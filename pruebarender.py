@@ -18,6 +18,12 @@ body {
     padding: 20px;
 }
 
+h1 {
+    color: #0ff;
+    text-shadow: 0 0 10px #0ff;
+    margin-bottom: 20px;
+}
+
 select {
     padding: 5px 10px;
     margin-bottom: 20px;
@@ -57,6 +63,8 @@ option[selected] {
 </head>
 <body>
 
+<h1>Campeonato de tiro</h1>
+
 <label for="categoriaFilter">Filtrar por CATEGORIA:</label>
 <select id="categoriaFilter" onchange="filterTable()">
     <option value="">Todas</option>
@@ -90,7 +98,7 @@ function filterTable() {
     var table = document.getElementById("dataTable");
     var tr = table.getElementsByTagName("tr");
     var categoria_idx = {{categoria_idx}};
-    for (var i = 1; i < tr.length; i++) {
+    for (var i = 1; i < tr.length; i++) {  // Empezar en 1 para ignorar encabezado
         var td = tr[i].getElementsByTagName("td")[categoria_idx];
         if (td) {
             var txtValue = td.textContent || td.innerText;
@@ -119,7 +127,7 @@ def view_data():
         df = df[df['Categoria'] == categoria_seleccionada]
 
     columnas = df.columns.tolist()
-    filas = df.values.tolist()
+    filas = df.to_numpy().tolist()  # Aseguramos usar solo los valores sin duplicar encabezados
     categoria_idx = columnas.index('Categoria')
 
     return render_template_string(
