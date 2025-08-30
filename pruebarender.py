@@ -24,8 +24,8 @@ body {
 }
 
 h1 {
-    color: #0ff;
-    text-shadow: 0 0 10px #0ff;
+    color: #ff7f00;  /* Neón naranja */
+    text-shadow: 0 0 10px #ff7f00;
     margin-bottom: 20px;
 }
 
@@ -39,29 +39,29 @@ select {
 table {
     margin: 0 auto;
     border-collapse: collapse;
-    width: 90%;
-    background-color: rgba(17,17,17,0.9); /* Fondo semi-transparente */
-    box-shadow: 0 0 20px #0ff;
+    width: 70%;  /* Tabla más pequeña */
+    background-color: rgba(17,17,17,0.9);
+    box-shadow: 0 0 20px #ff7f00;  /* Neón naranja */
 }
 
 th, td {
-    padding: 8px 12px;
-    border: 1px solid #0ff;
+    padding: 5px 8px;  /* Celdas más pequeñas */
+    border: 1px solid #ff7f00;  /* Neón naranja */
     text-align: center;
 }
 
 th {
     background-color: rgba(34,34,34,0.9);
-    color: #0ff;
+    color: #ff7f00;  /* Neón naranja */
 }
 
 tr:hover {
-    background-color: #0ff;
+    background-color: #ff7f00;
     color: #000;
 }
 
 option[selected] {
-    background-color: #0ff;
+    background-color: #ff7f00;
     color: #000;
 }
 </style>
@@ -119,19 +119,13 @@ function filterTable() {
 
 @app.route("/", methods=["GET"])
 def view_data():
-    # Saltar las dos primeras filas del CSV
     df = pd.read_csv(CSV_URL, skiprows=6)
     df = df.dropna(how="all")
-    
-    # Asignar nombres de columnas correctos
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
-    df = df.fillna("")  # Reemplazar NaN por cadena vacía
-
-    # Ordenar por Total de mayor a menor
+    df = df.fillna("")
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     df = df.sort_values(by='Total', ascending=False)
 
-    # Categorías únicas
     categorias = sorted(df['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -152,4 +146,3 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
