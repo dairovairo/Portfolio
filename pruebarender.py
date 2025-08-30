@@ -12,8 +12,8 @@ HTML_TEMPLATE = """
 <style>
 body {
     font-family: Arial, sans-serif;
-    background-color: #2b2b2b;
-    background-image: url('https://i.pinimg.com/1200x/c1/a8/9c/c1a89cc9d2824d7aacc448680adfd759.jpg');
+    background-color: #2b2b2b;  /* Gris oscuro como fallback */
+    background-image: url('https://i.pinimg.com/1200x/b2/72/c4/b272c49dd918d77624860ff20a7e8b51.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -24,7 +24,7 @@ body {
 }
 
 h1 {
-    color: #ff7f00; 
+    color: #ff7f00;  /* Neón naranja */
     text-shadow: 0 0 10px #ff7f00;
     margin-bottom: 20px;
 }
@@ -39,16 +39,15 @@ select {
 .table-container {
     width: 70%;
     margin: 0 auto;
-    background-color: rgba(17,17,17,0.9);
-    box-shadow: 0 0 20px #ff7f00;
-    max-height: 400px; /* Altura máxima para mostrar ~10 filas */
-    overflow-y: auto;  /* Scroll vertical */
-    border-radius: 5px;
+    max-height: 400px;  /* Aproximadamente 10 filas */
+    overflow-y: auto;
 }
 
 table {
-    width: 100%;
     border-collapse: collapse;
+    width: 100%;
+    background-color: rgba(17,17,17,0.9);
+    box-shadow: 0 0 20px #ff7f00;
 }
 
 th, td {
@@ -86,24 +85,24 @@ option[selected] {
 </select>
 
 <div class="table-container">
-    <table id="dataTable">
-        <thead>
+<table id="dataTable">
+    <thead>
+        <tr>
+            {% for col in columnas %}
+                <th>{{col}}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in filas %}
             <tr>
-                {% for col in columnas %}
-                    <th>{{col}}</th>
+                {% for cell in row %}
+                    <td>{{cell}}</td>
                 {% endfor %}
             </tr>
-        </thead>
-        <tbody>
-            {% for row in filas %}
-                <tr>
-                    {% for cell in row %}
-                        <td>{{cell}}</td>
-                    {% endfor %}
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+        {% endfor %}
+    </tbody>
+</table>
 </div>
 
 <script>
@@ -128,13 +127,22 @@ function filterTable() {
 
 @app.route("/", methods=["GET"])
 def view_data():
+    # Saltar las filas iniciales que no contienen datos
     df = pd.read_csv(CSV_URL, skiprows=6)
     df = df.dropna(how="all")
+    
+    # Asignar nombres de columnas
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
     df = df.fillna("")
+
+    # Ajustar la columna Numero para que empiece en 1
+    df['Numero'] = pd.to_numeric(df['Numero'], errors='coerce') - 2
+
+    # Ordenar por Total descendente
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     df = df.sort_values(by='Total', ascending=False)
-df['Numero'] = pd.to_numeric(df['Numero'], errors='coerce') - 2
+
+    # Filtrado de categorías
     categorias = sorted(df['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -155,4 +163,3 @@ df['Numero'] = pd.to_numeric(df['Numero'], errors='coerce') - 2
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
