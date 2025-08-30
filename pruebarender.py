@@ -13,7 +13,7 @@ HTML_TEMPLATE = """
 body {
     font-family: Arial, sans-serif;
     background-color: #2b2b2b;  /* Gris oscuro como fallback */
-    background-image: url('URL_DIRECTA_DE_LA_IMAGEN.jpg');
+    background-image: url('https://i.pinimg.com/736x/bf/8c/61/bf8c613ae23d804e8f389e45133227d7.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -146,3 +146,4 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
