@@ -134,7 +134,7 @@ def view_data():
     df = df.fillna("")
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     df = df.sort_values(by='Total', ascending=False)
-
+df['Numero'] = pd.to_numeric(df['Numero'], errors='coerce') - 2
     categorias = sorted(df['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -155,3 +155,4 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
