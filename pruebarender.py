@@ -115,7 +115,7 @@ function filterTable() {
 @app.route("/", methods=["GET"])
 def view_data():
     # Saltar las dos primeras filas del CSV
-    df = pd.read_csv(CSV_URL, skiprows=3)
+    df = pd.read_csv(CSV_URL, skiprows=4)
     df = df.dropna(how="all")
     
     # Asignar nombres de columnas correctos
@@ -147,4 +147,5 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
