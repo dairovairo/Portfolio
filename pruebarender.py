@@ -13,7 +13,7 @@ HTML_TEMPLATE = """
 body {
     font-family: Arial, sans-serif;
     background-color: #2b2b2b;
-    background-image: url('https://i.pinimg.com/1200x/c1/a8/9c/c1a89cc9d2824d7aacc448680adfd759.jpg');
+    background-image: url('https://i.pinimg.com/1200x/b2/72/c4/b272c49dd918d77624860ff20a7e8b51.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -41,8 +41,8 @@ select {
     margin: 0 auto;
     background-color: rgba(17,17,17,0.9);
     box-shadow: 0 0 20px #ff7f00;
-    max-height: 400px; /* Altura máxima para mostrar ~10 filas */
-    overflow-y: auto;  /* Scroll vertical */
+    max-height: 400px; 
+    overflow-y: auto; 
     border-radius: 5px;
 }
 
@@ -133,15 +133,19 @@ def view_data():
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
     df = df.fillna("")
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
-    df = df.sort_values(by='Total', ascending=False)
+    
+    # Ordenar por Total descendente (sin mover la columna Numero)
+    df_sorted = df.drop(columns=['Numero']).sort_values(by='Total', ascending=False).reset_index(drop=True)
+    # Crear columna Numero como posición en la clasificación
+    df_sorted.insert(0, 'Numero', range(1, len(df_sorted)+1))
 
-    categorias = sorted(df['Categoria'].dropna().unique())
+    categorias = sorted(df_sorted['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
-        df = df[df['Categoria'] == categoria_seleccionada]
+        df_sorted = df_sorted[df_sorted['Categoria'] == categoria_seleccionada]
 
-    columnas = df.columns.tolist()
-    filas = df.to_numpy().tolist()
+    columnas = df_sorted.columns.tolist()
+    filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
     return render_template_string(
@@ -155,4 +159,3 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
