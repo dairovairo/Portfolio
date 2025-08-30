@@ -1,37 +1,32 @@
-from flask import Flask, render_template_string
-import sqlite3
+from flask import Flask, render_template_string, request
+import csv
 
 app = Flask(__name__)
 
-DB_PATH = "resultados.db"  # tu archivo SQLite
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head><title>Resultados</title></head>
+<body>
+<h1>Resultados desde Google Sheets</h1>
+<table border="1">
+<tr>{% for header in headers %}<th>{{ header }}</th>{% endfor %}</tr>
+{% for row in rows %}
+<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+{% endfor %}
+</table>
+</body>
+</html>
+"""
 
 @app.route("/")
-def index():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tablas = cursor.fetchall()
-        conn.close()
-    except Exception as e:
-        tablas = []
-        print("Error al conectar a la base de datos:", e)
-
-    html = """
-    <html>
-        <head><title>Prueba Render</title></head>
-        <body>
-            <h1>Servidor Flask en Render</h1>
-            <p>Tablas en la base de datos:</p>
-            <ul>
-                {% for tabla in tablas %}
-                    <li>{{ tabla[0] }}</li>
-                {% endfor %}
-            </ul>
-        </body>
-    </html>
-    """
-    return render_template_string(html, tablas=tablas)
+def view_data():
+    with open("datos.csv", newline='', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        data = list(reader)
+    headers = data[0] if data else []
+    rows = data[1:] if len(data) > 1 else []
+    return render_template_string(HTML_TEMPLATE, headers=headers, rows=rows)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
