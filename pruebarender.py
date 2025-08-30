@@ -13,7 +13,7 @@ HTML_TEMPLATE = """
 body {
     font-family: Arial, sans-serif;
     background-color: #2b2b2b;  /* Gris oscuro como fallback */
-    background-image: url('https://i.pinimg.com/736x/bf/8c/61/bf8c613ae23d804e8f389e45133227d7.jpg');
+    background-image: url('https://i.pinimg.com/1200x/b2/72/c4/b272c49dd918d77624860ff20a7e8b51.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -119,13 +119,19 @@ function filterTable() {
 
 @app.route("/", methods=["GET"])
 def view_data():
-    df = pd.read_csv(CSV_URL, skiprows=2)
+    # Saltar las dos primeras filas del CSV
+    df = pd.read_csv(CSV_URL, skiprows=6)
     df = df.dropna(how="all")
+    
+    # Asignar nombres de columnas correctos
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
-    df = df.fillna("")
+    df = df.fillna("")  # Reemplazar NaN por cadena vacía
+
+    # Ordenar por Total de mayor a menor
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     df = df.sort_values(by='Total', ascending=False)
 
+    # Categorías únicas
     categorias = sorted(df['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -146,4 +152,3 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
