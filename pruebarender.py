@@ -128,7 +128,7 @@ function filterTable() {
 
 @app.route("/", methods=["GET"])
 def view_data():
-    df = pd.read_csv(CSV_URL, skiprows=6)
+    df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
     df = df.fillna("")
@@ -155,3 +155,4 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
