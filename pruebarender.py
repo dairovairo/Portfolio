@@ -24,11 +24,11 @@ def view_data():
     rows = data[1:]
 
     # Ordenar por columna TOTAL (asumiendo que la columna se llama exactamente "TOTAL")
-    total_idx = headers.index("TOTAL")
+    total_idx = headers.index("'TOTAL")
     rows.sort(key=lambda x: float(x[total_idx].replace(',', '').strip() or 0), reverse=True)
 
     # Obtener todas las categorías únicas para el filtro
-    categoria_idx = headers.index("CATEGORIA")
+    categoria_idx = headers.index("CAT.")
     categorias = sorted(set(row[categoria_idx] for row in rows))
 
     # Renderizar HTML
@@ -76,3 +76,4 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
