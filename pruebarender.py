@@ -1,32 +1,30 @@
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string
 import csv
+import requests
+import io
 
 app = Flask(__name__)
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head><title>Resultados</title></head>
-<body>
-<h1>Resultados desde Google Sheets</h1>
-<table border="1">
-<tr>{% for header in headers %}<th>{{ header }}</th>{% endfor %}</tr>
-{% for row in rows %}
-<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
-{% endfor %}
-</table>
-</body>
-</html>
-"""
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmbgLgN6Jd460AsuM2NSKwG347DtTQzPiyn-8gGxqWHG0Es69m-mnOFKQmuGZAdw/pub?output=csv"
 
 @app.route("/")
 def view_data():
-    with open("datos.csv", newline='', encoding='utf-8') as f:
-        reader = csv.reader(f)
-        data = list(reader)
-    headers = data[0] if data else []
-    rows = data[1:] if len(data) > 1 else []
-    return render_template_string(HTML_TEMPLATE, headers=headers, rows=rows)
+    # Descargar CSV desde Google Sheets
+    response = requests.get(CSV_URL)
+    response.raise_for_status()
+
+    # Leer CSV directamente desde memoria
+    f = io.StringIO(response.text)
+    reader = csv.reader(f)
+    data = list(reader)
+
+    # Renderizar en HTML
+    html = "<h1>Datos desde Google Sheets</h1><table border=1>"
+    for row in data:
+        html += "<tr>" + "".join(f"<td>{col}</td>" for col in row) + "</tr>"
+    html += "</table>"
+
+    return render_template_string(html)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=5000)
