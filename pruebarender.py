@@ -12,15 +12,10 @@ HTML_TEMPLATE = """
 <style>
 body {
     font-family: Arial, sans-serif;
-    background-color: #0e0e0e;
+    background-color: #2b2b2b;  /* Gris oscuro */
     color: #fff;
     text-align: center;
     padding: 20px;
-}
-
-h1 {
-    color: #0ff;
-    text-shadow: 0 0 10px #0ff;
 }
 
 select {
@@ -61,8 +56,6 @@ option[selected] {
 </style>
 </head>
 <body>
-
-<h1>Datos desde Google Sheets</h1>
 
 <label for="categoriaFilter">Filtrar por CATEGORIA:</label>
 <select id="categoriaFilter" onchange="filterTable()">
@@ -113,29 +106,15 @@ function filterTable() {
 
 @app.route("/", methods=["GET"])
 def view_data():
-    # Leer CSV desde Google Sheets usando pandas
     df = pd.read_csv(CSV_URL)
-
-    # Eliminar filas completamente vacías
     df = df.dropna(how="all")
-
-    # Reasignar nombres de columnas
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
-
-    # Reemplazar NaN con cadena vacía
     df = df.fillna("")
-
-    # Ordenar por Total de mayor a menor
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     df = df.sort_values(by='Total', ascending=False)
 
-    # Obtener todas las categorías únicas
     categorias = sorted(df['Categoria'].dropna().unique())
-
-    # Obtener categoría seleccionada del filtro
     categoria_seleccionada = request.args.get("categoria", "")
-
-    # Filtrar filas si se seleccionó alguna categoría
     if categoria_seleccionada:
         df = df[df['Categoria'] == categoria_seleccionada]
 
