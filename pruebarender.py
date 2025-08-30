@@ -98,7 +98,7 @@ function filterTable() {
     var table = document.getElementById("dataTable");
     var tr = table.getElementsByTagName("tr");
     var categoria_idx = {{categoria_idx}};
-    for (var i = 1; i < tr.length; i++) {  // Empezar en 1 para ignorar encabezado
+    for (var i = 1; i < tr.length; i++) {
         var td = tr[i].getElementsByTagName("td")[categoria_idx];
         if (td) {
             var txtValue = td.textContent || td.innerText;
@@ -114,20 +114,26 @@ function filterTable() {
 
 @app.route("/", methods=["GET"])
 def view_data():
-    df = pd.read_csv(CSV_URL)
+    # Saltar las dos primeras filas del CSV
+    df = pd.read_csv(CSV_URL, skiprows=2)
     df = df.dropna(how="all")
+    
+    # Asignar nombres de columnas correctos
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
-    df = df.fillna("")
+    df = df.fillna("")  # Reemplazar NaN por cadena vacía
+
+    # Ordenar por Total de mayor a menor
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     df = df.sort_values(by='Total', ascending=False)
 
+    # Categorías únicas
     categorias = sorted(df['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
         df = df[df['Categoria'] == categoria_seleccionada]
 
     columnas = df.columns.tolist()
-    filas = df.to_numpy().tolist()  # Aseguramos usar solo los valores sin duplicar encabezados
+    filas = df.to_numpy().tolist()  # Solo los datos, sin duplicar encabezados
     categoria_idx = columnas.index('Categoria')
 
     return render_template_string(
