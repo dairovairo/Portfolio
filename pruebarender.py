@@ -13,7 +13,7 @@ HTML_TEMPLATE = """
 body {
     font-family: Arial, sans-serif;
     background-color: #2b2b2b;
-    background-image: url('https://i.pinimg.com/1200x/b2/72/c4/b272c49dd918d77624860ff20a7e8b51.jpg');
+    background-image: url('https://i.pinimg.com/1200x/c1/a8/9c/c1a89cc9d2824d7aacc448680adfd759.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -159,3 +159,4 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
