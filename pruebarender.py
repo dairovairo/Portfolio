@@ -6,6 +6,62 @@ app = Flask(__name__)
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmbgLgN6Jd460AsuM2NSKwG347DtTQzPiyn-8gGxqWHG0Es69m-mnOFKQmuGZAdw/pub?output=csv&gid=110548680"
 
 HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background-color: #0e0e0e;
+    color: #fff;
+    text-align: center;
+    padding: 20px;
+}
+
+h1 {
+    color: #0ff;
+    text-shadow: 0 0 10px #0ff;
+}
+
+select {
+    padding: 5px 10px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    border: none;
+}
+
+table {
+    margin: 0 auto;
+    border-collapse: collapse;
+    width: 90%;
+    background-color: #111;
+    box-shadow: 0 0 20px #0ff;
+}
+
+th, td {
+    padding: 8px 12px;
+    border: 1px solid #0ff;
+    text-align: center;
+}
+
+th {
+    background-color: #222;
+    color: #0ff;
+}
+
+tr:hover {
+    background-color: #0ff;
+    color: #000;
+}
+
+option[selected] {
+    background-color: #0ff;
+    color: #000;
+}
+</style>
+</head>
+<body>
+
 <h1>Datos desde Google Sheets</h1>
 
 <label for="categoriaFilter">Filtrar por CATEGORIA:</label>
@@ -16,7 +72,7 @@ HTML_TEMPLATE = """
     {% endfor %}
 </select>
 
-<table border="1" id="dataTable">
+<table id="dataTable">
     <thead>
         <tr>
             {% for col in columnas %}
@@ -50,6 +106,9 @@ function filterTable() {
     }
 }
 </script>
+
+</body>
+</html>
 """
 
 @app.route("/", methods=["GET"])
@@ -60,8 +119,11 @@ def view_data():
     # Eliminar filas completamente vacías
     df = df.dropna(how="all")
 
-    # Reasignar nombres de columnas según tus necesidades
+    # Reasignar nombres de columnas
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
+
+    # Reemplazar NaN con cadena vacía
+    df = df.fillna("")
 
     # Ordenar por Total de mayor a menor
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
