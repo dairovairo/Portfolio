@@ -12,7 +12,7 @@ HTML_TEMPLATE = """
 <style>
 body {
     font-family: Arial, sans-serif;
-    background-color: #2b2b2b;  /* Gris oscuro como fallback */
+    background-color: #2b2b2b;
     background-image: url('https://i.pinimg.com/1200x/c1/a8/9c/c1a89cc9d2824d7aacc448680adfd759.jpg');
     background-size: cover;
     background-position: center;
@@ -24,7 +24,7 @@ body {
 }
 
 h1 {
-    color: #ff7f00;  /* Neón naranja */
+    color: #ff7f00; 
     text-shadow: 0 0 10px #ff7f00;
     margin-bottom: 20px;
 }
@@ -36,23 +36,30 @@ select {
     border: none;
 }
 
-table {
+.table-container {
+    width: 70%;
     margin: 0 auto;
-    border-collapse: collapse;
-    width: 70%;  /* Tabla más pequeña */
     background-color: rgba(17,17,17,0.9);
-    box-shadow: 0 0 20px #ff7f00;  /* Neón naranja */
+    box-shadow: 0 0 20px #ff7f00;
+    max-height: 400px; /* Altura máxima para mostrar ~10 filas */
+    overflow-y: auto;  /* Scroll vertical */
+    border-radius: 5px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
 }
 
 th, td {
-    padding: 5px 8px;  /* Celdas más pequeñas */
-    border: 1px solid #ff7f00;  /* Neón naranja */
+    padding: 5px 8px;
+    border: 1px solid #ff7f00;
     text-align: center;
 }
 
 th {
     background-color: rgba(34,34,34,0.9);
-    color: #ff7f00;  /* Neón naranja */
+    color: #ff7f00;
 }
 
 tr:hover {
@@ -78,24 +85,26 @@ option[selected] {
     {% endfor %}
 </select>
 
-<table id="dataTable">
-    <thead>
-        <tr>
-            {% for col in columnas %}
-                <th>{{col}}</th>
-            {% endfor %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for row in filas %}
+<div class="table-container">
+    <table id="dataTable">
+        <thead>
             <tr>
-                {% for cell in row %}
-                    <td>{{cell}}</td>
+                {% for col in columnas %}
+                    <th>{{col}}</th>
                 {% endfor %}
             </tr>
-        {% endfor %}
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            {% for row in filas %}
+                <tr>
+                    {% for cell in row %}
+                        <td>{{cell}}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 <script>
 function filterTable() {
