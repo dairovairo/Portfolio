@@ -27,35 +27,45 @@ h1 {
     color: #ff7f00; 
     text-shadow: 0 0 10px #ff7f00;
     margin-bottom: 20px;
-    font-size: 36px;
 }
 
 select {
-    padding: 10px 15px;
+    padding: 5px 10px;
     margin-bottom: 20px;
     border-radius: 5px;
     border: none;
-    font-size: 16px;
 }
 
 .table-container {
-    width: 90%;               /* más ancha */
+    width: 90%;
     margin: 0 auto;
     background-color: rgba(17,17,17,0.9);
     box-shadow: 0 0 20px #ff7f00;
-    max-height: 600px;        /* más alta */
+    max-height: 80vh;   /* ahora ocupa el 80% de la pantalla */
     overflow-y: auto; 
-    border-radius: 10px;
+    border-radius: 5px;
+}
+
+/* En móviles la tabla ocupa casi toda la pantalla */
+@media (max-width: 768px) {
+    .table-container {
+        width: 100%;
+        max-height: 90vh;
+    }
+
+    th, td {
+        padding: 4px 6px;
+        font-size: 14px;
+    }
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 18px;          /* texto más grande */
 }
 
 th, td {
-    padding: 12px 16px;       /* más espacio en celdas */
+    padding: 5px 8px;
     border: 1px solid #ff7f00;
     text-align: center;
 }
@@ -63,7 +73,6 @@ th, td {
 th {
     background-color: rgba(34,34,34,0.9);
     color: #ff7f00;
-    font-size: 20px;
 }
 
 tr:hover {
