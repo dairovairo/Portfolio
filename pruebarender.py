@@ -27,32 +27,35 @@ h1 {
     color: #ff7f00; 
     text-shadow: 0 0 10px #ff7f00;
     margin-bottom: 20px;
+    font-size: 36px;
 }
 
 select {
-    padding: 5px 10px;
+    padding: 10px 15px;
     margin-bottom: 20px;
     border-radius: 5px;
     border: none;
+    font-size: 16px;
 }
 
 .table-container {
-    width: 70%;
+    width: 90%;               /* más ancha */
     margin: 0 auto;
     background-color: rgba(17,17,17,0.9);
     box-shadow: 0 0 20px #ff7f00;
-    max-height: 400px; 
+    max-height: 600px;        /* más alta */
     overflow-y: auto; 
-    border-radius: 5px;
+    border-radius: 10px;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
+    font-size: 18px;          /* texto más grande */
 }
 
 th, td {
-    padding: 5px 8px;
+    padding: 12px 16px;       /* más espacio en celdas */
     border: 1px solid #ff7f00;
     text-align: center;
 }
@@ -60,6 +63,7 @@ th, td {
 th {
     background-color: rgba(34,34,34,0.9);
     color: #ff7f00;
+    font-size: 20px;
 }
 
 tr:hover {
