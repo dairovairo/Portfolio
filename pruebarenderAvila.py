@@ -3,7 +3,7 @@ import pandas as pd
 
 app = Flask(__name__)
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmbgLgN6Jd460AsuM2NSKwG347DtTQzPiyn-8gGxqWHG0Es69m-mnOFKQmuGZAdw/pub?output=csv&gid=110548680"
+CSV_URL = "https://docs.google.com/spreadsheets/d/116F61MqzgKjTjy7RCVq0Kwk0OqKmycF1/edit?gid=110548680#gid=110548680"
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -184,4 +184,5 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
