@@ -12,12 +12,12 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("comentarioserrorescampo-0d675197f102.json", scope)
 client = gspread.authorize(creds)
 
-# 📊 Abrir la hoja (cambia "Resultados" por el nombre de tu archivo en Google Drive)
-spreadsheet = client.open("Resultados")
-worksheet = spreadsheet.sheet1   # primera pestaña, la de resultados
+# 📊 Abrir la hoja
+spreadsheet = client.open("RESULTADOS FINALES")
+worksheet = spreadsheet.sheet4   # primera pestaña, la de resultados
 
 # 📂 Servicio extra para metadatos (última modificación)
 drive_service = build("drive", "v3", credentials=creds)
@@ -28,7 +28,6 @@ HTML_TEMPLATE = """
 <html>
 <head>
 <style>
-/* mismos estilos que ya tenías */
 body {
     font-family: Arial, sans-serif;
     background-color: #2b2b2b;
@@ -46,6 +45,9 @@ h1 { color: #ff7f00; text-shadow: 0 0 10px #ff7f00; margin-bottom: 20px; }
 th, td { padding: 5px 8px; border: 1px solid #ff7f00; text-align: center; }
 th { background-color: rgba(34,34,34,0.9); color: #ff7f00; }
 tr:hover { background-color: #ff7f00; color: #000; }
+textarea { width: 60%; padding: 5px; border-radius: 5px; }
+button { padding: 5px 10px; border-radius: 5px; border: none; background-color: #ff7f00; color: #000; cursor: pointer; }
+button:hover { background-color: #ffa500; }
 </style>
 </head>
 <body>
@@ -84,7 +86,7 @@ tr:hover { background-color: #ff7f00; color: #000; }
 
 <h2>Enviar un comentario</h2>
 <form method="post" action="/comentario">
-    <textarea name="comentario" rows="4" cols="40"></textarea><br>
+    <textarea name="comentario" rows="4" cols="40" placeholder="Escribe tu comentario aquí"></textarea><br>
     <button type="submit">Enviar</button>
 </form>
 
@@ -141,7 +143,7 @@ def view_data():
 
     # ⏱️ Fecha de última modificación
     meta = drive_service.files().get(fileId=spreadsheet_id, fields="modifiedTime").execute()
-    ultima_modificacion = meta["modifiedTime"]
+    ultima_modificacion = datetime.fromisoformat(meta["modifiedTime"].replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M:%S")
 
     return render_template_string(
         HTML_TEMPLATE,
@@ -157,8 +159,12 @@ def view_data():
 def guardar_comentario():
     comentario = request.form.get("comentario")
     if comentario:
-        # Guardar comentario en fila 250+ (columna A)
-        worksheet.update_cell(250, 1, f"{datetime.now().isoformat()} - {comentario}")
+        # Buscar primera fila vacía desde la 250
+        row = 250
+        while worksheet.cell(row, 1).value:
+            row += 1
+        # Guardar comentario con fecha/hora
+        worksheet.update_cell(row, 1, f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {comentario}")
     return "✅ ¡Comentario guardado en la hoja!"
 
 if __name__ == "__main__":
