@@ -12,7 +12,7 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
-creds = ServiceAccountCredentials.from_json_keyfile_name("C:\Users\hp\Downloads\comentarioserrorescampo-0d675197f102.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("C:/Users/hp/Downloads/comentarioserrorescampo-0d675197f102.json", scope)
 client = gspread.authorize(creds)
 
 # 📊 Abrir la hoja
@@ -169,3 +169,4 @@ def guardar_comentario():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
