@@ -1,5 +1,6 @@
 from flask import Flask, render_template_string, request
 import pandas as pd
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -26,6 +27,12 @@ body {
 h1 {
     color: #ff7f00; 
     text-shadow: 0 0 10px #ff7f00;
+    margin-bottom: 5px;
+}
+
+.last-updated {
+    font-size: 16px;   /* más grande */
+    color: #ff7f00;    /* naranja */
     margin-bottom: 20px;
 }
 
@@ -41,12 +48,11 @@ select {
     margin: 0 auto;
     background-color: rgba(17,17,17,0.9);
     box-shadow: 0 0 20px #ff7f00;
-    max-height: 80vh;   /* ahora ocupa el 80% de la pantalla */
+    max-height: 80vh;
     overflow-y: auto; 
     border-radius: 5px;
 }
 
-/* En móviles la tabla ocupa casi toda la pantalla */
 @media (max-width: 768px) {
     .table-container {
         width: 100%;
@@ -89,6 +95,10 @@ option[selected] {
 <body>
 
 <h1>Campeonato de tiro</h1>
+<p class="last-updated">
+    Última actualización en la web: {{ last_updated }}<br>
+    (hace {{ elapsed_time }})
+</p>
 
 <label for="categoriaFilter">Filtrar por CATEGORIA:</label>
 <select id="categoriaFilter" onchange="filterTable()">
@@ -139,20 +149,30 @@ function filterTable() {
 </html>
 """
 
+def format_elapsed(delta_seconds):
+    if delta_seconds < 60:
+        return f"{int(delta_seconds)} segundos"
+    elif delta_seconds < 3600:
+        return f"{int(delta_seconds//60)} minutos"
+    elif delta_seconds < 86400:
+        return f"{int(delta_seconds//3600)} horas"
+    else:
+        return f"{int(delta_seconds//86400)} días"
+
 @app.route("/", methods=["GET"])
 def view_data():
-    # Leer datos desde Google Sheets
+    now = datetime.now()
+    last_updated = now.strftime("%d/%m/%Y %H:%M:%S")
+
     df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
     df = df.fillna("")
 
-    # Convertir a numérico
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     for s in ['S1', 'S2', 'S3', 'S4']:
         df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0)
 
-    # Orden con desempates: primero Total, luego S4, S3, S2, S1
     tiradas = ['S4', 'S3', 'S2', 'S1']
     df_sorted = (
         df.drop(columns=['Numero'])
@@ -160,10 +180,8 @@ def view_data():
           .reset_index(drop=True)
     )
 
-    # Nueva numeración (clasificación)
     df_sorted.insert(0, 'Numero', range(1, len(df_sorted)+1))
 
-    # Filtro de categorías
     categorias = sorted(df_sorted['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -173,18 +191,18 @@ def view_data():
     filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
+    elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
+
     return render_template_string(
         HTML_TEMPLATE,
         columnas=columnas,
         filas=filas,
         categorias=categorias,
         categoria_seleccionada=categoria_seleccionada,
-        categoria_idx=categoria_idx
+        categoria_idx=categoria_idx,
+        last_updated=last_updated,
+        elapsed_time=elapsed_time
     )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
-
-
-
