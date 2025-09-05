@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template_string, request
 import pandas as pd
 from datetime import datetime
@@ -33,12 +32,8 @@ h1 {
 
 .last-updated {
     font-size: 14px;
-    color: #000;   /* 🔹 ahora en negro */
+    color: #ccc;
     margin-bottom: 20px;
-    background-color: rgba(255,255,255,0.7); /* 🔹 fondo blanco translúcido */
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 5px;
 }
 
 select {
@@ -139,4 +134,79 @@ function filterTable() {
     var filter = document.getElementById("categoriaFilter").value.toUpperCase();
     var table = document.getElementById("dataTable");
     var tr = table.getElementsByTagName("tr");
-    var categ
+    var categoria_idx = {{categoria_idx}};
+    for (var i = 1; i < tr.length; i++) {
+        var td = tr[i].getElementsByTagName("td")[categoria_idx];
+        if (td) {
+            var txtValue = td.textContent || td.innerText;
+            tr[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+        }
+    }
+}
+</script>
+
+</body>
+</html>
+"""
+
+def format_elapsed(delta_seconds):
+    """Convierte segundos a 'hace X tiempo'"""
+    if delta_seconds < 60:
+        return f"{int(delta_seconds)} segundos"
+    elif delta_seconds < 3600:
+        return f"{int(delta_seconds//60)} minutos"
+    elif delta_seconds < 86400:
+        return f"{int(delta_seconds//3600)} horas"
+    else:
+        return f"{int(delta_seconds//86400)} días"
+
+@app.route("/", methods=["GET"])
+def view_data():
+    # Momento de la última lectura del CSV
+    now = datetime.now()
+    last_updated = now.strftime("%d/%m/%Y %H:%M:%S")
+
+    # Leer datos desde Google Sheets
+    df = pd.read_csv(CSV_URL, skiprows=5)
+    df = df.dropna(how="all")
+    df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
+    df = df.fillna("")
+
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
+    for s in ['S1', 'S2', 'S3', 'S4']:
+        df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0)
+
+    tiradas = ['S4', 'S3', 'S2', 'S1']
+    df_sorted = (
+        df.drop(columns=['Numero'])
+          .sort_values(by=['Total'] + tiradas, ascending=False)
+          .reset_index(drop=True)
+    )
+
+    df_sorted.insert(0, 'Numero', range(1, len(df_sorted)+1))
+
+    categorias = sorted(df_sorted['Categoria'].dropna().unique())
+    categoria_seleccionada = request.args.get("categoria", "")
+    if categoria_seleccionada:
+        df_sorted = df_sorted[df_sorted['Categoria'] == categoria_seleccionada]
+
+    columnas = df_sorted.columns.tolist()
+    filas = df_sorted.to_numpy().tolist()
+    categoria_idx = columnas.index('Categoria')
+
+    # Tiempo relativo (desde que empezó la petición)
+    elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
+
+    return render_template_string(
+        HTML_TEMPLATE,
+        columnas=columnas,
+        filas=filas,
+        categorias=categorias,
+        categoria_seleccionada=categoria_seleccionada,
+        categoria_idx=categoria_idx,
+        last_updated=last_updated,
+        elapsed_time=elapsed_time
+    )
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
