@@ -1,27 +1,10 @@
 from flask import Flask, render_template_string, request
 import pandas as pd
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-# 🔑 Configuración credenciales de Google
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
-]
-creds = ServiceAccountCredentials.from_json_keyfile_name("C:/Users/hp/Downloads/comentarioserrorescampo-0d675197f102.json", scope)
-client = gspread.authorize(creds)
-
-# 📊 Abrir la hoja
-spreadsheet = client.open("RESULTADOS FINALES PLANTILLA AVILA")
-worksheet = spreadsheet.sheet4   # primera pestaña, la de resultados
-
-# 📂 Servicio extra para metadatos (última modificación)
-drive_service = build("drive", "v3", credentials=creds)
-spreadsheet_id = spreadsheet.id
+CSV_URL = "https://docs.google.com/spreadsheets/d/116F61MqzgKjTjy7RCVq0Kwk0OqKmycF1/edit?gid=110548680#gid=110548680"
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQYfTQDKEyVZwHvJNrsj1_hxACqg-QuKLLR7BcQs3CB5_jg8UBsD1J81x1Km1l2kA/pub?gid=110548680&single=true&output=csv"
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -40,20 +23,73 @@ body {
     text-align: center;
     padding: 20px;
 }
-h1 { color: #ff7f00; text-shadow: 0 0 10px #ff7f00; margin-bottom: 20px; }
-.table-container { width: 90%; margin: 0 auto; background-color: rgba(17,17,17,0.9); box-shadow: 0 0 20px #ff7f00; max-height: 80vh; overflow-y: auto; border-radius: 5px; }
-th, td { padding: 5px 8px; border: 1px solid #ff7f00; text-align: center; }
-th { background-color: rgba(34,34,34,0.9); color: #ff7f00; }
-tr:hover { background-color: #ff7f00; color: #000; }
-textarea { width: 60%; padding: 5px; border-radius: 5px; }
-button { padding: 5px 10px; border-radius: 5px; border: none; background-color: #ff7f00; color: #000; cursor: pointer; }
-button:hover { background-color: #ffa500; }
+
+h1 {
+    color: #ff7f00; 
+    text-shadow: 0 0 10px #ff7f00;
+    margin-bottom: 20px;
+}
+
+select {
+    padding: 5px 10px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    border: none;
+}
+
+.table-container {
+    width: 90%;
+    margin: 0 auto;
+    background-color: rgba(17,17,17,0.9);
+    box-shadow: 0 0 20px #ff7f00;
+    max-height: 80vh;   /* ahora ocupa el 80% de la pantalla */
+    overflow-y: auto; 
+    border-radius: 5px;
+}
+
+/* En móviles la tabla ocupa casi toda la pantalla */
+@media (max-width: 768px) {
+    .table-container {
+        width: 100%;
+        max-height: 90vh;
+    }
+
+    th, td {
+        padding: 4px 6px;
+        font-size: 14px;
+    }
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 5px 8px;
+    border: 1px solid #ff7f00;
+    text-align: center;
+}
+
+th {
+    background-color: rgba(34,34,34,0.9);
+    color: #ff7f00;
+}
+
+tr:hover {
+    background-color: #ff7f00;
+    color: #000;
+}
+
+option[selected] {
+    background-color: #ff7f00;
+    color: #000;
+}
 </style>
 </head>
 <body>
 
 <h1>Campeonato de tiro</h1>
-<p><em>Última actualización: {{ ultima_modificacion }}</em></p>
 
 <label for="categoriaFilter">Filtrar por CATEGORIA:</label>
 <select id="categoriaFilter" onchange="filterTable()">
@@ -84,12 +120,6 @@ button:hover { background-color: #ffa500; }
     </table>
 </div>
 
-<h2>Enviar un comentario</h2>
-<form method="post" action="/comentario">
-    <textarea name="comentario" rows="4" cols="40" placeholder="Escribe tu comentario aquí"></textarea><br>
-    <button type="submit">Enviar</button>
-</form>
-
 <script>
 function filterTable() {
     var filter = document.getElementById("categoriaFilter").value.toUpperCase();
@@ -112,26 +142,29 @@ function filterTable() {
 
 @app.route("/", methods=["GET"])
 def view_data():
-    # 📥 Leer datos de la hoja
-    data = worksheet.get_all_values()
-    df = pd.DataFrame(data[6:], columns=['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2'])
-    df = df.dropna(how="all").fillna("")
+    # Leer datos desde Google Sheets
+    df = pd.read_csv(CSV_URL, skiprows=5)
+    df = df.dropna(how="all")
+    df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
+    df = df.fillna("")
 
-    # 🔢 Conversión a números
+    # Convertir a numérico
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     for s in ['S1', 'S2', 'S3', 'S4']:
         df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0)
 
-    # 📊 Orden con desempates
+    # Orden con desempates: primero Total, luego S4, S3, S2, S1
     tiradas = ['S4', 'S3', 'S2', 'S1']
     df_sorted = (
         df.drop(columns=['Numero'])
           .sort_values(by=['Total'] + tiradas, ascending=False)
           .reset_index(drop=True)
     )
+
+    # Nueva numeración (clasificación)
     df_sorted.insert(0, 'Numero', range(1, len(df_sorted)+1))
 
-    # 🎯 Filtro categorías
+    # Filtro de categorías
     categorias = sorted(df_sorted['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -141,32 +174,7 @@ def view_data():
     filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
-    # ⏱️ Fecha de última modificación
-    meta = drive_service.files().get(fileId=spreadsheet_id, fields="modifiedTime").execute()
-    ultima_modificacion = datetime.fromisoformat(meta["modifiedTime"].replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M:%S")
-
     return render_template_string(
         HTML_TEMPLATE,
-        columnas=columnas,
-        filas=filas,
-        categorias=categorias,
-        categoria_seleccionada=categoria_seleccionada,
-        categoria_idx=categoria_idx,
-        ultima_modificacion=ultima_modificacion
-    )
-
-@app.route("/comentario", methods=["POST"])
-def guardar_comentario():
-    comentario = request.form.get("comentario")
-    if comentario:
-        # Buscar primera fila vacía desde la 250
-        row = 250
-        while worksheet.cell(row, 1).value:
-            row += 1
-        # Guardar comentario con fecha/hora
-        worksheet.update_cell(row, 1, f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {comentario}")
-    return "✅ ¡Comentario guardado en la hoja!"
-
-if __name__ == "__main__":
+@@ -186,3 +186,4 @@
     app.run(host="0.0.0.0", port=5000)
-
