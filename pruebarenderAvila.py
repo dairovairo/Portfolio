@@ -31,8 +31,8 @@ h1 {
 }
 
 .last-updated {
-    font-size: 14px;
-    color: #000;  /* Texto en negro */
+    font-size: 16px;      /* Aumentamos tamaño */
+    color: #fff;          /* Blanco */
     margin-bottom: 20px;
 }
 
