@@ -31,8 +31,8 @@ h1 {
 }
 
 .last-updated {
-    font-size: 16px;      /* Aumentamos tamaño */
-    color: #fff;          /* Blanco */
+    font-size: 16px;  /* un poco más grande */
+    color: #ff7f00;   /* naranja */
     margin-bottom: 20px;
 }
 
@@ -150,7 +150,6 @@ function filterTable() {
 """
 
 def format_elapsed(delta_seconds):
-    """Convierte segundos a 'hace X tiempo'"""
     if delta_seconds < 60:
         return f"{int(delta_seconds)} segundos"
     elif delta_seconds < 3600:
