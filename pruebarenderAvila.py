@@ -1,6 +1,5 @@
 from flask import Flask, render_template_string, request
 import pandas as pd
-import requests
 from datetime import datetime
 
 app = Flask(__name__)
@@ -28,7 +27,7 @@ body {
 h1 {
     color: #ff7f00; 
     text-shadow: 0 0 10px #ff7f00;
-    margin-bottom: 20px;
+    margin-bottom: 5px;
 }
 
 .last-updated {
@@ -96,7 +95,10 @@ option[selected] {
 <body>
 
 <h1>Campeonato de tiro</h1>
-<p class="last-updated">Última actualización del Excel: {{ last_updated }}</p>
+<p class="last-updated">
+    Última actualización en la web: {{ last_updated }}<br>
+    (hace {{ elapsed_time }})
+</p>
 
 <label for="categoriaFilter">Filtrar por CATEGORIA:</label>
 <select id="categoriaFilter" onchange="filterTable()">
@@ -147,22 +149,22 @@ function filterTable() {
 </html>
 """
 
-def get_last_modified(url):
-    try:
-        response = requests.head(url, allow_redirects=True)
-        last_mod = response.headers.get("Last-Modified")
-        if last_mod:
-            # Convertir formato HTTP date a datetime
-            dt = datetime.strptime(last_mod, "%a, %d %b %Y %H:%M:%S %Z")
-            return dt.strftime("%d/%m/%Y %H:%M:%S")
-    except Exception as e:
-        print("Error obteniendo fecha:", e)
-    return "Desconocida"
+def format_elapsed(delta_seconds):
+    """Convierte segundos a 'hace X tiempo'"""
+    if delta_seconds < 60:
+        return f"{int(delta_seconds)} segundos"
+    elif delta_seconds < 3600:
+        return f"{int(delta_seconds//60)} minutos"
+    elif delta_seconds < 86400:
+        return f"{int(delta_seconds//3600)} horas"
+    else:
+        return f"{int(delta_seconds//86400)} días"
 
 @app.route("/", methods=["GET"])
 def view_data():
-    # Fecha de última actualización del CSV
-    last_updated = get_last_modified(CSV_URL)
+    # Momento de la última lectura del CSV
+    now = datetime.now()
+    last_updated = now.strftime("%d/%m/%Y %H:%M:%S")
 
     # Leer datos desde Google Sheets
     df = pd.read_csv(CSV_URL, skiprows=5)
@@ -170,7 +172,6 @@ def view_data():
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
     df = df.fillna("")
 
-    # Convertir a numérico
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     for s in ['S1', 'S2', 'S3', 'S4']:
         df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0)
@@ -193,6 +194,9 @@ def view_data():
     filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
+    # Tiempo relativo (desde que empezó la petición)
+    elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
+
     return render_template_string(
         HTML_TEMPLATE,
         columnas=columnas,
@@ -200,7 +204,8 @@ def view_data():
         categorias=categorias,
         categoria_seleccionada=categoria_seleccionada,
         categoria_idx=categoria_idx,
-        last_updated=last_updated
+        last_updated=last_updated,
+        elapsed_time=elapsed_time
     )
 
 if __name__ == "__main__":
