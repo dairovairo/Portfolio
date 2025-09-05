@@ -1,5 +1,7 @@
 from flask import Flask, render_template_string, request
 import pandas as pd
+import requests
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -29,6 +31,12 @@ h1 {
     margin-bottom: 20px;
 }
 
+.last-updated {
+    font-size: 14px;
+    color: #ccc;
+    margin-bottom: 20px;
+}
+
 select {
     padding: 5px 10px;
     margin-bottom: 20px;
@@ -41,12 +49,11 @@ select {
     margin: 0 auto;
     background-color: rgba(17,17,17,0.9);
     box-shadow: 0 0 20px #ff7f00;
-    max-height: 80vh;   /* ahora ocupa el 80% de la pantalla */
+    max-height: 80vh;
     overflow-y: auto; 
     border-radius: 5px;
 }
 
-/* En móviles la tabla ocupa casi toda la pantalla */
 @media (max-width: 768px) {
     .table-container {
         width: 100%;
@@ -89,6 +96,7 @@ option[selected] {
 <body>
 
 <h1>Campeonato de tiro</h1>
+<p class="last-updated">Última actualización del Excel: {{ last_updated }}</p>
 
 <label for="categoriaFilter">Filtrar por CATEGORIA:</label>
 <select id="categoriaFilter" onchange="filterTable()">
@@ -139,8 +147,23 @@ function filterTable() {
 </html>
 """
 
+def get_last_modified(url):
+    try:
+        response = requests.head(url, allow_redirects=True)
+        last_mod = response.headers.get("Last-Modified")
+        if last_mod:
+            # Convertir formato HTTP date a datetime
+            dt = datetime.strptime(last_mod, "%a, %d %b %Y %H:%M:%S %Z")
+            return dt.strftime("%d/%m/%Y %H:%M:%S")
+    except Exception as e:
+        print("Error obteniendo fecha:", e)
+    return "Desconocida"
+
 @app.route("/", methods=["GET"])
 def view_data():
+    # Fecha de última actualización del CSV
+    last_updated = get_last_modified(CSV_URL)
+
     # Leer datos desde Google Sheets
     df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
@@ -152,7 +175,6 @@ def view_data():
     for s in ['S1', 'S2', 'S3', 'S4']:
         df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0)
 
-    # Orden con desempates: primero Total, luego S4, S3, S2, S1
     tiradas = ['S4', 'S3', 'S2', 'S1']
     df_sorted = (
         df.drop(columns=['Numero'])
@@ -160,10 +182,8 @@ def view_data():
           .reset_index(drop=True)
     )
 
-    # Nueva numeración (clasificación)
     df_sorted.insert(0, 'Numero', range(1, len(df_sorted)+1))
 
-    # Filtro de categorías
     categorias = sorted(df_sorted['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -179,10 +199,9 @@ def view_data():
         filas=filas,
         categorias=categorias,
         categoria_seleccionada=categoria_seleccionada,
-        categoria_idx=categoria_idx
+        categoria_idx=categoria_idx,
+        last_updated=last_updated
     )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
-
