@@ -32,7 +32,7 @@ h1 {
 
 .last-updated {
     font-size: 14px;
-    color: #ccc;
+    color: #000;  /* Texto en negro */
     margin-bottom: 20px;
 }
 
@@ -162,11 +162,9 @@ def format_elapsed(delta_seconds):
 
 @app.route("/", methods=["GET"])
 def view_data():
-    # Momento de la última lectura del CSV
     now = datetime.now()
     last_updated = now.strftime("%d/%m/%Y %H:%M:%S")
 
-    # Leer datos desde Google Sheets
     df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
@@ -194,7 +192,6 @@ def view_data():
     filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
-    # Tiempo relativo (desde que empezó la petición)
     elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
 
     return render_template_string(
