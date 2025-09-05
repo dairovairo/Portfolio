@@ -12,11 +12,11 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
-creds = ServiceAccountCredentials.from_json_keyfile_name("comentarioserrorescampo-0d675197f102.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("C:\Users\hp\Downloads\comentarioserrorescampo-0d675197f102.json", scope)
 client = gspread.authorize(creds)
 
 # 📊 Abrir la hoja
-spreadsheet = client.open("RESULTADOS FINALES")
+spreadsheet = client.open("RESULTADOS FINALES PLANTILLA AVILA")
 worksheet = spreadsheet.sheet4   # primera pestaña, la de resultados
 
 # 📂 Servicio extra para metadatos (última modificación)
