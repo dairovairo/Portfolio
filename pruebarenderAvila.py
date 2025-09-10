@@ -14,7 +14,7 @@ HTML_TEMPLATE = """
 body {
     font-family: Arial, sans-serif;
     background-color: #ffffff; /* Fondo blanco liso */
-    color: #000; 
+    color: #000; /* Texto en negro */
     text-align: center;
     padding: 20px;
 }
@@ -41,7 +41,7 @@ select {
     width: 90%;
     margin: 0 auto;
     background-color: #fff;
-    box-shadow: 0 0 10px #aaa;
+    box-shadow: 0 0 10px #ccc;
     max-height: 80vh;
     overflow-y: auto; 
     border-radius: 5px;
@@ -143,15 +143,15 @@ function filterTable() {
 </html>
 """
 
-def format_elapsed(delta_seconds):
+def format_elapsed(delta_seconds: int) -> str:
     if delta_seconds < 60:
-        return f"{int(delta_seconds)} segundos"
+        return f"{delta_seconds} segundos"
     elif delta_seconds < 3600:
-        return f"{int(delta_seconds//60)} minutos"
+        return f"{delta_seconds // 60} minutos"
     elif delta_seconds < 86400:
-        return f"{int(delta_seconds//3600)} horas"
+        return f"{delta_seconds // 3600} horas"
     else:
-        return f"{int(delta_seconds//86400)} días"
+        return f"{delta_seconds // 86400} días"
 
 @app.route("/", methods=["GET"])
 def view_data():
@@ -163,7 +163,7 @@ def view_data():
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
     df = df.fillna("")
 
-    # Convertimos a int en lugar de float
+    # Convertimos a int (sin decimales)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
     for s in ['S1', 'S2', 'S3', 'S4']:
         df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
@@ -186,7 +186,7 @@ def view_data():
     filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
-    elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
+    elapsed_time = format_elapsed(int((datetime.now() - now).total_seconds()))
 
     return render_template_string(
         HTML_TEMPLATE,
