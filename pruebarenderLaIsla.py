@@ -13,8 +13,8 @@ HTML_TEMPLATE = """
 <style>
 body {
     font-family: Arial, sans-serif;
-    background-color: #000000; /* fondo negro */
-    color: #ffffff; /* texto blanco */
+    background-color: #ffffff; /* fondo blanco liso */
+    color: #000; /* texto negro */
     text-align: center;
     padding: 20px;
 }
@@ -35,14 +35,12 @@ select {
     margin-bottom: 20px;
     border-radius: 5px;
     border: 1px solid #ff7f00;
-    background-color: #000;
-    color: #fff;
 }
 
 .table-container {
     width: 90%;
     margin: 0 auto;
-    background-color: #111111;
+    background-color: #ffffff;
     box-shadow: 0 0 10px #ff7f00;
     max-height: 80vh;
     overflow-y: auto; 
@@ -74,7 +72,7 @@ th, td {
 
 th {
     background-color: #ff7f00;
-    color: #000;
+    color: #fff;
 }
 
 tr:hover {
