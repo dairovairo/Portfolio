@@ -13,26 +13,20 @@ HTML_TEMPLATE = """
 <style>
 body {
     font-family: Arial, sans-serif;
-    background-color: #2b2b2b;
-    background-image: url('https://i.pinimg.com/1200x/c1/a8/9c/c1a89cc9d2824d7aacc448680adfd759.jpg');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-    color: #fff;
+    background-color: #ffffff; /* Fondo blanco liso */
+    color: #000; 
     text-align: center;
     padding: 20px;
 }
 
 h1 {
     color: #ff7f00; 
-    text-shadow: 0 0 10px #ff7f00;
     margin-bottom: 5px;
 }
 
 .last-updated {
-    font-size: 16px;  /* un poco más grande */
-    color: #ff7f00;   /* naranja */
+    font-size: 16px;
+    color: #ff7f00;
     margin-bottom: 20px;
 }
 
@@ -40,14 +34,14 @@ select {
     padding: 5px 10px;
     margin-bottom: 20px;
     border-radius: 5px;
-    border: none;
+    border: 1px solid #ccc;
 }
 
 .table-container {
     width: 90%;
     margin: 0 auto;
-    background-color: rgba(17,17,17,0.9);
-    box-shadow: 0 0 20px #ff7f00;
+    background-color: #fff;
+    box-shadow: 0 0 10px #aaa;
     max-height: 80vh;
     overflow-y: auto; 
     border-radius: 5px;
@@ -77,8 +71,8 @@ th, td {
 }
 
 th {
-    background-color: rgba(34,34,34,0.9);
-    color: #ff7f00;
+    background-color: #ff7f00;
+    color: #fff;
 }
 
 tr:hover {
@@ -169,9 +163,10 @@ def view_data():
     df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
     df = df.fillna("")
 
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
+    # Convertimos a int en lugar de float
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
     for s in ['S1', 'S2', 'S3', 'S4']:
-        df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0)
+        df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
 
     tiradas = ['S4', 'S3', 'S2', 'S1']
     df_sorted = (
