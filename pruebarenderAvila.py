@@ -77,7 +77,7 @@ option[selected] {
 </head>
 <body>
 
-<h1>Campeonato de tiro</h1>
+<h1>RESULTADOS EN DIRECTO EL FRESNILLO</h1>
 <p class="last-updated">
     Última actualización en la web: {{ last_updated }}<br>
     (hace {{ elapsed_time }})
@@ -198,3 +198,4 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
