@@ -4,7 +4,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQYfTQDKEyVZwHvJNrsj1_hxACqg-QuKLLR7BcQs3CB5_jg8UBsD1J81x1Km1l2kA/pub?gid=110548680&single=true&output=csv"
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmbgLgN6Jd460AsuM2NSKwG347DtTQzPiyn-8gGxqWHG0Es69m-mnOFKQmuGZAdw/pub?gid=110548680&single=true&output=csv"
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -13,8 +13,8 @@ HTML_TEMPLATE = """
 <style>
 body {
     font-family: Arial, sans-serif;
-    background-color: #ffffff; /* Fondo blanco liso */
-    color: #000; /* Texto en negro */
+    background-color: #ffffff; /* fondo blanco liso */
+    color: #000; /* texto negro */
     text-align: center;
     padding: 20px;
 }
@@ -34,14 +34,14 @@ select {
     padding: 5px 10px;
     margin-bottom: 20px;
     border-radius: 5px;
-    border: 1px solid #ccc;
+    border: 1px solid #ff7f00;
 }
 
 .table-container {
     width: 90%;
     margin: 0 auto;
-    background-color: #fff;
-    box-shadow: 0 0 10px #ccc;
+    background-color: #ffffff;
+    box-shadow: 0 0 10px #ff7f00;
     max-height: 80vh;
     overflow-y: auto; 
     border-radius: 5px;
@@ -143,40 +143,55 @@ function filterTable() {
 </html>
 """
 
-def format_elapsed(delta_seconds: int) -> str:
+def format_elapsed(delta_seconds):
+    delta_seconds = int(delta_seconds)  # aseguramos entero
     if delta_seconds < 60:
         return f"{delta_seconds} segundos"
     elif delta_seconds < 3600:
-        return f"{delta_seconds // 60} minutos"
+        return f"{delta_seconds//60} minutos"
     elif delta_seconds < 86400:
-        return f"{delta_seconds // 3600} horas"
+        return f"{delta_seconds//3600} horas"
     else:
-        return f"{delta_seconds // 86400} días"
+        return f"{delta_seconds//86400} días"
 
 @app.route("/", methods=["GET"])
 def view_data():
     now = datetime.now()
     last_updated = now.strftime("%d/%m/%Y %H:%M:%S")
 
+    # Leer CSV
     df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
-    df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
+
+    # Definimos columnas esperadas (ahora hasta S5)
+    columnas_base = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'S5', 'Total', 'Final', 'Total2']
+    df.columns = columnas_base
     df = df.fillna("")
 
-    # Convertimos a int (sin decimales)
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
-    for s in ['S1', 'S2', 'S3', 'S4']:
-        df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
+    # Detectar qué tiradas tienen datos
+    tiradas_validas = []
+    for s in ['S1', 'S2', 'S3', 'S4', 'S5']:
+        if df[s].replace("", float("nan")).notna().any():
+            df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
+            tiradas_validas.append(s)
+        else:
+            df = df.drop(columns=[s])
 
-    tiradas = ['S4', 'S3', 'S2', 'S1']
+    # Convertir Total en int
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
+
+    # Ordenar por Total y luego por las tiradas válidas en orden inverso
+    tiradas_validas_sorted = sorted(tiradas_validas, reverse=True)  # S5, S4, ...
     df_sorted = (
         df.drop(columns=['Numero'])
-          .sort_values(by=['Total'] + tiradas, ascending=False)
+          .sort_values(by=['Total'] + tiradas_validas_sorted, ascending=False)
           .reset_index(drop=True)
     )
 
+    # Reinsertar numeración
     df_sorted.insert(0, 'Numero', range(1, len(df_sorted)+1))
 
+    # Filtros
     categorias = sorted(df_sorted['Categoria'].dropna().unique())
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
@@ -186,7 +201,7 @@ def view_data():
     filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
-    elapsed_time = format_elapsed(int((datetime.now() - now).total_seconds()))
+    elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
 
     return render_template_string(
         HTML_TEMPLATE,
