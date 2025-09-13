@@ -1,109 +1,44 @@
-from flask import Flask, render_template_string, request
 import pandas as pd
+from flask import Flask, render_template_string, request
 from datetime import datetime
+import time
 
 app = Flask(__name__)
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmbgLgN6Jd460AsuM2NSKwG347DtTQzPiyn-8gGxqWHG0Es69m-mnOFKQmuGZAdw/pub?gid=110548680&single=true&output=csv"
+# URL del CSV
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQd_3Gh3drsN6jBf9VxUq2oZsuEYvJmC71Jv3rJdT5veSwM1hOLCwP4O3Lz9cRZ5k/pub?gid=1380536144&single=true&output=csv"
 
+# Plantilla HTML
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-<style>
-body {
-    font-family: Arial, sans-serif;
-    background-color: #ffffff; /* fondo blanco liso */
-    color: #000; /* texto negro */
-    text-align: center;
-    padding: 20px;
-}
-
-h1 {
-    color: #ff7f00; 
-    margin-bottom: 5px;
-}
-
-.last-updated {
-    font-size: 16px;
-    color: #ff7f00;
-    margin-bottom: 20px;
-}
-
-select {
-    padding: 5px 10px;
-    margin-bottom: 20px;
-    border-radius: 5px;
-    border: 1px solid #ff7f00;
-}
-
-.table-container {
-    width: 90%;
-    margin: 0 auto;
-    background-color: #ffffff;
-    box-shadow: 0 0 10px #ff7f00;
-    max-height: 80vh;
-    overflow-y: auto; 
-    border-radius: 5px;
-}
-
-@media (max-width: 768px) {
-    .table-container {
-        width: 100%;
-        max-height: 90vh;
-    }
-
-    th, td {
-        padding: 4px 6px;
-        font-size: 14px;
-    }
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    padding: 5px 8px;
-    border: 1px solid #ff7f00;
-    text-align: center;
-}
-
-th {
-    background-color: #ff7f00;
-    color: #fff;
-}
-
-tr:hover {
-    background-color: #ff7f00;
-    color: #000;
-}
-
-option[selected] {
-    background-color: #ff7f00;
-    color: #000;
-}
-</style>
+    <meta charset="UTF-8">
+    <title>Clasificación</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #111; color: #eee; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #444; padding: 8px; text-align: center; }
+        th { background: #222; }
+        tr:nth-child(even) { background: #1a1a1a; }
+        select, button { padding: 5px 10px; margin: 10px 0; }
+        .info { margin-top: 15px; font-size: 0.9em; color: #bbb; }
+    </style>
 </head>
 <body>
+    <h1>Clasificación</h1>
 
-<h1>Campeonato de tiro</h1>
-<p class="last-updated">
-    Última actualización en la web: {{ last_updated }}<br>
-    (hace {{ elapsed_time }})
-</p>
+    <form method="get">
+        <label for="categoria">Filtrar por categoría:</label>
+        <select name="categoria" id="categoria" onchange="this.form.submit()">
+            <option value="">Todas</option>
+            {% for cat in categorias %}
+                <option value="{{cat}}" {% if cat == categoria_seleccionada %}selected{% endif %}>{{cat}}</option>
+            {% endfor %}
+        </select>
+    </form>
 
-<label for="categoriaFilter">Filtrar por CATEGORIA:</label>
-<select id="categoriaFilter" onchange="filterTable()">
-    <option value="">Todas</option>
-    {% for cat in categorias %}
-        <option value="{{cat}}" {% if cat == categoria_seleccionada %}selected{% endif %}>{{cat}}</option>
-    {% endfor %}
-</select>
-
-<div class="table-container">
-    <table id="dataTable">
+    <table>
         <thead>
             <tr>
                 {% for col in columnas %}
@@ -112,50 +47,37 @@ option[selected] {
             </tr>
         </thead>
         <tbody>
-            {% for row in filas %}
+            {% for fila in filas %}
                 <tr>
-                    {% for cell in row %}
-                        <td>{{cell}}</td>
+                    {% for col, valor in zip(columnas, fila) %}
+                        {% if col == 'Categoria' %}
+                            <td>{{valor}}</td>
+                        {% else %}
+                            <td>{{valor}}</td>
+                        {% endif %}
                     {% endfor %}
                 </tr>
             {% endfor %}
         </tbody>
     </table>
-</div>
 
-<script>
-function filterTable() {
-    var filter = document.getElementById("categoriaFilter").value.toUpperCase();
-    var table = document.getElementById("dataTable");
-    var tr = table.getElementsByTagName("tr");
-    var categoria_idx = {{categoria_idx}};
-    for (var i = 1; i < tr.length; i++) {
-        var td = tr[i].getElementsByTagName("td")[categoria_idx];
-        if (td) {
-            var txtValue = td.textContent || td.innerText;
-            tr[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
-        }
-    }
-}
-</script>
-
+    <div class="info">
+        Última actualización: {{last_updated}} <br>
+        Tiempo de procesamiento: {{elapsed_time}}
+    </div>
 </body>
 </html>
 """
 
-def format_elapsed(delta_seconds):
-    delta_seconds = int(delta_seconds)  # aseguramos entero
-    if delta_seconds < 60:
-        return f"{delta_seconds} segundos"
-    elif delta_seconds < 3600:
-        return f"{delta_seconds//60} minutos"
-    elif delta_seconds < 86400:
-        return f"{delta_seconds//3600} horas"
-    else:
-        return f"{delta_seconds//86400} días"
+def format_elapsed(seconds: float) -> str:
+    """Formatea segundos en milisegundos o segundos."""
+    if seconds < 1:
+        return f"{seconds*1000:.0f} ms"
+    return f"{seconds:.2f} s"
 
 @app.route("/", methods=["GET"])
 def view_data():
+    start_time = time.time()
     now = datetime.now()
     last_updated = now.strftime("%d/%m/%Y %H:%M:%S")
 
@@ -163,28 +85,41 @@ def view_data():
     df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
 
-    # Definimos columnas esperadas (ahora hasta S5)
-    columnas_base = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'S5', 'Total', 'Final', 'Total2']
-    df.columns = columnas_base
+    # Detectar número de columnas reales
+    num_cols = df.shape[1]
+
+    # Base fija sin tiradas
+    columnas_base = ['Numero', 'Dorsal', 'Tirador', 'Categoria']
+    columnas_tiradas = ['S1', 'S2', 'S3', 'S4', 'S5']
+    columnas_extra = ['Total', 'Final', 'Total2']
+
+    # Construir lista de nombres según el número de columnas
+    tiradas_presentes = max(0, num_cols - len(columnas_base) - len(columnas_extra))
+    all_columns = columnas_base + columnas_tiradas[:tiradas_presentes] + columnas_extra[:(num_cols - len(columnas_base) - tiradas_presentes)]
+
+    df.columns = all_columns
     df = df.fillna("")
 
-    # Detectar qué tiradas tienen datos
+    # Detectar tiradas válidas (que existan y tengan algún dato)
     tiradas_validas = []
-    for s in ['S1', 'S2', 'S3', 'S4', 'S5']:
+    for s in [c for c in columnas_tiradas if c in df.columns]:
         if df[s].replace("", float("nan")).notna().any():
             df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
             tiradas_validas.append(s)
         else:
             df = df.drop(columns=[s])
 
-    # Convertir Total en int
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
+    # Convertir Total en int si existe
+    if 'Total' in df.columns:
+        df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
 
-    # Ordenar por Total y luego por las tiradas válidas en orden inverso
-    tiradas_validas_sorted = sorted(tiradas_validas, reverse=True)  # S5, S4, ...
+    # Ordenar por Total y tiradas válidas
+    tiradas_validas_sorted = sorted(tiradas_validas, reverse=True)  # ej: S5, S4, S3...
+    sort_cols = ['Total'] + tiradas_validas_sorted if 'Total' in df.columns else tiradas_validas_sorted
+
     df_sorted = (
-        df.drop(columns=['Numero'])
-          .sort_values(by=['Total'] + tiradas_validas_sorted, ascending=False)
+        df.drop(columns=['Numero'], errors="ignore")
+          .sort_values(by=sort_cols, ascending=False)
           .reset_index(drop=True)
     )
 
@@ -201,7 +136,7 @@ def view_data():
     filas = df_sorted.to_numpy().tolist()
     categoria_idx = columnas.index('Categoria')
 
-    elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
+    elapsed_time = format_elapsed(time.time() - start_time)
 
     return render_template_string(
         HTML_TEMPLATE,
@@ -215,4 +150,4 @@ def view_data():
     )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=10000, debug=True)
