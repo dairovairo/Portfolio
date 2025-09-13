@@ -144,7 +144,7 @@ function filterTable() {
 """
 
 def format_elapsed(delta_seconds):
-    delta_seconds = int(delta_seconds)  # aseguramos entero
+    delta_seconds = int(delta_seconds)
     if delta_seconds < 60:
         return f"{delta_seconds} segundos"
     elif delta_seconds < 3600:
@@ -161,18 +161,29 @@ def view_data():
 
     df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
-    df.columns = ['Numero', 'Dorsal', 'Tirador', 'Categoria', 'S1', 'S2', 'S3', 'S4', 'Total', 'Final', 'Total2']
+
+    # Columnas esperadas con hasta 5 tiradas
+    expected_cols = ['Numero', 'Dorsal', 'Tirador', 'Categoria',
+                     'S1', 'S2', 'S3', 'S4', 'S5',
+                     'Total', 'Final', 'Total2']
+    df.columns = expected_cols[:len(df.columns)]
     df = df.fillna("")
 
-    # Convertir valores numéricos a int
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
-    for s in ['S1', 'S2', 'S3', 'S4']:
-        df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
+    # Conversión a int de Total y tiradas
+    if "Total" in df.columns:
+        df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
+    for s in ['S1', 'S2', 'S3', 'S4', 'S5']:
+        if s in df.columns:
+            df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
 
-    tiradas = ['S4', 'S3', 'S2', 'S1']
+    # Tiradas realmente presentes con datos
+    tiradas = [s for s in ['S5', 'S4', 'S3', 'S2', 'S1']
+               if s in df.columns and df[s].sum() > 0]
+
     df_sorted = (
         df.drop(columns=['Numero'])
-          .sort_values(by=['Total'] + tiradas, ascending=False)
+          .sort_values(by=(['Total'] + tiradas if "Total" in df.columns else tiradas),
+                       ascending=False)
           .reset_index(drop=True)
     )
 
@@ -183,15 +194,18 @@ def view_data():
     if categoria_seleccionada:
         df_sorted = df_sorted[df_sorted['Categoria'] == categoria_seleccionada]
 
-    columnas = df_sorted.columns.tolist()
-    filas = df_sorted.to_numpy().tolist()
-    categoria_idx = columnas.index('Categoria')
+    # Columnas visibles → ocultamos tiradas sin datos
+    columnas_visibles = [c for c in df_sorted.columns
+                         if not (c in ['S1','S2','S3','S4','S5'] and df_sorted[c].sum() == 0)]
+
+    filas = df_sorted[columnas_visibles].to_numpy().tolist()
+    categoria_idx = columnas_visibles.index('Categoria')
 
     elapsed_time = format_elapsed((datetime.now() - now).total_seconds())
 
     return render_template_string(
         HTML_TEMPLATE,
-        columnas=columnas,
+        columnas=columnas_visibles,
         filas=filas,
         categorias=categorias,
         categoria_seleccionada=categoria_seleccionada,
