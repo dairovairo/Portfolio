@@ -4,7 +4,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/1AAcHY3YEgKy7F2OKNWSieYja4LPnlj0A/edit?usp=sharing&ouid=106278751517880292598&rtpof=true&sd=true"
+CSV_URL = ""
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -216,3 +216,4 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
