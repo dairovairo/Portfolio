@@ -4,7 +4,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmbgLgN6Jd460AsuM2NSKwG347DtTQzPiyn-8gGxqWHG0Es69m-mnOFKQmuGZAdw/pub?gid=110548680&single=true&output=csv"
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBdLOhcSFwA9NF_FIQ2bVbmOmr5g6pnGJXmqzn9pwc8T1fkR7qdATo0A7i2C4Vmg/pub?gid=110548680&single=true&output=csv"
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -88,7 +88,7 @@ option[selected] {
 </head>
 <body>
 
-<h1>RESULTADOS EN DIRECTO LA ISLA</h1>
+<h1>RESULTADOS EN DIRECTO EL FRESNILLO</h1>
 <p class="last-updated">
     Última actualización en la web: {{ last_updated }}<br>
     (hace {{ elapsed_time }})
@@ -216,6 +216,7 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001)
+
 
 
 
