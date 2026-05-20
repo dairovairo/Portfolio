@@ -6,13 +6,14 @@
   "private": true,
   "author": "SocialBattery",
   "license": "UNLICENSED",
-  "appUrl": "https://tu-frontend.onrender.com",
+  "appUrl": "https://portfolio-nmc3.onrender.com",
   "scripts": {
     "set-url": "node scripts/set-app-url.js",
+    "check-url": "node scripts/check-app-url.js",
     "start": "electron .",
-    "dist": "electron-builder --win nsis portable",
-    "dist:installer": "electron-builder --win nsis",
-    "dist:portable": "electron-builder --win portable"
+    "dist": "npm run check-url && electron-builder --win nsis portable",
+    "dist:installer": "npm run check-url && electron-builder --win nsis",
+    "dist:portable": "npm run check-url && electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "^31.7.7",
