@@ -16,21 +16,22 @@ async function apiFetch(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-const text = await res.text();
-let data = {};
-if (text) {
-  try {
-    data = JSON.parse(text);
-  } catch {
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (_e) {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    }
   }
-}
 
-if (!res.ok) {
-  throw new Error(data.error || `HTTP ${res.status}`);
-}
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
 
-return data;
+  return data;
+}
 
 export const api = {
   get: (path) => apiFetch(path),
