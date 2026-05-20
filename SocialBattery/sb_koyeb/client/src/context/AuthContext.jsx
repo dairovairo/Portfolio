@@ -63,6 +63,12 @@ export function AuthProvider({ children }) {
     return user;
   };
 
+  const createProfile = async (profileData) => {
+    const { user } = await api.post('/auth/profile', profileData);
+    setProfile(user);
+    return user;
+  };
+
   return (
     <AuthContext.Provider value={{
       session,
@@ -75,6 +81,7 @@ export function AuthProvider({ children }) {
       signIn,
       signOut,
       refreshProfile,
+      createProfile,
     }}>
       {/* Heartbeat broadcaster — active when logged in with a profile */}
       {profile?.id && <PresenceBroadcaster userId={profile.id} />}

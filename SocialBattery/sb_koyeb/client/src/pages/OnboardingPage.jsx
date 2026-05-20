@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
+import { apiUrl } from '../lib/api';
 import { getBatteryColor } from '../lib/battery';
 
 const STEPS = [
@@ -30,7 +30,7 @@ function ProgressDots({ step }) {
 }
 
 export default function OnboardingPage() {
-  const { refreshProfile } = useAuth();
+  const { createProfile } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
@@ -85,7 +85,7 @@ export default function OnboardingPage() {
           formData.append('avatar', avatarFile);
           try {
             const res = await fetch(
-              `${import.meta.env.VITE_API_URL || ''}/api/users/avatar`,
+              apiUrl('/users/avatar'),
               {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${(await import('../lib/supabase')).supabase.auth.getSession().then(r => r.data.session?.access_token)}` },
@@ -97,14 +97,13 @@ export default function OnboardingPage() {
           } catch { /* avatar upload optional */ }
         }
 
-        await api.post('/auth/profile', {
+        await createProfile({
           username: username.trim().toLowerCase(),
           display_name: displayName.trim() || username.trim(),
           bio: bio.trim() || null,
           avatar_url: avatarUrl || (avatarPreview ? null : null),
           initial_battery: battery,
         });
-        await refreshProfile();
         setStep(s => s + 1);
       } catch (err) {
         setError(err.message || 'Algo salió mal');

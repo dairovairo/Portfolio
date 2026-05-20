@@ -1,6 +1,19 @@
 import { supabase } from './supabase';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const rawBaseUrl = import.meta.env.VITE_API_URL || '/api';
+
+function normalizeBaseUrl(url) {
+  const trimmed = url.trim().replace(/\/+$/, '');
+  if (trimmed.endsWith('/api')) return trimmed;
+  return `${trimmed}/api`;
+}
+
+const BASE_URL = normalizeBaseUrl(rawBaseUrl);
+
+export function apiUrl(path) {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${BASE_URL}${cleanPath}`;
+}
 
 async function apiFetch(path, options = {}, retries = 3) {
   // Si no hay sesión aún, esperar hasta 2s antes de rendirse
@@ -14,7 +27,7 @@ async function apiFetch(path, options = {}, retries = 3) {
 
   let res;
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(apiUrl(path), {
       ...options,
       headers: {
         'Content-Type': 'application/json',
