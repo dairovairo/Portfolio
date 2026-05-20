@@ -38,6 +38,8 @@ npm.cmd start
 npm.cmd run dist
 ```
 
+Antes de construir, el script comprueba que la URL responde correctamente. Si aparece `Not Found`, casi siempre significa que configuraste una URL de ejemplo o una URL que no es la del frontend de Render.
+
 Los archivos saldran en:
 
 ```text

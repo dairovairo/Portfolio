@@ -23,6 +23,11 @@ if (parsed.protocol !== 'https:') {
   fail('Usa la URL HTTPS publica de Render.');
 }
 
+const placeholderWords = ['cambia-esto', 'tu-frontend', 'example'];
+if (placeholderWords.some(word => parsed.hostname.toLowerCase().includes(word))) {
+  fail('Esa URL parece de ejemplo. Usa la URL real de tu frontend en Render.');
+}
+
 const packagePath = path.join(__dirname, '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 packageJson.appUrl = parsed.href.replace(/\/$/, '');

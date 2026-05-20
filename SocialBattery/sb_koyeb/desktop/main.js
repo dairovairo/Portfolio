@@ -63,6 +63,64 @@ function renderSetupHtml() {
   `;
 }
 
+function renderHttpErrorHtml(statusCode, failedUrl) {
+  return `
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>SocialBattery</title>
+        <style>
+          :root { color-scheme: dark; font-family: Arial, sans-serif; }
+          body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: #0a0a0f;
+            color: #f7f7fb;
+          }
+          main {
+            width: min(460px, calc(100vw - 32px));
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 18px;
+            padding: 28px;
+            background: #15151e;
+          }
+          h1 { margin: 0 0 8px; font-size: 28px; }
+          p { color: #b7b7c7; line-height: 1.5; }
+          code {
+            display: block;
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 12px;
+            background: #0a0a0f;
+            color: #c4b5fd;
+            word-break: break-all;
+          }
+        </style>
+      </head>
+      <body>
+        <main>
+          <h1>URL de SocialBattery no encontrada</h1>
+          <p>La app de escritorio esta apuntando a una URL que responde ${statusCode}. Configura la URL real del frontend en Render y vuelve a generar el ejecutable.</p>
+          <code>${escapeHtml(failedUrl)}</code>
+        </main>
+      </body>
+    </html>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 function createWindow() {
   const appOrigin = isValidAppUrl(APP_URL) ? new URL(APP_URL).origin : null;
 
@@ -100,6 +158,18 @@ function createWindow() {
   win.webContents.on('did-fail-load', (_event, _errorCode, _errorDescription, _validatedURL, isMainFrame) => {
     if (!isMainFrame) return;
     win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(renderOfflineHtml())}`);
+  });
+
+  win.webContents.session.webRequest.onHeadersReceived({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+    if (
+      details.resourceType === 'mainFrame' &&
+      appOrigin &&
+      new URL(details.url).origin === appOrigin &&
+      details.statusCode >= 400
+    ) {
+      win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(renderHttpErrorHtml(details.statusCode, details.url))}`);
+    }
+    callback({});
   });
 
   if (isValidAppUrl(APP_URL)) {
