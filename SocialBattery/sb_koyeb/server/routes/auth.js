@@ -7,31 +7,19 @@ const { requireAuth } = require('../middleware/auth');
 router.post('/profile', requireAuth, async (req, res) => {
   const { username, display_name, bio, avatar_url, initial_battery } = req.body;
   const userId = req.user.id;
-  const normalizedUsername = username?.trim().toLowerCase();
 
-  if (!normalizedUsername || normalizedUsername.length < 3) {
+  if (!username || username.trim().length < 3) {
     return res.status(400).json({ error: 'Username must be at least 3 characters' });
   }
 
-  // If the profile was already created but the client lost the response, recover it.
-  const { data: currentProfile } = await supabase
-    .from('users')
-    .select('*, user_badges(badge_id, earned_at, badges(*))')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (currentProfile) {
-    return res.status(200).json({ user: currentProfile });
-  }
-
-  // Check username uniqueness, but allow the same user to retry onboarding.
+  // Check username uniqueness
   const { data: existing } = await supabase
     .from('users')
     .select('id')
-    .eq('username', normalizedUsername)
-    .maybeSingle();
+    .eq('username', username.trim().toLowerCase())
+    .single();
 
-  if (existing && existing.id !== userId) {
+  if (existing) {
     return res.status(409).json({ error: 'Username already taken' });
   }
 
@@ -43,7 +31,7 @@ router.post('/profile', requireAuth, async (req, res) => {
     .from('users')
     .upsert({
       id: userId,
-      username: normalizedUsername,
+      username: username.trim().toLowerCase(),
       display_name: (display_name || username).trim(),
       bio: bio ? bio.trim().slice(0, 160) : null,
       avatar_url: avatar_url || null,
@@ -59,15 +47,13 @@ router.post('/profile', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to create profile' });
   }
 
-  // Record initial battery once. A lost response can make the client retry this route.
-  if (!existing) {
-    await supabase.from('battery_history').insert({
-      user_id: userId,
-      level: batteryLevel,
-      day_of_week: new Date().getDay(),
-      hour: new Date().getHours(),
-    }).catch(() => {});
-  }
+  // Record initial battery in history
+  await supabase.from('battery_history').insert({
+    user_id: userId,
+    level: batteryLevel,
+    day_of_week: new Date().getDay(),
+    hour: new Date().getHours(),
+  }).catch(() => {});
 
   res.status(201).json({ user: data });
 });
