@@ -4,135 +4,77 @@ import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 
-// ── Category metadata ────────────────────────────────────────────────────────
-const CATEGORY_META = {
-  tiempo:  { label: '🕐 Horarios',       desc: 'Por cuándo estás activo' },
-  bateria: { label: '🔋 Batería',         desc: 'Por el nivel de tu energía social' },
-  habito:  { label: '📆 Hábitos',         desc: 'Por tu constancia' },
-  social:  { label: '🤝 Social',          desc: 'Por tus conexiones y organización' },
-  general: { label: '⭐ General',          desc: 'Logros generales' },
-};
-
-// ── Badge card ────────────────────────────────────────────────────────────────
-function BadgeCard({ badge, earnedAt }) {
-  const earned = !!earnedAt;
+function BadgeCard({ badge, assignment, currentUserId }) {
+  const holder = assignment?.user;
+  const isMine = assignment?.userId === currentUserId;
 
   return (
     <div
       className={`relative rounded-2xl border p-4 flex flex-col items-center text-center gap-2 transition-all duration-300 ${
-        earned
+        isMine
           ? 'bg-surface-card border-accent-primary/40 shadow-lg shadow-accent-primary/10'
-          : 'bg-surface-card/30 border-surface-border opacity-40'
+          : assignment
+          ? 'bg-surface-card border-surface-border'
+          : 'bg-surface-card/30 border-surface-border opacity-45'
       }`}
       title={badge.description}
     >
-      {/* Earned glow */}
-      {earned && (
+      {isMine && (
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"
-          style={{ background: 'radial-gradient(circle at 50% 0%, rgba(124,58,237,0.1) 0%, transparent 60%)' }}
+          style={{ background: 'radial-gradient(circle at 50% 0%, rgba(124,58,237,0.12) 0%, transparent 60%)' }}
         />
       )}
 
-      {/* Emoji */}
       <div
-        className={`text-4xl relative z-10 ${earned ? '' : 'grayscale'}`}
-        style={earned ? { filter: 'drop-shadow(0 0 10px rgba(168,85,247,0.5))' } : {}}
+        className={`text-4xl relative z-10 ${assignment ? '' : 'grayscale'}`}
+        style={isMine ? { filter: 'drop-shadow(0 0 10px rgba(168,85,247,0.5))' } : {}}
       >
         {badge.emoji}
       </div>
 
-      {/* Name */}
       <div className="font-display font-semibold text-surface-text text-sm leading-snug relative z-10">
         {badge.name}
       </div>
 
-      {/* Description */}
       <div className="text-xs text-surface-muted leading-tight relative z-10">
         {badge.description}
       </div>
 
-      {/* Earned date */}
-      {earned && (
-        <div className="text-xs font-mono text-accent-glow/70 relative z-10">
-          {new Date(earnedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-        </div>
-      )}
-
-      {/* Lock icon for unearned */}
-      {!earned && (
-        <div className="text-xs text-slate-600 font-mono relative z-10">🔒 Sin desbloquear</div>
+      {assignment ? (
+        <>
+          <div className={`text-xs font-mono relative z-10 ${isMine ? 'text-accent-glow/80' : 'text-surface-muted'}`}>
+            {isMine ? 'Tu titulo' : `@${holder?.username || 'usuario'}`}
+          </div>
+          <div className="text-[11px] text-surface-muted/75 leading-tight relative z-10">
+            {assignment.reason}
+          </div>
+        </>
+      ) : (
+        <div className="text-xs text-slate-600 font-mono relative z-10">Sin titular</div>
       )}
     </div>
   );
 }
 
-// ── Category section ──────────────────────────────────────────────────────────
-function CategorySection({ category, badges, earnedMap }) {
-  const meta = CATEGORY_META[category] || { label: category, desc: '' };
-  const earnedInCategory = badges.filter(b => earnedMap[b.id]).length;
-
-  return (
-    <div>
-      {/* Category header */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="font-display font-bold text-surface-text text-base">{meta.label}</h3>
-          <p className="text-xs text-surface-muted">{meta.desc}</p>
-        </div>
-        <span className="text-xs font-mono text-surface-muted bg-surface-card border border-surface-border px-2 py-1 rounded-lg">
-          {earnedInCategory}/{badges.length}
-        </span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-1 bg-surface-border rounded-full mb-4 overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-accent-primary to-accent-glow rounded-full transition-all duration-500"
-          style={{ width: `${badges.length > 0 ? (earnedInCategory / badges.length) * 100 : 0}%` }}
-        />
-      </div>
-
-      {/* Badge grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {badges.map(badge => (
-          <BadgeCard
-            key={badge.id}
-            badge={badge}
-            earnedAt={earnedMap[badge.id]}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────
 export default function BadgesPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
 
-  const [allBadges, setAllBadges] = useState([]);
-  const [earnedMap, setEarnedMap] = useState({});   // badge_id → earned_at
+  const [badges, setBadges] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const [{ badges: catalog }, { badges: earned }] = await Promise.all([
-          api.get('/badges'),
-          api.get('/badges/my'),
-        ]);
-
-        setAllBadges(catalog || []);
-
-        const map = {};
-        (earned || []).forEach(ub => {
-          map[ub.badge.id] = ub.earned_at;
-        });
-        setEarnedMap(map);
-      } catch (e) {
-        console.error(e);
+        const result = await api.get('/badges/circle');
+        setBadges(result.badges || []);
+        setAssignments(result.assignments || []);
+        setMembers(result.members || []);
+      } catch (error) {
+        console.error(error);
       } finally {
         setLoading(false);
       }
@@ -140,27 +82,18 @@ export default function BadgesPage() {
     load();
   }, []);
 
-  // Group by category (maintain stable order)
-  const byCategory = allBadges.reduce((acc, badge) => {
-    const cat = badge.category || 'general';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(badge);
+  const assignmentMap = assignments.reduce((acc, assignment) => {
+    acc[assignment.badgeId] = assignment;
     return acc;
   }, {});
 
-  const categoryOrder = ['bateria', 'habito', 'social', 'tiempo', 'general'];
-  const sortedCategories = [
-    ...categoryOrder.filter(c => byCategory[c]),
-    ...Object.keys(byCategory).filter(c => !categoryOrder.includes(c)),
-  ];
-
-  const totalEarned = Object.keys(earnedMap).length;
-  const totalBadges = allBadges.length;
-  const progress = totalBadges > 0 ? Math.round((totalEarned / totalBadges) * 100) : 0;
+  const myAssignments = assignments.filter(assignment => assignment.userId === profile?.id);
+  const assignedCount = assignments.length;
+  const totalBadges = badges.length;
+  const progress = totalBadges > 0 ? Math.round((assignedCount / totalBadges) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
-      {/* Nav */}
       <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/80 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button
@@ -170,17 +103,15 @@ export default function BadgesPage() {
             ←
           </button>
           <div className="flex-1">
-            <h1 className="font-display font-bold text-surface-text">Insignias</h1>
+            <h1 className="font-display font-bold text-surface-text">Insignias del circulo</h1>
           </div>
           <span className="text-xs font-mono text-accent-glow bg-accent-primary/15 border border-accent-primary/20 px-2.5 py-1 rounded-xl">
-            {totalEarned}/{totalBadges}
+            {assignedCount}/{totalBadges}
           </span>
         </div>
       </nav>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-7">
-
-        {/* Overall progress hero */}
         {!loading && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5">
             <div className="flex items-center gap-4 mb-4">
@@ -195,37 +126,32 @@ export default function BadgesPage() {
               </div>
               <div className="flex-1">
                 <div className="font-display font-bold text-surface-text text-xl mb-0.5">
-                  {profile?.display_name || 'Tu colección'}
+                  Tu circulo de amistades
                 </div>
                 <div className="text-sm text-surface-muted">
-                  {totalEarned === 0
-                    ? 'Todavía no has ganado ninguna insignia'
-                    : totalEarned === totalBadges
-                    ? '🎊 ¡Colección completa!'
-                    : `Has desbloqueado ${totalEarned} de ${totalBadges} insignias`}
+                  {members.length} miembros · {myAssignments.length || 'ningun'} titulo para ti
                 </div>
               </div>
             </div>
 
-            {/* Progress bar */}
             <div className="h-2.5 bg-surface-bg rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${progress}%`,
-                  background: progress === 100
-                    ? 'linear-gradient(to right, #22c55e, #84cc16)'
-                    : 'linear-gradient(to right, #7c3aed, #a855f7)',
+                  background: 'linear-gradient(to right, #7c3aed, #a855f7)',
                   boxShadow: '0 0 10px rgba(168,85,247,0.4)',
                 }}
               />
             </div>
-            <div className="text-right text-xs font-mono text-surface-muted mt-1.5">{progress}%</div>
+            <p className="text-xs text-surface-muted mt-3 leading-relaxed">
+              Los titulos se recalculan dentro de tu circulo. Si alguien domina varias categorias,
+              conserva la que gana con mas diferencia y deja sitio a otros cuando tambien destacan.
+            </p>
           </div>
         )}
 
-        {/* Loading skeleton */}
-        {loading && (
+        {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="bg-surface-card border border-surface-border rounded-2xl p-4 animate-pulse">
@@ -238,31 +164,43 @@ export default function BadgesPage() {
               </div>
             ))}
           </div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-display font-bold text-surface-text text-base">Titulos activos</h3>
+                <p className="text-xs text-surface-muted">Comparados contra tus amigos aceptados</p>
+              </div>
+              <span className="text-xs font-mono text-surface-muted bg-surface-card border border-surface-border px-2 py-1 rounded-lg">
+                {assignedCount}/{totalBadges}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {badges.map(badge => (
+                <BadgeCard
+                  key={badge.id}
+                  badge={badge}
+                  assignment={assignmentMap[badge.id]}
+                  currentUserId={profile?.id}
+                />
+              ))}
+            </div>
+          </div>
         )}
 
-        {/* Badge categories */}
-        {!loading && sortedCategories.map(category => (
-          <CategorySection
-            key={category}
-            category={category}
-            badges={byCategory[category]}
-            earnedMap={earnedMap}
-          />
-        ))}
-
-        {/* Hint for new users */}
-        {!loading && totalEarned === 0 && (
+        {!loading && members.length <= 1 && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center">
-            <div className="text-3xl mb-3">🌱</div>
-            <div className="font-display font-semibold text-surface-text mb-1.5">Empieza a ganar insignias</div>
+            <div className="text-3xl mb-3">👥</div>
+            <div className="font-display font-semibold text-surface-text mb-1.5">Necesitas un circulo</div>
             <div className="text-sm text-surface-muted leading-relaxed">
-              Actualiza tu batería social cada día para desbloquear logros. ¡Algunos se consiguen la primera vez que lo haces!
+              Anade amigos y cread pools para que las insignias tengan sentido.
             </div>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/friends')}
               className="mt-4 bg-accent-primary/20 text-accent-glow border border-accent-primary/30 text-sm font-display font-semibold px-4 py-2 rounded-xl hover:bg-accent-primary/30 transition-all"
             >
-              Actualizar batería →
+              Ir a amigos →
             </button>
           </div>
         )}

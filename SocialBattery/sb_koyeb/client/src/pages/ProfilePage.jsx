@@ -25,7 +25,7 @@ function BadgeCard({ badge, earned }) {
       <div className="text-xs font-display font-semibold text-surface-text leading-tight">{badge.name}</div>
       {earned && (
         <div className="text-xs text-surface-muted mt-0.5 font-mono">
-          {new Date(earned.earned_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+          Tu titulo
         </div>
       )}
     </div>
@@ -42,6 +42,7 @@ export default function ProfilePage() {
 
   const [history, setHistory] = useState([]);
   const [allBadges, setAllBadges] = useState([]);
+  const [earnedBadgesMap, setEarnedBadgesMap] = useState({});
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyView, setHistoryView] = useState('line');
 
@@ -55,9 +56,6 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  const earnedBadgesMap = {};
-  (profile?.user_badges || []).forEach(ub => { earnedBadgesMap[ub.badge_id] = ub; });
-
   useEffect(() => {
     api.get('/battery/history')
       .then(({ history }) => setHistory(history || []))
@@ -66,6 +64,14 @@ export default function ProfilePage() {
 
     api.get('/badges')
       .then(({ badges }) => setAllBadges(badges || []))
+      .catch(console.error);
+
+    api.get('/badges/my')
+      .then(({ badges }) => {
+        const map = {};
+        (badges || []).forEach(entry => { map[entry.badge.id] = entry; });
+        setEarnedBadgesMap(map);
+      })
       .catch(console.error);
   }, []);
 

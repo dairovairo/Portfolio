@@ -97,7 +97,9 @@ router.get('/', requireAuth, async (req, res) => {
   // Flatten: return the friend (not me)
   const friends = (data || []).map(f =>
     f.requester?.id === userId ? f.addressee : f.requester
-  ).filter(Boolean);
+  )
+    .filter(Boolean)
+    .sort((a, b) => (b.battery_level ?? -1) - (a.battery_level ?? -1));
 
   res.json({ friends });
 });
