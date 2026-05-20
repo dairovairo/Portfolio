@@ -163,9 +163,7 @@ export default function FriendsPage() {
     try {
       const { friends: data } = await api.get('/friends');
       const sorted = [...(data || [])].sort((a, b) => {
-        const diffA = Math.abs((a.battery_level ?? 50) - myBattery);
-        const diffB = Math.abs((b.battery_level ?? 50) - myBattery);
-        return diffA - diffB;
+        return (b.battery_level ?? -1) - (a.battery_level ?? -1);
       });
       setFriends(sorted);
     } catch (e) { console.error(e); }
@@ -347,7 +345,7 @@ export default function FriendsPage() {
             ) : (
               <>
                 <p className="text-xs text-slate-600 font-mono px-1">
-                  Ordenados por cercanía a tu batería ({myBattery}%)
+                  Ordenados por batería social, de más a menos
                   {onlineFriendsCount > 0 && ` · ${onlineFriendsCount} en línea`}
                 </p>
                 {friends.map(f => (
