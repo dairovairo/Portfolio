@@ -12,14 +12,14 @@ router.post('/profile', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Username must be at least 3 characters' });
   }
 
-  // Check username uniqueness
+  // Check username uniqueness, but allow the same user to retry onboarding.
   const { data: existing } = await supabase
     .from('users')
     .select('id')
     .eq('username', username.trim().toLowerCase())
-    .single();
+    .maybeSingle();
 
-  if (existing) {
+  if (existing && existing.id !== userId) {
     return res.status(409).json({ error: 'Username already taken' });
   }
 
@@ -47,13 +47,15 @@ router.post('/profile', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to create profile' });
   }
 
-  // Record initial battery in history
-  await supabase.from('battery_history').insert({
-    user_id: userId,
-    level: batteryLevel,
-    day_of_week: new Date().getDay(),
-    hour: new Date().getHours(),
-  }).catch(() => {});
+  // Record initial battery once. A lost response can make the client retry this route.
+  if (!existing) {
+    await supabase.from('battery_history').insert({
+      user_id: userId,
+      level: batteryLevel,
+      day_of_week: new Date().getDay(),
+      hour: new Date().getHours(),
+    }).catch(() => {});
+  }
 
   res.status(201).json({ user: data });
 });

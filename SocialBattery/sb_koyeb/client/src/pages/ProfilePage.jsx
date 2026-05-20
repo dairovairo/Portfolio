@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { usePush } from '../hooks/usePush';
-import { api } from '../lib/api';
+import { api, apiUrl } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { BatteryLineChart, BatteryHeatmap } from '../components/BatteryChart';
 import BatterySlider from '../components/BatterySlider';
@@ -108,7 +108,7 @@ export default function ProfilePage() {
 
       const formData = new FormData();
       formData.append('avatar', file);
-      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/users/avatar`, {
+      const res = await fetch(apiUrl('/users/avatar'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
