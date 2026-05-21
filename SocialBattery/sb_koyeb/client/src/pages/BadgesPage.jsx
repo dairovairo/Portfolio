@@ -57,30 +57,77 @@ function BadgeCard({ badge, assignment, currentUserId }) {
   );
 }
 
+function GroupSelector({ groups, selectedId, onSelect }) {
+  if (!groups.length) return null;
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+      {groups.map(group => (
+        <button
+          key={group.id}
+          onClick={() => onSelect(group.id)}
+          className={`flex-shrink-0 px-3.5 py-2 rounded-xl text-sm font-display font-semibold transition-all border ${
+            selectedId === group.id
+              ? 'bg-accent-primary/20 text-accent-glow border-accent-primary/30'
+              : 'bg-surface-card text-surface-muted border-surface-border hover:text-surface-text'
+          }`}
+        >
+          {group.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function BadgesPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
 
+  const [groups, setGroups] = useState([]);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [badges, setBadges] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [loadingBadges, setLoadingBadges] = useState(false);
 
+  // Cargar grupos del usuario
   useEffect(() => {
-    async function load() {
+    async function loadGroups() {
       try {
-        const result = await api.get('/badges/circle');
+        const result = await api.get('/groups');
+        const userGroups = result.groups || [];
+        setGroups(userGroups);
+        if (userGroups.length > 0) {
+          setSelectedGroupId(userGroups[0].id);
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoadingGroups(false);
+      }
+    }
+    loadGroups();
+  }, []);
+
+  // Cargar insignias del grupo seleccionado
+  useEffect(() => {
+    if (!selectedGroupId) return;
+
+    async function loadBadges() {
+      setLoadingBadges(true);
+      try {
+        const result = await api.get(`/badges/group/${selectedGroupId}`);
         setBadges(result.badges || []);
         setAssignments(result.assignments || []);
         setMembers(result.members || []);
       } catch (error) {
         console.error(error);
       } finally {
-        setLoading(false);
+        setLoadingBadges(false);
       }
     }
-    load();
-  }, []);
+    loadBadges();
+  }, [selectedGroupId]);
 
   const assignmentMap = assignments.reduce((acc, assignment) => {
     acc[assignment.badgeId] = assignment;
@@ -91,6 +138,7 @@ export default function BadgesPage() {
   const assignedCount = assignments.length;
   const totalBadges = badges.length;
   const progress = totalBadges > 0 ? Math.round((assignedCount / totalBadges) * 100) : 0;
+  const selectedGroup = groups.find(g => g.id === selectedGroupId);
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
@@ -103,55 +151,88 @@ export default function BadgesPage() {
             ←
           </button>
           <div className="flex-1">
-            <h1 className="font-display font-bold text-surface-text">Insignias del circulo</h1>
+            <h1 className="font-display font-bold text-surface-text">Insignias del grupo</h1>
           </div>
-          <span className="text-xs font-mono text-accent-glow bg-accent-primary/15 border border-accent-primary/20 px-2.5 py-1 rounded-xl">
-            {assignedCount}/{totalBadges}
-          </span>
+          {selectedGroupId && (
+            <span className="text-xs font-mono text-accent-glow bg-accent-primary/15 border border-accent-primary/20 px-2.5 py-1 rounded-xl">
+              {assignedCount}/{totalBadges}
+            </span>
+          )}
         </div>
       </nav>
 
-      <main className="max-w-lg mx-auto px-4 py-6 space-y-7">
-        {!loading && (
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
+
+        {/* Sin grupos */}
+        {!loadingGroups && groups.length === 0 && (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center">
+            <div className="text-3xl mb-3">👥</div>
+            <div className="font-display font-semibold text-surface-text mb-1.5">Necesitas un grupo privado</div>
+            <div className="text-sm text-surface-muted leading-relaxed">
+              Crea un grupo privado de amigos para que las insignias tengan sentido.
+              Cada grupo tiene sus propios titulares.
+            </div>
+            <button
+              onClick={() => navigate('/friends')}
+              className="mt-4 bg-accent-primary/20 text-accent-glow border border-accent-primary/30 text-sm font-display font-semibold px-4 py-2 rounded-xl hover:bg-accent-primary/30 transition-all"
+            >
+              Ir a amigos →
+            </button>
+          </div>
+        )}
+
+        {/* Selector de grupo */}
+        {groups.length > 0 && (
+          <GroupSelector
+            groups={groups}
+            selectedId={selectedGroupId}
+            onSelect={setSelectedGroupId}
+          />
+        )}
+
+        {/* Info del grupo seleccionado */}
+        {selectedGroupId && !loadingBadges && selectedGroup && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5">
             <div className="flex items-center gap-4 mb-4">
               <div
-                className="w-16 h-16 rounded-full flex items-center justify-center text-3xl border-2 border-accent-primary/40 flex-shrink-0"
+                className="w-14 h-14 rounded-full flex items-center justify-center text-2xl border-2 border-accent-primary/40 flex-shrink-0"
                 style={{
                   background: 'radial-gradient(circle at 50% 50%, rgba(124,58,237,0.2) 0%, transparent 70%)',
-                  boxShadow: '0 0 25px rgba(124,58,237,0.3)',
+                  boxShadow: '0 0 20px rgba(124,58,237,0.25)',
                 }}
               >
                 🏅
               </div>
               <div className="flex-1">
-                <div className="font-display font-bold text-surface-text text-xl mb-0.5">
-                  Tu circulo de amistades
+                <div className="font-display font-bold text-surface-text text-base mb-0.5">
+                  {selectedGroup.name}
                 </div>
                 <div className="text-sm text-surface-muted">
-                  {members.length} miembros · {myAssignments.length || 'ningun'} titulo para ti
+                  {members.length} miembros · {myAssignments.length || 'ningún'} título para ti
                 </div>
               </div>
             </div>
 
-            <div className="h-2.5 bg-surface-bg rounded-full overflow-hidden">
+            <div className="h-2 bg-surface-bg rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${progress}%`,
                   background: 'linear-gradient(to right, #7c3aed, #a855f7)',
-                  boxShadow: '0 0 10px rgba(168,85,247,0.4)',
+                  boxShadow: '0 0 8px rgba(168,85,247,0.4)',
                 }}
               />
             </div>
             <p className="text-xs text-surface-muted mt-3 leading-relaxed">
-              Los titulos se recalculan dentro de tu circulo. Si alguien domina varias categorias,
-              conserva la que gana con mas diferencia y deja sitio a otros cuando tambien destacan.
+              Cada insignia solo la puede tener una persona en el grupo.
+              Una persona puede tener varias. Si hay empate, tiene prioridad
+              quien no tenga ninguna. Al ganarla queda en tu perfil para siempre.
             </p>
           </div>
         )}
 
-        {loading ? (
+        {/* Insignias */}
+        {loadingGroups || (selectedGroupId && loadingBadges) ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="bg-surface-card border border-surface-border rounded-2xl p-4 animate-pulse">
@@ -164,12 +245,12 @@ export default function BadgesPage() {
               </div>
             ))}
           </div>
-        ) : (
+        ) : selectedGroupId && badges.length > 0 ? (
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="font-display font-bold text-surface-text text-base">Titulos activos</h3>
-                <p className="text-xs text-surface-muted">Comparados contra tus amigos aceptados</p>
+                <h3 className="font-display font-bold text-surface-text text-base">Titulares actuales</h3>
+                <p className="text-xs text-surface-muted">Dentro de {selectedGroup?.name}</p>
               </div>
               <span className="text-xs font-mono text-surface-muted bg-surface-card border border-surface-border px-2 py-1 rounded-lg">
                 {assignedCount}/{totalBadges}
@@ -187,21 +268,16 @@ export default function BadgesPage() {
               ))}
             </div>
           </div>
-        )}
+        ) : null}
 
-        {!loading && members.length <= 1 && (
+        {/* Sin actividad en el grupo */}
+        {selectedGroupId && !loadingBadges && badges.length > 0 && assignments.length === 0 && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center">
-            <div className="text-3xl mb-3">👥</div>
-            <div className="font-display font-semibold text-surface-text mb-1.5">Necesitas un circulo</div>
+            <div className="text-3xl mb-3">📊</div>
+            <div className="font-display font-semibold text-surface-text mb-1.5">Sin datos aún</div>
             <div className="text-sm text-surface-muted leading-relaxed">
-              Anade amigos y cread pools para que las insignias tengan sentido.
+              Cread pools y registrad batería para que se puedan calcular los titulares del grupo.
             </div>
-            <button
-              onClick={() => navigate('/friends')}
-              className="mt-4 bg-accent-primary/20 text-accent-glow border border-accent-primary/30 text-sm font-display font-semibold px-4 py-2 rounded-xl hover:bg-accent-primary/30 transition-all"
-            >
-              Ir a amigos →
-            </button>
           </div>
         )}
       </main>
