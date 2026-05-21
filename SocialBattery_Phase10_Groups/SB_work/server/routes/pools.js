@@ -162,7 +162,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 // ── POST /api/pools — create a new pool ─────────────────────────────────────
 router.post('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
-  const { activity, description, location_hint, scheduled_at, max_people = 4, is_public = false } = req.body;
+  const { activity, description, location_hint, scheduled_at, max_people = 4, is_public = false, group_id = null } = req.body;
 
   if (!activity?.trim()) return res.status(400).json({ error: 'activity is required' });
   if (!scheduled_at) return res.status(400).json({ error: 'scheduled_at is required' });
@@ -184,6 +184,7 @@ router.post('/', requireAuth, async (req, res) => {
         scheduled_at,
         max_people: parseInt(max_people),
         is_public: Boolean(is_public),
+        group_id: group_id || null,
         status: 'open',
       })
       .select(`

@@ -12,6 +12,7 @@ import MessagesPage from './pages/MessagesPage';
 import MessagesInboxPage from './pages/MessagesInboxPage';
 import PoolsPage from './pages/PoolsPage';
 import BadgesPage from './pages/BadgesPage';
+import GroupChatPage from './pages/GroupChatPage';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile } = useAuth();
@@ -53,6 +54,7 @@ function AppRoutes() {
       <Route path="/profile"           element={<ProfilePage />} />
       <Route path="/user/:id"          element={<UserProfilePage />} />
       <Route path="/messages/inbox"    element={<MessagesInboxPage />} />
+      <Route path="/messages/group/:groupId" element={<GroupChatPage />} />
       <Route path="/messages/:friendId" element={<MessagesPage />} />
       <Route path="/pools"             element={<PoolsPage />} />
       <Route path="/badges"            element={<BadgesPage />} />

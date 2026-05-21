@@ -12,6 +12,7 @@ const friendsRoutes = require('./routes/friends');
 const messagesRoutes = require('./routes/messages');
 const badgesRoutes  = require('./routes/badges');
 const poolsRoutes   = require('./routes/pools');
+const groupsRoutes  = require('./routes/groups');
 const { estimateBatteries } = require('./jobs/estimateBattery');
 
 const app = express();
@@ -19,7 +20,7 @@ const PORT = process.env.PORT || 3001;
 
 // ── Security & Middleware ──────────────────────────────────────────────────
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow image loading
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
@@ -27,7 +28,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 
-// Higher limit for avatar uploads
 const uploadLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
 app.use('/api/users/avatar', uploadLimiter);
 
@@ -42,9 +42,10 @@ app.use('/api/friends',  friendsRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/badges',   badgesRoutes);
 app.use('/api/pools',    poolsRoutes);
+app.use('/api/groups',   groupsRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.8.0', phase: 8, timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: '1.10.0', phase: 10, timestamp: new Date().toISOString() });
 });
 
 // ── Cron Jobs ──────────────────────────────────────────────────────────────
@@ -69,6 +70,6 @@ cron.schedule('0 0 * * *', async () => {
 
 // ── Start ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`🔋 SocialBattery server running on port ${PORT} (Phase 8)`);
+  console.log(`🔋 SocialBattery server running on port ${PORT} (Phase 10)`);
   estimateBatteries().catch(console.error);
 });
