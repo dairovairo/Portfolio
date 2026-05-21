@@ -19,6 +19,7 @@ export default function HomePage() {
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
   const [friends, setFriends] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loadingFriends, setLoadingFriends] = useState(true);
@@ -67,12 +68,20 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
+  const fetchGroups = useCallback(async () => {
+    try {
+      const { groups: data } = await api.get('/groups');
+      setGroups(data || []);
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     fetchFriends();
     fetchPending();
     fetchUnread();
     fetchActivePools();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchActivePools]);
+    fetchGroups();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchActivePools, fetchGroups]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -294,6 +303,40 @@ export default function HomePage() {
             </>
           )}
         </div>
+        {/* Groups panel */}
+        {groups.length > 0 && (
+          <div className="animate-slide-up" style={{ animationDelay: '0.15s' }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display font-semibold text-surface-text">
+                Grupos<span className="text-surface-muted font-normal"> · {groups.length}</span>
+              </h3>
+              <button onClick={() => navigate('/friends')} className="text-accent-glow text-sm hover:underline">
+                Gestionar →
+              </button>
+            </div>
+            <div className="space-y-2">
+              {groups.slice(0, 4).map(group => (
+                <button
+                  key={group.id}
+                  onClick={() => navigate(`/messages/group/${group.id}`)}
+                  className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-accent-primary/15 border-2 border-accent-primary/30 flex items-center justify-center text-lg flex-shrink-0">👥</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{group.name}</div>
+                    <div className="text-xs text-surface-muted font-mono">{group.member_count} miembros</div>
+                  </div>
+                  <span className="text-surface-muted text-sm">💬</span>
+                </button>
+              ))}
+              {groups.length > 4 && (
+                <button onClick={() => navigate('/friends')} className="w-full text-center text-sm text-accent-glow hover:underline py-2">
+                  Ver {groups.length - 4} grupos más →
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       <BottomNav pendingCount={pendingCount} unreadCount={unreadCount} />
