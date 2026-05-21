@@ -63,6 +63,16 @@ async function getCircleMemberIds(userId) {
   return [...ids];
 }
 
+async function getGroupMemberIds(groupId) {
+  const { data, error } = await supabase
+    .from('friend_group_members')
+    .select('user_id')
+    .eq('group_id', groupId);
+
+  if (error) throw error;
+  return (data || []).map(row => row.user_id);
+}
+
 function createStats(memberIds) {
   return Object.fromEntries(memberIds.map(userId => [userId, {
     userId,
@@ -154,37 +164,52 @@ function pushLoneWolfCandidates(candidates, statsList) {
   });
 }
 
+/**
+ * Asigna insignias con las siguientes reglas:
+ * - Una insignia solo puede tenerla UNA persona (exclusiva por grupo)
+ * - Una persona SÍ puede tener varias insignias
+ * - Si varias personas cumplen los requisitos para una insignia,
+ *   tienen prioridad las que NO tengan ninguna insignia asignada aún
+ */
 function chooseAssignments(candidates) {
   const assignments = [];
   const assignedBadges = new Set();
-  const assignedUsers = new Set();
+  const userBadgeCount = {}; // cuántas insignias lleva cada usuario en esta sesión
 
-  const sorted = [...candidates].sort((a, b) =>
-    b.strength - a.strength ||
-    b.score - a.score ||
-    a.rank - b.rank ||
-    a.badgeId.localeCompare(b.badgeId)
-  );
+  // Procesamos cada insignia en el orden definido en CIRCLE_BADGES
+  for (const badgeDef of CIRCLE_BADGES) {
+    const badgeId = badgeDef.id;
+    const badgeCandidates = candidates.filter(c => c.badgeId === badgeId);
+    if (!badgeCandidates.length) continue;
+    if (assignedBadges.has(badgeId)) continue;
 
-  sorted.forEach(candidate => {
-    if (assignedBadges.has(candidate.badgeId)) return;
-    if (assignedUsers.has(candidate.userId)) return;
+    // Ordenamos: primero los que tienen 0 insignias asignadas hasta ahora,
+    // luego por strength desc y score desc como desempate
+    const sorted = [...badgeCandidates].sort((a, b) => {
+      const aBadgeCount = userBadgeCount[a.userId] || 0;
+      const bBadgeCount = userBadgeCount[b.userId] || 0;
+      if (aBadgeCount !== bBadgeCount) return aBadgeCount - bBadgeCount; // menos insignias primero
+      return (b.strength - a.strength) || (b.score - a.score) || a.userId.localeCompare(b.userId);
+    });
 
+    const winner = sorted[0];
     assignments.push({
-      ...candidate,
-      badge: BADGE_BY_ID[candidate.badgeId],
+      ...winner,
+      badge: BADGE_BY_ID[badgeId],
       earned_at: new Date().toISOString(),
     });
-    assignedBadges.add(candidate.badgeId);
-    assignedUsers.add(candidate.userId);
-  });
+    assignedBadges.add(badgeId);
+    userBadgeCount[winner.userId] = (userBadgeCount[winner.userId] || 0) + 1;
+  }
 
-  return assignments.sort((a, b) => CIRCLE_BADGES.findIndex(badge => badge.id === a.badgeId) - CIRCLE_BADGES.findIndex(badge => badge.id === b.badgeId));
+  return assignments;
 }
 
-async function computeCircleBadges(viewerId) {
-  const memberIds = await getCircleMemberIds(viewerId);
-
+/**
+ * Calcula estadísticas y candidatos para una lista de miembros.
+ * Reutilizable tanto por computeCircleBadges como computeGroupBadges.
+ */
+async function computeBadgesForMembers(memberIds) {
   const { data: members, error: membersError } = await supabase
     .from('users')
     .select('id, username, display_name, avatar_url, battery_level')
@@ -335,7 +360,44 @@ async function computeCircleBadges(viewerId) {
   };
 }
 
+/**
+ * Calcula las insignias para un grupo privado de amigos.
+ * Las insignias ganadas se persisten permanentemente en user_badges.
+ * Devuelve las asignaciones actuales (dinámicas) del grupo.
+ */
+async function computeGroupBadges(groupId) {
+  const memberIds = await getGroupMemberIds(groupId);
+  if (!memberIds.length) return { badges: CIRCLE_BADGES, members: [], assignments: [], stats: {} };
+
+  const result = await computeBadgesForMembers(memberIds);
+
+  // Persistir insignias ganadas de forma permanente en user_badges
+  // (usando upsert; si ya la tiene, no cambia nada — es la primera vez que cuenta)
+  if (result.assignments.length) {
+    const rows = result.assignments.map(a => ({
+      user_id: a.userId,
+      badge_id: a.badgeId,
+      earned_at: a.earned_at,
+    }));
+    await supabase
+      .from('user_badges')
+      .upsert(rows, { onConflict: 'user_id,badge_id', ignoreDuplicates: true });
+  }
+
+  return result;
+}
+
+/**
+ * Calcula las insignias para el círculo completo de amigos aceptados del usuario.
+ * Mantenido por compatibilidad con rutas existentes.
+ */
+async function computeCircleBadges(viewerId) {
+  const memberIds = await getCircleMemberIds(viewerId);
+  return computeBadgesForMembers(memberIds);
+}
+
 module.exports = {
   CIRCLE_BADGES,
   computeCircleBadges,
+  computeGroupBadges,
 };

@@ -37,7 +37,8 @@ export default function UserProfilePage() {
           api.get(`/friends/status/${id}`),
           api.get(`/badges/user/${id}`).catch(() => ({ badges: [] })),
         ]);
-        setUser({ ...u, _earnedBadges: (earnedBadgesData || []).map(ub => ub.badge) });
+        // earnedBadgesData: [{ earned_at, badge: { id, name, emoji, description, category } }]
+        setUser({ ...u, _earnedBadges: (earnedBadgesData || []).map(ub => ub.badge).filter(Boolean) });
         setFriendshipStatus(status);
       } catch (e) {
         console.error(e);
