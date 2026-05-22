@@ -46,6 +46,7 @@ const CIRCLE_BADGES = [
 ];
 
 const BADGE_BY_ID = Object.fromEntries(CIRCLE_BADGES.map(badge => [badge.id, badge]));
+const MAX_IDENTITIES_PER_USER = 2;
 
 async function getCircleMemberIds(userId) {
   const { data: friendships, error } = await supabase
@@ -97,21 +98,39 @@ function scoreText(value, suffix = '') {
   return `${Math.round(value)}${suffix}`;
 }
 
+function stableTieValue(...parts) {
+  const text = parts.filter(Boolean).join(':');
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function scoreRank(statsList, metric, value, higherIsBetter = true) {
+  return statsList.filter(stats =>
+    higherIsBetter ? stats[metric] > value : stats[metric] < value
+  ).length + 1;
+}
+
 function pushHighCandidates(candidates, badgeId, statsList, metric, minScore, reasonFactory) {
   const ranked = statsList
     .filter(stats => stats[metric] >= minScore)
     .sort((a, b) => b[metric] - a[metric] || a.userId.localeCompare(b.userId));
 
   ranked.forEach((stats, index) => {
-    const next = ranked[index + 1];
+    const next = ranked.find((candidate, nextIndex) =>
+      nextIndex > index && candidate[metric] !== stats[metric]
+    );
     const gap = next ? stats[metric] - next[metric] : stats[metric];
-    if (gap <= 0 && index === 0) return;
     candidates.push({
       badgeId,
       userId: stats.userId,
       score: stats[metric],
-      strength: gap,
-      rank: index + 1,
+      sortScore: stats[metric],
+      strength: Math.max(0, gap),
+      rank: scoreRank(ranked, metric, stats[metric]),
       reason: reasonFactory(stats),
     });
   });
@@ -127,15 +146,17 @@ function pushAverageCandidates(candidates, badgeId, statsList, totalKey, countKe
     .sort((a, b) => b.average - a.average || b[countKey] - a[countKey] || a.userId.localeCompare(b.userId));
 
   ranked.forEach((stats, index) => {
-    const next = ranked[index + 1];
+    const next = ranked.find((candidate, nextIndex) =>
+      nextIndex > index && candidate.average !== stats.average
+    );
     const gap = next ? stats.average - next.average : stats.average;
-    if (gap <= 0 && index === 0) return;
     candidates.push({
       badgeId,
       userId: stats.userId,
       score: stats.average,
-      strength: gap + (stats[countKey] * 0.01),
-      rank: index + 1,
+      sortScore: stats.average,
+      strength: Math.max(0, gap) + (stats[countKey] * 0.01),
+      rank: ranked.filter(candidate => candidate.average > stats.average).length + 1,
       reason: reasonFactory(stats),
     });
   });
@@ -150,15 +171,17 @@ function pushLoneWolfCandidates(candidates, statsList) {
   );
 
   ranked.forEach((stats, index) => {
-    const next = ranked[index + 1];
+    const next = ranked.find((candidate, nextIndex) =>
+      nextIndex > index && candidate.joinedPools !== stats.joinedPools
+    );
     const gap = next ? next.joinedPools - stats.joinedPools : Math.max(1, statsList.length);
-    if (gap <= 0 && index === 0) return;
     candidates.push({
       badgeId: 'lone_wolf',
       userId: stats.userId,
       score: stats.joinedPools,
-      strength: gap,
-      rank: index + 1,
+      sortScore: -stats.joinedPools,
+      strength: Math.max(0, gap),
+      rank: scoreRank(ranked, 'joinedPools', stats.joinedPools, false),
       reason: `${stats.joinedPools} quedadas ajenas unidas`,
     });
   });
@@ -167,32 +190,32 @@ function pushLoneWolfCandidates(candidates, statsList) {
 /**
  * Asigna insignias con las siguientes reglas:
  * - Una insignia solo puede tenerla UNA persona (exclusiva por grupo)
- * - Una persona SÍ puede tener varias insignias
- * - Si varias personas cumplen los requisitos para una insignia,
- *   tienen prioridad las que NO tengan ninguna insignia asignada aún
+ * - Una persona puede tener como maximo dos identidades activas
+ * - Si varias personas empatan en puntuacion para una insignia,
+ *   tiene prioridad quien lleve menos identidades activas
  */
-function chooseAssignments(candidates) {
+function chooseAssignments(candidates, scopeId = 'circle') {
   const assignments = [];
   const assignedBadges = new Set();
-  const userBadgeCount = {}; // cuántas insignias lleva cada usuario en esta sesión
+  const userBadgeCount = {};
 
   // Procesamos cada insignia en el orden definido en CIRCLE_BADGES
   for (const badgeDef of CIRCLE_BADGES) {
     const badgeId = badgeDef.id;
-    const badgeCandidates = candidates.filter(c => c.badgeId === badgeId);
+    const badgeCandidates = candidates.filter(c =>
+      c.badgeId === badgeId &&
+      (userBadgeCount[c.userId] || 0) < MAX_IDENTITIES_PER_USER
+    );
     if (!badgeCandidates.length) continue;
     if (assignedBadges.has(badgeId)) continue;
 
-    // Ordenamos: primero los que tienen 0 insignias asignadas hasta ahora,
-    // luego por strength desc y score desc como desempate
-    const sorted = [...badgeCandidates].sort((a, b) => {
-      const aBadgeCount = userBadgeCount[a.userId] || 0;
-      const bBadgeCount = userBadgeCount[b.userId] || 0;
-      if (aBadgeCount !== bBadgeCount) return aBadgeCount - bBadgeCount; // menos insignias primero
-      return (b.strength - a.strength) || (b.score - a.score) || a.userId.localeCompare(b.userId);
-    });
-
-    const winner = sorted[0];
+    const bestScore = Math.max(...badgeCandidates.map(c => c.sortScore ?? c.score ?? 0));
+    const topCandidates = badgeCandidates.filter(c => (c.sortScore ?? c.score ?? 0) === bestScore);
+    const fewestIdentities = Math.min(...topCandidates.map(c => userBadgeCount[c.userId] || 0));
+    const balancedCandidates = topCandidates.filter(c => (userBadgeCount[c.userId] || 0) === fewestIdentities);
+    const winner = [...balancedCandidates].sort((a, b) =>
+      stableTieValue(scopeId, badgeId, a.userId) - stableTieValue(scopeId, badgeId, b.userId)
+    )[0];
     assignments.push({
       ...winner,
       badge: BADGE_BY_ID[badgeId],
@@ -209,7 +232,7 @@ function chooseAssignments(candidates) {
  * Calcula estadísticas y candidatos para una lista de miembros.
  * Reutilizable tanto por computeCircleBadges como computeGroupBadges.
  */
-async function computeBadgesForMembers(memberIds) {
+async function computeBadgesForMembers(memberIds, options = {}) {
   const { data: members, error: membersError } = await supabase
     .from('users')
     .select('id, username, display_name, avatar_url, battery_level')
@@ -218,11 +241,17 @@ async function computeBadgesForMembers(memberIds) {
 
   const statsByUser = createStats(memberIds);
 
-  const { data: pools, error: poolsError } = await supabase
+  let poolsQuery = supabase
     .from('hangout_pools')
     .select('id, creator_id, scheduled_at, status, created_at')
     .in('creator_id', memberIds)
     .neq('status', 'cancelled');
+
+  if (options.groupId) {
+    poolsQuery = poolsQuery.eq('group_id', options.groupId);
+  }
+
+  const { data: pools, error: poolsError } = await poolsQuery;
   if (poolsError) throw poolsError;
 
   const poolIds = (pools || []).map(pool => pool.id);
@@ -342,7 +371,7 @@ async function computeBadgesForMembers(memberIds) {
     stats => `${scoreText(stats.average, '%')} de media por la manana (${stats.morningCount} registros)`
   );
 
-  const assignments = chooseAssignments(candidates);
+  const assignments = chooseAssignments(candidates, options.scopeId || options.groupId || memberIds.join('|'));
   const membersById = Object.fromEntries((members || []).map(member => [member.id, member]));
 
   return {
@@ -369,7 +398,7 @@ async function computeGroupBadges(groupId) {
   const memberIds = await getGroupMemberIds(groupId);
   if (!memberIds.length) return { badges: CIRCLE_BADGES, members: [], assignments: [], stats: {} };
 
-  const result = await computeBadgesForMembers(memberIds);
+  const result = await computeBadgesForMembers(memberIds, { groupId, scopeId: groupId });
 
   // Persistir insignias ganadas de forma permanente en user_badges
   // (usando upsert; si ya la tiene, no cambia nada — es la primera vez que cuenta)
@@ -393,7 +422,7 @@ async function computeGroupBadges(groupId) {
  */
 async function computeCircleBadges(viewerId) {
   const memberIds = await getCircleMemberIds(viewerId);
-  return computeBadgesForMembers(memberIds);
+  return computeBadgesForMembers(memberIds, { scopeId: `circle:${viewerId}` });
 }
 
 module.exports = {

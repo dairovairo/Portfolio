@@ -44,14 +44,14 @@ function BadgeCard({ badge, assignment, currentUserId }) {
       {assignment ? (
         <>
           <div className={`text-xs font-mono relative z-10 ${isMine ? 'text-accent-glow/80' : 'text-surface-muted'}`}>
-            {isMine ? 'Tu titulo' : `@${holder?.username || 'usuario'}`}
+            {isMine ? 'Tu identidad' : `@${holder?.username || 'usuario'}`}
           </div>
           <div className="text-[11px] text-surface-muted/75 leading-tight relative z-10">
             {assignment.reason}
           </div>
         </>
       ) : (
-        <div className="text-xs text-slate-600 font-mono relative z-10">Sin titular</div>
+        <div className="text-xs text-slate-600 font-mono relative z-10">Sin identidad</div>
       )}
     </div>
   );
@@ -170,7 +170,7 @@ export default function BadgesPage() {
             <div className="font-display font-semibold text-surface-text mb-1.5">Necesitas un grupo privado</div>
             <div className="text-sm text-surface-muted leading-relaxed">
               Crea un grupo privado de amigos para que las insignias tengan sentido.
-              Cada grupo tiene sus propios titulares.
+              Cada grupo tiene sus propias identidades.
             </div>
             <button
               onClick={() => navigate('/friends')}
@@ -208,7 +208,7 @@ export default function BadgesPage() {
                   {selectedGroup.name}
                 </div>
                 <div className="text-sm text-surface-muted">
-                  {members.length} miembros · {myAssignments.length || 'ningún'} título para ti
+                  {members.length} miembros · {myAssignments.length || 'ninguna'} identidad para ti
                 </div>
               </div>
             </div>
@@ -224,9 +224,10 @@ export default function BadgesPage() {
               />
             </div>
             <p className="text-xs text-surface-muted mt-3 leading-relaxed">
-              Cada insignia solo la puede tener una persona en el grupo.
-              Una persona puede tener varias. Si hay empate, tiene prioridad
-              quien no tenga ninguna. Al ganarla queda en tu perfil para siempre.
+              Cada identidad solo la puede tener una persona en el grupo.
+              Cada persona puede tener como maximo 2. Si hay empate de puntuacion,
+              tiene prioridad quien tenga menos identidades; si sigue empatado,
+              se elige un titular estable al azar. Al ganarla queda en tu perfil para siempre.
             </p>
           </div>
         )}
@@ -249,7 +250,7 @@ export default function BadgesPage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="font-display font-bold text-surface-text text-base">Titulares actuales</h3>
+                <h3 className="font-display font-bold text-surface-text text-base">Identidades actuales</h3>
                 <p className="text-xs text-surface-muted">Dentro de {selectedGroup?.name}</p>
               </div>
               <span className="text-xs font-mono text-surface-muted bg-surface-card border border-surface-border px-2 py-1 rounded-lg">
@@ -276,7 +277,7 @@ export default function BadgesPage() {
             <div className="text-3xl mb-3">📊</div>
             <div className="font-display font-semibold text-surface-text mb-1.5">Sin datos aún</div>
             <div className="text-sm text-surface-muted leading-relaxed">
-              Cread pools y registrad batería para que se puedan calcular los titulares del grupo.
+              Cread pools y registrad batería para que se puedan calcular las identidades del grupo.
             </div>
           </div>
         )}
