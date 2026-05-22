@@ -6,6 +6,112 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 
+// ── Wallpaper helpers ───────────────────────────────────────────────────────
+
+function getWallpaperKey(friendId) {
+  return `wallpaper_dm_${friendId}`;
+}
+
+function loadWallpaper(friendId) {
+  try {
+    return localStorage.getItem(getWallpaperKey(friendId)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveWallpaper(friendId, dataUrl) {
+  try {
+    if (dataUrl) localStorage.setItem(getWallpaperKey(friendId), dataUrl);
+    else localStorage.removeItem(getWallpaperKey(friendId));
+  } catch {
+    // localStorage full or unavailable
+  }
+}
+
+// ── WallpaperButton ─────────────────────────────────────────────────────────
+
+function WallpaperButton({ wallpaper, onSet, onRemove }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const fileInputRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showMenu]);
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      onSet(ev.target.result);
+      setShowMenu(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  return (
+    <div className="relative flex-shrink-0" ref={menuRef}>
+      <button
+        onClick={() => setShowMenu(v => !v)}
+        title="Fondo de pantalla"
+        className={`w-9 h-9 rounded-xl flex items-center justify-center text-base transition-all border ${
+          wallpaper
+            ? 'bg-accent-primary/20 border-accent-primary/50 text-accent-glow'
+            : 'bg-surface-card border-surface-border text-surface-muted hover:border-accent-primary/40 hover:text-surface-text'
+        }`}
+      >
+        🖼️
+      </button>
+
+      {showMenu && (
+        <div className="absolute right-0 top-11 z-50 w-52 bg-surface-card border border-surface-border rounded-2xl shadow-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-surface-border">
+            <p className="text-xs font-display font-bold text-surface-text">Fondo del chat</p>
+            <p className="text-[11px] text-surface-muted mt-0.5">Solo visible para ti</p>
+          </div>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-surface-text hover:bg-surface-border/30 transition-colors text-left"
+          >
+            <span className="text-base">📷</span>
+            <span className="font-display font-medium">
+              {wallpaper ? 'Cambiar foto' : 'Elegir foto'}
+            </span>
+          </button>
+
+          {wallpaper && (
+            <button
+              onClick={() => { onRemove(); setShowMenu(false); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left border-t border-surface-border"
+            >
+              <span className="text-base">🗑️</span>
+              <span className="font-display font-medium">Quitar fondo</span>
+            </button>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Subcomponents ──────────────────────────────────────────────────────────
 
 function OnlineDot({ lastSeenAt, className = '' }) {
@@ -25,7 +131,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
 
   return (
     <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-      <div className={`max-w-[82%] rounded-2xl px-4 py-3 border ${
+      <div className={`max-w-[82%] rounded-2xl px-4 py-3 border shadow-sm ${
         isAccepted
           ? 'bg-green-500/15 border-green-500/30'
           : isRejected
@@ -98,13 +204,15 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
   );
 }
 
-function TextBubble({ msg, isMe }) {
+function TextBubble({ msg, isMe, hasWallpaper }) {
   return (
     <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-      <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
+      <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm ${
         isMe
           ? 'bg-accent-primary text-surface-text'
-          : 'bg-surface-card border border-surface-border text-surface-text'
+          : hasWallpaper
+            ? 'bg-surface-bg/90 backdrop-blur-sm border border-surface-border text-surface-text'
+            : 'bg-surface-card border border-surface-border text-surface-text'
       }`}>
         <p className="text-sm leading-relaxed break-words">{msg.content}</p>
         <div className={`text-xs mt-1 ${isMe ? 'text-surface-text/50' : 'text-slate-600'}`}>
@@ -116,15 +224,21 @@ function TextBubble({ msg, isMe }) {
   );
 }
 
-function DateDivider({ date }) {
+function DateDivider({ date, hasWallpaper }) {
   const today = new Date().toDateString();
   const yesterday = new Date(Date.now() - 86400000).toDateString();
   const label = date === today ? 'Hoy'
     : date === yesterday ? 'Ayer'
     : new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   return (
-    <div className="text-center text-xs text-slate-600 font-mono py-3">
-      {label}
+    <div className="text-center py-3">
+      <span className={`text-xs font-mono px-3 py-1 rounded-full ${
+        hasWallpaper
+          ? 'bg-surface-bg/80 backdrop-blur-sm text-surface-muted border border-surface-border/50'
+          : 'text-slate-600'
+      }`}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -205,9 +319,26 @@ export default function MessagesPage() {
   const [showHangoutForm, setShowHangoutForm] = useState(false);
   const [respondingId, setRespondingId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [wallpaper, setWallpaper] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
-  const messagesEndRef = useRef(null);
+
+  // Load wallpaper for this conversation
+  useEffect(() => {
+    setWallpaper(loadWallpaper(friendId));
+  }, [friendId]);
+
+  function handleSetWallpaper(dataUrl) {
+    setWallpaper(dataUrl);
+    saveWallpaper(friendId, dataUrl);
+    showToast('¡Fondo actualizado! 🖼️');
+  }
+
+  function handleRemoveWallpaper() {
+    setWallpaper(null);
+    saveWallpaper(friendId, null);
+    showToast('Fondo eliminado');
+  }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -425,6 +556,13 @@ export default function MessagesPage() {
                   </span>
                 </div>
               </button>
+
+              {/* Wallpaper button */}
+              <WallpaperButton
+                wallpaper={wallpaper}
+                onSet={handleSetWallpaper}
+                onRemove={handleRemoveWallpaper}
+              />
             </>
           ) : loading ? (
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
@@ -433,43 +571,62 @@ export default function MessagesPage() {
       </nav>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
-        {loading ? (
-          <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
-            Cargando mensajes...
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 gap-2">
-            <div className="text-4xl">💬</div>
-            <p className="text-slate-500 text-sm">Sin mensajes aún. ¡Di hola!</p>
-            {friend && (
-              <p className="text-xs text-slate-600">
-                {friend.display_name} tiene la batería al {friend.battery_level}%
-              </p>
-            )}
-          </div>
-        ) : (
-          grouped.map(item => {
-            if (item.type === 'date') {
-              return <DateDivider key={item.key} date={item.date} />;
-            }
-            const msg = item.msg;
-            const isMe = msg.sender_id === profile?.id;
-            if (msg.type === 'hangout_request') {
-              return (
-                <HangoutRequestBubble
-                  key={item.key}
-                  msg={msg}
-                  isMe={isMe}
-                  onRespond={respondToHangout}
-                  responding={respondingId === msg.id}
-                />
-              );
-            }
-            return <TextBubble key={item.key} msg={msg} isMe={isMe} />;
-          })
+      <div
+        className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3 relative"
+        style={wallpaper ? {
+          backgroundImage: `url(${wallpaper})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'local',
+        } : {}}
+      >
+        {/* Overlay for readability when wallpaper is set */}
+        {wallpaper && (
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: 'rgba(10,10,15,0.45)' }}
+          />
         )}
-        <div ref={bottomRef} />
+
+        {/* Content (above overlay) */}
+        <div className="relative z-10 space-y-3">
+          {loading ? (
+            <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
+              Cargando mensajes...
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 gap-2">
+              <div className="text-4xl">💬</div>
+              <p className="text-slate-500 text-sm">Sin mensajes aún. ¡Di hola!</p>
+              {friend && (
+                <p className="text-xs text-slate-600">
+                  {friend.display_name} tiene la batería al {friend.battery_level}%
+                </p>
+              )}
+            </div>
+          ) : (
+            grouped.map(item => {
+              if (item.type === 'date') {
+                return <DateDivider key={item.key} date={item.date} hasWallpaper={!!wallpaper} />;
+              }
+              const msg = item.msg;
+              const isMe = msg.sender_id === profile?.id;
+              if (msg.type === 'hangout_request') {
+                return (
+                  <HangoutRequestBubble
+                    key={item.key}
+                    msg={msg}
+                    isMe={isMe}
+                    onRespond={respondToHangout}
+                    responding={respondingId === msg.id}
+                  />
+                );
+              }
+              return <TextBubble key={item.key} msg={msg} isMe={isMe} hasWallpaper={!!wallpaper} />;
+            })
+          )}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {/* Input area */}
