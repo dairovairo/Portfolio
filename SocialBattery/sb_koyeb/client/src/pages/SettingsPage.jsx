@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 
-// ── helpers ─────────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -14,87 +14,73 @@ function readFileAsDataUrl(file) {
   });
 }
 
-// ── Section wrapper ──────────────────────────────────────────────────────────
-
-function Section({ title, children }) {
-  return (
-    <div className="space-y-3">
-      <h2 className="text-xs font-mono uppercase tracking-widest text-surface-muted px-1">
-        {title}
-      </h2>
-      <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden divide-y divide-surface-border">
-        {children}
-      </div>
-    </div>
-  );
+function hexToRgba(hex, opacity) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
 }
 
-function Row({ label, description, children }) {
-  return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
-        {description && (
-          <div className="text-xs text-surface-muted mt-0.5">{description}</div>
-        )}
-      </div>
-      <div className="flex-shrink-0">{children}</div>
-    </div>
-  );
+function bubbleRgba(hex, opacity) {
+  return opacity < 1 ? hexToRgba(hex, opacity) : hex;
 }
 
-// ── Bubble colour picker row ─────────────────────────────────────────────────
+// ── Accordion wrapper ─────────────────────────────────────────────────────────
 
-function BubbleColorRow({ label, description, color, opacity, onColorChange, onOpacityChange }) {
+function AccordionSection({ id, open, onToggle, icon, title, subtitle, children }) {
   return (
-    <div className="px-4 py-3.5 space-y-3">
-      <div>
-        <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
-        {description && (
-          <div className="text-xs text-surface-muted mt-0.5">{description}</div>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        {/* Preview swatch */}
-        <div
-          className="w-10 h-10 rounded-xl border-2 border-surface-border flex-shrink-0 shadow-inner"
-          style={{ backgroundColor: color, opacity }}
-        />
-        {/* Color input */}
-        <div className="flex-1 space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-surface-muted w-12">Color</label>
-            <input
-              type="color"
-              value={color}
-              onChange={e => onColorChange(e.target.value)}
-              className="h-8 w-full rounded-lg cursor-pointer bg-transparent border border-surface-border"
-            />
+    <div className={`rounded-2xl border transition-colors overflow-hidden ${
+      open ? 'border-accent-primary/40 bg-surface-card' : 'border-surface-border bg-surface-card'
+    }`}>
+      {/* Header */}
+      <button
+        onClick={() => onToggle(id)}
+        className="w-full flex items-center gap-3 px-4 py-4 text-left"
+      >
+        <span className="text-xl flex-shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className={`font-display font-bold text-sm transition-colors ${
+            open ? 'text-accent-glow' : 'text-surface-text'
+          }`}>
+            {title}
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-surface-muted w-12">Opacidad</label>
-            <input
-              type="range"
-              min="0.3"
-              max="1"
-              step="0.05"
-              value={opacity}
-              onChange={e => onOpacityChange(parseFloat(e.target.value))}
-              className="flex-1 accent-accent-primary"
-            />
-            <span className="text-xs text-surface-muted w-8 text-right font-mono">
-              {Math.round(opacity * 100)}%
-            </span>
-          </div>
+          {subtitle && (
+            <div className="text-xs text-surface-muted mt-0.5">{subtitle}</div>
+          )}
         </div>
-      </div>
+        <span className={`text-surface-muted transition-transform duration-200 text-sm flex-shrink-0 ${
+          open ? 'rotate-180' : ''
+        }`}>
+          ▾
+        </span>
+      </button>
+
+      {/* Body */}
+      {open && (
+        <div className="border-t border-surface-border animate-slide-down">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Wallpaper picker row ─────────────────────────────────────────────────────
+// ── Sub-section label inside an accordion ────────────────────────────────────
 
-function WallpaperRow({ wallpaper, onSet, onClear }) {
+function SubSection({ title, children }) {
+  return (
+    <div className="px-4 py-4 space-y-3 border-b border-surface-border last:border-b-0">
+      <div className="text-[11px] font-mono uppercase tracking-widest text-surface-muted">
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Wallpaper picker ──────────────────────────────────────────────────────────
+
+function WallpaperPicker({ wallpaper, onSet, onClear }) {
   const fileRef = useRef(null);
   const [loading, setLoading] = useState(false);
 
@@ -105,35 +91,28 @@ function WallpaperRow({ wallpaper, onSet, onClear }) {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       onSet(dataUrl);
-    } catch { /* silently ignore */ }
+    } catch {}
     finally { setLoading(false); e.target.value = ''; }
   }
 
   return (
-    <div className="px-4 py-3.5 space-y-3">
-      <div>
-        <div className="text-sm font-display font-semibold text-surface-text">Fondo de pantalla</div>
-        <div className="text-xs text-surface-muted mt-0.5">
-          Imagen de fondo para todos los chats personales
-        </div>
-      </div>
-
+    <div className="space-y-3">
       {wallpaper ? (
         <div className="flex items-center gap-3">
           <div
-            className="w-16 h-16 rounded-xl border border-surface-border bg-cover bg-center flex-shrink-0"
+            className="w-14 h-14 rounded-xl border border-surface-border bg-cover bg-center flex-shrink-0"
             style={{ backgroundImage: `url(${wallpaper})` }}
           />
-          <div className="flex flex-col gap-2 flex-1">
+          <div className="flex flex-col gap-1.5 flex-1">
             <button
               onClick={() => fileRef.current?.click()}
-              className="text-sm font-display font-semibold text-accent-glow hover:opacity-80 transition-opacity text-left"
+              className="text-sm font-display font-semibold text-accent-glow hover:opacity-75 transition-opacity text-left"
             >
               Cambiar imagen
             </button>
             <button
               onClick={onClear}
-              className="text-sm font-display font-semibold text-red-400 hover:opacity-80 transition-opacity text-left"
+              className="text-sm font-display font-semibold text-red-400 hover:opacity-75 transition-opacity text-left"
             >
               Quitar fondo
             </button>
@@ -145,27 +124,127 @@ function WallpaperRow({ wallpaper, onSet, onClear }) {
           disabled={loading}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-surface-border hover:border-accent-primary/50 hover:bg-accent-primary/5 transition-all text-sm text-surface-muted font-display font-semibold"
         >
-          <span className="text-lg">🖼️</span>
+          <span className="text-base">🖼️</span>
           {loading ? 'Cargando...' : 'Elegir imagen de la galería'}
         </button>
       )}
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFile}
-      />
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
     </div>
   );
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ── Bubble colour + opacity row ───────────────────────────────────────────────
+
+function BubbleColorPicker({ label, color, opacity, onColorChange, onOpacityChange }) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-display font-semibold text-surface-text">{label}</div>
+      <div className="flex items-center gap-3">
+        {/* Swatch preview */}
+        <div
+          className="w-9 h-9 rounded-xl border border-surface-border flex-shrink-0"
+          style={{ backgroundColor: bubbleRgba(color, opacity) }}
+        />
+        <div className="flex-1 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-surface-muted w-16">Color</span>
+            <input
+              type="color"
+              value={color}
+              onChange={e => onColorChange(e.target.value)}
+              className="h-7 flex-1 rounded-lg cursor-pointer bg-transparent border border-surface-border"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-surface-muted w-16">Opacidad</span>
+            <input
+              type="range" min="0.3" max="1" step="0.05"
+              value={opacity}
+              onChange={e => onOpacityChange(parseFloat(e.target.value))}
+              className="flex-1 accent-accent-primary"
+            />
+            <span className="text-xs text-surface-muted font-mono w-8 text-right">
+              {Math.round(opacity * 100)}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Live preview ──────────────────────────────────────────────────────────────
+
+function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, otherBubbleColor, otherBubbleOpacity }) {
+  return (
+    <div
+      className="rounded-xl overflow-hidden min-h-[120px] p-3 space-y-2 bg-cover bg-center"
+      style={wallpaper
+        ? { backgroundImage: `url(${wallpaper})` }
+        : { backgroundColor: 'var(--sb-bg)' }
+      }
+    >
+      <div className="flex">
+        <div
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs text-surface-text border border-surface-border"
+          style={{ backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity) }}
+        >
+          ¡Hola! ¿Cómo estás? 👋
+        </div>
+      </div>
+      <div className="flex flex-row-reverse">
+        <div
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs text-white"
+          style={{ backgroundColor: bubbleRgba(myBubbleColor, myBubbleOpacity) }}
+        >
+          ¡Todo genial! 🔋
+        </div>
+      </div>
+      <div className="flex">
+        <div
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs text-surface-text border border-surface-border"
+          style={{ backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity) }}
+        >
+          ¿Quedamos este finde? 🤝
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Simple info row ───────────────────────────────────────────────────────────
+
+function InfoRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-sm text-surface-text">{label}</span>
+      <span className="text-sm text-surface-muted font-mono">{value}</span>
+    </div>
+  );
+}
+
+// ── Toggle switch ─────────────────────────────────────────────────────────────
+
+function Toggle({ enabled, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+        enabled ? 'bg-accent-primary' : 'bg-surface-border'
+      }`}
+    >
+      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+        enabled ? 'translate-x-5' : 'translate-x-0.5'
+      }`} />
+    </button>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { theme, toggle: toggleTheme, isDark } = useTheme();
+  const { isDark, toggle: toggleTheme } = useTheme();
   const {
     chatWallpaper, setChatWallpaper,
     myBubbleColor, setMyBubbleColor,
@@ -173,6 +252,18 @@ export default function SettingsPage() {
     otherBubbleColor, setOtherBubbleColor,
     otherBubbleOpacity, setOtherBubbleOpacity,
   } = useSettings();
+
+  // Only one section open at a time
+  const [openSection, setOpenSection] = useState(null);
+
+  function toggleSection(id) {
+    setOpenSection(prev => prev === id ? null : id);
+  }
+
+  // Local privacy toggles (UI only — extend with real logic as needed)
+  const [showBattery, setShowBattery] = useState(true);
+  const [showOnline, setShowOnline] = useState(true);
+  const [showLastSeen, setShowLastSeen] = useState(true);
 
   return (
     <div className="min-h-screen bg-surface-bg">
@@ -189,14 +280,19 @@ export default function SettingsPage() {
         </div>
       </nav>
 
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-lg mx-auto px-4 py-5 space-y-3">
 
-        {/* ── PERSONALIZACIÓN ── */}
-        <Section title="Personalización">
-
+        {/* ── PERSONALIZACIÓN ────────────────────────────────────────────── */}
+        <AccordionSection
+          id="personalizacion"
+          open={openSection === 'personalizacion'}
+          onToggle={toggleSection}
+          icon="🎨"
+          title="Personalización"
+          subtitle="Tema, fondos y colores de mensajes"
+        >
           {/* Temas */}
-          <div className="px-4 py-3.5 space-y-2">
-            <div className="text-sm font-display font-semibold text-surface-text">Temas</div>
+          <SubSection title="Temas">
             <div className="flex gap-2">
               <button
                 onClick={() => { if (isDark) toggleTheme(); }}
@@ -219,83 +315,130 @@ export default function SettingsPage() {
                 🌙 Oscuro
               </button>
             </div>
-          </div>
+          </SubSection>
 
-        </Section>
+          {/* Fondo de pantalla */}
+          <SubSection title="Mensajería · Fondo de pantalla">
+            <p className="text-xs text-surface-muted -mt-1 mb-2">
+              Se aplica a todos los chats personales. Para grupos, usa el botón 🖼️ dentro de cada chat.
+            </p>
+            <WallpaperPicker
+              wallpaper={chatWallpaper}
+              onSet={setChatWallpaper}
+              onClear={() => setChatWallpaper(null)}
+            />
+          </SubSection>
 
-        {/* ── MENSAJERÍA ── */}
-        <Section title="Mensajería">
+          {/* Colores de mensajes */}
+          <SubSection title="Mensajería · Mensajes">
+            <div className="space-y-4">
+              <BubbleColorPicker
+                label="Mis mensajes"
+                color={myBubbleColor}
+                opacity={myBubbleOpacity}
+                onColorChange={setMyBubbleColor}
+                onOpacityChange={setMyBubbleOpacity}
+              />
+              <BubbleColorPicker
+                label="Mensajes recibidos"
+                color={otherBubbleColor}
+                opacity={otherBubbleOpacity}
+                onColorChange={setOtherBubbleColor}
+                onOpacityChange={setOtherBubbleOpacity}
+              />
+            </div>
+          </SubSection>
 
-          {/* Wallpaper */}
-          <WallpaperRow
-            wallpaper={chatWallpaper}
-            onSet={setChatWallpaper}
-            onClear={() => setChatWallpaper(null)}
-          />
+          {/* Vista previa */}
+          <SubSection title="Vista previa">
+            <ChatPreview
+              wallpaper={chatWallpaper}
+              myBubbleColor={myBubbleColor}
+              myBubbleOpacity={myBubbleOpacity}
+              otherBubbleColor={otherBubbleColor}
+              otherBubbleOpacity={otherBubbleOpacity}
+            />
+          </SubSection>
+        </AccordionSection>
 
-          {/* My bubble */}
-          <BubbleColorRow
-            label="Color de mis mensajes"
-            description="Fondo de las burbujas que tú envías"
-            color={myBubbleColor}
-            opacity={myBubbleOpacity}
-            onColorChange={setMyBubbleColor}
-            onOpacityChange={setMyBubbleOpacity}
-          />
-
-          {/* Other bubble */}
-          <BubbleColorRow
-            label="Color de mensajes recibidos"
-            description="Fondo de las burbujas de los demás"
-            color={otherBubbleColor}
-            opacity={otherBubbleOpacity}
-            onColorChange={setOtherBubbleColor}
-            onOpacityChange={setOtherBubbleOpacity}
-          />
-
-        </Section>
-
-        {/* Preview mini */}
-        <Section title="Vista previa">
-          <div
-            className="p-4 space-y-2 min-h-[140px] bg-cover bg-center relative"
-            style={chatWallpaper ? { backgroundImage: `url(${chatWallpaper})` } : {}}
-          >
-            {!chatWallpaper && (
-              <div className="absolute inset-0 bg-surface-bg rounded-b-2xl" />
-            )}
-            <div className="relative space-y-2">
-              {/* Other bubble */}
-              <div className="flex gap-2">
-                <div
-                  className="max-w-[72%] rounded-2xl px-4 py-2.5 text-sm"
-                  style={{
-                    backgroundColor: otherBubbleOpacity < 1
-                      ? `rgba(${parseInt(otherBubbleColor.slice(1,3),16)},${parseInt(otherBubbleColor.slice(3,5),16)},${parseInt(otherBubbleColor.slice(5,7),16)},${otherBubbleOpacity})`
-                      : otherBubbleColor,
-                    color: 'var(--sb-text)',
-                    border: '1px solid var(--sb-border)',
-                  }}
-                >
-                  ¡Hola! ¿Cómo estás? 👋
+        {/* ── PRIVACIDAD ─────────────────────────────────────────────────── */}
+        <AccordionSection
+          id="privacidad"
+          open={openSection === 'privacidad'}
+          onToggle={toggleSection}
+          icon="🔒"
+          title="Privacidad"
+          subtitle="Visibilidad de tu perfil y actividad"
+        >
+          <SubSection title="Visibilidad">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar batería</div>
+                  <div className="text-xs text-surface-muted">Tus amigos pueden ver tu nivel de batería social</div>
                 </div>
+                <Toggle enabled={showBattery} onToggle={() => setShowBattery(v => !v)} />
               </div>
-              {/* My bubble */}
-              <div className="flex gap-2 flex-row-reverse">
-                <div
-                  className="max-w-[72%] rounded-2xl px-4 py-2.5 text-sm text-white"
-                  style={{
-                    backgroundColor: myBubbleOpacity < 1
-                      ? `rgba(${parseInt(myBubbleColor.slice(1,3),16)},${parseInt(myBubbleColor.slice(3,5),16)},${parseInt(myBubbleColor.slice(5,7),16)},${myBubbleOpacity})`
-                      : myBubbleColor,
-                  }}
-                >
-                  ¡Todo genial! 🔋
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar en línea</div>
+                  <div className="text-xs text-surface-muted">Otros pueden ver cuando estás activo</div>
                 </div>
+                <Toggle enabled={showOnline} onToggle={() => setShowOnline(v => !v)} />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar última vez</div>
+                  <div className="text-xs text-surface-muted">Visible en chats privados</div>
+                </div>
+                <Toggle enabled={showLastSeen} onToggle={() => setShowLastSeen(v => !v)} />
               </div>
             </div>
-          </div>
-        </Section>
+          </SubSection>
+        </AccordionSection>
+
+        {/* ── NOTIFICACIONES ─────────────────────────────────────────────── */}
+        <AccordionSection
+          id="notificaciones"
+          open={openSection === 'notificaciones'}
+          onToggle={toggleSection}
+          icon="🔔"
+          title="Notificaciones"
+          subtitle="Mensajes, quedadas y solicitudes"
+        >
+          <SubSection title="General">
+            <div className="space-y-1">
+              <InfoRow label="Notificaciones push" value="Activadas" />
+              <InfoRow label="Sonidos" value="Activados" />
+              <InfoRow label="Vibración" value="Activada" />
+            </div>
+            <p className="text-xs text-surface-muted mt-2">
+              Gestiona los permisos detallados desde los ajustes de tu dispositivo.
+            </p>
+          </SubSection>
+        </AccordionSection>
+
+        {/* ── CUENTA ─────────────────────────────────────────────────────── */}
+        <AccordionSection
+          id="cuenta"
+          open={openSection === 'cuenta'}
+          onToggle={toggleSection}
+          icon="👤"
+          title="Cuenta"
+          subtitle="Perfil, sesión y datos"
+        >
+          <SubSection title="Sesión">
+            <div className="space-y-1">
+              <InfoRow label="Versión" value="Phase 8" />
+            </div>
+            <button
+              onClick={() => navigate('/profile')}
+              className="mt-3 w-full py-2.5 rounded-xl bg-accent-primary/10 border border-accent-primary/20 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/20 transition-colors"
+            >
+              Editar perfil
+            </button>
+          </SubSection>
+        </AccordionSection>
 
       </div>
     </div>
