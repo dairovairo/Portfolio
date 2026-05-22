@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import BatterySlider from '../components/BatterySlider';
@@ -13,7 +12,6 @@ import { supabase } from '../lib/supabase';
 
 export default function HomePage() {
   const { profile, refreshProfile } = useAuth();
-  const { theme, toggle: toggleTheme } = useTheme();
   const { addToast } = useToast();
   const navigate = useNavigate();
 
@@ -139,11 +137,11 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={toggleTheme}
+              onClick={() => navigate('/settings')}
               className="p-2 text-surface-muted hover:text-surface-text transition-colors text-base"
-              title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+              title="Ajustes"
             >
-              {theme === 'dark' ? '☀️' : '🌙'}
+              ⚙️
             </button>
             <button
               onClick={() => navigate('/profile')}
