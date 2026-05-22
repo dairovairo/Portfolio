@@ -33,12 +33,7 @@ export default function HomePage() {
   const fetchFriends = useCallback(async () => {
     try {
       const { friends: data } = await api.get('/battery/friends');
-      const myBattery = profile?.battery_level ?? 50;
-      const sorted = [...(data || [])].sort((a, b) => {
-        const diffA = Math.abs((a.battery_level ?? 50) - myBattery);
-        const diffB = Math.abs((b.battery_level ?? 50) - myBattery);
-        return diffA - diffB;
-      });
+      const sorted = [...(data || [])].sort((a, b) => (b.battery_level ?? -1) - (a.battery_level ?? -1));
       setFriends(sorted);
     } catch (e) { console.error(e); }
     finally { setLoadingFriends(false); }
@@ -278,9 +273,6 @@ export default function HomePage() {
             </div>
           ) : (
             <>
-              <p className="text-xs text-surface-muted/60 font-mono mb-3 px-1">
-                Ordenados por cercanía a tu batería ({profile?.battery_level}%)
-              </p>
               <div className="space-y-3">
                 {friends.slice(0, 8).map(friend => (
                   <FriendCard
