@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+
+// ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function Avatar({ user, size = 'sm' }) {
   const color = getBatteryColor(user?.battery_level ?? 50);
@@ -130,7 +133,8 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
   );
 }
 
-function TextBubble({ msg, isMe }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
+  const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   return (
     <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       {!isMe && <Avatar user={msg.sender} />}
@@ -140,13 +144,12 @@ function TextBubble({ msg, isMe }) {
             {msg.sender?.display_name || msg.sender?.username}
           </div>
         )}
-        <div className={`rounded-2xl px-4 py-2.5 ${
-          isMe
-            ? 'bg-accent-primary text-surface-text'
-            : 'bg-surface-card border border-surface-border text-surface-text'
-        }`}>
-          <p className="text-sm leading-relaxed break-words">{msg.content}</p>
-          <div className={`text-xs mt-1 ${isMe ? 'text-surface-text/50' : 'text-slate-600'}`}>
+        <div
+          className={`rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
+          style={bubbleStyle}
+        >
+          <p className="text-sm leading-relaxed break-words text-surface-text">{msg.content}</p>
+          <div className={`text-xs mt-1 ${isMe ? 'text-white/50' : 'text-surface-muted'}`}>
             {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
@@ -162,24 +165,96 @@ function DateDivider({ date }) {
     : date === yesterday ? 'Ayer'
     : new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   return (
-    <div className="text-center text-xs text-slate-600 font-mono py-3">{label}</div>
+    <div className="text-center text-xs text-slate-600 font-mono py-3">
+      <span className="bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">{label}</span>
+    </div>
   );
 }
+
+// ── Wallpaper modal ───────────────────────────────────────────────────────────
+
+function WallpaperModal({ current, onSet, onClear, onClose }) {
+  const fileRef = useRef(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const dataUrl = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = ev => res(ev.target.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      onSet(dataUrl);
+      onClose();
+    } catch {}
+    finally { setLoading(false); e.target.value = ''; }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface-card border border-surface-border rounded-t-3xl p-5 w-full max-w-lg space-y-4 animate-slide-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <div className="font-display font-bold text-surface-text">Fondo del grupo</div>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+
+        {current && (
+          <div
+            className="w-full h-24 rounded-2xl bg-cover bg-center border border-surface-border"
+            style={{ backgroundImage: `url(${current})` }}
+          />
+        )}
+
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-surface-border hover:border-accent-primary/50 hover:bg-accent-primary/5 transition-all text-sm text-surface-muted font-display font-semibold"
+        >
+          <span className="text-lg">🖼️</span>
+          {loading ? 'Cargando...' : 'Elegir imagen de la galería'}
+        </button>
+
+        {current && (
+          <button
+            onClick={() => { onClear(); onClose(); }}
+            className="w-full py-2.5 rounded-xl text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            Quitar fondo del grupo
+          </button>
+        )}
+
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      </div>
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function GroupChatPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { getGroupWallpaper, setGroupWallpaper, myBubbleStyle, otherBubbleStyle } = useSettings();
 
   const [group, setGroup] = useState(null);
   const [messages, setMessages] = useState([]);
   const [badgeData, setBadgeData] = useState({ badges: [], assignments: [] });
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showWallpaperModal, setShowWallpaperModal] = useState(false);
   const [loadingIdentities, setLoadingIdentities] = useState(true);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState(null);
+  const [groupWallpaper, setGroupWallpaperState] = useState(() => getGroupWallpaper(groupId));
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -231,7 +306,6 @@ export default function GroupChatPage() {
     if (messages.length > 0) scrollToBottom();
   }, [messages.length, scrollToBottom]);
 
-  // Realtime subscription
   useEffect(() => {
     if (!profile?.id) return;
     const channel = supabase
@@ -242,7 +316,6 @@ export default function GroupChatPage() {
         table: 'group_messages',
         filter: `group_id=eq.${groupId}`,
       }, async (payload) => {
-        // Fetch the full message with sender info
         const { data } = await supabase
           .from('group_messages')
           .select(`id, content, type, created_at, sender:sender_id(id, username, display_name, avatar_url, battery_level)`)
@@ -255,6 +328,16 @@ export default function GroupChatPage() {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [groupId, profile?.id]);
+
+  function handleSetGroupWallpaper(dataUrl) {
+    setGroupWallpaper(groupId, dataUrl);
+    setGroupWallpaperState(dataUrl);
+  }
+
+  function handleClearGroupWallpaper() {
+    setGroupWallpaper(groupId, null);
+    setGroupWallpaperState(null);
+  }
 
   async function sendText() {
     if (!input.trim() || sending) return;
@@ -285,7 +368,6 @@ export default function GroupChatPage() {
     }
   }
 
-  // Group messages by date
   const grouped = [];
   let lastDate = null;
   messages.forEach(msg => {
@@ -335,6 +417,18 @@ export default function GroupChatPage() {
           ) : loading ? (
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
           ) : null}
+
+          {/* Wallpaper button */}
+          {group && (
+            <button
+              onClick={() => setShowWallpaperModal(true)}
+              className={`text-surface-muted hover:text-surface-text text-base p-1.5 transition-colors rounded-lg ${groupWallpaper ? 'text-accent-glow' : ''}`}
+              title="Fondo del grupo"
+            >
+              🖼️
+            </button>
+          )}
+
           {group && (
             <button
               onClick={() => setShowGroupInfo(open => !open)}
@@ -357,8 +451,16 @@ export default function GroupChatPage() {
         />
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
+      {/* Messages — group wallpaper */}
+      <div
+        className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3"
+        style={groupWallpaper ? {
+          backgroundImage: `url(${groupWallpaper})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'local',
+        } : {}}
+      >
         {loading ? (
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
             Cargando mensajes...
@@ -373,7 +475,15 @@ export default function GroupChatPage() {
             if (item.type === 'date') return <DateDivider key={item.key} date={item.date} />;
             const msg = item.msg;
             const isMe = msg.sender_id === profile?.id || msg.sender?.id === profile?.id;
-            return <TextBubble key={item.key} msg={msg} isMe={isMe} />;
+            return (
+              <TextBubble
+                key={item.key}
+                msg={msg}
+                isMe={isMe}
+                myBubbleStyle={myBubbleStyle}
+                otherBubbleStyle={otherBubbleStyle}
+              />
+            );
           })
         )}
         <div ref={bottomRef} />
@@ -402,6 +512,16 @@ export default function GroupChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Wallpaper modal */}
+      {showWallpaperModal && (
+        <WallpaperModal
+          current={groupWallpaper}
+          onSet={handleSetGroupWallpaper}
+          onClear={handleClearGroupWallpaper}
+          onClose={() => setShowWallpaperModal(false)}
+        />
+      )}
     </div>
   );
 }

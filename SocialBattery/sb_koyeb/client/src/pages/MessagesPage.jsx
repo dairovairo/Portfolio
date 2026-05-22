@@ -1,12 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 
-// ── Subcomponents ──────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function hexToRgba(hex, opacity) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
+// ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function OnlineDot({ lastSeenAt, className = '' }) {
   const online = isOnline(lastSeenAt);
@@ -18,21 +28,25 @@ function OnlineDot({ lastSeenAt, className = '' }) {
   );
 }
 
-function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
+function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle }) {
   const isPending = msg.hangout_status === 'pending';
   const isAccepted = msg.hangout_status === 'accepted';
   const isRejected = msg.hangout_status === 'rejected';
 
+  const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
+
   return (
     <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-      <div className={`max-w-[82%] rounded-2xl px-4 py-3 border ${
-        isAccepted
-          ? 'bg-green-500/15 border-green-500/30'
-          : isRejected
-          ? 'bg-slate-700/50 border-slate-600/30'
-          : 'bg-accent-primary/15 border-accent-primary/30'
-      }`}>
-        {/* Header */}
+      <div
+        className={`max-w-[82%] rounded-2xl px-4 py-3 border ${
+          isAccepted
+            ? 'border-green-500/30'
+            : isRejected
+            ? 'border-slate-600/30'
+            : 'border-accent-primary/30'
+        }`}
+        style={bubbleStyle}
+      >
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">🤝</span>
           <span className="text-xs font-display font-bold text-accent-glow uppercase tracking-wide">
@@ -40,10 +54,8 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
           </span>
         </div>
 
-        {/* Content */}
         <p className="text-sm text-surface-text leading-relaxed">{msg.content}</p>
 
-        {/* Optional time */}
         {msg.hangout_time && (
           <div className="mt-1.5 flex items-center gap-1.5 text-xs text-surface-muted">
             <span>🕐</span>
@@ -51,7 +63,6 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
           </div>
         )}
 
-        {/* Status */}
         <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
           {isAccepted && (
             <span className="text-xs font-display font-semibold text-green-400 flex items-center gap-1">
@@ -67,7 +78,6 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
             <span className="text-xs text-surface-muted italic">Esperando respuesta...</span>
           )}
 
-          {/* Accept/Reject buttons — only for receiver when pending */}
           {isPending && !isMe && (
             <div className="flex gap-2 mt-1 w-full">
               <button
@@ -88,8 +98,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
           )}
         </div>
 
-        {/* Timestamp */}
-        <div className={`text-xs mt-2 ${isMe ? 'text-surface-text/40' : 'text-slate-600'}`}>
+        <div className={`text-xs mt-2 ${isMe ? 'text-white/50' : 'text-surface-muted'}`}>
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && msg.read_at && <span className="ml-1 text-accent-glow/60">✓✓</span>}
         </div>
@@ -98,16 +107,16 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding }) {
   );
 }
 
-function TextBubble({ msg, isMe }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
+  const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   return (
     <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-      <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
-        isMe
-          ? 'bg-accent-primary text-surface-text'
-          : 'bg-surface-card border border-surface-border text-surface-text'
-      }`}>
-        <p className="text-sm leading-relaxed break-words">{msg.content}</p>
-        <div className={`text-xs mt-1 ${isMe ? 'text-surface-text/50' : 'text-slate-600'}`}>
+      <div
+        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
+        style={bubbleStyle}
+      >
+        <p className="text-sm leading-relaxed break-words text-surface-text">{msg.content}</p>
+        <div className={`text-xs mt-1 ${isMe ? 'text-white/50' : 'text-surface-muted'}`}>
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && msg.read_at && <span className="ml-1">✓✓</span>}
         </div>
@@ -124,7 +133,7 @@ function DateDivider({ date }) {
     : new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   return (
     <div className="text-center text-xs text-slate-600 font-mono py-3">
-      {label}
+      <span className="bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">{label}</span>
     </div>
   );
 }
@@ -196,6 +205,7 @@ export default function MessagesPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { chatWallpaper, myBubbleStyle, otherBubbleStyle } = useSettings();
 
   const [friend, setFriend] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -207,7 +217,6 @@ export default function MessagesPage() {
   const [toast, setToast] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
-  const messagesEndRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -218,7 +227,6 @@ export default function MessagesPage() {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
   }, []);
 
-  // Initial load
   useEffect(() => {
     async function load() {
       try {
@@ -238,19 +246,14 @@ export default function MessagesPage() {
     load();
   }, [friendId]);
 
-  // Scroll to bottom after initial load
   useEffect(() => {
-    if (!loading) {
-      setTimeout(() => scrollToBottom(false), 50);
-    }
+    if (!loading) setTimeout(() => scrollToBottom(false), 50);
   }, [loading, scrollToBottom]);
 
-  // Scroll on new messages
   useEffect(() => {
     if (messages.length > 0) scrollToBottom();
   }, [messages.length, scrollToBottom]);
 
-  // Realtime: new incoming messages
   useEffect(() => {
     if (!profile?.id) return;
     const channel = supabase
@@ -266,7 +269,6 @@ export default function MessagesPage() {
           api.patch(`/messages/${friendId}/read`).catch(() => {});
         }
       })
-      // Realtime: hangout status updates
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
@@ -280,7 +282,6 @@ export default function MessagesPage() {
           setMessages(m => m.map(msg => msg.id === updated.id ? { ...msg, ...updated } : msg));
         }
       })
-      // Realtime: friend's last_seen_at changes
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
@@ -293,8 +294,6 @@ export default function MessagesPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, [friendId, profile?.id]);
-
-  // ── Sending messages ─────────────────────────────────────────────────────
 
   async function sendText() {
     if (!input.trim() || sending) return;
@@ -359,8 +358,6 @@ export default function MessagesPage() {
     }
   }
 
-  // ── Grouped messages by date ─────────────────────────────────────────────
-
   const grouped = [];
   let lastDate = null;
   messages.forEach(msg => {
@@ -408,7 +405,6 @@ export default function MessagesPage() {
                       : friend.display_name?.[0]?.toUpperCase()
                     }
                   </div>
-                  {/* Online dot */}
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-bg ${friendOnline ? 'bg-green-400' : 'bg-slate-600'}`}
                   />
@@ -432,8 +428,16 @@ export default function MessagesPage() {
         </div>
       </nav>
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
+      {/* Messages area — wallpaper here */}
+      <div
+        className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3 relative"
+        style={chatWallpaper ? {
+          backgroundImage: `url(${chatWallpaper})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'local',
+        } : {}}
+      >
         {loading ? (
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
             Cargando mensajes...
@@ -463,10 +467,20 @@ export default function MessagesPage() {
                   isMe={isMe}
                   onRespond={respondToHangout}
                   responding={respondingId === msg.id}
+                  myBubbleStyle={myBubbleStyle}
+                  otherBubbleStyle={otherBubbleStyle}
                 />
               );
             }
-            return <TextBubble key={item.key} msg={msg} isMe={isMe} />;
+            return (
+              <TextBubble
+                key={item.key}
+                msg={msg}
+                isMe={isMe}
+                myBubbleStyle={myBubbleStyle}
+                otherBubbleStyle={otherBubbleStyle}
+              />
+            );
           })
         )}
         <div ref={bottomRef} />
@@ -475,7 +489,6 @@ export default function MessagesPage() {
       {/* Input area */}
       <div className="flex-shrink-0 border-t border-surface-border bg-surface-bg/95 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-4 py-3 space-y-2">
-          {/* Hangout form (expanded) */}
           {showHangoutForm ? (
             <HangoutForm
               onSend={sendHangout}
@@ -484,7 +497,6 @@ export default function MessagesPage() {
             />
           ) : (
             <div className="flex items-center gap-2">
-              {/* Hangout button */}
               <button
                 onClick={() => setShowHangoutForm(true)}
                 title="Proponer quedada"
@@ -492,8 +504,6 @@ export default function MessagesPage() {
               >
                 🤝
               </button>
-
-              {/* Text input */}
               <input
                 ref={inputRef}
                 value={input}
@@ -503,8 +513,6 @@ export default function MessagesPage() {
                 maxLength={1000}
                 className="flex-1 bg-surface-card border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
               />
-
-              {/* Send button */}
               <button
                 onClick={sendText}
                 disabled={!input.trim() || sending}
