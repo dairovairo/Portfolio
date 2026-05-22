@@ -425,9 +425,6 @@ export default function FriendsPage() {
               </div>
             ) : (
               <>
-                <p className="text-xs text-slate-600 font-mono px-1">
-                  Ordenados por batería · {onlineFriendsCount > 0 && `${onlineFriendsCount} en línea`}
-                </p>
                 {friends.map(f => (
                   <FriendRow key={f.id} friend={f} myBattery={myBattery} online={!!onlineMap[f.id]}
                     onMessage={() => navigate(`/messages/${f.id}`)} onRemove={removeFriend} />
