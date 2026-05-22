@@ -21,6 +21,115 @@ function Avatar({ user, size = 'sm' }) {
   );
 }
 
+function IdentityPill({ badge }) {
+  return (
+    <span
+      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-accent-primary/20 bg-accent-primary/10 px-2 py-1 text-xs font-display font-semibold text-accent-glow"
+      title={badge.description}
+    >
+      <span className="flex-shrink-0">{badge.emoji}</span>
+      <span className="truncate">{badge.name}</span>
+    </span>
+  );
+}
+
+function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser }) {
+  const identitiesByUser = assignments.reduce((acc, assignment) => {
+    if (!acc[assignment.userId]) acc[assignment.userId] = [];
+    acc[assignment.userId].push(assignment);
+    return acc;
+  }, {});
+
+  const members = group?.members || [];
+
+  return (
+    <div className="border-b border-surface-border bg-surface-bg/95 backdrop-blur-xl flex-shrink-0">
+      <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="font-display font-bold text-surface-text text-sm">Integrantes</div>
+            <div className="text-xs text-surface-muted font-mono">
+              {members.length} miembros · {assignments.length} identidades activas
+            </div>
+          </div>
+          {loading && <span className="text-xs text-surface-muted font-mono animate-pulse">Calculando...</span>}
+        </div>
+
+        <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+          {members.map(member => {
+            const memberIdentities = identitiesByUser[member.id] || [];
+            const isOwner = group?.owner?.id === member.id;
+            const isMe = currentUserId === member.id;
+            const color = getBatteryColor(member.battery_level ?? 50);
+
+            return (
+              <div key={member.id} className="bg-surface-card border border-surface-border rounded-2xl p-3">
+                <div className="flex items-start gap-3">
+                  <button onClick={() => onOpenUser(member.id)} className="flex-shrink-0">
+                    <Avatar user={member} size="md" />
+                  </button>
+
+                  <div className="flex-1 min-w-0">
+                    <button onClick={() => onOpenUser(member.id)} className="text-left w-full">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-display font-semibold text-surface-text text-sm truncate">
+                          {member.display_name || member.username}
+                        </span>
+                        {isMe && (
+                          <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                            Tu
+                          </span>
+                        )}
+                        {isOwner && (
+                          <span className="text-[11px] text-surface-muted bg-surface-bg border border-surface-border px-1.5 py-0.5 rounded-md flex-shrink-0">
+                            Owner
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-surface-muted font-mono truncate">@{member.username}</div>
+                    </button>
+
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {memberIdentities.length > 0 ? (
+                        memberIdentities.map(identity => (
+                          <IdentityPill key={identity.badgeId} badge={identity.badge} />
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-600 font-mono">Sin identidad activa</span>
+                      )}
+                    </div>
+
+                    {member.last_seen_at && (
+                      <div className="text-[11px] text-surface-muted/70 font-mono mt-2">
+                        {formatRelativeTime(member.last_seen_at)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-shrink-0 text-right">
+                    <div className="font-display font-bold tabular-nums text-sm" style={{ color: color.hex }}>
+                      {member.battery_level ?? '—'}%
+                    </div>
+                    {member.battery_is_estimated && (
+                      <div className="text-[11px] text-yellow-400 font-mono">estimada</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {!loading && assignments.length === 0 && (
+          <div className="bg-surface-card/50 border border-surface-border rounded-2xl p-3 text-xs text-surface-muted leading-relaxed">
+            Aun no hay identidades activas. Se calculan con la actividad del grupo y, al conseguir una, la insignia queda desbloqueada en el perfil para siempre.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TextBubble({ msg, isMe }) {
   return (
     <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -64,6 +173,9 @@ export default function GroupChatPage() {
 
   const [group, setGroup] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [badgeData, setBadgeData] = useState({ badges: [], assignments: [] });
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [loadingIdentities, setLoadingIdentities] = useState(true);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -83,17 +195,29 @@ export default function GroupChatPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [{ group: g }, { messages: msgs }] = await Promise.all([
+        setLoading(true);
+        setShowGroupInfo(false);
+        setLoadingIdentities(true);
+        const [groupResult, messagesResult, badgesResult] = await Promise.all([
           api.get(`/groups/${groupId}`),
           api.get(`/groups/${groupId}/messages`),
+          api.get(`/badges/group/${groupId}`).catch(error => {
+            console.error(error);
+            return { badges: [], assignments: [] };
+          }),
         ]);
-        setGroup(g);
-        setMessages(msgs || []);
+        setGroup(groupResult.group);
+        setMessages(messagesResult.messages || []);
+        setBadgeData({
+          badges: badgesResult.badges || [],
+          assignments: badgesResult.assignments || [],
+        });
       } catch (e) {
         console.error(e);
         showToast('Error al cargar el chat', 'error');
       } finally {
         setLoading(false);
+        setLoadingIdentities(false);
       }
     }
     load();
@@ -190,21 +314,30 @@ export default function GroupChatPage() {
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-surface-muted hover:text-surface-text transition-colors p-1 text-lg">←</button>
           {group ? (
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">👥</span>
-                <span className="font-display font-bold text-surface-text truncate">{group.name}</span>
+            <button
+              onClick={() => setShowGroupInfo(open => !open)}
+              className="flex-1 min-w-0 text-left group"
+              title="Ver integrantes e identidades"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-lg flex-shrink-0">👥</span>
+                <span className="font-display font-bold text-surface-text truncate group-hover:text-accent-glow transition-colors">
+                  {group.name}
+                </span>
+                <span className="text-xs text-surface-muted flex-shrink-0">
+                  {showGroupInfo ? '^' : 'v'}
+                </span>
               </div>
               <div className="text-xs text-surface-muted font-mono">
-                {group.member_count} miembros
+                {group.member_count} miembros · {badgeData.assignments.length} identidades
               </div>
-            </div>
+            </button>
           ) : loading ? (
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
           ) : null}
           {group && (
             <button
-              onClick={() => navigate(`/groups/${groupId}/info`)}
+              onClick={() => setShowGroupInfo(open => !open)}
               className="text-surface-muted hover:text-surface-text text-lg p-1 transition-colors"
               title="Info del grupo"
             >
@@ -213,6 +346,16 @@ export default function GroupChatPage() {
           )}
         </div>
       </nav>
+
+      {group && showGroupInfo && (
+        <GroupInfoPanel
+          group={group}
+          assignments={badgeData.assignments}
+          loading={loadingIdentities}
+          currentUserId={profile?.id}
+          onOpenUser={(userId) => navigate(`/user/${userId}`)}
+        />
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
