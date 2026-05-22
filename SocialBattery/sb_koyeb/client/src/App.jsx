@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
+import { SettingsProvider } from './context/SettingsContext';
 import AuthPage from './pages/AuthPage';
 import OnboardingPage from './pages/OnboardingPage';
 import HomePage from './pages/HomePage';
@@ -13,6 +14,7 @@ import MessagesInboxPage from './pages/MessagesInboxPage';
 import PoolsPage from './pages/PoolsPage';
 import BadgesPage from './pages/BadgesPage';
 import GroupChatPage from './pages/GroupChatPage';
+import SettingsPage from './pages/SettingsPage';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile } = useAuth();
@@ -48,17 +50,18 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/"                  element={<HomePage />} />
-      <Route path="/auth"              element={<Navigate to="/" replace />} />
-      <Route path="/friends"           element={<FriendsPage />} />
-      <Route path="/profile"           element={<ProfilePage />} />
-      <Route path="/user/:id"          element={<UserProfilePage />} />
-      <Route path="/messages/inbox"    element={<MessagesInboxPage />} />
-      <Route path="/messages/group/:groupId" element={<GroupChatPage />} />
-      <Route path="/messages/:friendId" element={<MessagesPage />} />
-      <Route path="/pools"             element={<PoolsPage />} />
-      <Route path="/badges"            element={<BadgesPage />} />
-      <Route path="*"                  element={<Navigate to="/" replace />} />
+      <Route path="/"                         element={<HomePage />} />
+      <Route path="/auth"                     element={<Navigate to="/" replace />} />
+      <Route path="/friends"                  element={<FriendsPage />} />
+      <Route path="/profile"                  element={<ProfilePage />} />
+      <Route path="/user/:id"                 element={<UserProfilePage />} />
+      <Route path="/messages/inbox"           element={<MessagesInboxPage />} />
+      <Route path="/messages/group/:groupId"  element={<GroupChatPage />} />
+      <Route path="/messages/:friendId"       element={<MessagesPage />} />
+      <Route path="/pools"                    element={<PoolsPage />} />
+      <Route path="/badges"                   element={<BadgesPage />} />
+      <Route path="/settings"                 element={<SettingsPage />} />
+      <Route path="*"                         element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
@@ -67,11 +70,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <AppRoutes />
-          </AuthProvider>
-        </ToastProvider>
+        <SettingsProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <AppRoutes />
+            </AuthProvider>
+          </ToastProvider>
+        </SettingsProvider>
       </ThemeProvider>
     </BrowserRouter>
   );
