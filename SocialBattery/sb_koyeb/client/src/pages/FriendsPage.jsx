@@ -135,7 +135,7 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[85vh] flex flex-col">
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5 sm:hidden" />
