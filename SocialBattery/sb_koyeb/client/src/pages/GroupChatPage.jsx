@@ -5,114 +5,6 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 
-// ── Wallpaper helpers ───────────────────────────────────────────────────────
-
-function getWallpaperKey(groupId) {
-  return `wallpaper_group_${groupId}`;
-}
-
-function loadWallpaper(groupId) {
-  try {
-    return localStorage.getItem(getWallpaperKey(groupId)) || null;
-  } catch {
-    return null;
-  }
-}
-
-function saveWallpaper(groupId, dataUrl) {
-  try {
-    if (dataUrl) localStorage.setItem(getWallpaperKey(groupId), dataUrl);
-    else localStorage.removeItem(getWallpaperKey(groupId));
-  } catch {
-    // localStorage full or unavailable
-  }
-}
-
-// ── WallpaperButton ─────────────────────────────────────────────────────────
-
-function WallpaperButton({ wallpaper, onSet, onRemove }) {
-  const [showMenu, setShowMenu] = useState(false);
-  const fileInputRef = useRef(null);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    if (!showMenu) return;
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showMenu]);
-
-  function handleFileChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      onSet(ev.target.result);
-      setShowMenu(false);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  }
-
-  return (
-    <div className="relative flex-shrink-0" ref={menuRef}>
-      <button
-        onClick={() => setShowMenu(v => !v)}
-        title="Fondo de pantalla"
-        className={`w-9 h-9 rounded-xl flex items-center justify-center text-base transition-all border ${
-          wallpaper
-            ? 'bg-accent-primary/20 border-accent-primary/50 text-accent-glow'
-            : 'bg-surface-card border-surface-border text-surface-muted hover:border-accent-primary/40 hover:text-surface-text'
-        }`}
-      >
-        🖼️
-      </button>
-
-      {showMenu && (
-        <div className="absolute right-0 top-11 z-50 w-52 bg-surface-card border border-surface-border rounded-2xl shadow-2xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-surface-border">
-            <p className="text-xs font-display font-bold text-surface-text">Fondo del grupo</p>
-            <p className="text-[11px] text-surface-muted mt-0.5">Solo visible para ti</p>
-          </div>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-surface-text hover:bg-surface-border/30 transition-colors text-left"
-          >
-            <span className="text-base">📷</span>
-            <span className="font-display font-medium">
-              {wallpaper ? 'Cambiar foto' : 'Elegir foto'}
-            </span>
-          </button>
-
-          {wallpaper && (
-            <button
-              onClick={() => { onRemove(); setShowMenu(false); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left border-t border-surface-border"
-            >
-              <span className="text-base">🗑️</span>
-              <span className="font-display font-medium">Quitar fondo</span>
-            </button>
-          )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Subcomponents ──────────────────────────────────────────────────────────
-
 function Avatar({ user, size = 'sm' }) {
   const color = getBatteryColor(user?.battery_level ?? 50);
   const sz = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-sm';
@@ -238,7 +130,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
   );
 }
 
-function TextBubble({ msg, isMe, hasWallpaper }) {
+function TextBubble({ msg, isMe }) {
   return (
     <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       {!isMe && <Avatar user={msg.sender} />}
@@ -248,12 +140,10 @@ function TextBubble({ msg, isMe, hasWallpaper }) {
             {msg.sender?.display_name || msg.sender?.username}
           </div>
         )}
-        <div className={`rounded-2xl px-4 py-2.5 shadow-sm ${
+        <div className={`rounded-2xl px-4 py-2.5 ${
           isMe
             ? 'bg-accent-primary text-surface-text'
-            : hasWallpaper
-              ? 'bg-surface-bg/90 backdrop-blur-sm border border-surface-border text-surface-text'
-              : 'bg-surface-card border border-surface-border text-surface-text'
+            : 'bg-surface-card border border-surface-border text-surface-text'
         }`}>
           <p className="text-sm leading-relaxed break-words">{msg.content}</p>
           <div className={`text-xs mt-1 ${isMe ? 'text-surface-text/50' : 'text-slate-600'}`}>
@@ -265,22 +155,14 @@ function TextBubble({ msg, isMe, hasWallpaper }) {
   );
 }
 
-function DateDivider({ date, hasWallpaper }) {
+function DateDivider({ date }) {
   const today = new Date().toDateString();
   const yesterday = new Date(Date.now() - 86400000).toDateString();
   const label = date === today ? 'Hoy'
     : date === yesterday ? 'Ayer'
     : new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   return (
-    <div className="text-center py-3">
-      <span className={`text-xs font-mono px-3 py-1 rounded-full ${
-        hasWallpaper
-          ? 'bg-surface-bg/80 backdrop-blur-sm text-surface-muted border border-surface-border/50'
-          : 'text-slate-600'
-      }`}>
-        {label}
-      </span>
-    </div>
+    <div className="text-center text-xs text-slate-600 font-mono py-3">{label}</div>
   );
 }
 
@@ -298,7 +180,6 @@ export default function GroupChatPage() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState(null);
-  const [wallpaper, setWallpaper] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -306,23 +187,6 @@ export default function GroupChatPage() {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
-
-  // Load wallpaper for this group
-  useEffect(() => {
-    setWallpaper(loadWallpaper(groupId));
-  }, [groupId]);
-
-  function handleSetWallpaper(dataUrl) {
-    setWallpaper(dataUrl);
-    saveWallpaper(groupId, dataUrl);
-    showToast('¡Fondo actualizado! 🖼️');
-  }
-
-  function handleRemoveWallpaper() {
-    setWallpaper(null);
-    saveWallpaper(groupId, null);
-    showToast('Fondo eliminado');
-  }
 
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
@@ -471,23 +335,14 @@ export default function GroupChatPage() {
           ) : loading ? (
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
           ) : null}
-
           {group && (
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Wallpaper button */}
-              <WallpaperButton
-                wallpaper={wallpaper}
-                onSet={handleSetWallpaper}
-                onRemove={handleRemoveWallpaper}
-              />
-              <button
-                onClick={() => setShowGroupInfo(open => !open)}
-                className="text-surface-muted hover:text-surface-text text-lg p-1 transition-colors"
-                title="Info del grupo"
-              >
-                ℹ️
-              </button>
-            </div>
+            <button
+              onClick={() => setShowGroupInfo(open => !open)}
+              className="text-surface-muted hover:text-surface-text text-lg p-1 transition-colors"
+              title="Info del grupo"
+            >
+              ℹ️
+            </button>
           )}
         </div>
       </nav>
@@ -503,44 +358,25 @@ export default function GroupChatPage() {
       )}
 
       {/* Messages */}
-      <div
-        className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 relative"
-        style={wallpaper ? {
-          backgroundImage: `url(${wallpaper})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundAttachment: 'local',
-        } : {}}
-      >
-        {/* Overlay for readability when wallpaper is set */}
-        {wallpaper && (
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ background: 'rgba(10,10,15,0.45)' }}
-          />
+      <div className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
+            Cargando mensajes...
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 gap-2">
+            <div className="text-4xl">👥</div>
+            <p className="text-slate-500 text-sm">¡El chat está vacío! Sé el primero en escribir.</p>
+          </div>
+        ) : (
+          grouped.map(item => {
+            if (item.type === 'date') return <DateDivider key={item.key} date={item.date} />;
+            const msg = item.msg;
+            const isMe = msg.sender_id === profile?.id || msg.sender?.id === profile?.id;
+            return <TextBubble key={item.key} msg={msg} isMe={isMe} />;
+          })
         )}
-
-        {/* Content (above overlay) */}
-        <div className="relative z-10 space-y-3">
-          {loading ? (
-            <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
-              Cargando mensajes...
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 gap-2">
-              <div className="text-4xl">👥</div>
-              <p className="text-slate-500 text-sm">¡El chat está vacío! Sé el primero en escribir.</p>
-            </div>
-          ) : (
-            grouped.map(item => {
-              if (item.type === 'date') return <DateDivider key={item.key} date={item.date} hasWallpaper={!!wallpaper} />;
-              const msg = item.msg;
-              const isMe = msg.sender_id === profile?.id || msg.sender?.id === profile?.id;
-              return <TextBubble key={item.key} msg={msg} isMe={isMe} hasWallpaper={!!wallpaper} />;
-            })
-          )}
-          <div ref={bottomRef} />
-        </div>
+        <div ref={bottomRef} />
       </div>
 
       {/* Input */}
