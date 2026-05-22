@@ -25,7 +25,7 @@ function BadgeCard({ badge, earned }) {
       <div className="text-xs font-display font-semibold text-surface-text leading-tight">{badge.name}</div>
       {earned && (
         <div className="text-xs text-surface-muted mt-0.5 font-mono">
-          Tu titulo
+          Desbloqueada
         </div>
       )}
     </div>
