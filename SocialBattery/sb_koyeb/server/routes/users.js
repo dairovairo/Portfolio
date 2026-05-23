@@ -96,6 +96,65 @@ router.get('/search', requireAuth, async (req, res) => {
   res.json({ users: data });
 });
 
+// GET /api/users/:id/stats — public stats for any user profile
+router.get('/:id/stats', requireAuth, async (req, res) => {
+  const targetId = req.params.id;
+
+  try {
+    const [friendsRes, createdRes, participationsRes, batteryRes, userRes] = await Promise.all([
+      // Accepted friendships (both directions)
+      supabase
+        .from('friendships')
+        .select('id', { count: 'exact', head: true })
+        .or(`requester_id.eq.${targetId},addressee_id.eq.${targetId}`)
+        .eq('status', 'accepted'),
+
+      // Pools created by this user
+      supabase
+        .from('hangout_pools')
+        .select('id', { count: 'exact', head: true })
+        .eq('creator_id', targetId),
+
+      // All pool_participants rows for this user (creator is auto-joined too)
+      supabase
+        .from('pool_participants')
+        .select('pool_id', { count: 'exact', head: true })
+        .eq('user_id', targetId),
+
+      // Battery update count (service role bypasses RLS)
+      supabase
+        .from('battery_history')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', targetId),
+
+      // member_since
+      supabase
+        .from('users')
+        .select('created_at')
+        .eq('id', targetId)
+        .single(),
+    ]);
+
+    const poolsCreated       = createdRes.count ?? 0;
+    const totalParticipations = participationsRes.count ?? 0;
+    // Creator is auto-joined so subtract to get "joined others' pools"
+    const poolsJoined        = Math.max(0, totalParticipations - poolsCreated);
+
+    res.json({
+      stats: {
+        friends_count:   friendsRes.count ?? 0,
+        pools_created:   poolsCreated,
+        pools_joined:    poolsJoined,
+        battery_updates: batteryRes.count ?? 0,
+        member_since:    userRes.data?.created_at ?? null,
+      },
+    });
+  } catch (e) {
+    console.error('[USERS] GET /:id/stats', e);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
 // GET /api/users/:id
 router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
