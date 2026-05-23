@@ -362,14 +362,25 @@ function CreatePoolModal({ onClose, onCreate }) {
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sortByDate(pools) {
+  return [...pools].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+}
+
+function isActive(p) {
+  return p.status !== 'cancelled' && p.status !== 'closed' && new Date(p.scheduled_at) > new Date();
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PoolsPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
 
-  const [pools, setPools] = useState([]);
+  const [pools, setPools] = useState([]);           // for 'active' tab
+  const [myCreated, setMyCreated] = useState([]);   // for 'myplans' tab – creados
+  const [myJoined, setMyJoined] = useState([]);     // for 'myplans' tab – unidos
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('active'); // active | mine | joined
+  const [tab, setTab] = useState('active');          // active | myplans
   const [showCreate, setShowCreate] = useState(false);
   const [joining, setJoining] = useState(null);
   const [leaving, setLeaving] = useState(null);
@@ -380,11 +391,25 @@ export default function PoolsPage() {
     setTimeout(() => setToast(null), 3000);
   }
 
-  const fetchPools = useCallback(async (filter = tab) => {
+  const fetchPools = useCallback(async (currentTab = tab) => {
     setLoading(true);
     try {
-      const { pools: data } = await api.get(`/pools?filter=${filter}&limit=30`);
-      setPools(data || []);
+      if (currentTab === 'active') {
+        const { pools: data } = await api.get('/pools?filter=active&limit=30');
+        setPools(data || []);
+      } else {
+        // Fetch both mine (created) and joined in parallel
+        const [mineRes, joinedRes] = await Promise.all([
+          api.get('/pools?filter=mine&limit=50'),
+          api.get('/pools?filter=joined&limit=50'),
+        ]);
+        const created = (mineRes.pools || []).filter(isActive);
+        // Joined list: exclude pools the user created (avoid duplicates)
+        const createdIds = new Set(created.map(p => p.id));
+        const joined = (joinedRes.pools || []).filter(p => isActive(p) && !createdIds.has(p.id));
+        setMyCreated(sortByDate(created));
+        setMyJoined(sortByDate(joined));
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -410,10 +435,10 @@ export default function PoolsPage() {
   }, [profile?.id, tab, fetchPools]);
 
   async function handleCreate(formData) {
-    const { pool } = await api.post('/pools', formData);
+    await api.post('/pools', formData);
     showToast('¡Pool creado! 🎉');
-    setTab('mine');
-    fetchPools('mine');
+    setTab('myplans');
+    fetchPools('myplans');
   }
 
   async function handleJoin(poolId) {
@@ -453,8 +478,14 @@ export default function PoolsPage() {
     }
   }
 
-  const activePools = pools.filter(p => p.status !== 'cancelled' && p.status !== 'closed');
-  const pastPools = pools.filter(p => p.status === 'cancelled' || p.status === 'closed');
+  const poolCardProps = { onJoin: handleJoin, onLeave: handleLeave, onCancel: handleCancel, joining, leaving };
+
+  // Active tab: split active vs past
+  const activePools = sortByDate(pools.filter(isActive));
+  const pastPools   = pools.filter(p => !isActive(p));
+
+  // Myplans tab: empty check
+  const myplansEmpty = myCreated.length === 0 && myJoined.length === 0;
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
@@ -478,9 +509,8 @@ export default function PoolsPage() {
       <div className="max-w-lg mx-auto px-4 pt-4">
         <div className="flex gap-1 bg-surface-card border border-surface-border rounded-xl p-1 mb-5">
           {[
-            { key: 'active', label: '🌐 Activos' },
-            { key: 'joined', label: '✓ Mis planes' },
-            { key: 'mine', label: '📅 Mis pools' },
+            { key: 'active',   label: '🌐 Activos' },
+            { key: 'myplans',  label: '✓ Mis planes' },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -505,67 +535,123 @@ export default function PoolsPage() {
               <div key={i} className="h-44 bg-surface-card rounded-2xl animate-pulse border border-surface-border" />
             ))}
           </div>
-        ) : pools.length === 0 ? (
-          <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
-            <div className="text-5xl mb-4">
-              {tab === 'active' ? '🤝' : tab === 'mine' ? '📅' : '🚀'}
-            </div>
-            <p className="text-slate-300 font-display font-semibold mb-1">
-              {tab === 'active' ? 'Sin pools activos' :
-               tab === 'mine' ? 'Aún no has creado pools' :
-               'No estás en ningún plan'}
-            </p>
-            <p className="text-slate-500 text-sm mb-5">
-              {tab === 'active'
-                ? 'Crea un pool o espera a que tus amigos propongan planes'
-                : tab === 'mine'
-                ? '¡Propón un plan y que se unan tus amigos!'
-                : 'Únete a pools activos de tus amigos'}
-            </p>
-            <button
-              onClick={() => tab === 'active' || tab === 'mine' ? setShowCreate(true) : setTab('active')}
-              className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold"
-            >
-              {tab === 'joined' ? '🔍 Ver pools activos' : '+ Crear pool'}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {/* Active pools */}
-            {activePools.map(pool => (
-              <PoolCard
-                key={pool.id}
-                pool={pool}
-                onJoin={handleJoin}
-                onLeave={handleLeave}
-                onCancel={handleCancel}
-                joining={joining}
-                leaving={leaving}
-              />
-            ))}
 
-            {/* Past pools (collapsed) */}
-            {pastPools.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs font-mono text-slate-600 mb-2 px-1">
-                  Cancelados / cerrados ({pastPools.length})
-                </p>
-                <div className="space-y-2">
-                  {pastPools.map(pool => (
-                    <PoolCard
-                      key={pool.id}
-                      pool={pool}
-                      onJoin={handleJoin}
-                      onLeave={handleLeave}
-                      onCancel={handleCancel}
-                      joining={joining}
-                      leaving={leaving}
-                    />
-                  ))}
+        ) : tab === 'active' ? (
+          // ── Active tab ──────────────────────────────────────────────────────
+          pools.length === 0 ? (
+            <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
+              <div className="text-5xl mb-4">🤝</div>
+              <p className="text-slate-300 font-display font-semibold mb-1">Sin pools activos</p>
+              <p className="text-slate-500 text-sm mb-5">Crea un pool o espera a que tus amigos propongan planes</p>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold"
+              >
+                + Crear pool
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activePools.map(pool => (
+                <PoolCard key={pool.id} pool={pool} {...poolCardProps} />
+              ))}
+              {pastPools.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-mono text-slate-600 mb-2 px-1">
+                    Cancelados / cerrados ({pastPools.length})
+                  </p>
+                  <div className="space-y-2">
+                    {pastPools.map(pool => (
+                      <PoolCard key={pool.id} pool={pool} {...poolCardProps} />
+                    ))}
+                  </div>
                 </div>
+              )}
+            </div>
+          )
+
+        ) : (
+          // ── Mis planes tab ──────────────────────────────────────────────────
+          myplansEmpty ? (
+            <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
+              <div className="text-5xl mb-4">📅</div>
+              <p className="text-slate-300 font-display font-semibold mb-1">Sin planes activos</p>
+              <p className="text-slate-500 text-sm mb-5">Crea un pool o únete a los de tus amigos</p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold"
+                >
+                  + Crear pool
+                </button>
+                <button
+                  onClick={() => setTab('active')}
+                  className="bg-surface-bg border border-surface-border px-5 py-2.5 rounded-xl text-sm font-display font-semibold text-slate-400"
+                >
+                  🔍 Ver activos
+                </button>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+
+              {/* ── Planes que has creado ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-base">🗓️</span>
+                  <h2 className="text-sm font-display font-bold text-surface-text">Planes que has creado</h2>
+                  <span className="ml-auto text-xs font-mono text-slate-500">{myCreated.length}</span>
+                </div>
+                {myCreated.length === 0 ? (
+                  <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
+                    <p className="text-slate-500 text-sm">No has creado ningún plan activo</p>
+                    <button
+                      onClick={() => setShowCreate(true)}
+                      className="mt-3 text-xs text-accent-glow font-display font-semibold"
+                    >
+                      + Crear pool
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {myCreated.map(pool => (
+                      <PoolCard key={pool.id} pool={pool} {...poolCardProps} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-surface-border" />
+
+              {/* ── Planes a los que te has unido ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-base">🚀</span>
+                  <h2 className="text-sm font-display font-bold text-surface-text">Planes a los que te has unido</h2>
+                  <span className="ml-auto text-xs font-mono text-slate-500">{myJoined.length}</span>
+                </div>
+                {myJoined.length === 0 ? (
+                  <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
+                    <p className="text-slate-500 text-sm">Aún no te has unido a ningún plan</p>
+                    <button
+                      onClick={() => setTab('active')}
+                      className="mt-3 text-xs text-accent-glow font-display font-semibold"
+                    >
+                      🔍 Ver planes activos
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {myJoined.map(pool => (
+                      <PoolCard key={pool.id} pool={pool} {...poolCardProps} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )
         )}
       </main>
 
