@@ -189,7 +189,12 @@ def view_data():
 
     df_sorted.insert(0, 'Numero', range(1, len(df_sorted)+1))
 
-    categorias = sorted(df_sorted['Categoria'].dropna().unique())
+    categorias = sorted(
+    df_sorted['Categoria']
+    .dropna()
+    .astype(str)
+    .unique()
+)
     categoria_seleccionada = request.args.get("categoria", "")
     if categoria_seleccionada:
         df_sorted = df_sorted[df_sorted['Categoria'] == categoria_seleccionada]
