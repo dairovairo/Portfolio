@@ -148,8 +148,8 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
           className={`rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
           style={bubbleStyle}
         >
-          <p className="text-sm leading-relaxed break-words text-surface-text">{msg.content}</p>
-          <div className={`text-xs mt-1 ${isMe ? 'text-white/50' : 'text-surface-muted'}`}>
+          <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
+          <div className="text-xs mt-1 opacity-60">
             {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
