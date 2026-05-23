@@ -9,6 +9,17 @@
  *   (requester_id / addressee_id).
  * - Settings are read via a live ref so toggling takes effect immediately
  *   without remounting.
+ *
+ * Fix 2025 — Bug #1: Battery notifications were firing on every UPDATE to the
+ * users table (including last_seen_at presence updates) even when battery_level
+ * had not changed. Now we track the last notified level per friend and only
+ * fire when the value actually differs.
+ *
+ * Fix 2025 — Bug #2: Group message notifications were never delivered because
+ * per-group filters on RLS-protected tables fail silently in Supabase
+ * postgres_changes. Replaced with a single filterless channel (identical
+ * pattern to MessagesInboxPage which works correctly) and check group
+ * membership in the callback via a pre-loaded Set.
  */
 
 import { useEffect, useRef } from 'react';
@@ -101,14 +112,16 @@ export function useMessageNotifications(profile, settings) {
         });
       } catch (e) { console.warn('[notif] could not load friends:', e); }
 
-      // Group IDs the user belongs to
-      const groupIds = [];
+      // Group IDs the user belongs to (as a Set for O(1) lookup in callback)
+      const groupIdSet = new Set();
+      // Also keep group metadata (name) cached to avoid async lookups on each event
+      const groupNameCache = {};
       try {
         const { data } = await supabase
           .from('friend_group_members')
           .select('group_id')
           .eq('user_id', profile.id);
-        (data || []).forEach(r => groupIds.push(r.group_id));
+        (data || []).forEach(r => groupIdSet.add(r.group_id));
       } catch (e) { console.warn('[notif] could not load groups:', e); }
 
       if (cancelled) return;
@@ -150,52 +163,75 @@ export function useMessageNotifications(profile, settings) {
         .subscribe();
       channels.push(personalCh);
 
-      // ── 4. Group messages — one channel per group (required for RLS) ────────
-      for (const groupId of groupIds) {
-        const ch = supabase
-          .channel(`notif-group-${profile.id}-${groupId}`)
+      // ── 4. Group messages — single filterless channel (required for RLS) ───
+      //
+      // BUG FIX: Using per-group channels with filter: group_id=eq.UUID fails
+      // silently on RLS-protected tables in Supabase postgres_changes.
+      // The correct pattern (same as MessagesInboxPage) is a single channel
+      // with NO filter; RLS ensures only accessible rows are delivered.
+      // We then check group membership via groupIdSet in the callback.
+      if (groupIdSet.size > 0) {
+        const groupCh = supabase
+          .channel(`notif-groups-${profile.id}`)
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
             table: 'group_messages',
-            filter: `group_id=eq.${groupId}`,
           }, async (payload) => {
             const s = settingsRef.current;
             if (s.muteAllNotifications || s.muteGroupChats) return;
 
             const msg = payload.new;
+            if (!msg?.group_id) return;
             if (msg.sender_id === profile.id) return;
 
-            const chatPath = `/messages/group/${groupId}`;
+            // Only notify for groups the user belongs to
+            if (!groupIdSet.has(msg.group_id)) return;
+
+            const chatPath = `/messages/group/${msg.group_id}`;
             if (!shouldNotify(locationRef.current, chatPath)) return;
 
-            let groupName  = 'Grupo';
+            // Use cached group name if available, otherwise fetch once and cache
+            let groupName  = groupNameCache[msg.group_id] || 'Grupo';
             let senderName = 'Alguien';
             try {
-              const [groupRes, senderRes] = await Promise.all([
-                supabase.from('friend_groups').select('name').eq('id', groupId).single(),
+              const promises = [
                 supabase.from('users').select('display_name, username').eq('id', msg.sender_id).single(),
-              ]);
-              if (groupRes.data)  groupName  = groupRes.data.name;
-              if (senderRes.data) senderName = senderRes.data.display_name || `@${senderRes.data.username}`;
+              ];
+              if (!groupNameCache[msg.group_id]) {
+                promises.push(
+                  supabase.from('friend_groups').select('name').eq('id', msg.group_id).single()
+                );
+              }
+              const results = await Promise.all(promises);
+              if (results[0].data) senderName = results[0].data.display_name || `@${results[0].data.username}`;
+              if (results[1]?.data) {
+                groupName = results[1].data.name;
+                groupNameCache[msg.group_id] = groupName;
+              }
             } catch {}
 
             fireNotification({
               title: groupName,
               body:  `${senderName}: ${msg.content?.slice(0, 80) || '📩 Nuevo mensaje'}`,
-              tag:   `group-${groupId}`,
+              tag:   `group-${msg.group_id}`,
               navigateTo: chatPath,
             });
           })
           .subscribe();
-        channels.push(ch);
+        channels.push(groupCh);
       }
 
       // ── 5. Battery changes ──────────────────────────────────────────────────
-      // Listen to updates on the users table and filter by preloaded friend IDs.
-      // We don't rely on payload.old (Supabase doesn't send it without REPLICA
-      // IDENTITY FULL), so we fire on any update to battery_level for a friend.
+      // BUG FIX: The users table is updated on every presence heartbeat
+      // (last_seen_at), causing the same battery notification to fire
+      // repeatedly even when battery_level has not changed.
+      // We now track the last notified level per friend and only fire
+      // when the value is different from the previously notified level.
       if (friendIds.size > 0) {
+        // Map<friendId, lastNotifiedLevel> — persists across events
+        const lastNotifiedLevel = new Map();
+
         const batteryCh = supabase
           .channel(`notif-battery-${profile.id}`)
           .on('postgres_changes', {
@@ -211,16 +247,23 @@ export function useMessageNotifications(profile, settings) {
             if (updated.id === profile.id) return;
             if (!friendIds.has(updated.id)) return;
 
+            const newLevel = updated.battery_level;
+
+            // Skip if the level has not actually changed since last notification
+            if (lastNotifiedLevel.get(updated.id) === newLevel) return;
+
             // Skip if the user is already on the home feed
             if (!document.hidden && locationRef.current === '/') return;
 
+            // Record the notified level before firing
+            lastNotifiedLevel.set(updated.id, newLevel);
+
             const name  = updated.display_name || `@${updated.username}` || 'Un amigo';
-            const level = updated.battery_level;
-            const emoji = level >= 70 ? '⚡' : level >= 40 ? '🔋' : '🪫';
+            const emoji = newLevel >= 70 ? '⚡' : newLevel >= 40 ? '🔋' : '🪫';
 
             fireNotification({
               title: `${name} actualizó su batería`,
-              body:  `${emoji} ${level}% de energía social`,
+              body:  `${emoji} ${newLevel}% de energía social`,
               tag:   `battery-${updated.id}`,
               navigateTo: '/',
             });
