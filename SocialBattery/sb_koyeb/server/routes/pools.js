@@ -44,12 +44,55 @@ async function syncPoolStatus(poolId) {
   }
 }
 
+/**
+ * Checks whether userId is allowed to see/join poolId.
+ * Returns true if:
+ *   - user is the creator
+ *   - pool is public AND creator is a friend
+ *   - pool is private AND user is in the linked group OR explicitly invited
+ */
+async function canAccessPool(pool, userId, friendIds) {
+  if (pool.creator_id === userId) return true;
+  if (pool.is_public) return friendIds.includes(pool.creator_id);
+
+  // Private: check group membership
+  if (pool.group_id) {
+    const { data: membership } = await supabase
+      .from('friend_group_members')
+      .select('user_id')
+      .eq('group_id', pool.group_id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (membership) return true;
+  }
+
+  // Private: check explicit invite
+  const { data: invite } = await supabase
+    .from('pool_invitees')
+    .select('user_id')
+    .eq('pool_id', pool.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!invite;
+}
+
+/** Builds participant preview (up to 6) for the feed */
+function buildParticipantPreview(rawParticipants) {
+  return (rawParticipants || [])
+    .slice(0, 6)
+    .map(p => ({
+      id: p.user?.id,
+      display_name: p.user?.display_name,
+      avatar_url: p.user?.avatar_url,
+      battery_level: p.user?.battery_level,
+    }))
+    .filter(p => p.id);
+}
+
 // ── GET /api/pools — feed visible to the current user ───────────────────────
-// Shows: pools from friends + public pools + own pools
-// Filters: upcoming, not cancelled/closed
 router.get('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
-  const { filter = 'active', limit = 20, offset = 0 } = req.query;
+  const { filter = 'active', limit = 30, offset = 0 } = req.query;
 
   try {
     const friendIds = await getFriendIds(userId);
@@ -58,9 +101,12 @@ router.get('/', requireAuth, async (req, res) => {
       .from('hangout_pools')
       .select(`
         id, activity, description, location_hint, scheduled_at,
-        max_people, is_public, status, created_at,
+        max_people, is_public, group_id, status, created_at, creator_id,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated),
-        pool_participants(user_id)
+        pool_participants(
+          joined_at,
+          user:user_id(id, username, display_name, avatar_url, battery_level)
+        )
       `)
       .order('scheduled_at', { ascending: true })
       .limit(parseInt(limit))
@@ -68,8 +114,8 @@ router.get('/', requireAuth, async (req, res) => {
 
     if (filter === 'mine') {
       query = query.eq('creator_id', userId);
+
     } else if (filter === 'joined') {
-      // Pools where I'm a participant (but not creator)
       const { data: myParticipations } = await supabase
         .from('pool_participants')
         .select('pool_id')
@@ -77,35 +123,73 @@ router.get('/', requireAuth, async (req, res) => {
       const poolIds = (myParticipations || []).map(p => p.pool_id);
       if (!poolIds.length) return res.json({ pools: [] });
       query = query.in('id', poolIds).neq('creator_id', userId);
+
     } else {
-      // Active feed: upcoming pools from friends + public + own
+      // Active feed — correct visibility:
+      // 1. Own pools
+      // 2. Public pools where creator is a friend
+      // 3. Private pools where user is in the linked group
+      // 4. Private pools where user is explicitly invited
       query = query
         .gt('scheduled_at', new Date().toISOString())
         .in('status', ['open', 'full']);
 
-      if (friendIds.length) {
-        // Pools visible to user (own + friend's + public)
-        query = query.or(
-          `creator_id.eq.${userId},is_public.eq.true,creator_id.in.(${friendIds.join(',')})`
-        );
-      } else {
-        query = query.or(`creator_id.eq.${userId},is_public.eq.true`);
+      // Collect private pool IDs the user can access
+      const privatePoolIds = new Set();
+
+      // Via group membership
+      const { data: myMemberships } = await supabase
+        .from('friend_group_members')
+        .select('group_id')
+        .eq('user_id', userId);
+      const myGroupIds = (myMemberships || []).map(m => m.group_id);
+
+      if (myGroupIds.length) {
+        const { data: groupPools } = await supabase
+          .from('hangout_pools')
+          .select('id')
+          .in('group_id', myGroupIds)
+          .eq('is_public', false);
+        (groupPools || []).forEach(p => privatePoolIds.add(p.id));
       }
+
+      // Via explicit invite
+      const { data: invites } = await supabase
+        .from('pool_invitees')
+        .select('pool_id')
+        .eq('user_id', userId);
+      (invites || []).forEach(i => privatePoolIds.add(i.pool_id));
+
+      // Build OR filter
+      // - own pools
+      // - public pools from friends
+      // - private pools user has access to
+      const orParts = [`creator_id.eq.${userId}`];
+
+      if (friendIds.length) {
+        orParts.push(`and(is_public.eq.true,creator_id.in.(${friendIds.join(',')}))`);
+      }
+
+      if (privatePoolIds.size) {
+        orParts.push(`id.in.(${[...privatePoolIds].join(',')})`);
+      }
+
+      query = query.or(orParts.join(','));
     }
 
     const { data: pools, error } = await query;
     if (error) throw error;
 
-    // Enrich: add participant count + whether current user has joined
     const enriched = (pools || []).map(pool => {
       const participants = pool.pool_participants || [];
       const participantCount = participants.length;
-      const hasJoined = participants.some(p => p.user_id === userId);
+      const hasJoined = participants.some(p => p.user?.id === userId);
       const isCreator = pool.creator?.id === userId;
       return {
         ...pool,
-        pool_participants: undefined, // don't send raw list
+        pool_participants: undefined,
         participant_count: participantCount,
+        participants_preview: buildParticipantPreview(participants),
         has_joined: hasJoined,
         is_creator: isCreator,
         spots_left: pool.max_people - participantCount,
@@ -128,7 +212,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       .from('hangout_pools')
       .select(`
         id, activity, description, location_hint, scheduled_at,
-        max_people, is_public, status, created_at,
+        max_people, is_public, group_id, status, created_at, creator_id,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated),
         pool_participants(
           joined_at,
@@ -140,14 +224,30 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     if (error || !pool) return res.status(404).json({ error: 'Pool not found' });
 
+    const friendIds = await getFriendIds(userId);
+    const allowed = await canAccessPool(pool, userId, friendIds);
+    if (!allowed) return res.status(403).json({ error: 'No tienes acceso a este pool' });
+
     const participants = pool.pool_participants || [];
     const hasJoined = participants.some(p => p.user?.id === userId);
     const isCreator = pool.creator?.id === userId;
 
+    // Full participant list for detail view
+    const participantList = participants.map(p => ({
+      id: p.user?.id,
+      display_name: p.user?.display_name,
+      avatar_url: p.user?.avatar_url,
+      battery_level: p.user?.battery_level,
+      joined_at: p.joined_at,
+    })).filter(p => p.id);
+
     res.json({
       pool: {
         ...pool,
+        pool_participants: undefined,
         participant_count: participants.length,
+        participants: participantList,
+        participants_preview: buildParticipantPreview(participants),
         has_joined: hasJoined,
         is_creator: isCreator,
         spots_left: pool.max_people - participants.length,
@@ -162,7 +262,12 @@ router.get('/:id', requireAuth, async (req, res) => {
 // ── POST /api/pools — create a new pool ─────────────────────────────────────
 router.post('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
-  const { activity, description, location_hint, scheduled_at, max_people = 4, is_public = false, group_id = null } = req.body;
+  const {
+    activity, description, location_hint, scheduled_at,
+    max_people = 4, is_public = false,
+    group_id = null,
+    invited_user_ids = [],   // NEW: individual friend invites for private pools
+  } = req.body;
 
   if (!activity?.trim()) return res.status(400).json({ error: 'activity is required' });
   if (!scheduled_at) return res.status(400).json({ error: 'scheduled_at is required' });
@@ -171,6 +276,9 @@ router.post('/', requireAuth, async (req, res) => {
   }
   if (max_people < 2 || max_people > 50) {
     return res.status(400).json({ error: 'max_people must be between 2 and 50' });
+  }
+  if (!is_public && !group_id && (!invited_user_ids || invited_user_ids.length === 0)) {
+    return res.status(400).json({ error: 'Un pool privado necesita al menos un grupo o un amigo invitado' });
   }
 
   try {
@@ -201,13 +309,27 @@ router.post('/', requireAuth, async (req, res) => {
       .from('pool_participants')
       .insert({ pool_id: pool.id, user_id: userId });
 
-    // Check badge: organizer_5 (5+ pools created) — using shared badge engine
+    // Insert individual invitees (deduplicated, excluding creator)
+    if (!is_public && invited_user_ids?.length) {
+      const uniqueInvites = [...new Set(invited_user_ids)]
+        .filter(id => id !== userId)
+        .map(uid => ({ pool_id: pool.id, user_id: uid }));
+      if (uniqueInvites.length) {
+        await supabase.from('pool_invitees').insert(uniqueInvites);
+      }
+    }
+
     const newBadgeId = await checkOrganizerBadgeForUser(userId).catch(() => null);
 
     res.status(201).json({
       pool: {
         ...pool,
         participant_count: 1,
+        participants_preview: [{
+          id: userId,
+          display_name: pool.creator?.display_name,
+          avatar_url: pool.creator?.avatar_url,
+        }],
         has_joined: true,
         is_creator: true,
         spots_left: pool.max_people - 1,
@@ -226,10 +348,9 @@ router.post('/:id/join', requireAuth, async (req, res) => {
   const poolId = req.params.id;
 
   try {
-    // Get pool with current count
     const { data: pool, error: poolErr } = await supabase
       .from('hangout_pools')
-      .select('id, status, max_people, creator_id, scheduled_at')
+      .select('id, status, max_people, creator_id, scheduled_at, is_public, group_id')
       .eq('id', poolId)
       .single();
 
@@ -240,7 +361,11 @@ router.post('/:id/join', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Pool has already started' });
     }
 
-    // Check current count
+    // Access check for private pools
+    const friendIds = await getFriendIds(userId);
+    const allowed = await canAccessPool(pool, userId, friendIds);
+    if (!allowed) return res.status(403).json({ error: 'No tienes acceso a este pool' });
+
     const { count } = await supabase
       .from('pool_participants')
       .select('*', { count: 'exact', head: true })
@@ -250,7 +375,6 @@ router.post('/:id/join', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Pool is full' });
     }
 
-    // Check already joined
     const { data: existing } = await supabase
       .from('pool_participants')
       .select('pool_id')
@@ -260,14 +384,12 @@ router.post('/:id/join', requireAuth, async (req, res) => {
 
     if (existing) return res.status(409).json({ error: 'Already joined this pool' });
 
-    // Join
     const { error: joinErr } = await supabase
       .from('pool_participants')
       .insert({ pool_id: poolId, user_id: userId });
 
     if (joinErr) throw joinErr;
 
-    // Sync pool status
     await syncPoolStatus(poolId);
 
     res.json({ success: true, message: '¡Te has unido al pool!' });
@@ -283,7 +405,6 @@ router.delete('/:id/leave', requireAuth, async (req, res) => {
   const poolId = req.params.id;
 
   try {
-    // Get pool to check if user is creator
     const { data: pool } = await supabase
       .from('hangout_pools')
       .select('creator_id, status')
@@ -293,7 +414,6 @@ router.delete('/:id/leave', requireAuth, async (req, res) => {
     if (!pool) return res.status(404).json({ error: 'Pool not found' });
 
     if (pool.creator_id === userId) {
-      // Creator leaving = cancel the pool
       await supabase
         .from('hangout_pools')
         .update({ status: 'cancelled' })
@@ -301,7 +421,6 @@ router.delete('/:id/leave', requireAuth, async (req, res) => {
       return res.json({ success: true, cancelled: true, message: 'Pool cancelado' });
     }
 
-    // Remove participant
     const { error } = await supabase
       .from('pool_participants')
       .delete()
@@ -310,7 +429,6 @@ router.delete('/:id/leave', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
-    // Sync status (might go from 'full' back to 'open')
     await syncPoolStatus(poolId);
 
     res.json({ success: true, message: 'Has salido del pool' });
@@ -327,7 +445,6 @@ router.patch('/:id', requireAuth, async (req, res) => {
   const { activity, description, location_hint, scheduled_at, max_people, is_public, status } = req.body;
 
   try {
-    // Verify ownership
     const { data: pool } = await supabase
       .from('hangout_pools')
       .select('creator_id, status, max_people')
