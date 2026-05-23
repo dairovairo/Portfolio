@@ -5,9 +5,10 @@
  * (both personal and group) and fires a native browser/OS notification when:
  *   - The Notifications API is granted
  *   - The document is hidden  OR  the user is not on that specific chat
+ *   - The relevant notification toggles are NOT muted
  *
- * This works on desktop, Android Chrome, and iOS 16.4+ (PWA installed).
- * No server-side changes needed — purely realtime-driven from the client.
+ * Notification settings are read live from SettingsContext on each event,
+ * so toggling a setting takes effect immediately without remounting.
  */
 
 import { useEffect, useRef } from 'react';
@@ -17,27 +18,17 @@ import { supabase } from '../lib/supabase';
 const ICON = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
 
-/**
- * Request permission once per session, non-intrusively.
- * Returns true if already granted, does not prompt if denied.
- */
 async function ensurePermission() {
   if (!('Notification' in window)) return false;
   if (Notification.permission === 'granted') return true;
   if (Notification.permission === 'denied') return false;
-  // 'default' — ask once
   const result = await Notification.requestPermission();
   return result === 'granted';
 }
 
-/**
- * Fire a native notification. Falls back gracefully if the API is unavailable.
- */
 function fireNotification({ title, body, tag, navigateTo }) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-
   try {
-    // Prefer service-worker-based notification (survives tab close, works on Android)
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(reg => {
         reg.showNotification(title, {
@@ -48,7 +39,6 @@ function fireNotification({ title, body, tag, navigateTo }) {
           renotify: true,
           data: { url: navigateTo || '/' },
         }).catch(() => {
-          // Fallback: plain Notification constructor
           const n = new Notification(title, { body, icon: ICON, tag });
           if (navigateTo) n.onclick = () => { window.focus(); window.location.href = navigateTo; };
         });
@@ -60,26 +50,28 @@ function fireNotification({ title, body, tag, navigateTo }) {
       const n = new Notification(title, { body, icon: ICON, tag });
       if (navigateTo) n.onclick = () => { window.focus(); window.location.href = navigateTo; };
     }
-  } catch {
-    // Silently ignore — notifications are a progressive enhancement
-  }
+  } catch { /* progressive enhancement — fail silently */ }
 }
 
-/**
- * Decide if we should show a notification.
- * We skip it if the user is already looking at that exact chat.
- */
 function shouldNotify(currentPath, chatPath) {
-  // Always notify if tab is hidden
   if (document.hidden) return true;
-  // Skip if already on that chat
   return !currentPath.startsWith(chatPath);
 }
 
-export function useMessageNotifications(profile) {
+/**
+ * @param {object} profile  - current user profile from AuthContext
+ * @param {object} settings - notification settings from SettingsContext
+ *   { muteAllNotifications, mutePersonalChats, muteGroupChats, muteBatteryChanges }
+ */
+export function useMessageNotifications(profile, settings) {
   const location = useLocation();
   const locationRef = useRef(location.pathname);
+  // Keep a live ref to settings so realtime callbacks always read the latest value
+  // without needing to re-subscribe every time a toggle changes.
+  const settingsRef = useRef(settings);
+
   useEffect(() => { locationRef.current = location.pathname; }, [location.pathname]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -97,13 +89,15 @@ export function useMessageNotifications(profile) {
         filter: `receiver_id=eq.${profile.id}`,
       }, async (payload) => {
         if (!permissionGranted) return;
+        const s = settingsRef.current;
+        if (s.muteAllNotifications || s.mutePersonalChats) return;
+
         const msg = payload.new;
-        if (msg.sender_id === profile.id) return; // ignore own messages
+        if (msg.sender_id === profile.id) return;
 
         const chatPath = `/messages/${msg.sender_id}`;
         if (!shouldNotify(locationRef.current, chatPath)) return;
 
-        // Fetch sender display name for nicer notification
         let senderName = 'Alguien';
         try {
           const { data } = await supabase
@@ -118,19 +112,11 @@ export function useMessageNotifications(profile) {
           ? `${senderName} te propone una quedada 🤝`
           : msg.content?.slice(0, 100) || '📩 Nuevo mensaje';
 
-        fireNotification({
-          title: senderName,
-          body,
-          tag: `msg-${msg.sender_id}`,
-          navigateTo: chatPath,
-        });
+        fireNotification({ title: senderName, body, tag: `msg-${msg.sender_id}`, navigateTo: chatPath });
       })
       .subscribe();
 
     // ── Group messages ───────────────────────────────────────────────────────
-    // Listen to all group_messages where the current user is a member.
-    // We can't filter by group membership in realtime easily, so we listen
-    // to sender_id != own and check membership client-side via a quick cache.
     const groupMembershipCache = new Set();
     let membershipLoaded = false;
 
@@ -154,16 +140,16 @@ export function useMessageNotifications(profile) {
         table: 'group_messages',
       }, async (payload) => {
         if (!permissionGranted) return;
-        const msg = payload.new;
-        if (msg.sender_id === profile.id) return; // own message
+        const s = settingsRef.current;
+        if (s.muteAllNotifications || s.muteGroupChats) return;
 
-        // Only care about groups we belong to
+        const msg = payload.new;
+        if (msg.sender_id === profile.id) return;
         if (membershipLoaded && !groupMembershipCache.has(msg.group_id)) return;
 
         const chatPath = `/messages/group/${msg.group_id}`;
         if (!shouldNotify(locationRef.current, chatPath)) return;
 
-        // Fetch group name and sender
         let groupName = 'Grupo';
         let senderName = 'Alguien';
         try {
@@ -184,9 +170,63 @@ export function useMessageNotifications(profile) {
       })
       .subscribe();
 
+    // ── Battery changes ───────────────────────────────────────────────────────
+    // Listens for friend battery updates. Uses muteBatteryChanges toggle.
+    // Only fires if the user is NOT on the home feed (they'd see it anyway).
+    const batteryChannel = supabase
+      .channel(`notif-battery-${profile.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users',
+        // We can't filter by friendship here, so we do a quick friendship check client-side
+      }, async (payload) => {
+        if (!permissionGranted) return;
+        const s = settingsRef.current;
+        if (s.muteAllNotifications || s.muteBatteryChanges) return;
+
+        const updated = payload.new;
+        const old = payload.old;
+
+        // Only react to actual battery_level changes
+        if (updated.battery_level === old?.battery_level) return;
+        if (updated.id === profile.id) return; // ignore own changes
+
+        // Check if this person is a friend
+        try {
+          const { data } = await supabase
+            .from('friendships')
+            .select('id')
+            .or(
+              `and(user_id.eq.${profile.id},friend_id.eq.${updated.id}),` +
+              `and(user_id.eq.${updated.id},friend_id.eq.${profile.id})`
+            )
+            .eq('status', 'accepted')
+            .maybeSingle();
+
+          if (!data) return; // not a friend
+        } catch { return; }
+
+        // Only notify if not already on the home feed
+        if (!document.hidden && locationRef.current === '/') return;
+
+        const name = updated.display_name || `@${updated.username}` || 'Un amigo';
+        const level = updated.battery_level ?? '?';
+        const emoji = level >= 70 ? '⚡' : level >= 40 ? '🔋' : '🪫';
+
+        fireNotification({
+          title: `${name} actualizó su batería`,
+          body: `${emoji} ${level}% de energía social`,
+          tag: `battery-${updated.id}`,
+          navigateTo: '/',
+        });
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(personalChannel);
       supabase.removeChannel(groupChannel);
+      supabase.removeChannel(batteryChannel);
     };
   }, [profile?.id]);
 }

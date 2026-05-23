@@ -14,13 +14,18 @@ export const SETTINGS_DEFAULTS = {
 };
 
 const STORAGE_KEYS = {
-  chatWallpaper:        'sb-chat-wallpaper',
-  myBubbleColor:        'sb-my-bubble-color',
-  myBubbleOpacity:      'sb-my-bubble-opacity',
-  myBubbleTextColor:    'sb-my-bubble-text-color',
-  otherBubbleColor:     'sb-other-bubble-color',
-  otherBubbleOpacity:   'sb-other-bubble-opacity',
-  otherBubbleTextColor: 'sb-other-bubble-text-color',
+  chatWallpaper:         'sb-chat-wallpaper',
+  myBubbleColor:         'sb-my-bubble-color',
+  myBubbleOpacity:       'sb-my-bubble-opacity',
+  myBubbleTextColor:     'sb-my-bubble-text-color',
+  otherBubbleColor:      'sb-other-bubble-color',
+  otherBubbleOpacity:    'sb-other-bubble-opacity',
+  otherBubbleTextColor:  'sb-other-bubble-text-color',
+  // notifications
+  muteBatteryChanges:    'sb-mute-battery-changes',
+  muteAllNotifications:  'sb-mute-all-notifications',
+  mutePersonalChats:     'sb-mute-personal-chats',
+  muteGroupChats:        'sb-mute-group-chats',
 };
 
 function loadStorage(key, fallback) {
@@ -65,6 +70,20 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.otherBubbleTextColor, SETTINGS_DEFAULTS.otherBubbleTextColor)
   );
 
+  // ── Notification preferences ──────────────────────────────────────────────
+  const [muteBatteryChanges, setMuteBatteryChangesState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteBatteryChanges, 'false') === 'true'
+  );
+  const [muteAllNotifications, setMuteAllNotificationsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteAllNotifications, 'false') === 'true'
+  );
+  const [mutePersonalChats, setMutePersonalChatsState] = useState(
+    () => loadStorage(STORAGE_KEYS.mutePersonalChats, 'false') === 'true'
+  );
+  const [muteGroupChats, setMuteGroupChatsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteGroupChats, 'false') === 'true'
+  );
+
   // ── setters ──────────────────────────────────────────────────────────────
 
   const setChatWallpaper = useCallback((dataUrl) => {
@@ -100,6 +119,26 @@ export function SettingsProvider({ children }) {
   const setOtherBubbleTextColor = useCallback((hex) => {
     localStorage.setItem(STORAGE_KEYS.otherBubbleTextColor, hex);
     setOtherBubbleTextColorState(hex);
+  }, []);
+
+  const setMuteBatteryChanges = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteBatteryChanges, String(v));
+    setMuteBatteryChangesState(v);
+  }, []);
+
+  const setMuteAllNotifications = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteAllNotifications, String(v));
+    setMuteAllNotificationsState(v);
+  }, []);
+
+  const setMutePersonalChats = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.mutePersonalChats, String(v));
+    setMutePersonalChatsState(v);
+  }, []);
+
+  const setMuteGroupChats = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteGroupChats, String(v));
+    setMuteGroupChatsState(v);
   }, []);
 
   // ── reset to defaults ─────────────────────────────────────────────────────
@@ -166,6 +205,11 @@ export function SettingsProvider({ children }) {
       resetMessagingDefaults,
       // derived styles
       myBubbleStyle, otherBubbleStyle,
+      // notification preferences
+      muteBatteryChanges, setMuteBatteryChanges,
+      muteAllNotifications, setMuteAllNotifications,
+      mutePersonalChats, setMutePersonalChats,
+      muteGroupChats, setMuteGroupChats,
     }}>
       {children}
     </SettingsContext.Provider>

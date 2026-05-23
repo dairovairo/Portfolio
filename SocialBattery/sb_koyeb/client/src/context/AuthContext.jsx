@@ -3,18 +3,29 @@ import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { usePresenceBroadcast } from '../hooks/usePresence';
 import { useMessageNotifications } from '../hooks/useMessageNotifications';
+import { useSettings } from './SettingsContext';
 
 const AuthContext = createContext(null);
 
-// Inner component that handles presence (needs userId from context)
 function PresenceBroadcaster({ userId }) {
   usePresenceBroadcast(userId);
   return null;
 }
 
-// Inner component that handles message notifications (needs profile from context)
 function MessageNotificationsBroadcaster({ profile }) {
-  useMessageNotifications(profile);
+  const {
+    muteAllNotifications,
+    mutePersonalChats,
+    muteGroupChats,
+    muteBatteryChanges,
+  } = useSettings();
+
+  useMessageNotifications(profile, {
+    muteAllNotifications,
+    mutePersonalChats,
+    muteGroupChats,
+    muteBatteryChanges,
+  });
   return null;
 }
 

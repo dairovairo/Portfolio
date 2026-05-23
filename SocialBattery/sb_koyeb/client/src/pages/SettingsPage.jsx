@@ -268,6 +268,10 @@ export default function SettingsPage() {
     otherBubbleOpacity, setOtherBubbleOpacity,
     otherBubbleTextColor, setOtherBubbleTextColor,
     resetMessagingDefaults,
+    muteBatteryChanges, setMuteBatteryChanges,
+    muteAllNotifications, setMuteAllNotifications,
+    mutePersonalChats, setMutePersonalChats,
+    muteGroupChats, setMuteGroupChats,
   } = useSettings();
 
   // Only one section open at a time
@@ -450,17 +454,83 @@ export default function SettingsPage() {
           onToggle={toggleSection}
           icon="🔔"
           title="Notificaciones"
-          subtitle="Mensajes, quedadas y solicitudes"
+          subtitle="Mensajes, batería y alertas"
         >
           <SubSection title="General">
-            <div className="space-y-1">
-              <InfoRow label="Notificaciones push" value="Activadas" />
-              <InfoRow label="Sonidos" value="Activados" />
-              <InfoRow label="Vibración" value="Activada" />
+            <div className="space-y-4">
+
+              {/* Silenciar todas */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Silenciar notificaciones
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    Desactiva todas las notificaciones del sistema
+                  </div>
+                </div>
+                <Toggle
+                  enabled={muteAllNotifications}
+                  onToggle={() => setMuteAllNotifications(!muteAllNotifications)}
+                />
+              </div>
+
+              {/* Sub-toggles — solo visibles si las notifs están activadas */}
+              {!muteAllNotifications && (
+                <div className="pl-4 border-l-2 border-surface-border space-y-4 animate-slide-down">
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar chats personales
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de mensajes directos
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={mutePersonalChats}
+                      onToggle={() => setMutePersonalChats(!mutePersonalChats)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar grupos privados
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de grupos
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteGroupChats}
+                      onToggle={() => setMuteGroupChats(!muteGroupChats)}
+                    />
+                  </div>
+
+                </div>
+              )}
+
+              <div className="border-t border-surface-border" />
+
+              {/* Silenciar cambios de batería — independiente del mute global */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Silenciar cambios de batería
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    No te avisaremos cuando un amigo actualice su energía
+                  </div>
+                </div>
+                <Toggle
+                  enabled={muteBatteryChanges}
+                  onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
+                />
+              </div>
+
             </div>
-            <p className="text-xs text-surface-muted mt-2">
-              Gestiona los permisos detallados desde los ajustes de tu dispositivo.
-            </p>
           </SubSection>
         </AccordionSection>
 
