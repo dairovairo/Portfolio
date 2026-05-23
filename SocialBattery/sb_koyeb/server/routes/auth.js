@@ -32,7 +32,7 @@ router.post('/profile', requireAuth, async (req, res) => {
     .upsert({
       id: userId,
       username: username.trim().toLowerCase(),
-      display_name: (display_name || username).trim(),
+      display_name: (display_name || username).trim().slice(0, 16),
       bio: bio ? bio.trim().slice(0, 160) : null,
       avatar_url: avatar_url || null,
       battery_level: batteryLevel,

@@ -62,14 +62,13 @@ export default function FriendCard({ friend, onClick }) {
         <div className="text-xs text-surface-muted font-mono">%</div>
       </div>
 
-      {/* Mini bar */}
-      <div className="w-1.5 h-12 bg-surface-bg rounded-full flex-shrink-0 overflow-hidden">
+      {/* Mini bar — fills bottom to top */}
+      <div className="w-1.5 h-12 bg-surface-bg rounded-full flex-shrink-0 overflow-hidden relative">
         <div
-          className="w-full rounded-full transition-all duration-500"
+          className="absolute bottom-0 w-full rounded-full transition-all duration-500"
           style={{
             height: `${friend.battery_level ?? 0}%`,
             backgroundColor: color.hex,
-            marginTop: `${100 - (friend.battery_level ?? 0)}%`,
             boxShadow: `0 0 8px ${color.hex}`,
           }}
         />
