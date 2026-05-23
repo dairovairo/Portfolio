@@ -27,7 +27,12 @@ function ConversationRow({ conv, onClick }) {
   const color = getBatteryColor(partner.battery_level ?? 50);
   const online = isOnline(partner.last_seen_at);
   const isHangout = lastMessage?.type === 'hangout_request';
-  const preview = isHangout ? `🤝 ${lastMessage.content}` : lastMessage?.content ?? 'Sin mensajes';
+  const isNew = !lastMessage;
+  const preview = isNew
+    ? '¡Ahora sois amigos! Di hola 👋'
+    : isHangout
+      ? `🤝 ${lastMessage.content}`
+      : lastMessage.content;
 
   return (
     <button onClick={onClick} className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left">
@@ -46,7 +51,7 @@ function ConversationRow({ conv, onClick }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : 'text-slate-500'}`}>{preview}</p>
+          <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : isNew ? 'text-accent-glow italic' : 'text-slate-500'}`}>{preview}</p>
           <span className="text-xs flex-shrink-0 font-mono" style={{ color: color.hex }}>🔋 {partner.battery_level}%</span>
         </div>
       </div>
@@ -130,7 +135,7 @@ export default function MessagesInboxPage() {
     fetchGroups();
   }, [fetchConversations, fetchGroups]);
 
-  // Realtime: direct messages
+  // Realtime: direct messages + friendship changes
   useEffect(() => {
     if (!profile?.id) return;
     const channel = supabase
@@ -139,6 +144,13 @@ export default function MessagesInboxPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => fetchConversations())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, () => {
         fetchGroups();
+      })
+      // Refresh inbox when a friendship is accepted (UPDATE) or removed (DELETE)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships' }, (payload) => {
+        if (payload.new?.status === 'accepted') fetchConversations();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'friendships' }, () => {
+        fetchConversations();
       })
       .subscribe();
     return () => supabase.removeChannel(channel);

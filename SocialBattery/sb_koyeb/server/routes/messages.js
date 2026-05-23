@@ -3,11 +3,31 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 
-// GET /api/messages — list conversations (last message per friend)
+// GET /api/messages — list conversations (all accepted friends, with last message if any)
 router.get('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
 
-  const { data, error } = await supabase
+  // 1. Fetch all accepted friends
+  const { data: friendships, error: fErr } = await supabase
+    .from('friendships')
+    .select(`
+      requester:requester_id(id, username, display_name, avatar_url, battery_level, last_seen_at),
+      addressee:addressee_id(id, username, display_name, avatar_url, battery_level, last_seen_at)
+    `)
+    .eq('status', 'accepted')
+    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+
+  if (fErr) return res.status(500).json({ error: 'Failed to fetch friends' });
+
+  // Build a map of friendId -> friend profile
+  const friendsMap = {};
+  (friendships || []).forEach(f => {
+    const friend = f.requester?.id === userId ? f.addressee : f.requester;
+    if (friend) friendsMap[friend.id] = friend;
+  });
+
+  // 2. Fetch last messages (only with current friends)
+  const { data: messages, error: mErr } = await supabase
     .from('messages')
     .select(`
       id, content, type, hangout_status, created_at, read_at,
@@ -18,13 +38,15 @@ router.get('/', requireAuth, async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(300);
 
-  if (error) return res.status(500).json({ error: 'Failed to fetch conversations' });
+  if (mErr) return res.status(500).json({ error: 'Failed to fetch conversations' });
 
-  // Group by partner, keep only latest message, count unread
+  // 3. Build conversation map from messages, but only for current friends
   const convMap = {};
-  (data || []).forEach(msg => {
+  (messages || []).forEach(msg => {
     const isMe = msg.sender.id === userId;
     const partner = isMe ? msg.receiver : msg.sender;
+    // Skip if no longer friends
+    if (!friendsMap[partner.id]) return;
     if (!convMap[partner.id]) {
       convMap[partner.id] = {
         partner,
@@ -33,6 +55,17 @@ router.get('/', requireAuth, async (req, res) => {
       };
     } else if (!isMe && !msg.read_at) {
       convMap[partner.id].unread++;
+    }
+  });
+
+  // 4. Add friends that have no messages yet (new friendships)
+  Object.entries(friendsMap).forEach(([friendId, friend]) => {
+    if (!convMap[friendId]) {
+      convMap[friendId] = {
+        partner: friend,
+        lastMessage: null,
+        unread: 0,
+      };
     }
   });
 
