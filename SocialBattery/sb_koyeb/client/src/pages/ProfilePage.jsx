@@ -11,6 +11,57 @@ import BatterySlider from '../components/BatterySlider';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import BottomNav from '../components/BottomNav';
 
+// ── Public Stats ──────────────────────────────────────────────────────────────
+function formatMemberSince(isoDate) {
+  if (!isoDate) return '—';
+  const start = new Date(isoDate);
+  const now = new Date();
+  const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+  if (diffDays < 1)  return 'Hoy';
+  if (diffDays < 30) return `${diffDays} día${diffDays !== 1 ? 's' : ''}`;
+  const months = Math.floor(diffDays / 30);
+  if (months < 12)   return `${months} mes${months !== 1 ? 'es' : ''}`;
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  return remMonths > 0 ? `${years}a ${remMonths}m` : `${years} año${years !== 1 ? 's' : ''}`;
+}
+
+function StatsGrid({ stats }) {
+  if (!stats) return null;
+  const items = [
+    { icon: '👥', label: 'Amigos',           value: stats.friends_count },
+    { icon: '🗓️', label: 'Planes creados',   value: stats.pools_created },
+    { icon: '🚀', label: 'Planes unidos',    value: stats.pools_joined },
+    { icon: '🔋', label: 'Updates batería',  value: stats.battery_updates },
+    { icon: '⏱️', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
+  ];
+  return (
+    <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+      <h3 className="font-display font-semibold text-surface-text mb-3 text-sm">
+        📊 Estadísticas públicas
+      </h3>
+      <div className="grid grid-cols-2 gap-2">
+        {items.map(({ icon, label, value }) => (
+          <div
+            key={label}
+            className="bg-surface-bg rounded-xl px-3 py-3 flex items-center gap-3"
+          >
+            <span className="text-xl flex-shrink-0">{icon}</span>
+            <div className="min-w-0">
+              <div className="font-display font-bold text-surface-text text-base leading-none">
+                {value ?? '—'}
+              </div>
+              <div className="text-xs text-surface-muted font-mono mt-0.5 leading-tight">
+                {label}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BadgeCard({ badge, earned }) {
   return (
     <div
@@ -45,6 +96,7 @@ export default function ProfilePage() {
   const [earnedBadgesMap, setEarnedBadgesMap] = useState({});
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyView, setHistoryView] = useState('line');
+  const [stats, setStats] = useState(null);
 
   // Edit state
   const [editing, setEditing] = useState(false);
@@ -73,6 +125,12 @@ export default function ProfilePage() {
         setEarnedBadgesMap(map);
       })
       .catch(console.error);
+
+    if (profile?.id) {
+      api.get(`/users/${profile.id}/stats`)
+        .then(({ stats: s }) => setStats(s))
+        .catch(console.error);
+    }
   }, []);
 
   async function saveProfile() {
@@ -363,6 +421,9 @@ export default function ProfilePage() {
             </button>
           )}
         </div>
+
+        {/* ── Public Stats ── */}
+        <StatsGrid stats={stats} />
 
         {/* ── Battery history ── */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
