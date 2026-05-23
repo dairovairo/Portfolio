@@ -54,7 +54,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
           </span>
         </div>
 
-        <p className="text-sm text-surface-text leading-relaxed">{msg.content}</p>
+        <p className="text-sm leading-relaxed" style={{ color: 'inherit' }}>{msg.content}</p>
 
         {msg.hangout_time && (
           <div className="mt-1.5 flex items-center gap-1.5 text-xs text-surface-muted">
@@ -98,7 +98,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
           )}
         </div>
 
-        <div className={`text-xs mt-2 ${isMe ? 'text-white/50' : 'text-surface-muted'}`}>
+        <div className="text-xs mt-2 opacity-60">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && msg.read_at && <span className="ml-1 text-accent-glow/60">✓✓</span>}
         </div>
@@ -115,8 +115,8 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
         className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
         style={bubbleStyle}
       >
-        <p className="text-sm leading-relaxed break-words text-surface-text">{msg.content}</p>
-        <div className={`text-xs mt-1 ${isMe ? 'text-white/50' : 'text-surface-muted'}`}>
+        <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
+        <div className="text-xs mt-1 opacity-60">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && msg.read_at && <span className="ml-1">✓✓</span>}
         </div>

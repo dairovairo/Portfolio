@@ -2,12 +2,25 @@ import { createContext, useContext, useState, useCallback } from 'react';
 
 const SettingsContext = createContext(null);
 
+// ── Defaults ──────────────────────────────────────────────────────────────────
+// Good colours for the dark theme (deep purple sender, dark navy receiver)
+export const SETTINGS_DEFAULTS = {
+  myBubbleColor:       '#7c3aed',  // accent purple — great on dark bg
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#ffffff',  // white text on purple
+  otherBubbleColor:    '#1e293b',  // slate-800 — clearly distinct from #0a0a0f bg
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#e2e8f0',  // light grey text on dark navy
+};
+
 const STORAGE_KEYS = {
-  chatWallpaper: 'sb-chat-wallpaper',
-  myBubbleColor: 'sb-my-bubble-color',
-  myBubbleOpacity: 'sb-my-bubble-opacity',
-  otherBubbleColor: 'sb-other-bubble-color',
-  otherBubbleOpacity: 'sb-other-bubble-opacity',
+  chatWallpaper:        'sb-chat-wallpaper',
+  myBubbleColor:        'sb-my-bubble-color',
+  myBubbleOpacity:      'sb-my-bubble-opacity',
+  myBubbleTextColor:    'sb-my-bubble-text-color',
+  otherBubbleColor:     'sb-other-bubble-color',
+  otherBubbleOpacity:   'sb-other-bubble-opacity',
+  otherBubbleTextColor: 'sb-other-bubble-text-color',
 };
 
 function loadStorage(key, fallback) {
@@ -30,20 +43,26 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.chatWallpaper, null)
   );
 
-  // My bubble colour
+  // My bubble
   const [myBubbleColor, setMyBubbleColorState] = useState(
-    () => loadStorage(STORAGE_KEYS.myBubbleColor, '#7c3aed')
+    () => loadStorage(STORAGE_KEYS.myBubbleColor, SETTINGS_DEFAULTS.myBubbleColor)
   );
   const [myBubbleOpacity, setMyBubbleOpacityState] = useState(
-    () => parseFloat(loadStorage(STORAGE_KEYS.myBubbleOpacity, '1'))
+    () => parseFloat(loadStorage(STORAGE_KEYS.myBubbleOpacity, String(SETTINGS_DEFAULTS.myBubbleOpacity)))
+  );
+  const [myBubbleTextColor, setMyBubbleTextColorState] = useState(
+    () => loadStorage(STORAGE_KEYS.myBubbleTextColor, SETTINGS_DEFAULTS.myBubbleTextColor)
   );
 
-  // Other people's bubble colour
+  // Other people's bubble
   const [otherBubbleColor, setOtherBubbleColorState] = useState(
-    () => loadStorage(STORAGE_KEYS.otherBubbleColor, '#1e1e2e')
+    () => loadStorage(STORAGE_KEYS.otherBubbleColor, SETTINGS_DEFAULTS.otherBubbleColor)
   );
   const [otherBubbleOpacity, setOtherBubbleOpacityState] = useState(
-    () => parseFloat(loadStorage(STORAGE_KEYS.otherBubbleOpacity, '1'))
+    () => parseFloat(loadStorage(STORAGE_KEYS.otherBubbleOpacity, String(SETTINGS_DEFAULTS.otherBubbleOpacity)))
+  );
+  const [otherBubbleTextColor, setOtherBubbleTextColorState] = useState(
+    () => loadStorage(STORAGE_KEYS.otherBubbleTextColor, SETTINGS_DEFAULTS.otherBubbleTextColor)
   );
 
   // ── setters ──────────────────────────────────────────────────────────────
@@ -63,6 +82,11 @@ export function SettingsProvider({ children }) {
     setMyBubbleOpacityState(v);
   }, []);
 
+  const setMyBubbleTextColor = useCallback((hex) => {
+    localStorage.setItem(STORAGE_KEYS.myBubbleTextColor, hex);
+    setMyBubbleTextColorState(hex);
+  }, []);
+
   const setOtherBubbleColor = useCallback((hex) => {
     localStorage.setItem(STORAGE_KEYS.otherBubbleColor, hex);
     setOtherBubbleColorState(hex);
@@ -71,6 +95,29 @@ export function SettingsProvider({ children }) {
   const setOtherBubbleOpacity = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.otherBubbleOpacity, String(v));
     setOtherBubbleOpacityState(v);
+  }, []);
+
+  const setOtherBubbleTextColor = useCallback((hex) => {
+    localStorage.setItem(STORAGE_KEYS.otherBubbleTextColor, hex);
+    setOtherBubbleTextColorState(hex);
+  }, []);
+
+  // ── reset to defaults ─────────────────────────────────────────────────────
+
+  const resetMessagingDefaults = useCallback(() => {
+    const d = SETTINGS_DEFAULTS;
+    localStorage.setItem(STORAGE_KEYS.myBubbleColor,        d.myBubbleColor);
+    localStorage.setItem(STORAGE_KEYS.myBubbleOpacity,      String(d.myBubbleOpacity));
+    localStorage.setItem(STORAGE_KEYS.myBubbleTextColor,    d.myBubbleTextColor);
+    localStorage.setItem(STORAGE_KEYS.otherBubbleColor,     d.otherBubbleColor);
+    localStorage.setItem(STORAGE_KEYS.otherBubbleOpacity,   String(d.otherBubbleOpacity));
+    localStorage.setItem(STORAGE_KEYS.otherBubbleTextColor, d.otherBubbleTextColor);
+    setMyBubbleColorState(d.myBubbleColor);
+    setMyBubbleOpacityState(d.myBubbleOpacity);
+    setMyBubbleTextColorState(d.myBubbleTextColor);
+    setOtherBubbleColorState(d.otherBubbleColor);
+    setOtherBubbleOpacityState(d.otherBubbleOpacity);
+    setOtherBubbleTextColorState(d.otherBubbleTextColor);
   }, []);
 
   // ── group wallpaper helpers ───────────────────────────────────────────────
@@ -86,18 +133,20 @@ export function SettingsProvider({ children }) {
     } catch {}
   }, []);
 
-  // ── derived ───────────────────────────────────────────────────────────────
+  // ── derived styles (include text color so bubbles inherit it) ─────────────
 
   const myBubbleStyle = {
     backgroundColor: myBubbleOpacity < 1
       ? hexToRgba(myBubbleColor, myBubbleOpacity)
       : myBubbleColor,
+    color: myBubbleTextColor,
   };
 
   const otherBubbleStyle = {
     backgroundColor: otherBubbleOpacity < 1
       ? hexToRgba(otherBubbleColor, otherBubbleOpacity)
       : otherBubbleColor,
+    color: otherBubbleTextColor,
   };
 
   return (
@@ -109,8 +158,12 @@ export function SettingsProvider({ children }) {
       // bubble colours
       myBubbleColor, setMyBubbleColor,
       myBubbleOpacity, setMyBubbleOpacity,
+      myBubbleTextColor, setMyBubbleTextColor,
       otherBubbleColor, setOtherBubbleColor,
       otherBubbleOpacity, setOtherBubbleOpacity,
+      otherBubbleTextColor, setOtherBubbleTextColor,
+      // reset
+      resetMessagingDefaults,
       // derived styles
       myBubbleStyle, otherBubbleStyle,
     }}>
