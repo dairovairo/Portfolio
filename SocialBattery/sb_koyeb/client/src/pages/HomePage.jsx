@@ -23,7 +23,6 @@ export default function HomePage() {
   const [loadingFriends, setLoadingFriends] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [activePoolsCount, setActivePoolsCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
 
   useEffect(() => {
@@ -54,13 +53,6 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
-  const fetchActivePools = useCallback(async () => {
-    try {
-      const { pools } = await api.get('/pools?filter=active&limit=5');
-      setActivePoolsCount((pools || []).filter(p => !p.has_joined && !p.is_creator).length);
-    } catch (e) {}
-  }, []);
-
   const fetchGroups = useCallback(async () => {
     try {
       const { groups: data } = await api.get('/groups');
@@ -72,9 +64,8 @@ export default function HomePage() {
     fetchFriends();
     fetchPending();
     fetchUnread();
-    fetchActivePools();
     fetchGroups();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchActivePools, fetchGroups]);
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -227,22 +218,6 @@ export default function HomePage() {
           </button>
         )}
 
-        {activePoolsCount > 0 && (
-          <button
-            onClick={() => navigate('/pools')}
-            className="w-full bg-purple-500/10 border border-purple-500/25 rounded-2xl p-4
-              flex items-center gap-3 hover:bg-purple-500/15 transition-all animate-fade-in text-left"
-          >
-            <span className="text-2xl">🎉</span>
-            <div>
-              <div className="font-display font-semibold text-surface-text text-sm">
-                {activePoolsCount} {activePoolsCount === 1 ? 'plan disponible' : 'planes disponibles'}
-              </div>
-              <div className="text-xs text-purple-400">¡Únete antes de que se llenen! →</div>
-            </div>
-          </button>
-        )}
-
         {/* Friends feed */}
         <div className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
           <div className="flex items-center justify-between mb-3">
@@ -251,9 +226,6 @@ export default function HomePage() {
                 <span className="text-surface-muted font-normal"> · {friends.length}</span>
               )}
             </h3>
-            <button onClick={() => navigate('/friends')} className="text-accent-glow text-sm hover:underline">
-              Gestionar →
-            </button>
           </div>
 
           {loadingFriends ? (
@@ -300,9 +272,6 @@ export default function HomePage() {
               <h3 className="font-display font-semibold text-surface-text">
                 Grupos<span className="text-surface-muted font-normal"> · {groups.length}</span>
               </h3>
-              <button onClick={() => navigate('/friends')} className="text-accent-glow text-sm hover:underline">
-                Gestionar →
-              </button>
             </div>
             <div className="space-y-2">
               {groups.slice(0, 4).map(group => (
