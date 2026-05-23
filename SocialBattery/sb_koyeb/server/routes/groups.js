@@ -40,10 +40,62 @@ router.get('/', requireAuth, async (req, res) => {
       .filter(Boolean)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+    // Fetch last message for each group
+    if (groups.length > 0) {
+      const groupIds = groups.map(g => g.id);
+      const { data: lastMsgs } = await supabase
+        .from('group_messages')
+        .select('group_id, created_at, sender_id, content')
+        .in('group_id', groupIds)
+        .order('created_at', { ascending: false });
+
+      const lastMsgMap = {};
+      (lastMsgs || []).forEach(msg => {
+        if (!lastMsgMap[msg.group_id]) lastMsgMap[msg.group_id] = msg;
+      });
+      groups.forEach(g => { g.last_message = lastMsgMap[g.id] || null; });
+    }
+
     res.json({ groups });
   } catch (err) {
     console.error('[GROUPS] GET /', err);
     res.status(500).json({ error: 'Failed to fetch groups' });
+  }
+});
+
+// ── GET /api/groups/unread-counts — count unread messages per group ──────────
+router.get('/unread-counts', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  let reads = {};
+  try { reads = JSON.parse(req.query.reads || '{}'); } catch {}
+
+  try {
+    // Get all groups this user belongs to
+    const { data: memberships } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('user_id', userId);
+
+    const groupIds = (memberships || []).map(m => m.group_id);
+    if (groupIds.length === 0) return res.json({ counts: {} });
+
+    const counts = {};
+    await Promise.all(groupIds.map(async (groupId) => {
+      const since = reads[groupId];
+      let query = supabase
+        .from('group_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', groupId)
+        .neq('sender_id', userId);
+      if (since) query = query.gt('created_at', since);
+      const { count } = await query;
+      counts[groupId] = count || 0;
+    }));
+
+    res.json({ counts });
+  } catch (err) {
+    console.error('[GROUPS] GET /unread-counts', err);
+    res.status(500).json({ error: 'Failed to fetch unread counts' });
   }
 });
 

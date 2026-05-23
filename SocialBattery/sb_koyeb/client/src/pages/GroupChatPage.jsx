@@ -6,6 +6,11 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 
+// ── Mark group as read in localStorage ───────────────────────────────────────
+function markGroupRead(groupId) {
+  localStorage.setItem(`grp_read_${groupId}`, new Date().toISOString());
+}
+
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function Avatar({ user, size = 'sm' }) {
@@ -36,7 +41,115 @@ function IdentityPill({ badge }) {
   );
 }
 
-function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser }) {
+// ── Add Member Modal ──────────────────────────────────────────────────────────
+
+function AddMemberModal({ group, onClose, onAdded }) {
+  const [friends, setFriends] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(null);
+  const [search, setSearch] = useState('');
+
+  const memberIds = new Set((group?.members || []).map(m => m.id));
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { friends: data } = await api.get('/friends');
+        setFriends(data || []);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    }
+    load();
+  }, []);
+
+  const eligible = friends.filter(f =>
+    !memberIds.has(f.id) &&
+    (f.display_name?.toLowerCase().includes(search.toLowerCase()) ||
+     f.username?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  async function handleAdd(friend) {
+    setAdding(friend.id);
+    try {
+      await api.post(`/groups/${group.id}/members`, { user_id: friend.id });
+      onAdded(friend);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface-card border border-surface-border rounded-t-3xl p-5 w-full max-w-lg space-y-4 animate-slide-up max-h-[75vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between flex-shrink-0">
+          <div>
+            <div className="font-display font-bold text-surface-text">Añadir miembro</div>
+            <div className="text-xs text-surface-muted font-mono">{group.name}</div>
+          </div>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+
+        <input
+          type="text"
+          placeholder="Buscar amigos..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-shrink-0 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
+        />
+
+        <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+          {loading ? (
+            [1, 2, 3].map(i => <div key={i} className="h-14 bg-surface-bg rounded-2xl animate-pulse" />)
+          ) : eligible.length === 0 ? (
+            <div className="text-center text-slate-500 text-sm py-8">
+              {friends.filter(f => !memberIds.has(f.id)).length === 0
+                ? 'Todos tus amigos ya están en el grupo'
+                : 'No se encontraron amigos'}
+            </div>
+          ) : (
+            eligible.map(friend => {
+              const color = getBatteryColor(friend.battery_level ?? 50);
+              const isAdding = adding === friend.id;
+              return (
+                <div key={friend.id} className="bg-surface-bg border border-surface-border rounded-2xl p-3 flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center font-display font-bold border-2 flex-shrink-0 text-sm"
+                    style={{ borderColor: color.hex, background: `${color.hex}15` }}
+                  >
+                    {friend.avatar_url
+                      ? <img src={friend.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                      : (friend.display_name || friend.username)?.[0]?.toUpperCase()
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{friend.display_name || friend.username}</div>
+                    <div className="text-xs text-surface-muted font-mono">@{friend.username} · 🔋 {friend.battery_level ?? '—'}%</div>
+                  </div>
+                  <button
+                    onClick={() => handleAdd(friend)}
+                    disabled={isAdding}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-accent-primary/20 text-accent-glow border border-accent-primary/30 text-xs font-display font-semibold hover:bg-accent-primary/30 transition-colors disabled:opacity-50"
+                  >
+                    {isAdding ? '...' : '+ Añadir'}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Group info panel ──────────────────────────────────────────────────────────
+
+function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser, onAddMember }) {
   const identitiesByUser = assignments.reduce((acc, assignment) => {
     if (!acc[assignment.userId]) acc[assignment.userId] = [];
     acc[assignment.userId].push(assignment);
@@ -44,6 +157,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
   }, {});
 
   const members = group?.members || [];
+  const isOwner = group?.owner?.id === currentUserId;
 
   return (
     <div className="border-b border-surface-border bg-surface-bg/95 backdrop-blur-xl flex-shrink-0">
@@ -55,13 +169,23 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
               {members.length} miembros · {assignments.length} identidades activas
             </div>
           </div>
-          {loading && <span className="text-xs text-surface-muted font-mono animate-pulse">Calculando...</span>}
+          <div className="flex items-center gap-2">
+            {loading && <span className="text-xs text-surface-muted font-mono animate-pulse">Calculando...</span>}
+            {isOwner && (
+              <button
+                onClick={onAddMember}
+                className="text-xs bg-accent-primary/15 text-accent-glow border border-accent-primary/25 px-3 py-1.5 rounded-xl font-display font-semibold hover:bg-accent-primary/25 transition-colors flex items-center gap-1"
+              >
+                <span>+</span> Añadir
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
           {members.map(member => {
             const memberIdentities = identitiesByUser[member.id] || [];
-            const isOwner = group?.owner?.id === member.id;
+            const isOwnerMember = group?.owner?.id === member.id;
             const isMe = currentUserId === member.id;
             const color = getBatteryColor(member.battery_level ?? 50);
 
@@ -83,7 +207,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                             Tu
                           </span>
                         )}
-                        {isOwner && (
+                        {isOwnerMember && (
                           <span className="text-[11px] text-surface-muted bg-surface-bg border border-surface-border px-1.5 py-0.5 rounded-md flex-shrink-0">
                             Owner
                           </span>
@@ -249,6 +373,7 @@ export default function GroupChatPage() {
   const [badgeData, setBadgeData] = useState({ badges: [], assignments: [] });
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
   const [loadingIdentities, setLoadingIdentities] = useState(true);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
@@ -287,6 +412,8 @@ export default function GroupChatPage() {
           badges: badgesResult.badges || [],
           assignments: badgesResult.assignments || [],
         });
+        // Mark as read when entering the chat
+        markGroupRead(groupId);
       } catch (e) {
         console.error(e);
         showToast('Error al cargar el chat', 'error');
@@ -305,6 +432,11 @@ export default function GroupChatPage() {
   useEffect(() => {
     if (messages.length > 0) scrollToBottom();
   }, [messages.length, scrollToBottom]);
+
+  // Mark as read whenever new messages arrive while viewing the chat
+  useEffect(() => {
+    if (messages.length > 0) markGroupRead(groupId);
+  }, [messages.length, groupId]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -337,6 +469,17 @@ export default function GroupChatPage() {
   function handleClearGroupWallpaper() {
     setGroupWallpaper(groupId, null);
     setGroupWallpaperState(null);
+  }
+
+  function handleMemberAdded(friend) {
+    setGroup(prev => {
+      if (!prev) return prev;
+      const alreadyThere = prev.members.some(m => m.id === friend.id);
+      if (alreadyThere) return prev;
+      const newMembers = [...prev.members, friend];
+      return { ...prev, members: newMembers, member_count: newMembers.length };
+    });
+    showToast(`${friend.display_name || friend.username} añadido al grupo`);
   }
 
   async function sendText() {
@@ -448,6 +591,7 @@ export default function GroupChatPage() {
           loading={loadingIdentities}
           currentUserId={profile?.id}
           onOpenUser={(userId) => navigate(`/user/${userId}`)}
+          onAddMember={() => setShowAddMember(true)}
         />
       )}
 
@@ -520,6 +664,18 @@ export default function GroupChatPage() {
           onSet={handleSetGroupWallpaper}
           onClear={handleClearGroupWallpaper}
           onClose={() => setShowWallpaperModal(false)}
+        />
+      )}
+
+      {/* Add member modal */}
+      {showAddMember && group && (
+        <AddMemberModal
+          group={group}
+          onClose={() => setShowAddMember(false)}
+          onAdded={(friend) => {
+            handleMemberAdded(friend);
+            setShowAddMember(false);
+          }}
         />
       )}
     </div>

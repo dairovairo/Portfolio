@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,21 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 
+// ── localStorage helpers for group read tracking ─────────────────────────────
+function getGroupLastRead(groupId) {
+  return localStorage.getItem(`grp_read_${groupId}`) || null;
+}
+
+function buildReadsMap(groups) {
+  const reads = {};
+  groups.forEach(g => {
+    const ts = getGroupLastRead(g.id);
+    if (ts) reads[g.id] = ts;
+  });
+  return reads;
+}
+
+// ── Direct conversation row ───────────────────────────────────────────────────
 function ConversationRow({ conv, onClick }) {
   const { partner, lastMessage, unread } = conv;
   const color = getBatteryColor(partner.battery_level ?? 50);
@@ -39,28 +54,54 @@ function ConversationRow({ conv, onClick }) {
   );
 }
 
-function GroupConversationRow({ group, onClick }) {
+// ── Group conversation row ────────────────────────────────────────────────────
+function GroupConversationRow({ group, unread, onClick }) {
+  const lastMsg = group.last_message;
   return (
     <button onClick={onClick} className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left">
       <div className="w-12 h-12 rounded-full bg-accent-primary/15 border-2 border-accent-primary/30 flex items-center justify-center text-xl flex-shrink-0">👥</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <span className="font-display font-semibold text-surface-text text-sm truncate">{group.name}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {lastMsg && <span className="text-xs text-slate-600 font-mono">{formatRelativeTime(lastMsg.created_at)}</span>}
+            {unread > 0 && (
+              <span className="bg-accent-primary text-surface-text text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : 'text-slate-500'}`}>
+            {lastMsg ? lastMsg.content : `${group.member_count} miembros`}
+          </p>
           <span className="text-xs bg-accent-primary/15 text-accent-glow border border-accent-primary/20 px-1.5 py-0.5 rounded-full font-mono flex-shrink-0">Grupo</span>
         </div>
-        <p className="text-xs text-slate-500 truncate">{group.member_count} miembros</p>
       </div>
     </button>
   );
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function MessagesInboxPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupUnreads, setGroupUnreads] = useState({});
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('all');
+  const [tab, setTab] = useState('direct');
+  const groupsRef = useRef([]);
+
+  const fetchUnreadCounts = useCallback(async (groupList) => {
+    if (!groupList || groupList.length === 0) return;
+    try {
+      const reads = buildReadsMap(groupList);
+      const { counts } = await api.get(`/groups/unread-counts?reads=${encodeURIComponent(JSON.stringify(reads))}`);
+      setGroupUnreads(counts || {});
+    } catch (e) { console.error(e); }
+  }, []);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -75,30 +116,37 @@ export default function MessagesInboxPage() {
   const fetchGroups = useCallback(async () => {
     try {
       const { groups: data } = await api.get('/groups');
-      setGroups(data || []);
+      const list = data || [];
+      setGroups(list);
+      groupsRef.current = list;
+      await fetchUnreadCounts(list);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, []);
+  }, [fetchUnreadCounts]);
 
   useEffect(() => {
     fetchConversations();
     fetchGroups();
   }, [fetchConversations, fetchGroups]);
 
+  // Realtime: direct messages
   useEffect(() => {
     if (!profile?.id) return;
     const channel = supabase
       .channel(`inbox-${profile.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${profile.id}` }, () => fetchConversations())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => fetchConversations())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, () => fetchGroups())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, () => {
+        fetchGroups();
+      })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [profile?.id, fetchConversations, fetchGroups]);
 
-  const totalUnread = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
-  const showDirect = tab === 'all' || tab === 'direct';
-  const showGroups = tab === 'all' || tab === 'groups';
+  const totalDirectUnread = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
+  const totalGroupUnread = Object.values(groupUnreads).reduce((acc, n) => acc + n, 0);
+  const totalUnread = totalDirectUnread + totalGroupUnread;
+
   const hasContent = conversations.length > 0 || groups.length > 0;
 
   return (
@@ -114,18 +162,30 @@ export default function MessagesInboxPage() {
             + Chat
           </button>
         </div>
-        {/* Tabs */}
+        {/* Tabs — solo Directos y Grupos */}
         <div className="max-w-lg mx-auto px-4 pb-3 flex gap-1">
           {[
-            { id: 'all', label: 'Todo' },
-            { id: 'direct', label: `Directos${conversations.length ? ` (${conversations.length})` : ''}` },
-            { id: 'groups', label: `Grupos${groups.length ? ` (${groups.length})` : ''}` },
+            {
+              id: 'direct',
+              label: `Directos${conversations.length ? ` (${conversations.length})` : ''}`,
+              badge: totalDirectUnread,
+            },
+            {
+              id: 'groups',
+              label: `Grupos${groups.length ? ` (${groups.length})` : ''}`,
+              badge: totalGroupUnread,
+            },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-display font-semibold transition-all ${
+              className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-display font-semibold transition-all relative ${
                 tab === t.id ? 'bg-accent-primary text-surface-text' : 'text-slate-400 hover:text-surface-text'
               }`}>
               {t.label}
+              {t.badge > 0 && tab !== t.id && (
+                <span className="absolute -top-1 -right-1 bg-accent-primary text-surface-text text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {t.badge > 9 ? '9+' : t.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -145,31 +205,36 @@ export default function MessagesInboxPage() {
           </div>
         ) : (
           <>
-            {showGroups && groups.length > 0 && (
+            {tab === 'groups' && (
               <>
-                {tab === 'all' && <p className="text-xs text-slate-600 font-mono px-1">Grupos</p>}
-                {groups.map(g => (
-                  <GroupConversationRow key={g.id} group={g} onClick={() => navigate(`/messages/group/${g.id}`)} />
-                ))}
+                {groups.length === 0 ? (
+                  <div className="text-center text-surface-muted text-sm py-8">
+                    <div className="text-3xl mb-3">👥</div>
+                    <p>Sin grupos aún</p>
+                    <button onClick={() => navigate('/friends')} className="mt-3 text-accent-glow text-sm hover:underline">Crear grupo →</button>
+                  </div>
+                ) : (
+                  groups.map(g => (
+                    <GroupConversationRow
+                      key={g.id}
+                      group={g}
+                      unread={groupUnreads[g.id] || 0}
+                      onClick={() => navigate(`/messages/group/${g.id}`)}
+                    />
+                  ))
+                )}
               </>
             )}
-            {showDirect && conversations.length > 0 && (
+            {tab === 'direct' && (
               <>
-                {tab === 'all' && groups.length > 0 && <p className="text-xs text-slate-600 font-mono px-1 pt-2">Directos</p>}
-                {conversations.map(conv => (
-                  <ConversationRow key={conv.partner.id} conv={conv} onClick={() => navigate(`/messages/${conv.partner.id}`)} />
-                ))}
+                {conversations.length === 0 ? (
+                  <div className="text-center text-surface-muted text-sm py-8">Sin conversaciones directas</div>
+                ) : (
+                  conversations.map(conv => (
+                    <ConversationRow key={conv.partner.id} conv={conv} onClick={() => navigate(`/messages/${conv.partner.id}`)} />
+                  ))
+                )}
               </>
-            )}
-            {showGroups && tab === 'groups' && groups.length === 0 && (
-              <div className="text-center text-surface-muted text-sm py-8">
-                <div className="text-3xl mb-3">👥</div>
-                <p>Sin grupos aún</p>
-                <button onClick={() => navigate('/friends')} className="mt-3 text-accent-glow text-sm hover:underline">Crear grupo →</button>
-              </div>
-            )}
-            {showDirect && tab === 'direct' && conversations.length === 0 && (
-              <div className="text-center text-surface-muted text-sm py-8">Sin conversaciones directas</div>
             )}
           </>
         )}
