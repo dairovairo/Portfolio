@@ -289,7 +289,7 @@ export default function ProfilePage() {
                   <input
                     value={displayName}
                     onChange={e => setDisplayName(e.target.value)}
-                    maxLength={40}
+                    maxLength={16}
                     onKeyDown={e => { if (e.key === 'Enter') saveProfile(); if (e.key === 'Escape') setEditing(false); }}
                     className="w-full bg-surface-bg border border-accent-primary rounded-xl px-3 py-2
                       text-surface-text text-sm focus:outline-none"

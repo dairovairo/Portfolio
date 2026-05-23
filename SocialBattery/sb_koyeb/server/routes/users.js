@@ -175,7 +175,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.patch('/me', requireAuth, async (req, res) => {
   const { display_name, avatar_url, bio } = req.body;
   const updates = {};
-  if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 40);
+  if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 20);
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
 

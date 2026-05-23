@@ -60,7 +60,7 @@ export default function OnboardingPage() {
     const u = username.trim();
     if (u.length < 3) return 'Mínimo 3 caracteres';
     if (!/^[a-z0-9_]+$/i.test(u)) return 'Solo letras, números y _';
-    if (u.length > 20) return 'Máximo 20 caracteres';
+    if (u.length > 16) return 'Máximo 16 caracteres';
     return null;
   }
 
@@ -183,9 +183,9 @@ export default function OnboardingPage() {
                   <input
                     type="text"
                     value={username}
-                    onChange={e => setUsername(e.target.value.toLowerCase())}
+                    onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, '_'))}
                     placeholder="tu_nombre"
-                    maxLength={20}
+                    maxLength={16}
                     autoFocus
                     className="w-full bg-surface-bg border border-surface-border rounded-xl pl-8 pr-4 py-3
                       text-surface-text text-sm placeholder-surface-muted focus:outline-none focus:border-accent-primary
@@ -203,12 +203,13 @@ export default function OnboardingPage() {
                   type="text"
                   value={displayName}
                   onChange={e => setDisplayName(e.target.value)}
-                  placeholder="Tu nombre real o apodo"
-                  maxLength={40}
+                  placeholder="Tu nombre o apodo"
+                  maxLength={20}
                   className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3
                     text-surface-text text-sm placeholder-surface-muted focus:outline-none focus:border-accent-primary
                     transition-colors"
                 />
+                <p className="text-surface-muted/60 text-xs mt-1">Puede tener espacios · Máx. 20 caracteres</p>
               </div>
 
               <div>
