@@ -133,18 +133,20 @@ function WallpaperPicker({ wallpaper, onSet, onClear }) {
   );
 }
 
-// ── Bubble colour + opacity row ───────────────────────────────────────────────
+// ── Bubble colour + opacity + text color row ──────────────────────────────────
 
-function BubbleColorPicker({ label, color, opacity, onColorChange, onOpacityChange }) {
+function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, onOpacityChange, onTextColorChange }) {
   return (
     <div className="space-y-2">
       <div className="text-xs font-display font-semibold text-surface-text">{label}</div>
       <div className="flex items-center gap-3">
         {/* Swatch preview */}
         <div
-          className="w-9 h-9 rounded-xl border border-surface-border flex-shrink-0"
-          style={{ backgroundColor: bubbleRgba(color, opacity) }}
-        />
+          className="w-9 h-9 rounded-xl border border-surface-border flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
+          style={{ backgroundColor: bubbleRgba(color, opacity), color: textColor }}
+        >
+          Aa
+        </div>
         <div className="flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-xs text-surface-muted w-16">Color</span>
@@ -167,6 +169,15 @@ function BubbleColorPicker({ label, color, opacity, onColorChange, onOpacityChan
               {Math.round(opacity * 100)}%
             </span>
           </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-surface-muted w-16">Letra</span>
+            <input
+              type="color"
+              value={textColor}
+              onChange={e => onTextColorChange(e.target.value)}
+              className="h-7 flex-1 rounded-lg cursor-pointer bg-transparent border border-surface-border"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -175,7 +186,10 @@ function BubbleColorPicker({ label, color, opacity, onColorChange, onOpacityChan
 
 // ── Live preview ──────────────────────────────────────────────────────────────
 
-function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, otherBubbleColor, otherBubbleOpacity }) {
+function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextColor, otherBubbleColor, otherBubbleOpacity, otherBubbleTextColor }) {
+  const myStyle = { backgroundColor: bubbleRgba(myBubbleColor, myBubbleOpacity), color: myBubbleTextColor };
+  const otherStyle = { backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity), color: otherBubbleTextColor };
+
   return (
     <div
       className="rounded-xl overflow-hidden min-h-[120px] p-3 space-y-2 bg-cover bg-center"
@@ -186,24 +200,24 @@ function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, otherBubbleCol
     >
       <div className="flex">
         <div
-          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs text-surface-text border border-surface-border"
-          style={{ backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity) }}
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs border border-surface-border"
+          style={otherStyle}
         >
           ¡Hola! ¿Cómo estás? 👋
         </div>
       </div>
       <div className="flex flex-row-reverse">
         <div
-          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs text-white"
-          style={{ backgroundColor: bubbleRgba(myBubbleColor, myBubbleOpacity) }}
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
+          style={myStyle}
         >
           ¡Todo genial! 🔋
         </div>
       </div>
       <div className="flex">
         <div
-          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs text-surface-text border border-surface-border"
-          style={{ backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity) }}
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs border border-surface-border"
+          style={otherStyle}
         >
           ¿Quedamos este finde? 🤝
         </div>
@@ -249,15 +263,29 @@ export default function SettingsPage() {
     chatWallpaper, setChatWallpaper,
     myBubbleColor, setMyBubbleColor,
     myBubbleOpacity, setMyBubbleOpacity,
+    myBubbleTextColor, setMyBubbleTextColor,
     otherBubbleColor, setOtherBubbleColor,
     otherBubbleOpacity, setOtherBubbleOpacity,
+    otherBubbleTextColor, setOtherBubbleTextColor,
+    resetMessagingDefaults,
   } = useSettings();
 
   // Only one section open at a time
   const [openSection, setOpenSection] = useState(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   function toggleSection(id) {
     setOpenSection(prev => prev === id ? null : id);
+  }
+
+  function handleReset() {
+    if (resetConfirm) {
+      resetMessagingDefaults();
+      setResetConfirm(false);
+    } else {
+      setResetConfirm(true);
+      setTimeout(() => setResetConfirm(false), 3000);
+    }
   }
 
   // Local privacy toggles (UI only — extend with real logic as needed)
@@ -336,16 +364,32 @@ export default function SettingsPage() {
                 label="Mis mensajes"
                 color={myBubbleColor}
                 opacity={myBubbleOpacity}
+                textColor={myBubbleTextColor}
                 onColorChange={setMyBubbleColor}
                 onOpacityChange={setMyBubbleOpacity}
+                onTextColorChange={setMyBubbleTextColor}
               />
               <BubbleColorPicker
                 label="Mensajes recibidos"
                 color={otherBubbleColor}
                 opacity={otherBubbleOpacity}
+                textColor={otherBubbleTextColor}
                 onColorChange={setOtherBubbleColor}
                 onOpacityChange={setOtherBubbleOpacity}
+                onTextColorChange={setOtherBubbleTextColor}
               />
+
+              {/* Botón restaurar */}
+              <button
+                onClick={handleReset}
+                className={`w-full py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
+                  resetConfirm
+                    ? 'bg-red-500/20 border-red-500/60 text-red-400'
+                    : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted hover:text-surface-text'
+                }`}
+              >
+                {resetConfirm ? '⚠️ Pulsa de nuevo para confirmar' : '↩ Restaurar colores por defecto'}
+              </button>
             </div>
           </SubSection>
 
@@ -355,8 +399,10 @@ export default function SettingsPage() {
               wallpaper={chatWallpaper}
               myBubbleColor={myBubbleColor}
               myBubbleOpacity={myBubbleOpacity}
+              myBubbleTextColor={myBubbleTextColor}
               otherBubbleColor={otherBubbleColor}
               otherBubbleOpacity={otherBubbleOpacity}
+              otherBubbleTextColor={otherBubbleTextColor}
             />
           </SubSection>
         </AccordionSection>
