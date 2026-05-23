@@ -447,6 +447,22 @@ export default function MessagesPage() {
           api.patch(`/messages/${friendId}/read`).catch(() => {});
         }
       })
+      // My message sent from another device
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `sender_id=eq.${profile.id}`,
+      }, (payload) => {
+        if (payload.new.receiver_id === friendId) {
+          // The optimistic was already replaced with the real message (real ID),
+          // so checking for 'opt-' prefix no longer works. Just check by real ID.
+          setMessages(m => {
+            if (m.some(msg => msg.id === payload.new.id)) return m;
+            return [...m, payload.new];
+          });
+        }
+      })
       // Any message update: ticks (delivered/read), deletions, hangout status
       .on('postgres_changes', {
         event: 'UPDATE',
