@@ -2,13 +2,6 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
-const { sendGroupMessageNotif, VAPID_PUBLIC_KEY } = require('../lib/webpush');
-
-// ── GET /api/groups/vapid-public-key — devuelve la clave pública VAPID al cliente
-router.get('/vapid-public-key', (req, res) => {
-  if (!VAPID_PUBLIC_KEY) return res.status(404).json({ error: 'VAPID not configured' });
-  res.json({ key: VAPID_PUBLIC_KEY });
-});
 
 // ── GET /api/groups — list my groups (owned + member) ───────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -299,38 +292,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       .single();
 
     if (error) throw error;
-
-    // Respond immediately; push delivery is fire-and-forget
     res.status(201).json({ message: data });
-
-    // Send Web Push to all other group members (non-blocking)
-    const groupName  = data.sender ? null : 'Grupo'; // will be fetched below if needed
-    const senderName = data.sender?.display_name || `@${data.sender?.username}` || 'Alguien';
-
-    // Fetch group name for the notification title
-    supabase
-      .from('friend_groups')
-      .select('name')
-      .eq('id', req.params.id)
-      .single()
-      .then(({ data: grp }) => {
-        sendGroupMessageNotif({
-          groupId:    req.params.id,
-          senderId:   userId,
-          groupName:  grp?.name || 'Grupo',
-          senderName,
-          content:    content.trim(),
-        });
-      })
-      .catch(() => {
-        sendGroupMessageNotif({
-          groupId:    req.params.id,
-          senderId:   userId,
-          groupName:  'Grupo',
-          senderName,
-          content:    content.trim(),
-        });
-      });
   } catch (err) {
     console.error('[GROUPS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });
