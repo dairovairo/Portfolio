@@ -28,11 +28,14 @@ function ConversationRow({ conv, onClick }) {
   const online = isOnline(partner.last_seen_at);
   const isHangout = lastMessage?.type === 'hangout_request';
   const isNew = !lastMessage;
+  const isDeletedForEveryone = lastMessage?.deleted_for_everyone;
   const preview = isNew
     ? '¡Ahora sois amigos! Di hola 👋'
-    : isHangout
-      ? `🤝 ${lastMessage.content}`
-      : lastMessage.content;
+    : isDeletedForEveryone
+      ? '🚫 Mensaje eliminado'
+      : isHangout
+        ? `🤝 ${lastMessage.content}`
+        : lastMessage.content;
 
   return (
     <button onClick={onClick} className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left">
@@ -140,8 +143,15 @@ export default function MessagesInboxPage() {
     if (!profile?.id) return;
     const channel = supabase
       .channel(`inbox-${profile.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${profile.id}` }, () => fetchConversations())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${profile.id}` }, (payload) => {
+        fetchConversations();
+        // Mark as delivered so sender sees the double tick
+        if (payload.new?.sender_id) {
+          api.patch(`/messages/${payload.new.sender_id}/deliver`).catch(() => {});
+        }
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => fetchConversations())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => fetchConversations())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, () => {
         fetchGroups();
       })

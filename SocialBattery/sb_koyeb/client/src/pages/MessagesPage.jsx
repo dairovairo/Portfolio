@@ -7,13 +7,173 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function hexToRgba(hex, opacity) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${opacity})`;
+}
+
+// ── MessageTick — enviado / recibido / leído ──────────────────────────────────
+// Estado   → visual
+// optimist → ✓  gris (enviando)
+// sent     → ✓  gris
+// delivered→ ✓✓ gris
+// read     → ✓✓ color acento
+
+function MessageTick({ msg }) {
+  const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
+
+  if (isOptimistic) {
+    return (
+      <span className="ml-1 inline-flex items-center gap-[1px] opacity-40" title="Enviando…">
+        <svg width="11" height="9" viewBox="0 0 11 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+    );
+  }
+
+  if (msg.read_at) {
+    return (
+      <span className="ml-1 inline-flex items-center" title="Leído" style={{ color: 'var(--color-accent-glow, #7c6af7)' }}>
+        <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+    );
+  }
+
+  if (msg.delivered_at) {
+    return (
+      <span className="ml-1 inline-flex items-center opacity-50" title="Recibido">
+        <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+    );
+  }
+
+  // Sent — single check
+  return (
+    <span className="ml-1 inline-flex items-center opacity-50" title="Enviado">
+      <svg width="11" height="9" viewBox="0 0 11 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
+}
+
+// ── DeletedBubble — rastro de mensaje eliminado para todos ────────────────────
+function DeletedBubble({ isMe }) {
+  return (
+    <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className="max-w-[78%] rounded-2xl px-4 py-2.5 border border-surface-border bg-surface-card/50">
+        <p className="text-sm italic text-surface-muted flex items-center gap-1.5">
+          <span className="text-base">🚫</span>
+          {isMe ? 'Eliminaste este mensaje' : 'Mensaje eliminado'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
+function MessageContextMenu({ msg, isMe, onClose, onDeleteForMe, onDeleteForEveryone }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="relative bg-surface-card border border-surface-border rounded-t-3xl w-full max-w-lg pb-safe"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="w-10 h-1 bg-surface-border rounded-full mx-auto mt-3 mb-3" />
+
+        {/* Preview */}
+        {!msg.deleted_for_everyone && (
+          <p className="text-xs text-surface-muted font-mono text-center truncate px-8 mb-3 opacity-60">
+            {msg.content?.slice(0, 80)}{msg.content?.length > 80 ? '…' : ''}
+          </p>
+        )}
+
+        <div className="px-4 pb-4 space-y-1.5">
+          <button
+            onClick={onDeleteForMe}
+            className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+          >
+            <span className="text-xl">🗑️</span>
+            <div>
+              <div>Eliminar para mí</div>
+              <div className="text-xs text-surface-muted font-normal">Solo desaparece de tu vista</div>
+            </div>
+          </button>
+
+          {isMe && !msg.deleted_for_everyone && (
+            <button
+              onClick={onDeleteForEveryone}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/15 text-red-400 text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">❌</span>
+              <div>
+                <div>Eliminar para todos</div>
+                <div className="text-xs text-red-400/60 font-normal">Queda rastro en la conversación</div>
+              </div>
+            </button>
+          )}
+
+          <button
+            onClick={onClose}
+            className="w-full text-center py-3.5 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ClearChatModal ────────────────────────────────────────────────────────────
+function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-surface-card border border-surface-border rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="text-center mb-5">
+          <div className="text-4xl mb-3">🧹</div>
+          <h3 className="font-display font-bold text-surface-text text-lg mb-2">Vaciar conversación</h3>
+          <p className="text-surface-muted text-sm leading-relaxed">
+            Los mensajes desaparecerán solo para ti.{' '}
+            <span className="text-surface-text font-medium">{friendName}</span> seguirá viendo el historial completo.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 py-3 rounded-2xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text border border-surface-border hover:bg-surface-hover transition-all disabled:opacity-40"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 py-3 rounded-2xl text-sm font-display font-semibold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all disabled:opacity-40"
+          >
+            {loading ? 'Vaciando…' : 'Vaciar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Subcomponents ─────────────────────────────────────────────────────────────
@@ -28,56 +188,48 @@ function OnlineDot({ lastSeenAt, className = '' }) {
   );
 }
 
-function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle }) {
+function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle, onLongPress }) {
   const isPending = msg.hangout_status === 'pending';
   const isAccepted = msg.hangout_status === 'accepted';
   const isRejected = msg.hangout_status === 'rejected';
-
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
+  const longPressTimer = useRef(null);
+
+  function handleTouchStart() {
+    longPressTimer.current = setTimeout(() => onLongPress(msg), 500);
+  }
+  function handleTouchEnd() {
+    clearTimeout(longPressTimer.current);
+  }
 
   return (
-    <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div
+      className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
+      onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
+    >
       <div
         className={`max-w-[82%] rounded-2xl px-4 py-3 border ${
-          isAccepted
-            ? 'border-green-500/30'
-            : isRejected
-            ? 'border-slate-600/30'
-            : 'border-accent-primary/30'
+          isAccepted ? 'border-green-500/30' : isRejected ? 'border-slate-600/30' : 'border-accent-primary/30'
         }`}
         style={bubbleStyle}
       >
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">🤝</span>
-          <span className="text-xs font-display font-bold text-accent-glow uppercase tracking-wide">
-            Propuesta de quedada
-          </span>
+          <span className="text-xs font-display font-bold text-accent-glow uppercase tracking-wide">Propuesta de quedada</span>
         </div>
-
-        <p className="text-sm leading-relaxed" style={{ color: 'inherit' }}>{msg.content}</p>
-
+        <p className="text-sm leading-relaxed">{msg.content}</p>
         {msg.hangout_time && (
           <div className="mt-1.5 flex items-center gap-1.5 text-xs text-surface-muted">
-            <span>🕐</span>
-            <span>{msg.hangout_time}</span>
+            <span>🕐</span><span>{msg.hangout_time}</span>
           </div>
         )}
-
         <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
-          {isAccepted && (
-            <span className="text-xs font-display font-semibold text-green-400 flex items-center gap-1">
-              ✅ ¡Quedada confirmada!
-            </span>
-          )}
-          {isRejected && (
-            <span className="text-xs font-display font-semibold text-surface-muted flex items-center gap-1">
-              ❌ {isMe ? 'Rechazaste' : 'Rechazada'}
-            </span>
-          )}
-          {isPending && isMe && (
-            <span className="text-xs text-surface-muted italic">Esperando respuesta...</span>
-          )}
-
+          {isAccepted && <span className="text-xs font-display font-semibold text-green-400 flex items-center gap-1">✅ ¡Quedada confirmada!</span>}
+          {isRejected && <span className="text-xs font-display font-semibold text-surface-muted flex items-center gap-1">❌ {isMe ? 'Rechazaste' : 'Rechazada'}</span>}
+          {isPending && isMe && <span className="text-xs text-surface-muted italic">Esperando respuesta...</span>}
           {isPending && !isMe && (
             <div className="flex gap-2 mt-1 w-full">
               <button
@@ -97,28 +249,42 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
             </div>
           )}
         </div>
-
-        <div className="text-xs mt-2 opacity-60">
+        <div className="text-xs mt-2 opacity-60 flex items-center justify-end gap-1">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-          {isMe && msg.read_at && <span className="ml-1 text-accent-glow/60">✓✓</span>}
+          {isMe && <MessageTick msg={msg} />}
         </div>
       </div>
     </div>
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
+  const longPressTimer = useRef(null);
+
+  function handleTouchStart() {
+    longPressTimer.current = setTimeout(() => onLongPress(msg), 500);
+  }
+  function handleTouchEnd() {
+    clearTimeout(longPressTimer.current);
+  }
+
   return (
-    <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div
+      className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
+      onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
+    >
       <div
-        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
+        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''} select-none`}
         style={bubbleStyle}
       >
-        <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
-        <div className="text-xs mt-1 opacity-60">
+        <p className="text-sm leading-relaxed break-words">{msg.content}</p>
+        <div className="text-xs mt-1 opacity-60 flex items-center justify-end gap-1">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-          {isMe && msg.read_at && <span className="ml-1">✓✓</span>}
+          {isMe && <MessageTick msg={msg} />}
         </div>
       </div>
     </div>
@@ -137,8 +303,6 @@ function DateDivider({ date }) {
     </div>
   );
 }
-
-// ── HangoutForm ────────────────────────────────────────────────────────────
 
 function HangoutForm({ onSend, onCancel, sending }) {
   const [content, setContent] = useState('');
@@ -159,12 +323,8 @@ function HangoutForm({ onSend, onCancel, sending }) {
       <div>
         <label className="text-xs text-surface-muted font-mono mb-1 block">¿Qué os apetece hacer? *</label>
         <input
-          type="text"
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder="Ej: ¿Unas cañas en el centro?"
-          autoFocus
-          maxLength={200}
+          type="text" value={content} onChange={e => setContent(e.target.value)}
+          placeholder="Ej: ¿Unas cañas en el centro?" autoFocus maxLength={200}
           onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
           className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
         />
@@ -172,24 +332,17 @@ function HangoutForm({ onSend, onCancel, sending }) {
       <div>
         <label className="text-xs text-surface-muted font-mono mb-1 block">¿Cuándo? (opcional)</label>
         <input
-          type="text"
-          value={time}
-          onChange={e => setTime(e.target.value)}
-          placeholder="Ej: Hoy a las 19h, Este finde..."
-          maxLength={80}
+          type="text" value={time} onChange={e => setTime(e.target.value)}
+          placeholder="Ej: Hoy a las 19h, Este finde..." maxLength={80}
           className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
         />
       </div>
       <div className="flex gap-2">
-        <button
-          onClick={onCancel}
-          className="flex-1 py-2 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors"
-        >
+        <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors">
           Cancelar
         </button>
         <button
-          onClick={handleSubmit}
-          disabled={!content.trim() || sending}
+          onClick={handleSubmit} disabled={!content.trim() || sending}
           className="flex-1 bg-accent-primary text-surface-text rounded-xl py-2 text-sm font-display font-semibold disabled:opacity-40 hover:bg-accent-primary/80 active:scale-95 transition-all"
         >
           {sending ? 'Enviando...' : 'Proponer 🤝'}
@@ -199,7 +352,7 @@ function HangoutForm({ onSend, onCancel, sending }) {
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────
+// ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
   const { friendId } = useParams();
@@ -209,14 +362,25 @@ export default function MessagesPage() {
 
   const [friend, setFriend] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [clearedAt, setClearedAt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [showHangoutForm, setShowHangoutForm] = useState(false);
   const [respondingId, setRespondingId] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // Context menu (delete message)
+  const [contextMenu, setContextMenu] = useState(null); // { msg }
+
+  // Header menu (clear chat)
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearingChat, setClearingChat] = useState(false);
+
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const headerMenuRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -227,15 +391,27 @@ export default function MessagesPage() {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
   }, []);
 
+  // Close header menu on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target)) {
+        setShowHeaderMenu(false);
+      }
+    }
+    if (showHeaderMenu) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showHeaderMenu]);
+
   useEffect(() => {
     async function load() {
       try {
-        const [{ user }, { messages: msgs }] = await Promise.all([
+        const [{ user }, { messages: msgs, cleared_at }] = await Promise.all([
           api.get(`/users/${friendId}`),
           api.get(`/messages/${friendId}`),
         ]);
         setFriend(user);
         setMessages(msgs || []);
+        setClearedAt(cleared_at || null);
         api.patch(`/messages/${friendId}/read`).catch(() => {});
       } catch (e) {
         console.error(e);
@@ -254,10 +430,12 @@ export default function MessagesPage() {
     if (messages.length > 0) scrollToBottom();
   }, [messages.length, scrollToBottom]);
 
+  // Realtime
   useEffect(() => {
     if (!profile?.id) return;
     const channel = supabase
       .channel(`chat-${profile.id}-${friendId}`)
+      // New message from friend
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -269,19 +447,37 @@ export default function MessagesPage() {
           api.patch(`/messages/${friendId}/read`).catch(() => {});
         }
       })
+      // My message sent from another device
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `sender_id=eq.${profile.id}`,
+      }, (payload) => {
+        if (payload.new.receiver_id === friendId) {
+          // Avoid duplicating optimistic messages
+          setMessages(m => {
+            const hasOptimistic = m.some(msg => msg.id?.startsWith('opt-') && msg.content === payload.new.content);
+            if (hasOptimistic) return m;
+            return [...m, payload.new];
+          });
+        }
+      })
+      // Any message update: ticks (delivered/read), deletions, hangout status
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'messages',
       }, (payload) => {
         const updated = payload.new;
-        if (
-          updated.type === 'hangout_request' &&
-          (updated.sender_id === profile.id || updated.receiver_id === profile.id)
-        ) {
+        const involved =
+          (updated.sender_id === profile.id && updated.receiver_id === friendId) ||
+          (updated.sender_id === friendId && updated.receiver_id === profile.id);
+        if (involved) {
           setMessages(m => m.map(msg => msg.id === updated.id ? { ...msg, ...updated } : msg));
         }
       })
+      // Friend profile changes (battery, online)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
@@ -294,6 +490,8 @@ export default function MessagesPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, [friendId, profile?.id]);
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
 
   async function sendText() {
     if (!input.trim() || sending) return;
@@ -309,6 +507,7 @@ export default function MessagesPage() {
       type: 'text',
       created_at: new Date().toISOString(),
       read_at: null,
+      delivered_at: null,
     };
     setMessages(m => [...m, optimistic]);
 
@@ -329,10 +528,7 @@ export default function MessagesPage() {
     setSending(true);
     try {
       const { message } = await api.post('/messages', {
-        receiver_id: friendId,
-        content,
-        type: 'hangout_request',
-        hangout_time: hangoutTime,
+        receiver_id: friendId, content, type: 'hangout_request', hangout_time: hangoutTime,
       });
       setMessages(m => [...m, message]);
       setShowHangoutForm(false);
@@ -358,9 +554,52 @@ export default function MessagesPage() {
     }
   }
 
+  async function deleteMessage(msg, scope) {
+    setContextMenu(null);
+    try {
+      const { message: updated } = await api.patch(`/messages/message/${msg.id}`, { scope });
+      if (scope === 'me') {
+        // Remove from local view immediately
+        setMessages(m => m.filter(x => x.id !== msg.id));
+      } else {
+        // Show deleted placeholder
+        setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
+      }
+      showToast(scope === 'me' ? 'Mensaje eliminado' : 'Mensaje eliminado para todos');
+    } catch (e) {
+      showToast(e.message || 'Error al eliminar', 'error');
+    }
+  }
+
+  async function clearChat() {
+    setClearingChat(true);
+    try {
+      await api.post(`/messages/chat/${friendId}/clear`);
+      const now = new Date().toISOString();
+      setClearedAt(now);
+      setMessages([]);
+      setShowClearConfirm(false);
+      showToast('Conversación vaciada');
+    } catch (e) {
+      showToast('Error al vaciar la conversación', 'error');
+    } finally {
+      setClearingChat(false);
+    }
+  }
+
+  // ── Filter & group messages ───────────────────────────────────────────────────
+
+  const visibleMessages = messages.filter(msg => {
+    // Hide messages before clearedAt
+    if (clearedAt && new Date(msg.created_at) <= new Date(clearedAt)) return false;
+    // Hide messages deleted for me (deleted_for_self)
+    if (Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(profile?.id)) return false;
+    return true;
+  });
+
   const grouped = [];
   let lastDate = null;
-  messages.forEach(msg => {
+  visibleMessages.forEach(msg => {
     const d = new Date(msg.created_at).toDateString();
     if (d !== lastDate) {
       grouped.push({ type: 'date', date: d, key: `date-${d}` });
@@ -386,12 +625,34 @@ export default function MessagesPage() {
         </div>
       )}
 
+      {/* Context menu (delete message) */}
+      {contextMenu && (
+        <MessageContextMenu
+          msg={contextMenu}
+          isMe={contextMenu.sender_id === profile?.id}
+          onClose={() => setContextMenu(null)}
+          onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
+          onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
+        />
+      )}
+
+      {/* Clear chat confirm */}
+      {showClearConfirm && (
+        <ClearChatModal
+          friendName={friend?.display_name || 'esta persona'}
+          onConfirm={clearChat}
+          onCancel={() => setShowClearConfirm(false)}
+          loading={clearingChat}
+        />
+      )}
+
       {/* Nav */}
       <nav className="border-b border-surface-border bg-surface-bg/90 backdrop-blur-xl z-10 flex-shrink-0">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-surface-muted hover:text-surface-text transition-colors p-1 text-lg">
             ←
           </button>
+
           {friend ? (
             <>
               <button onClick={() => navigate(`/user/${friend.id}`)} className="flex-shrink-0">
@@ -405,9 +666,7 @@ export default function MessagesPage() {
                       : friend.display_name?.[0]?.toUpperCase()
                     }
                   </div>
-                  <span
-                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-bg ${friendOnline ? 'bg-green-400' : 'bg-slate-600'}`}
-                  />
+                  <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-bg ${friendOnline ? 'bg-green-400' : 'bg-slate-600'}`} />
                 </div>
               </button>
               <button onClick={() => navigate(`/user/${friend.id}`)} className="flex-1 text-left">
@@ -425,10 +684,31 @@ export default function MessagesPage() {
           ) : loading ? (
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
           ) : null}
+
+          {/* Header menu */}
+          <div className="relative flex-shrink-0" ref={headerMenuRef}>
+            <button
+              onClick={() => setShowHeaderMenu(v => !v)}
+              className="w-9 h-9 rounded-xl text-surface-muted hover:text-surface-text hover:bg-surface-card border border-transparent hover:border-surface-border transition-all flex items-center justify-center text-xl font-bold"
+              title="Opciones"
+            >
+              ⋯
+            </button>
+            {showHeaderMenu && (
+              <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[180px] py-1.5 overflow-hidden">
+                <button
+                  onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
+                  className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+                >
+                  <span>🧹</span> Vaciar conversación
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
-      {/* Messages area — wallpaper here */}
+      {/* Messages area */}
       <div
         className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3 relative"
         style={chatWallpaper ? {
@@ -437,16 +717,19 @@ export default function MessagesPage() {
           backgroundPosition: 'center',
           backgroundAttachment: 'local',
         } : {}}
+        onClick={() => setShowHeaderMenu(false)}
       >
         {loading ? (
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
             Cargando mensajes...
           </div>
-        ) : messages.length === 0 ? (
+        ) : visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <div className="text-4xl">💬</div>
-            <p className="text-slate-500 text-sm">Sin mensajes aún. ¡Di hola!</p>
-            {friend && (
+            <p className="text-slate-500 text-sm">
+              {clearedAt ? 'Conversación vaciada. ¡Di algo nuevo!' : 'Sin mensajes aún. ¡Di hola!'}
+            </p>
+            {friend && !clearedAt && (
               <p className="text-xs text-slate-600">
                 {friend.display_name} tiene la batería al {friend.battery_level}%
               </p>
@@ -459,6 +742,12 @@ export default function MessagesPage() {
             }
             const msg = item.msg;
             const isMe = msg.sender_id === profile?.id;
+
+            // Deleted for everyone → placeholder visible para ambos
+            if (msg.deleted_for_everyone) {
+              return <DeletedBubble key={item.key} isMe={isMe} />;
+            }
+
             if (msg.type === 'hangout_request') {
               return (
                 <HangoutRequestBubble
@@ -469,9 +758,11 @@ export default function MessagesPage() {
                   responding={respondingId === msg.id}
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
+                  onLongPress={setContextMenu}
                 />
               );
             }
+
             return (
               <TextBubble
                 key={item.key}
@@ -479,6 +770,7 @@ export default function MessagesPage() {
                 isMe={isMe}
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
+                onLongPress={setContextMenu}
               />
             );
           })

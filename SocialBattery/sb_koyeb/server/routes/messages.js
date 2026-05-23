@@ -3,11 +3,10 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 
-// GET /api/messages — list conversations (all accepted friends, with last message if any)
+// ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
 
-  // 1. Fetch all accepted friends
   const { data: friendships, error: fErr } = await supabase
     .from('friendships')
     .select(`
@@ -19,18 +18,17 @@ router.get('/', requireAuth, async (req, res) => {
 
   if (fErr) return res.status(500).json({ error: 'Failed to fetch friends' });
 
-  // Build a map of friendId -> friend profile
   const friendsMap = {};
   (friendships || []).forEach(f => {
     const friend = f.requester?.id === userId ? f.addressee : f.requester;
     if (friend) friendsMap[friend.id] = friend;
   });
 
-  // 2. Fetch last messages (only with current friends)
   const { data: messages, error: mErr } = await supabase
     .from('messages')
     .select(`
-      id, content, type, hangout_status, created_at, read_at,
+      id, content, type, hangout_status, created_at, read_at, delivered_at,
+      deleted_for_everyone, deleted_for_self,
       sender:sender_id(id, username, display_name, avatar_url, battery_level, last_seen_at),
       receiver:receiver_id(id, username, display_name, avatar_url, battery_level, last_seen_at)
     `)
@@ -40,13 +38,16 @@ router.get('/', requireAuth, async (req, res) => {
 
   if (mErr) return res.status(500).json({ error: 'Failed to fetch conversations' });
 
-  // 3. Build conversation map from messages, but only for current friends
   const convMap = {};
   (messages || []).forEach(msg => {
     const isMe = msg.sender.id === userId;
     const partner = isMe ? msg.receiver : msg.sender;
-    // Skip if no longer friends
     if (!friendsMap[partner.id]) return;
+
+    // Skip messages deleted for me
+    const deletedForMe = Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(userId);
+    if (deletedForMe) return;
+
     if (!convMap[partner.id]) {
       convMap[partner.id] = {
         partner,
@@ -58,26 +59,21 @@ router.get('/', requireAuth, async (req, res) => {
     }
   });
 
-  // 4. Add friends that have no messages yet (new friendships)
   Object.entries(friendsMap).forEach(([friendId, friend]) => {
     if (!convMap[friendId]) {
-      convMap[friendId] = {
-        partner: friend,
-        lastMessage: null,
-        unread: 0,
-      };
+      convMap[friendId] = { partner: friend, lastMessage: null, unread: 0 };
     }
   });
 
   res.json({ conversations: Object.values(convMap) });
 });
 
-// GET /api/messages/:friendId — conversation with a user
+// ── GET /api/messages/:friendId — conversation messages ───────────────────────
 router.get('/:friendId', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const { friendId } = req.params;
   const limit = parseInt(req.query.limit) || 60;
-  const before = req.query.before; // cursor-based pagination
+  const before = req.query.before;
 
   let query = supabase
     .from('messages')
@@ -89,17 +85,41 @@ router.get('/:friendId', requireAuth, async (req, res) => {
     .order('created_at', { ascending: true })
     .limit(limit);
 
-  if (before) {
-    query = query.lt('created_at', before);
-  }
+  if (before) query = query.lt('created_at', before);
 
   const { data, error } = await query;
-
   if (error) return res.status(500).json({ error: 'Failed to fetch messages' });
-  res.json({ messages: data });
+
+  // Mark undelivered messages from friend as delivered
+  const undeliveredIds = (data || [])
+    .filter(m => m.sender_id === friendId && m.receiver_id === userId && !m.delivered_at)
+    .map(m => m.id);
+
+  if (undeliveredIds.length > 0) {
+    await supabase
+      .from('messages')
+      .update({ delivered_at: new Date().toISOString() })
+      .in('id', undeliveredIds);
+
+    // Update local copy
+    const now = new Date().toISOString();
+    data.forEach(m => {
+      if (undeliveredIds.includes(m.id)) m.delivered_at = now;
+    });
+  }
+
+  // Fetch cleared_at for this user+partner
+  const { data: clearData } = await supabase
+    .from('conversation_clears')
+    .select('cleared_at')
+    .eq('user_id', userId)
+    .eq('partner_id', friendId)
+    .maybeSingle();
+
+  res.json({ messages: data, cleared_at: clearData?.cleared_at || null });
 });
 
-// POST /api/messages — send a message
+// ── POST /api/messages — send message ────────────────────────────────────────
 router.post('/', requireAuth, async (req, res) => {
   const { receiver_id, content, type = 'text', hangout_time } = req.body;
   const senderId = req.user.id;
@@ -111,7 +131,6 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid message type' });
   }
 
-  // Verify they are friends
   const { data: friendship } = await supabase
     .from('friendships')
     .select('id')
@@ -148,16 +167,47 @@ router.post('/', requireAuth, async (req, res) => {
   res.status(201).json({ message: data });
 });
 
-// PATCH /api/messages/:messageId/hangout — accept or reject a hangout request
+// ── PATCH /api/messages/:friendId/deliver — mark messages as delivered ────────
+router.patch('/:friendId/deliver', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.params;
+
+  await supabase
+    .from('messages')
+    .update({ delivered_at: new Date().toISOString() })
+    .eq('sender_id', friendId)
+    .eq('receiver_id', userId)
+    .is('delivered_at', null);
+
+  res.json({ success: true });
+});
+
+// ── PATCH /api/messages/:friendId/read — mark messages as read ────────────────
+router.patch('/:friendId/read', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.params;
+  const now = new Date().toISOString();
+
+  // Set both delivered_at and read_at
+  await supabase
+    .from('messages')
+    .update({ delivered_at: now, read_at: now })
+    .eq('sender_id', friendId)
+    .eq('receiver_id', userId)
+    .is('read_at', null);
+
+  res.json({ success: true });
+});
+
+// ── PATCH /api/messages/:messageId/hangout — respond to hangout request ───────
 router.patch('/:messageId/hangout', requireAuth, async (req, res) => {
-  const { status } = req.body; // 'accepted' | 'rejected'
+  const { status } = req.body;
   const userId = req.user.id;
 
   if (!['accepted', 'rejected'].includes(status)) {
     return res.status(400).json({ error: 'Status must be accepted or rejected' });
   }
 
-  // Only the receiver can respond to a hangout request
   const { data: msg } = await supabase
     .from('messages')
     .select('id, sender_id, receiver_id, type, hangout_status')
@@ -166,9 +216,7 @@ router.patch('/:messageId/hangout', requireAuth, async (req, res) => {
     .eq('type', 'hangout_request')
     .single();
 
-  if (!msg) {
-    return res.status(404).json({ error: 'Hangout request not found' });
-  }
+  if (!msg) return res.status(404).json({ error: 'Hangout request not found' });
   if (msg.hangout_status !== 'pending') {
     return res.status(409).json({ error: 'This request has already been answered' });
   }
@@ -184,22 +232,75 @@ router.patch('/:messageId/hangout', requireAuth, async (req, res) => {
   res.json({ message: data });
 });
 
-// PATCH /api/messages/:friendId/read — mark messages from friend as read
-router.patch('/:friendId/read', requireAuth, async (req, res) => {
+// ── PATCH /api/messages/message/:messageId — delete a message ─────────────────
+// scope: 'me' → solo para mí | 'everyone' → para todos (solo sender, deja rastro)
+router.patch('/message/:messageId', requireAuth, async (req, res) => {
+  const { scope } = req.body;
+  const userId = req.user.id;
+
+  if (!['me', 'everyone'].includes(scope)) {
+    return res.status(400).json({ error: 'scope must be "me" or "everyone"' });
+  }
+
+  const { data: msg, error: fetchErr } = await supabase
+    .from('messages')
+    .select('id, sender_id, receiver_id, deleted_for_self')
+    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .eq('id', req.params.messageId)
+    .single();
+
+  if (fetchErr || !msg) return res.status(404).json({ error: 'Message not found' });
+
+  if (scope === 'everyone') {
+    if (msg.sender_id !== userId) {
+      return res.status(403).json({ error: 'Solo puedes eliminar para todos tus propios mensajes' });
+    }
+    const { data, error } = await supabase
+      .from('messages')
+      .update({
+        deleted_for_everyone: true,
+        deleted_for_everyone_at: new Date().toISOString(),
+      })
+      .eq('id', req.params.messageId)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: 'Failed to delete message' });
+    return res.json({ message: data });
+  } else {
+    // Add userId to deleted_for_self array
+    const current = Array.isArray(msg.deleted_for_self) ? msg.deleted_for_self : [];
+    if (!current.includes(userId)) current.push(userId);
+
+    const { data, error } = await supabase
+      .from('messages')
+      .update({ deleted_for_self: current })
+      .eq('id', req.params.messageId)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: 'Failed to delete message' });
+    return res.json({ message: data });
+  }
+});
+
+// ── POST /api/messages/chat/:friendId/clear — vaciar conversación ─────────────
+router.post('/chat/:friendId/clear', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const { friendId } = req.params;
 
-  await supabase
-    .from('messages')
-    .update({ read_at: new Date().toISOString() })
-    .eq('sender_id', friendId)
-    .eq('receiver_id', userId)
-    .is('read_at', null);
+  const { error } = await supabase
+    .from('conversation_clears')
+    .upsert(
+      { user_id: userId, partner_id: friendId, cleared_at: new Date().toISOString() },
+      { onConflict: 'user_id,partner_id' }
+    );
 
-  res.json({ success: true });
+  if (error) return res.status(500).json({ error: 'Failed to clear conversation' });
+  res.json({ success: true, cleared_at: new Date().toISOString() });
 });
 
-// PATCH /api/users/me/seen — update last_seen_at (heartbeat)
+// ── PATCH /api/messages/heartbeat ────────────────────────────────────────────
 router.patch('/heartbeat', requireAuth, async (req, res) => {
   await supabase
     .from('users')
