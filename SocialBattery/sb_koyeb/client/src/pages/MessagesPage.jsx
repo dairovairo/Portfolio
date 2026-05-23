@@ -447,22 +447,6 @@ export default function MessagesPage() {
           api.patch(`/messages/${friendId}/read`).catch(() => {});
         }
       })
-      // My message sent from another device
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `sender_id=eq.${profile.id}`,
-      }, (payload) => {
-        if (payload.new.receiver_id === friendId) {
-          // Avoid duplicating optimistic messages
-          setMessages(m => {
-            const hasOptimistic = m.some(msg => msg.id?.startsWith('opt-') && msg.content === payload.new.content);
-            if (hasOptimistic) return m;
-            return [...m, payload.new];
-          });
-        }
-      })
       // Any message update: ticks (delivered/read), deletions, hangout status
       .on('postgres_changes', {
         event: 'UPDATE',
