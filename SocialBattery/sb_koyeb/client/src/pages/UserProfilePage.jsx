@@ -13,12 +13,66 @@ function BadgePill({ badge }) {
   );
 }
 
+// ── Public Stats ──────────────────────────────────────────────────────────────
+function formatMemberSince(isoDate) {
+  if (!isoDate) return '—';
+  const start = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now - start;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 1)  return 'Hoy';
+  if (diffDays < 30) return `${diffDays} día${diffDays !== 1 ? 's' : ''}`;
+  const months = Math.floor(diffDays / 30);
+  if (months < 12)   return `${months} mes${months !== 1 ? 'es' : ''}`;
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  return remMonths > 0 ? `${years}a ${remMonths}m` : `${years} año${years !== 1 ? 's' : ''}`;
+}
+
+function StatsGrid({ stats }) {
+  if (!stats) return null;
+  const items = [
+    { icon: '👥', label: 'Amigos',           value: stats.friends_count },
+    { icon: '🗓️', label: 'Planes creados',   value: stats.pools_created },
+    { icon: '🚀', label: 'Planes unidos',    value: stats.pools_joined },
+    { icon: '🔋', label: 'Updates batería',  value: stats.battery_updates },
+    { icon: '⏱️', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
+  ];
+  return (
+    <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+      <h3 className="font-display font-semibold text-white mb-3 text-sm">
+        📊 Estadísticas públicas
+      </h3>
+      <div className="grid grid-cols-2 gap-2">
+        {items.map(({ icon, label, value }) => (
+          <div
+            key={label}
+            className="bg-surface-bg rounded-xl px-3 py-3 flex items-center gap-3"
+          >
+            <span className="text-xl flex-shrink-0">{icon}</span>
+            <div className="min-w-0">
+              <div className="font-display font-bold text-surface-text text-base leading-none">
+                {value ?? '—'}
+              </div>
+              <div className="text-xs text-surface-muted font-mono mt-0.5 leading-tight">
+                {label}
+              </div>
+            </div>
+          </div>
+        ))}
+        {/* 5 items → last one spans full width for symmetry */}
+      </div>
+    </div>
+  );
+}
+
 export default function UserProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile: myProfile } = useAuth();
 
   const [user, setUser] = useState(null);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [friendshipStatus, setFriendshipStatus] = useState(null); // null | 'pending' | 'accepted' | 'sent'
   const [actionLoading, setActionLoading] = useState(false);
@@ -32,14 +86,15 @@ export default function UserProfilePage() {
   useEffect(() => {
     async function load() {
       try {
-        const [{ user: u }, { status }, { badges: earnedBadgesData }] = await Promise.all([
+        const [{ user: u }, { status }, { badges: earnedBadgesData }, statsRes] = await Promise.all([
           api.get(`/users/${id}`),
           api.get(`/friends/status/${id}`),
           api.get(`/badges/user/${id}`).catch(() => ({ badges: [] })),
+          api.get(`/users/${id}/stats`).catch(() => ({ stats: null })),
         ]);
-        // earnedBadgesData: [{ earned_at, badge: { id, name, emoji, description, category } }]
         setUser({ ...u, _earnedBadges: (earnedBadgesData || []).map(ub => ub.badge).filter(Boolean) });
         setFriendshipStatus(status);
+        setStats(statsRes.stats);
       } catch (e) {
         console.error(e);
       } finally {
@@ -253,6 +308,9 @@ export default function UserProfilePage() {
             </div>
           </div>
         )}
+
+        {/* Public stats */}
+        <StatsGrid stats={stats} />
       </main>
     </div>
   );
