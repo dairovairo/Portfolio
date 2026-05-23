@@ -2,12 +2,19 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { usePresenceBroadcast } from '../hooks/usePresence';
+import { useMessageNotifications } from '../hooks/useMessageNotifications';
 
 const AuthContext = createContext(null);
 
 // Inner component that handles presence (needs userId from context)
 function PresenceBroadcaster({ userId }) {
   usePresenceBroadcast(userId);
+  return null;
+}
+
+// Inner component that handles message notifications (needs profile from context)
+function MessageNotificationsBroadcaster({ profile }) {
+  useMessageNotifications(profile);
   return null;
 }
 
@@ -85,6 +92,8 @@ export function AuthProvider({ children }) {
     }}>
       {/* Heartbeat broadcaster — active when logged in with a profile */}
       {profile?.id && <PresenceBroadcaster userId={profile.id} />}
+      {/* Native notification listener — active when logged in with a profile */}
+      {profile?.id && <MessageNotificationsBroadcaster profile={profile} />}
       {children}
     </AuthContext.Provider>
   );

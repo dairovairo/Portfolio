@@ -29,7 +29,7 @@ function ProgressDots({ step }) {
 }
 
 export default function OnboardingPage() {
-  const { completeOnboarding, refreshProfile } = useAuth();
+  const { completeOnboarding, refreshProfile, signOut } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
@@ -443,6 +443,16 @@ export default function OnboardingPage() {
               Saltar por ahora →
             </button>
           )}
+        </div>
+
+        {/* Escape hatch — session may have expired or the user is stuck */}
+        <div className="text-center mt-4">
+          <button
+            onClick={async () => { await signOut(); navigate('/auth', { replace: true }); }}
+            className="text-xs text-surface-muted/50 hover:text-surface-muted transition-colors underline underline-offset-4"
+          >
+            ← Volver a inicio de sesión
+          </button>
         </div>
       </div>
     </div>
