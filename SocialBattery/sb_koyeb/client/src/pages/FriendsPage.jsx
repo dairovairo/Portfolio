@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
@@ -85,7 +86,7 @@ function UserRow({ user, action, onAction, loading, onSelect, isSelected }) {
         </button>
       ) : (
         <button onClick={() => navigate(`/user/${user.id}`)} className="flex-shrink-0">
-          <Avatar user={user} size="sm" online={isOnline(user.last_seen_at)} />
+          <Avatar user={user} size="sm" online={false} />
         </button>
       )}
       <div className="flex-1 min-w-0">
@@ -223,6 +224,7 @@ function GroupRow({ group, onClick, onDelete }) {
 
 export default function FriendsPage() {
   const { profile } = useAuth();
+  const { showOnline } = useSettings();
   const navigate = useNavigate();
   const myBattery = profile?.battery_level ?? 50;
 
@@ -242,6 +244,8 @@ export default function FriendsPage() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
 
   const onlineMap = useFriendsOnline(friends);
+  // If the user has disabled "Mostrar en línea", treat everyone as offline (mutual, WhatsApp-style)
+  const effectiveOnlineMap = showOnline ? onlineMap : {};
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -352,7 +356,7 @@ export default function FriendsPage() {
 
   const friendIds = new Set(friends.map(f => f.id));
   const pendingCount = requests.length;
-  const onlineFriendsCount = friends.filter(f => onlineMap[f.id]).length;
+  const onlineFriendsCount = friends.filter(f => effectiveOnlineMap[f.id]).length;
 
   const tabs = [
     { id: 'friends', label: `Amigos${friends.length ? ` (${friends.length})` : ''}` },
@@ -426,7 +430,7 @@ export default function FriendsPage() {
             ) : (
               <>
                 {friends.map(f => (
-                  <FriendRow key={f.id} friend={f} myBattery={myBattery} online={!!onlineMap[f.id]}
+                  <FriendRow key={f.id} friend={f} myBattery={myBattery} online={!!effectiveOnlineMap[f.id]}
                     onMessage={() => navigate(`/messages/${f.id}`)} onRemove={removeFriend} />
                 ))}
               </>
@@ -483,7 +487,7 @@ export default function FriendsPage() {
                 {requests.map(req => (
                   <div key={req.id} className="bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3">
                     <button onClick={() => navigate(`/user/${req.requester.id}`)} className="flex-shrink-0">
-                      <Avatar user={req.requester} size="sm" online={isOnline(req.requester.last_seen_at)} />
+                      <Avatar user={req.requester} size="sm" online={showOnline && isOnline(req.requester.last_seen_at)} />
                     </button>
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.display_name || req.requester.username}</div>

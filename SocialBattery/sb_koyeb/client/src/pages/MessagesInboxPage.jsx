@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
@@ -22,10 +23,10 @@ function buildReadsMap(groups) {
 }
 
 // ── Direct conversation row ───────────────────────────────────────────────────
-function ConversationRow({ conv, onClick }) {
+function ConversationRow({ conv, onClick, showOnline }) {
   const { partner, lastMessage, unread } = conv;
   const color = getBatteryColor(partner.battery_level ?? 50);
-  const online = isOnline(partner.last_seen_at);
+  const online = showOnline && isOnline(partner.last_seen_at);
   const isHangout = lastMessage?.type === 'hangout_request';
   const isNew = !lastMessage;
   const isDeletedForEveryone = lastMessage?.deleted_for_everyone;
@@ -94,6 +95,7 @@ function GroupConversationRow({ group, unread, onClick }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MessagesInboxPage() {
   const { profile } = useAuth();
+  const { showOnline } = useSettings();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -295,7 +297,7 @@ export default function MessagesInboxPage() {
                   </div>
                 ) : (
                   filteredConversations.map(conv => (
-                    <ConversationRow key={conv.partner.id} conv={conv} onClick={() => navigate(`/messages/${conv.partner.id}`)} />
+                    <ConversationRow key={conv.partner.id} conv={conv} onClick={() => navigate(`/messages/${conv.partner.id}`)} showOnline={showOnline} />
                   ))
                 )}
               </>

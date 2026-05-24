@@ -356,7 +356,7 @@ export default function MessagesPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts, tickColorRead, tickColorUnread, tickColorSent } = useSettings();
+  const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts, tickColorRead, tickColorUnread, tickColorSent, showOnline, showLastSeen } = useSettings();
 
   const [friend, setFriend] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -674,8 +674,12 @@ export default function MessagesPage() {
                   <span className="font-mono" style={{ color: friendColor?.hex }}>
                     🔋 {friend.battery_level}%{friend.battery_is_estimated ? ' ⚡' : ''}
                   </span>
-                  <span className={`text-xs ${friendOnline ? 'text-green-400' : 'text-slate-600'}`}>
-                    · {friendOnline ? 'En línea' : formatRelativeTime(friend.last_seen_at)}
+                  <span className={`text-xs ${friendOnline && showOnline ? 'text-green-400' : 'text-slate-600'}`}>
+                    {showOnline && friendOnline
+                      ? '· En línea'
+                      : showLastSeen && friend.last_seen_at
+                        ? `· ${formatRelativeTime(friend.last_seen_at)}`
+                        : null}
                   </span>
                 </div>
               </button>

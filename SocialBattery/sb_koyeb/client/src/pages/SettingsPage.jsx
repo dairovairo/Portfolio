@@ -372,6 +372,8 @@ export default function SettingsPage() {
     mutePersonalChats, setMutePersonalChats,
     muteGroupChats, setMuteGroupChats,
     readReceipts, setReadReceipts,
+    showOnline, setShowOnline,
+    showLastSeen, setShowLastSeen,
   } = useSettings();
 
   // Only one section open at a time
@@ -391,11 +393,6 @@ export default function SettingsPage() {
       setTimeout(() => setResetConfirm(false), 3000);
     }
   }
-
-  // Local privacy toggles (UI only — extend with real logic as needed)
-  const [showBattery, setShowBattery] = useState(true);
-  const [showOnline, setShowOnline] = useState(true);
-  const [showLastSeen, setShowLastSeen] = useState(true);
 
   return (
     <div className="min-h-screen bg-surface-bg">
@@ -554,24 +551,25 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar batería</div>
-                  <div className="text-xs text-surface-muted">Tus amigos pueden ver tu nivel de batería social</div>
-                </div>
-                <Toggle enabled={showBattery} onToggle={() => setShowBattery(v => !v)} />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <div>
                   <div className="text-sm font-display font-semibold text-surface-text">Mostrar en línea</div>
-                  <div className="text-xs text-surface-muted">Otros pueden ver cuando estás activo</div>
+                  <div className="text-xs text-surface-muted">
+                    {showOnline
+                      ? 'Tus amigos pueden ver cuando estás activo ahora mismo'
+                      : 'Apareces como desconectado — tampoco verás el estado de otros'}
+                  </div>
                 </div>
-                <Toggle enabled={showOnline} onToggle={() => setShowOnline(v => !v)} />
+                <Toggle enabled={showOnline} onToggle={() => setShowOnline(!showOnline)} />
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-display font-semibold text-surface-text">Mostrar última vez</div>
-                  <div className="text-xs text-surface-muted">Visible en chats privados</div>
+                  <div className="text-xs text-surface-muted">
+                    {showLastSeen
+                      ? 'Se muestra cuándo fue tu última actividad en los chats'
+                      : 'Tu última conexión queda oculta en los chats privados'}
+                  </div>
                 </div>
-                <Toggle enabled={showLastSeen} onToggle={() => setShowLastSeen(v => !v)} />
+                <Toggle enabled={showLastSeen} onToggle={() => setShowLastSeen(!showLastSeen)} />
               </div>
 
               <div className="border-t border-surface-border" />
@@ -583,8 +581,8 @@ export default function SettingsPage() {
                   </div>
                   <div className="text-xs text-surface-muted">
                     {readReceipts
-                      ? 'Los demás ven cuándo lees sus mensajes (✓✓ en color)'
-                      : 'Nadie sabe cuándo lees — tú tampoco verás las suyas'}
+                      ? 'Los demás ven cuándo lees sus mensajes (✓✓ en color) y tú ves los suyos'
+                      : 'No se envía confirmación de lectura — tampoco recibirás la de otros'}
                   </div>
                 </div>
                 <Toggle

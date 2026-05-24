@@ -7,8 +7,8 @@ import { useSettings } from './SettingsContext';
 
 const AuthContext = createContext(null);
 
-function PresenceBroadcaster({ userId }) {
-  usePresenceBroadcast(userId);
+function PresenceBroadcaster({ userId, showOnline }) {
+  usePresenceBroadcast(userId, showOnline);
   return null;
 }
 
@@ -18,6 +18,8 @@ function MessageNotificationsBroadcaster({ profile }) {
     mutePersonalChats,
     muteGroupChats,
     muteBatteryChanges,
+    showOnline,
+    showLastSeen,
   } = useSettings();
 
   useMessageNotifications(profile, {
@@ -102,7 +104,7 @@ export function AuthProvider({ children }) {
       completeOnboarding,
     }}>
       {/* Heartbeat broadcaster — active when logged in with a profile */}
-      {profile?.id && <PresenceBroadcaster userId={profile.id} />}
+      {profile?.id && <PresenceBroadcaster userId={profile.id} showOnline={showOnline} />}
       {/* Native notification listener — active when logged in with a profile */}
       {profile?.id && <MessageNotificationsBroadcaster profile={profile} />}
       {children}

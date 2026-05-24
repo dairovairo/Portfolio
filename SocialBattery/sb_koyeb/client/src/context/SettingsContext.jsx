@@ -13,8 +13,8 @@ export const SETTINGS_DEFAULTS_DARK = {
   otherBubbleOpacity:  1,
   otherBubbleTextColor:'#e2e8f0',  // light grey text
   tickColorSent:       '#ffffff',  // blanco — tick individual (enviado, no entregado)
-  tickColorUnread:     '#64748b',  // slate-500 — grey for sent/delivered
-  tickColorRead:       '#1d9bf0',  // sky blue — read confirmation
+  tickColorUnread:     '#ffffff',  // blanco — doble tick entregado
+  tickColorRead:       '#ffffff',  // blanco — doble tick leído
 };
 
 export const SETTINGS_DEFAULTS_LIGHT = {
@@ -25,8 +25,8 @@ export const SETTINGS_DEFAULTS_LIGHT = {
   otherBubbleOpacity:  1,
   otherBubbleTextColor:'#1e293b',  // dark text on light grey
   tickColorSent:       '#ffffff',  // blanco — tick individual light theme
-  tickColorUnread:     '#94a3b8',  // slate-400 — grey for light theme
-  tickColorRead:       '#1d9bf0',  // same blue tick on light theme
+  tickColorUnread:     '#ffffff',  // blanco — doble tick entregado light theme
+  tickColorRead:       '#ffffff',  // blanco — doble tick leído light theme
 };
 
 // Default set (dark is the app default theme)
@@ -50,6 +50,8 @@ const STORAGE_KEYS = {
   muteGroupChats:        'sb-mute-group-chats',
   // privacy
   readReceipts:          'sb-read-receipts',
+  showOnline:            'sb-show-online',
+  showLastSeen:          'sb-show-last-seen',
 };
 
 function loadStorage(key, fallback) {
@@ -124,6 +126,14 @@ export function SettingsProvider({ children }) {
   // can't see when we've read their messages (and we hide theirs too, mutual).
   const [readReceipts, setReadReceiptsState] = useState(
     () => loadStorage(STORAGE_KEYS.readReceipts, 'true') === 'true'
+  );
+
+  const [showOnline, setShowOnlineState] = useState(
+    () => loadStorage(STORAGE_KEYS.showOnline, 'true') === 'true'
+  );
+
+  const [showLastSeen, setShowLastSeenState] = useState(
+    () => loadStorage(STORAGE_KEYS.showLastSeen, 'true') === 'true'
   );
 
   // ── setters ──────────────────────────────────────────────────────────────
@@ -201,6 +211,16 @@ export function SettingsProvider({ children }) {
   const setReadReceipts = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.readReceipts, String(v));
     setReadReceiptsState(v);
+  }, []);
+
+  const setShowOnline = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showOnline, String(v));
+    setShowOnlineState(v);
+  }, []);
+
+  const setShowLastSeen = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showLastSeen, String(v));
+    setShowLastSeenState(v);
   }, []);
 
   // ── reset to defaults ─────────────────────────────────────────────────────
@@ -284,6 +304,8 @@ export function SettingsProvider({ children }) {
       muteGroupChats, setMuteGroupChats,
       // privacy
       readReceipts, setReadReceipts,
+      showOnline, setShowOnline,
+      showLastSeen, setShowLastSeen,
     }}>
       {children}
     </SettingsContext.Provider>
