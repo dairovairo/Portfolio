@@ -22,8 +22,7 @@ function Avatar({ user, size = 'md', online = false }) {
         ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
         : (user.display_name || user.username)?.[0]?.toUpperCase()
       }
-      <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card" style={{ backgroundColor: color.hex }} />
-      {online && <div className="absolute inset-0 rounded-full ring-2 ring-green-400/50 ring-offset-1 ring-offset-surface-bg" />}
+      <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
     </div>
   );
 }
@@ -38,10 +37,9 @@ function BatteryBadge({ level, isEstimated }) {
   );
 }
 
-function OnlineLabel({ online, lastSeenAt }) {
-  if (online) return <span className="text-xs text-green-400 font-mono">● En línea</span>;
-  if (lastSeenAt) return <span className="text-xs text-slate-600 font-mono">{formatRelativeTime(lastSeenAt)}</span>;
-  return <span className="text-xs text-slate-700 font-mono">Sin actividad</span>;
+function OnlineLabel({ friend }) {
+  if (!friend.battery_updated_at) return <span className="text-xs text-slate-700 font-mono">Sin actualizar</span>;
+  return <span className="text-xs text-slate-500 font-mono">Última actualización: {formatRelativeTime(friend.battery_updated_at)}</span>;
 }
 
 // ── Friend Row ──────────────────────────────────────────────────────────────
@@ -60,7 +58,7 @@ function FriendRow({ friend, onMessage, onRemove, myBattery, online }) {
             <span className="font-display font-semibold text-surface-text text-sm truncate">{friend.display_name || friend.username}</span>
             {diff <= 15 && <span className="text-xs bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-md font-mono flex-shrink-0">~tuyo</span>}
           </div>
-          <OnlineLabel online={online} lastSeenAt={friend.last_seen_at} />
+          <OnlineLabel friend={friend} />
         </button>
       </div>
       <div className="flex items-center gap-1.5">
