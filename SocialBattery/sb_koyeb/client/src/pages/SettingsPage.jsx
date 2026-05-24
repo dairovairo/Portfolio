@@ -507,8 +507,8 @@ export default function SettingsPage() {
                 onChange={setTickColorSent}
               />
               <TickColorPicker
-                label="Tick enviado / recibido"
-                description="Doble tick gris — mensaje entregado"
+                label="Tick recibido"
+                description="Doble tick — mensaje entregado al destinatario"
                 color={tickColorUnread}
                 onChange={setTickColorUnread}
               />

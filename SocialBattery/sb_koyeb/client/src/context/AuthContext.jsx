@@ -7,7 +7,10 @@ import { useSettings } from './SettingsContext';
 
 const AuthContext = createContext(null);
 
-function PresenceBroadcaster({ userId, showOnline }) {
+// PresenceBroadcaster lee showOnline desde useSettings directamente
+// para evitar el bug donde showOnline era undefined en AuthProvider
+function PresenceBroadcaster({ userId }) {
+  const { showOnline } = useSettings();
   usePresenceBroadcast(userId, showOnline);
   return null;
 }
@@ -18,8 +21,6 @@ function MessageNotificationsBroadcaster({ profile }) {
     mutePersonalChats,
     muteGroupChats,
     muteBatteryChanges,
-    showOnline,
-    showLastSeen,
   } = useSettings();
 
   useMessageNotifications(profile, {
@@ -103,9 +104,9 @@ export function AuthProvider({ children }) {
       refreshProfile,
       completeOnboarding,
     }}>
-      {/* Heartbeat broadcaster — active when logged in with a profile */}
-      {profile?.id && <PresenceBroadcaster userId={profile.id} showOnline={showOnline} />}
-      {/* Native notification listener — active when logged in with a profile */}
+      {/* Heartbeat broadcaster — lee showOnline desde SettingsContext internamente */}
+      {profile?.id && <PresenceBroadcaster userId={profile.id} />}
+      {/* Native notification listener */}
       {profile?.id && <MessageNotificationsBroadcaster profile={profile} />}
       {children}
     </AuthContext.Provider>

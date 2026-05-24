@@ -669,19 +669,21 @@ export default function MessagesPage() {
                 </div>
               </button>
               <button onClick={() => navigate(`/user/${friend.id}`)} className="flex-1 text-left">
-                <div className="font-display font-semibold text-surface-text text-sm">{friend.display_name}</div>
-                <div className="text-xs flex items-center gap-1.5">
-                  <span className="font-mono" style={{ color: friendColor?.hex }}>
-                    🔋 {friend.battery_level}%{friend.battery_is_estimated ? ' ⚡' : ''}
-                  </span>
-                  <span className={`text-xs ${friendOnline && showOnline ? 'text-green-400' : 'text-slate-600'}`}>
-                    {showOnline && friendOnline
-                      ? '· En línea'
-                      : showLastSeen && friend.last_seen_at
-                        ? `· ${formatRelativeTime(friend.last_seen_at)}`
-                        : null}
-                  </span>
+                <div className="font-display font-semibold text-surface-text text-sm leading-tight">
+                  {friend.display_name}
                 </div>
+                {/* Línea de estado: "En línea" tiene prioridad sobre "última vez" */}
+                {showOnline && friendOnline ? (
+                  <div className="text-xs text-green-400 font-medium mt-0.5">En línea</div>
+                ) : showLastSeen && friend.last_seen_at && !friendOnline ? (
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {formatRelativeTime(friend.last_seen_at)}
+                  </div>
+                ) : (
+                  <div className="text-xs font-mono mt-0.5" style={{ color: friendColor?.hex }}>
+                    🔋 {friend.battery_level}%{friend.battery_is_estimated ? ' ⚡' : ''}
+                  </div>
+                )}
               </button>
             </>
           ) : loading ? (

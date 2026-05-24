@@ -78,6 +78,23 @@ router.patch('/me/seen', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
+// PATCH /api/users/me/privacy — sincroniza preferencias de privacidad
+// Almacena en columnas de la tabla users (se añaden via migración SQL)
+router.patch('/me/privacy', requireAuth, async (req, res) => {
+  const { show_online, show_last_seen, read_receipts } = req.body;
+  const updates = {};
+  if (typeof show_online    === 'boolean') updates.privacy_show_online    = show_online;
+  if (typeof show_last_seen === 'boolean') updates.privacy_show_last_seen = show_last_seen;
+  if (typeof read_receipts  === 'boolean') updates.privacy_read_receipts  = read_receipts;
+
+  if (Object.keys(updates).length === 0) {
+    return res.json({ success: true });
+  }
+
+  await supabase.from('users').update(updates).eq('id', req.user.id);
+  res.json({ success: true });
+});
+
 // GET /api/users/search?q=username
 router.get('/search', requireAuth, async (req, res) => {
   const { q } = req.query;
@@ -162,13 +179,27 @@ router.get('/:id', requireAuth, async (req, res) => {
     .select(`
       id, username, display_name, bio, avatar_url,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
+      privacy_show_online, privacy_show_last_seen, privacy_read_receipts,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)
     .eq('id', req.params.id)
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'User not found' });
-  res.json({ user: data });
+
+  // Respetar privacidad: si el usuario no quiere mostrar última vez, la ocultamos
+  if (data.privacy_show_last_seen === false) {
+    data.last_seen_at = null;
+  }
+  // Si no quiere mostrar en línea, también ocultamos last_seen_at para que no se deduzca
+  if (data.privacy_show_online === false) {
+    data.last_seen_at = null;
+  }
+
+  // No exponer las columnas de privacidad internas al cliente
+  const { privacy_show_online, privacy_show_last_seen, privacy_read_receipts, ...safeUser } = data;
+
+  res.json({ user: safeUser, privacy_read_receipts: privacy_read_receipts ?? true });
 });
 
 // PATCH /api/users/me — update profile

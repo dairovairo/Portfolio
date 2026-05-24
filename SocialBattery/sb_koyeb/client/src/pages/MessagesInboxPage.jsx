@@ -54,10 +54,18 @@ function ConversationRow({ conv, onClick, showOnline }) {
             {unread > 0 && <span className="bg-accent-primary text-surface-text text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">{unread > 9 ? '9+' : unread}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : isNew ? 'text-accent-glow italic' : 'text-slate-500'}`}>{preview}</p>
-          <span className="text-xs flex-shrink-0 font-mono" style={{ color: color.hex }}>🔋 {partner.battery_level}%</span>
-        </div>
+        {online ? (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-green-400 font-medium flex-shrink-0">En línea</p>
+            <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : isNew ? 'text-accent-glow italic' : 'text-slate-500'}`}>{preview}</p>
+            <span className="text-xs flex-shrink-0 font-mono" style={{ color: color.hex }}>🔋 {partner.battery_level}%</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : isNew ? 'text-accent-glow italic' : 'text-slate-500'}`}>{preview}</p>
+            <span className="text-xs flex-shrink-0 font-mono" style={{ color: color.hex }}>🔋 {partner.battery_level}%</span>
+          </div>
+        )}
       </div>
     </button>
   );
