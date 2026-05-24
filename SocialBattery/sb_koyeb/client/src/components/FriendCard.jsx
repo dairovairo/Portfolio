@@ -1,7 +1,9 @@
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { isOnline } from '../hooks/usePresence';
 
 export default function FriendCard({ friend, onClick }) {
   const color = getBatteryColor(friend.battery_level ?? 50);
+  const online = isOnline(friend.last_seen_at);
 
   return (
     <button
@@ -24,11 +26,8 @@ export default function FriendCard({ friend, onClick }) {
             (friend.display_name || friend.username)?.[0]?.toUpperCase()
           )}
         </div>
-        {/* Mini battery dot */}
-        <div
-          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface-card flex items-center justify-center"
-          style={{ backgroundColor: color.hex }}
-        />
+        {/* Online dot */}
+        <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
       </div>
 
       {/* Info */}
