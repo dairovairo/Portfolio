@@ -1,11 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const NAV_ITEMS = [
-  { path: '/',           icon: '🏠', label: 'Inicio' },
-  { path: '/friends',   icon: '👥', label: 'Amigos' },
-  { path: '/pools',     icon: '📍', label: 'Quedadas' },
-  { path: '/messages/inbox', icon: '💬', label: 'Mensajes' },
-  { path: '/profile',   icon: '👤', label: 'Perfil' },
+  { path: '/',                icon: '🏠', label: 'Inicio' },
+  { path: '/pools',           icon: '📍', label: 'Quedadas' },
+  { path: '/messages/inbox',  icon: '💬', label: 'Mensajes' },
+  { path: '/profile',         icon: '👤', label: 'Perfil' },
 ];
 
 export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
@@ -13,7 +12,7 @@ export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
   const location = useLocation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 
+    <nav className="fixed bottom-0 left-0 right-0 z-50
       bg-surface-bg/95 dark:bg-surface-bg/95 light:bg-white/95
       border-t border-surface-border backdrop-blur-xl
       pb-safe">
@@ -22,7 +21,7 @@ export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
           const active = location.pathname === item.path ||
             (item.path !== '/' && location.pathname.startsWith(item.path));
           const badge =
-            item.path === '/friends' ? pendingCount :
+            item.path === '/' ? pendingCount :
             item.path === '/messages/inbox' ? unreadCount : 0;
 
           return (
