@@ -5,12 +5,12 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const supabaseRequestKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_KEY;
 
 function getUserSupabase(req) {
-  if (!supabaseUrl || !supabaseAnonKey || !req.token) return supabase;
+  if (!supabaseUrl || !supabaseRequestKey || !req.token) return supabase;
 
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  return createClient(supabaseUrl, supabaseRequestKey, {
     global: {
       headers: {
         Authorization: `Bearer ${req.token}`,
@@ -34,6 +34,46 @@ function communityErrorMessage(err, fallback) {
     return 'Falta aplicar la migracion de comunidad en Supabase.';
   }
   return fallback;
+}
+
+function fallbackDisplayName(user) {
+  const fromMetadata = user.user_metadata?.display_name || user.user_metadata?.name;
+  const fromEmail = user.email?.split('@')[0];
+  return (fromMetadata || fromEmail || 'Usuario').trim().slice(0, 16) || 'Usuario';
+}
+
+function fallbackUsername(user) {
+  const idPart = user.id.replace(/-/g, '').slice(0, 12);
+  return `user_${idPart}`;
+}
+
+async function ensurePublicProfile(db, user) {
+  const { data: existing, error: selectError } = await db
+    .from('users')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (selectError) throw selectError;
+  if (existing) return;
+
+  const { error: insertError } = await db
+    .from('users')
+    .insert({
+      id: user.id,
+      username: fallbackUsername(user),
+      display_name: fallbackDisplayName(user),
+    });
+
+  if (!insertError) return;
+
+  const { data: afterInsert } = await db
+    .from('users')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (!afterInsert) throw insertError;
 }
 
 // ── GET /api/community/events ─────────────────────────────────────────────────
@@ -96,6 +136,8 @@ router.post('/events', requireAuth, async (req, res) => {
   }
 
   try {
+    await ensurePublicProfile(db, req.user);
+
     const { data: event, error } = await db
       .from('community_events')
       .insert({
@@ -228,6 +270,8 @@ router.post('/communities', requireAuth, async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
   try {
+    await ensurePublicProfile(db, req.user);
+
     const { data: community, error } = await db
       .from('communities')
       .insert({

@@ -752,6 +752,33 @@ export default function CommunityPage() {
               <p className="text-xs text-surface-muted">Grupos de interés abiertos a todos</p>
             </div>
 
+            <div className="space-y-3 mb-4">
+              <input
+                type="search"
+                value={communitySearch}
+                onChange={e => setCommunitySearch(e.target.value)}
+                placeholder="Buscar comunidades..."
+                className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
+              />
+
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                {COMMUNITY_CATEGORY_FILTERS.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCommunityCategoryFilter(cat)}
+                    className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      communityCategoryFilter === cat
+                        ? 'border-purple-500/60 bg-purple-500/20 text-purple-300'
+                        : 'border-surface-border text-surface-muted hover:border-purple-500/30'
+                    }`}
+                  >
+                    {cat === ALL_COMMUNITY_CATEGORIES ? '🌐' : getCommunityEmoji(cat)} {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {communities.length === 0 ? (
               <div className="text-center py-16">
                 <div className="text-5xl mb-4">👥</div>
@@ -766,33 +793,6 @@ export default function CommunityPage() {
               </div>
             ) : (
               <>
-                <div className="space-y-3 mb-4">
-                  <input
-                    type="search"
-                    value={communitySearch}
-                    onChange={e => setCommunitySearch(e.target.value)}
-                    placeholder="Buscar comunidades..."
-                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
-                  />
-
-                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                    {COMMUNITY_CATEGORY_FILTERS.map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setCommunityCategoryFilter(cat)}
-                        className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-all ${
-                          communityCategoryFilter === cat
-                            ? 'border-purple-500/60 bg-purple-500/20 text-purple-300'
-                            : 'border-surface-border text-surface-muted hover:border-purple-500/30'
-                        }`}
-                      >
-                        {cat === ALL_COMMUNITY_CATEGORIES ? '🌐' : getCommunityEmoji(cat)} {cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {filteredCommunities.length === 0 ? (
                   <div className="text-center py-14">
                     <div className="text-4xl mb-3">👥</div>
