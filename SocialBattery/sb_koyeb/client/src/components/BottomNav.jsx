@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 const NAV_ITEMS = [
   { path: '/',                icon: '🏠', label: 'Inicio' },
   { path: '/pools',           icon: '📍', label: 'Quedadas' },
+  { path: '/community',       icon: '🌐', label: 'Comunidad' },
   { path: '/messages/inbox',  icon: '💬', label: 'Mensajes' },
   { path: '/profile',         icon: '👤', label: 'Perfil' },
 ];

@@ -5,14 +5,15 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
-const authRoutes    = require('./routes/auth');
-const usersRoutes   = require('./routes/users');
-const batteryRoutes = require('./routes/battery');
-const friendsRoutes = require('./routes/friends');
-const messagesRoutes = require('./routes/messages');
-const badgesRoutes  = require('./routes/badges');
-const poolsRoutes   = require('./routes/pools');
-const groupsRoutes  = require('./routes/groups');
+const authRoutes      = require('./routes/auth');
+const usersRoutes     = require('./routes/users');
+const batteryRoutes   = require('./routes/battery');
+const friendsRoutes   = require('./routes/friends');
+const messagesRoutes  = require('./routes/messages');
+const badgesRoutes    = require('./routes/badges');
+const poolsRoutes     = require('./routes/pools');
+const groupsRoutes    = require('./routes/groups');
+const communityRoutes = require('./routes/community');
 const { estimateBatteries } = require('./jobs/estimateBattery');
 
 const app = express();
@@ -35,17 +36,18 @@ const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
 app.use('/api', limiter);
 
 // ── Routes ─────────────────────────────────────────────────────────────────
-app.use('/api/auth',     authRoutes);
-app.use('/api/users',    usersRoutes);
-app.use('/api/battery',  batteryRoutes);
-app.use('/api/friends',  friendsRoutes);
-app.use('/api/messages', messagesRoutes);
-app.use('/api/badges',   badgesRoutes);
-app.use('/api/pools',    poolsRoutes);
-app.use('/api/groups',   groupsRoutes);
+app.use('/api/auth',      authRoutes);
+app.use('/api/users',     usersRoutes);
+app.use('/api/battery',   batteryRoutes);
+app.use('/api/friends',   friendsRoutes);
+app.use('/api/messages',  messagesRoutes);
+app.use('/api/badges',    badgesRoutes);
+app.use('/api/pools',     poolsRoutes);
+app.use('/api/groups',    groupsRoutes);
+app.use('/api/community', communityRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.10.0', phase: 10, timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: '1.11.0', phase: 11, timestamp: new Date().toISOString() });
 });
 
 // ── Cron Jobs ──────────────────────────────────────────────────────────────
@@ -70,5 +72,5 @@ cron.schedule('0 0 * * *', async () => {
 
 // ── Start ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`🔋 SocialBattery server running on port ${PORT} (Phase 10)`);
+  console.log(`🔋 SocialBattery server running on port ${PORT} (Phase 11)`);
 });

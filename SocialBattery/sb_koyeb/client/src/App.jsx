@@ -15,6 +15,7 @@ import PoolsPage from './pages/PoolsPage';
 import BadgesPage from './pages/BadgesPage';
 import GroupChatPage from './pages/GroupChatPage';
 import SettingsPage from './pages/SettingsPage';
+import CommunityPage from './pages/CommunityPage';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile } = useAuth();
@@ -61,6 +62,7 @@ function AppRoutes() {
       <Route path="/pools"                    element={<PoolsPage />} />
       <Route path="/badges"                   element={<BadgesPage />} />
       <Route path="/settings"                 element={<SettingsPage />} />
+      <Route path="/community"               element={<CommunityPage />} />
       <Route path="*"                         element={<Navigate to="/" replace />} />
     </Routes>
   );
