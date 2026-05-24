@@ -214,9 +214,17 @@ function TickColorPicker({ label, description, color, onChange }) {
 
 // ── Live preview ──────────────────────────────────────────────────────────────
 
-function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextColor, otherBubbleColor, otherBubbleOpacity, otherBubbleTextColor, tickColorUnread, tickColorRead }) {
+function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextColor, otherBubbleColor, otherBubbleOpacity, otherBubbleTextColor, tickColorSent, tickColorUnread, tickColorRead }) {
   const myStyle = { backgroundColor: bubbleRgba(myBubbleColor, myBubbleOpacity), color: myBubbleTextColor };
   const otherStyle = { backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity), color: otherBubbleTextColor };
+
+  const TickSingle = ({ color }) => (
+    <span style={{ color }} className="inline-flex items-center ml-1 opacity-80">
+      <svg width="11" height="9" viewBox="0 0 11 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
 
   const TickDouble = ({ colorOverride }) => (
     <span style={{ color: colorOverride }} className="inline-flex items-center ml-1">
@@ -241,6 +249,18 @@ function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextCo
           style={otherStyle}
         >
           ¡Hola! ¿Cómo estás? 👋
+        </div>
+      </div>
+      <div className="flex flex-row-reverse">
+        <div
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
+          style={myStyle}
+        >
+          <span>¡Ahora mismo te escribo! ✏️</span>
+          <div className="flex items-center justify-end gap-0.5 opacity-70 mt-0.5">
+            <span className="text-[10px]">12:33</span>
+            <TickSingle color={tickColorSent} />
+          </div>
         </div>
       </div>
       <div className="flex flex-row-reverse">
@@ -345,6 +365,7 @@ export default function SettingsPage() {
     otherBubbleTextColor, setOtherBubbleTextColor,
     tickColorUnread, setTickColorUnread,
     tickColorRead, setTickColorRead,
+    tickColorSent, setTickColorSent,
     resetMessagingDefaults,
     muteBatteryChanges, setMuteBatteryChanges,
     muteAllNotifications, setMuteAllNotifications,
@@ -483,6 +504,12 @@ export default function SettingsPage() {
             </p>
             <div className="space-y-3">
               <TickColorPicker
+                label="Tick enviado"
+                description="Tick individual — mensaje enviado (no entregado aún)"
+                color={tickColorSent}
+                onChange={setTickColorSent}
+              />
+              <TickColorPicker
                 label="Tick enviado / recibido"
                 description="Doble tick gris — mensaje entregado"
                 color={tickColorUnread}
@@ -507,6 +534,7 @@ export default function SettingsPage() {
               otherBubbleColor={otherBubbleColor}
               otherBubbleOpacity={otherBubbleOpacity}
               otherBubbleTextColor={otherBubbleTextColor}
+              tickColorSent={tickColorSent}
               tickColorUnread={tickColorUnread}
               tickColorRead={tickColorRead}
             />

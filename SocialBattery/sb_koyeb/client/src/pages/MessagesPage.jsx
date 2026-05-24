@@ -23,9 +23,10 @@ function hexToRgba(hex, opacity) {
 // delivered→ ✓✓ gris
 // read     → ✓✓ color acento
 
-function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tickColorUnread = '#64748b' }) {
+function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tickColorUnread = '#64748b', tickColorSent = '#475569' }) {
   const colorRead   = msg._tickColorRead   ?? tickColorRead;
   const colorUnread = msg._tickColorUnread ?? tickColorUnread;
+  const colorSent   = msg._tickColorSent   ?? tickColorSent;
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
 
   if (isOptimistic) {
@@ -63,7 +64,7 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
 
   // Sent — single check
   return (
-    <span className="ml-1 inline-flex items-center opacity-50" title="Enviado">
+    <span className="ml-1 inline-flex items-center" title="Enviado" style={{ color: colorSent }}>
       <svg width="11" height="9" viewBox="0 0 11 9" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
@@ -361,7 +362,7 @@ export default function MessagesPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts, tickColorRead, tickColorUnread } = useSettings();
+  const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts, tickColorRead, tickColorUnread, tickColorSent } = useSettings();
 
   const [friend, setFriend] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -599,7 +600,7 @@ export default function MessagesPage() {
     if (Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(profile?.id)) return false;
     return true;
   // Inject _readReceipts flag so bubbles can decide whether to show coloured tick
-  }).map(msg => ({ ...msg, _readReceipts: readReceipts, _tickColorRead: tickColorRead, _tickColorUnread: tickColorUnread }));
+  }).map(msg => ({ ...msg, _readReceipts: readReceipts, _tickColorRead: tickColorRead, _tickColorUnread: tickColorUnread, _tickColorSent: tickColorSent }));
 
   const grouped = [];
   let lastDate = null;

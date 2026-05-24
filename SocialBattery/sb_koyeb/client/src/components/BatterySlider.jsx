@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { getBatteryColor } from '../lib/battery';
 
 export default function BatterySlider({ value, onChange, readonly = false, isEstimated = false }) {
-  const [isDragging, setIsDragging] = useState(false);
   const color = getBatteryColor(value);
+  const barRef = useRef(null);
+  const isDragging = useRef(false);
 
   const segments = Array.from({ length: 20 }, (_, i) => {
     const segLevel = (i + 1) * 5;
@@ -12,11 +13,95 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
     return { i, filled, hex: segColor.hex };
   });
 
+  // Calculate new battery value from a pointer/touch X position relative to the bar
+  const valueFromEvent = useCallback((clientX) => {
+    const bar = barRef.current;
+    if (!bar) return value;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    // Round to nearest 5 to match the 20 segments
+    return Math.round((ratio * 100) / 5) * 5;
+  }, [value]);
+
+  const handleMove = useCallback((clientX) => {
+    if (readonly || !isDragging.current) return;
+    const newVal = valueFromEvent(clientX);
+    if (newVal !== value) onChange(newVal);
+  }, [readonly, value, onChange, valueFromEvent]);
+
+  const handleStart = useCallback((clientX) => {
+    if (readonly) return;
+    isDragging.current = true;
+    const newVal = valueFromEvent(clientX);
+    onChange(newVal);
+  }, [readonly, onChange, valueFromEvent]);
+
+  const handleEnd = useCallback(() => {
+    isDragging.current = false;
+  }, []);
+
+  // Mouse events
+  const onMouseDown = useCallback((e) => {
+    e.preventDefault();
+    handleStart(e.clientX);
+  }, [handleStart]);
+
+  const onMouseMove = useCallback((e) => {
+    handleMove(e.clientX);
+  }, [handleMove]);
+
+  // Touch events
+  const onTouchStart = useCallback((e) => {
+    handleStart(e.touches[0].clientX);
+  }, [handleStart]);
+
+  const onTouchMove = useCallback((e) => {
+    e.preventDefault();
+    if (isDragging.current) handleMove(e.touches[0].clientX);
+  }, [handleMove]);
+
+  // Global listeners for drag outside the element
+  useEffect(() => {
+    const onUp = () => handleEnd();
+    const onGlobalMove = (e) => {
+      if (!isDragging.current) return;
+      const clientX = e.touches ? e.touches[0]?.clientX : e.clientX;
+      if (clientX !== undefined) handleMove(clientX);
+    };
+
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('mousemove', onGlobalMove);
+    window.addEventListener('touchend', onUp);
+    window.addEventListener('touchmove', onGlobalMove, { passive: false });
+
+    return () => {
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('mousemove', onGlobalMove);
+      window.removeEventListener('touchend', onUp);
+      window.removeEventListener('touchmove', onGlobalMove);
+    };
+  }, [handleEnd, handleMove]);
+
   return (
     <div className="w-full">
-      {/* Visual battery bar */}
+      {/* Interactive battery bar */}
       <div className="relative mb-6">
-        <div className="flex items-center gap-1 h-10">
+        <div
+          ref={barRef}
+          className={`flex items-center gap-1 h-10 ${!readonly ? 'cursor-ew-resize select-none touch-none' : ''}`}
+          onMouseDown={!readonly ? onMouseDown : undefined}
+          onTouchStart={!readonly ? onTouchStart : undefined}
+          onTouchMove={!readonly ? onTouchMove : undefined}
+          role={!readonly ? 'slider' : undefined}
+          aria-valuenow={!readonly ? value : undefined}
+          aria-valuemin={!readonly ? 0 : undefined}
+          aria-valuemax={!readonly ? 100 : undefined}
+          onKeyDown={!readonly ? (e) => {
+            if (e.key === 'ArrowRight') onChange(Math.min(100, value + 5));
+            if (e.key === 'ArrowLeft') onChange(Math.max(0, value - 5));
+          } : undefined}
+          tabIndex={!readonly ? 0 : undefined}
+        >
           {segments.map(({ i, filled, hex }) => (
             <div
               key={i}
@@ -31,6 +116,13 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
           {/* Battery tip */}
           <div className="w-2 h-4 bg-slate-600 rounded-r-sm ml-0.5 flex-shrink-0" />
         </div>
+
+        {/* Drag hint */}
+        {!readonly && (
+          <p className="text-center text-xs text-surface-muted/50 mt-1.5 font-mono select-none">
+            ← desliza para ajustar →
+          </p>
+        )}
       </div>
 
       {/* Level display */}
@@ -55,52 +147,6 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
           </div>
         )}
       </div>
-
-      {/* Slider */}
-      {!readonly && (
-        <div className="relative px-1">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={value}
-            onChange={e => onChange(Number(e.target.value))}
-            onMouseDown={() => setIsDragging(true)}
-            onMouseUp={() => setIsDragging(false)}
-            onTouchStart={() => setIsDragging(true)}
-            onTouchEnd={() => setIsDragging(false)}
-            className="w-full appearance-none h-2 rounded-full outline-none cursor-pointer"
-            style={{
-              background: `linear-gradient(to right, ${color.hex} 0%, ${color.hex} ${value}%, #1e1e2e ${value}%, #1e1e2e 100%)`,
-            }}
-          />
-        </div>
-      )}
-
-      <style>{`
-        input[type='range']::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: white;
-          border: 3px solid ${color.hex};
-          box-shadow: 0 0 12px ${color.hex}80;
-          cursor: pointer;
-          transition: box-shadow 0.15s;
-        }
-        input[type='range']::-webkit-slider-thumb:hover {
-          box-shadow: 0 0 20px ${color.hex};
-        }
-        input[type='range']::-moz-range-thumb {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: white;
-          border: 3px solid ${color.hex};
-          cursor: pointer;
-        }
-      `}</style>
     </div>
   );
 }

@@ -12,6 +12,7 @@ export const SETTINGS_DEFAULTS_DARK = {
   otherBubbleColor:    '#1e293b',  // slate-800 — distinct from #0a0a0f bg
   otherBubbleOpacity:  1,
   otherBubbleTextColor:'#e2e8f0',  // light grey text
+  tickColorSent:       '#475569',  // slate-600 — single tick (enviado, no entregado)
   tickColorUnread:     '#64748b',  // slate-500 — grey for sent/delivered
   tickColorRead:       '#1d9bf0',  // sky blue — read confirmation
 };
@@ -23,6 +24,7 @@ export const SETTINGS_DEFAULTS_LIGHT = {
   otherBubbleColor:    '#f1f5f9',  // slate-100 — soft on white bg
   otherBubbleOpacity:  1,
   otherBubbleTextColor:'#1e293b',  // dark text on light grey
+  tickColorSent:       '#94a3b8',  // slate-400 — single tick light theme
   tickColorUnread:     '#94a3b8',  // slate-400 — grey for light theme
   tickColorRead:       '#1d9bf0',  // same blue tick on light theme
 };
@@ -38,6 +40,7 @@ const STORAGE_KEYS = {
   otherBubbleColor:      'sb-other-bubble-color',
   otherBubbleOpacity:    'sb-other-bubble-opacity',
   otherBubbleTextColor:  'sb-other-bubble-text-color',
+  tickColorSent:         'sb-tick-color-sent',
   tickColorUnread:       'sb-tick-color-unread',
   tickColorRead:         'sb-tick-color-read',
   // notifications
@@ -92,6 +95,9 @@ export function SettingsProvider({ children }) {
   );
 
   // Tick colours
+  const [tickColorSent, setTickColorSentState] = useState(
+    () => loadStorage(STORAGE_KEYS.tickColorSent, SETTINGS_DEFAULTS.tickColorSent)
+  );
   const [tickColorUnread, setTickColorUnreadState] = useState(
     () => loadStorage(STORAGE_KEYS.tickColorUnread, SETTINGS_DEFAULTS.tickColorUnread)
   );
@@ -157,6 +163,11 @@ export function SettingsProvider({ children }) {
     setOtherBubbleTextColorState(hex);
   }, []);
 
+  const setTickColorSent = useCallback((hex) => {
+    localStorage.setItem(STORAGE_KEYS.tickColorSent, hex);
+    setTickColorSentState(hex);
+  }, []);
+
   const setTickColorUnread = useCallback((hex) => {
     localStorage.setItem(STORAGE_KEYS.tickColorUnread, hex);
     setTickColorUnreadState(hex);
@@ -202,6 +213,7 @@ export function SettingsProvider({ children }) {
     localStorage.setItem(STORAGE_KEYS.otherBubbleColor,     d.otherBubbleColor);
     localStorage.setItem(STORAGE_KEYS.otherBubbleOpacity,   String(d.otherBubbleOpacity));
     localStorage.setItem(STORAGE_KEYS.otherBubbleTextColor, d.otherBubbleTextColor);
+    localStorage.setItem(STORAGE_KEYS.tickColorSent,        d.tickColorSent);
     localStorage.setItem(STORAGE_KEYS.tickColorUnread,      d.tickColorUnread);
     localStorage.setItem(STORAGE_KEYS.tickColorRead,        d.tickColorRead);
     setMyBubbleColorState(d.myBubbleColor);
@@ -210,6 +222,7 @@ export function SettingsProvider({ children }) {
     setOtherBubbleColorState(d.otherBubbleColor);
     setOtherBubbleOpacityState(d.otherBubbleOpacity);
     setOtherBubbleTextColorState(d.otherBubbleTextColor);
+    setTickColorSentState(d.tickColorSent);
     setTickColorUnreadState(d.tickColorUnread);
     setTickColorReadState(d.tickColorRead);
   }, []);
@@ -257,6 +270,7 @@ export function SettingsProvider({ children }) {
       otherBubbleOpacity, setOtherBubbleOpacity,
       otherBubbleTextColor, setOtherBubbleTextColor,
       // tick colours
+      tickColorSent, setTickColorSent,
       tickColorUnread, setTickColorUnread,
       tickColorRead, setTickColorRead,
       // reset
