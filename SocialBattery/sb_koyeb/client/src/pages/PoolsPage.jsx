@@ -147,7 +147,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl max-h-[80vh] flex flex-col"
+        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl max-h-[62vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Handle */}
@@ -174,7 +174,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
         </div>
 
         {/* Participants list */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="overflow-y-auto px-5 py-3 max-h-[22vh]">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-display font-bold text-surface-text">
               Apuntados
@@ -255,7 +255,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
         </div>
 
         {/* Actions */}
-        <div className="flex-shrink-0 border-t border-surface-border px-5 py-4 pb-safe">
+        <div className="flex-shrink-0 border-t border-surface-border px-5 py-3">
           {canJoin && (
             <button
               onClick={() => { onJoin(pool.id); onClose(); }}
