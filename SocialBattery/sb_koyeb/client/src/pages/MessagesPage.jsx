@@ -23,7 +23,7 @@ function hexToRgba(hex, opacity) {
 // delivered→ ✓✓ gris
 // read     → ✓✓ color acento
 
-function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tickColorUnread = '#64748b', tickColorSent = '#475569' }) {
+function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tickColorUnread = '#ffffff', tickColorSent = '#ffffff' }) {
   const colorRead   = msg._tickColorRead   ?? tickColorRead;
   const colorUnread = msg._tickColorUnread ?? tickColorUnread;
   const colorSent   = msg._tickColorSent   ?? tickColorSent;
@@ -441,8 +441,16 @@ export default function MessagesPage() {
         filter: `sender_id=eq.${friendId}`,
       }, (payload) => {
         if (payload.new.receiver_id === profile.id) {
-          setMessages(m => [...m, payload.new]);
-          if (readReceipts) api.patch(`/messages/${friendId}/read`).catch(() => {});
+          // Mark as delivered immediately in local state so the sender sees 2 ticks right away
+          const now = new Date().toISOString();
+          setMessages(m => [...m, { ...payload.new, delivered_at: payload.new.delivered_at ?? now }]);
+          if (readReceipts) {
+            // read also sets delivered_at server-side
+            api.patch(`/messages/${friendId}/read`).catch(() => {});
+          } else {
+            // Always mark delivered even when read receipts are off
+            api.patch(`/messages/${friendId}/deliver`).catch(() => {});
+          }
         }
       })
       // My message sent from another device

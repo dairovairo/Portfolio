@@ -97,12 +97,18 @@ export function SettingsProvider({ children }) {
   );
 
   // Tick colours
-  const [tickColorSent, setTickColorSentState] = useState(
-    () => loadStorage(STORAGE_KEYS.tickColorSent, SETTINGS_DEFAULTS.tickColorSent)
-  );
-  const [tickColorUnread, setTickColorUnreadState] = useState(
-    () => loadStorage(STORAGE_KEYS.tickColorUnread, SETTINGS_DEFAULTS.tickColorUnread)
-  );
+  const [tickColorSent, setTickColorSentState] = useState(() => {
+    const stored = loadStorage(STORAGE_KEYS.tickColorSent, SETTINGS_DEFAULTS.tickColorSent);
+    // Migrate old grey defaults (#475569 / #64748b) to current white default
+    if (stored === '#475569' || stored === '#64748b') return SETTINGS_DEFAULTS.tickColorSent;
+    return stored;
+  });
+  const [tickColorUnread, setTickColorUnreadState] = useState(() => {
+    const stored = loadStorage(STORAGE_KEYS.tickColorUnread, SETTINGS_DEFAULTS.tickColorUnread);
+    // Migrate old grey defaults (#475569 / #64748b) to current white default
+    if (stored === '#475569' || stored === '#64748b') return SETTINGS_DEFAULTS.tickColorUnread;
+    return stored;
+  });
   const [tickColorRead, setTickColorReadState] = useState(
     () => loadStorage(STORAGE_KEYS.tickColorRead, SETTINGS_DEFAULTS.tickColorRead)
   );
