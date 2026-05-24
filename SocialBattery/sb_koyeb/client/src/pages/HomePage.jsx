@@ -9,6 +9,7 @@ import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import BottomNav from '../components/BottomNav';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+import { useFriendsOnline } from '../hooks/usePresence';
 
 export default function HomePage() {
   const { profile, refreshProfile } = useAuth();
@@ -17,6 +18,7 @@ export default function HomePage() {
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
   const [friends, setFriends] = useState([]);
+  const onlineMap = useFriendsOnline(friends);
   const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -250,6 +252,7 @@ export default function HomePage() {
                   <FriendCard
                     key={friend.id}
                     friend={friend}
+                    online={!!onlineMap[friend.id]}
                     onClick={() => navigate(`/user/${friend.id}`)}
                   />
                 ))}
