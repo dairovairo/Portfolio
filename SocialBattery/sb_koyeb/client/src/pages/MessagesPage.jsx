@@ -30,13 +30,7 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
 
   if (isOptimistic) {
-    return (
-      <span className="ml-1 inline-flex items-center gap-[1px] opacity-40" title="Enviando…">
-        <svg width="11" height="9" viewBox="0 0 11 9" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
+    return null;
   }
 
   // When read receipts are off, treat read_at as delivered (grey double tick)

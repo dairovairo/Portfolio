@@ -12,7 +12,7 @@ export const SETTINGS_DEFAULTS_DARK = {
   otherBubbleColor:    '#1e293b',  // slate-800 — distinct from #0a0a0f bg
   otherBubbleOpacity:  1,
   otherBubbleTextColor:'#e2e8f0',  // light grey text
-  tickColorSent:       '#475569',  // slate-600 — single tick (enviado, no entregado)
+  tickColorSent:       '#ffffff',  // blanco — tick individual (enviado, no entregado)
   tickColorUnread:     '#64748b',  // slate-500 — grey for sent/delivered
   tickColorRead:       '#1d9bf0',  // sky blue — read confirmation
 };
@@ -24,7 +24,7 @@ export const SETTINGS_DEFAULTS_LIGHT = {
   otherBubbleColor:    '#f1f5f9',  // slate-100 — soft on white bg
   otherBubbleOpacity:  1,
   otherBubbleTextColor:'#1e293b',  // dark text on light grey
-  tickColorSent:       '#94a3b8',  // slate-400 — single tick light theme
+  tickColorSent:       '#ffffff',  // blanco — tick individual light theme
   tickColorUnread:     '#94a3b8',  // slate-400 — grey for light theme
   tickColorRead:       '#1d9bf0',  // same blue tick on light theme
 };

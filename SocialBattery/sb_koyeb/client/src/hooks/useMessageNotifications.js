@@ -193,9 +193,22 @@ export function useMessageNotifications(profile, settings) {
 
       // ── 5. Battery changes ──────────────────────────────────────────────────
       // Listen to updates on the users table and filter by preloaded friend IDs.
-      // We don't rely on payload.old (Supabase doesn't send it without REPLICA
-      // IDENTITY FULL), so we fire on any update to battery_level for a friend.
+      // We cache battery_updated_at per friend so we only notify when the battery
+      // was actually saved — not on presence heartbeats or other row updates.
       if (friendIds.size > 0) {
+        // Preload the current battery_updated_at for each friend so we can
+        // detect real changes vs. presence-triggered no-op updates.
+        const batteryTimestampCache = new Map();
+        try {
+          const { data: friendRows } = await supabase
+            .from('users')
+            .select('id, battery_updated_at')
+            .in('id', [...friendIds]);
+          (friendRows || []).forEach(row => {
+            batteryTimestampCache.set(row.id, row.battery_updated_at);
+          });
+        } catch (e) { console.warn('[notif] could not preload battery timestamps:', e); }
+
         const batteryCh = supabase
           .channel(`notif-battery-${profile.id}`)
           .on('postgres_changes', {
@@ -207,9 +220,21 @@ export function useMessageNotifications(profile, settings) {
             if (s.muteAllNotifications || s.muteBatteryChanges) return;
 
             const updated = payload.new;
-            if (!updated?.id || !updated?.battery_level) return;
+            if (!updated?.id) return;
             if (updated.id === profile.id) return;
             if (!friendIds.has(updated.id)) return;
+
+            // Only notify if battery_updated_at actually changed — this filters
+            // out presence heartbeats, last_seen_at updates, and other row writes
+            // that don't touch the battery.
+            const previousTimestamp = batteryTimestampCache.get(updated.id);
+            const newTimestamp = updated.battery_updated_at;
+            if (!newTimestamp || newTimestamp === previousTimestamp) return;
+
+            // Update the cache so repeated updates at the same timestamp don't re-notify
+            batteryTimestampCache.set(updated.id, newTimestamp);
+
+            if (!updated.battery_level && updated.battery_level !== 0) return;
 
             // Skip if the user is already on the home feed
             if (!document.hidden && locationRef.current === '/') return;
