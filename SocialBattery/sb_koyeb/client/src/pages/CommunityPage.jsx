@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -413,6 +412,30 @@ function CreateEventModal({ onClose, onCreate }) {
 
 // ── Create Community Modal ────────────────────────────────────────────────────
 const COMMUNITY_CATEGORIES = ['Música', 'Deporte', 'Tecnología', 'Arte', 'Viajes', 'Cocina', 'Juego', 'Bienestar', 'Fotografía', 'Otro'];
+const ALL_COMMUNITY_CATEGORIES = 'Todo';
+const COMMUNITY_CATEGORY_FILTERS = [ALL_COMMUNITY_CATEGORIES, ...COMMUNITY_CATEGORIES];
+const KNOWN_COMMUNITY_CATEGORIES = COMMUNITY_CATEGORIES.filter(cat => cat !== 'Otro');
+
+function normalizeText(value = '') {
+  return value
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function matchesCommunityCategory(community, selectedCategory) {
+  if (selectedCategory === ALL_COMMUNITY_CATEGORIES) return true;
+
+  const category = (community.category || '').trim();
+  if (selectedCategory === 'Otro') {
+    if (!category) return true;
+    return !KNOWN_COMMUNITY_CATEGORIES.some(cat => normalizeText(cat) === normalizeText(category));
+  }
+
+  return normalizeText(category) === normalizeText(selectedCategory);
+}
 
 function CreateCommunityModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
@@ -532,8 +555,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CommunityPage() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const { showToast } = useToast();
 
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
@@ -542,6 +564,8 @@ export default function CommunityPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showCreateCommunity, setShowCreateCommunity] = useState(false);
+  const [communitySearch, setCommunitySearch] = useState('');
+  const [communityCategoryFilter, setCommunityCategoryFilter] = useState(ALL_COMMUNITY_CATEGORIES);
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
@@ -609,6 +633,23 @@ export default function CommunityPage() {
   // Sort events by popularity (attendee_count DESC)
   const sortedEvents = [...events].sort((a, b) => (b.attendee_count || 0) - (a.attendee_count || 0));
   const maxAttendees = sortedEvents[0]?.attendee_count || 1;
+  const normalizedCommunitySearch = normalizeText(communitySearch);
+  const filteredCommunities = communities
+    .filter(community => {
+      const matchesSearch = !normalizedCommunitySearch || normalizeText([
+        community.name,
+        community.description,
+        community.category,
+        community.creator_name,
+      ].filter(Boolean).join(' ')).includes(normalizedCommunitySearch);
+
+      return matchesSearch && matchesCommunityCategory(community, communityCategoryFilter);
+    })
+    .sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
+  const isCommunityFiltered = normalizedCommunitySearch || communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES;
+  const communityCountLabel = isCommunityFiltered
+    ? `${filteredCommunities.length}/${communities.length} comunidades`
+    : `${communities.length} comunidades`;
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -618,7 +659,7 @@ export default function CommunityPage() {
           <div>
             <h1 className="font-display font-bold text-surface-text text-xl">Comunidad</h1>
             <p className="text-xs text-surface-muted font-mono">
-              {tab === 'events' ? `${events.length} eventos` : `${communities.length} comunidades`}
+              {tab === 'events' ? `${events.length} eventos` : communityCountLabel}
             </p>
           </div>
           <div className="flex gap-2">
@@ -697,7 +738,7 @@ export default function CommunityPage() {
                     rank={index + 1}
                     maxAttendees={maxAttendees}
                     onJoin={handleJoinEvent}
-                    currentUserId={user?.id}
+                    currentUserId={profile?.id}
                   />
                 ))}
               </div>
@@ -724,18 +765,62 @@ export default function CommunityPage() {
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {communities
-                  .sort((a, b) => (b.member_count || 0) - (a.member_count || 0))
-                  .map(community => (
+              <>
+                <div className="space-y-3 mb-4">
+                  <input
+                    type="search"
+                    value={communitySearch}
+                    onChange={e => setCommunitySearch(e.target.value)}
+                    placeholder="Buscar comunidades..."
+                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
+                  />
+
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                    {COMMUNITY_CATEGORY_FILTERS.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCommunityCategoryFilter(cat)}
+                        className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-all ${
+                          communityCategoryFilter === cat
+                            ? 'border-purple-500/60 bg-purple-500/20 text-purple-300'
+                            : 'border-surface-border text-surface-muted hover:border-purple-500/30'
+                        }`}
+                      >
+                        {cat === ALL_COMMUNITY_CATEGORIES ? '🌐' : getCommunityEmoji(cat)} {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {filteredCommunities.length === 0 ? (
+                  <div className="text-center py-14">
+                    <div className="text-4xl mb-3">👥</div>
+                    <p className="font-display font-bold text-surface-text mb-1">Sin resultados</p>
+                    <p className="text-sm text-surface-muted mb-5">Prueba con otra búsqueda o categoría.</p>
+                    <button
+                      onClick={() => {
+                        setCommunitySearch('');
+                        setCommunityCategoryFilter(ALL_COMMUNITY_CATEGORIES);
+                      }}
+                      className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-purple-500/40 font-display font-semibold text-sm transition-all"
+                    >
+                      Limpiar filtros
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredCommunities.map(community => (
                     <CommunityCard
                       key={community.id}
                       community={{ ...community, members: community.member_ids || [] }}
                       onJoin={handleJoinCommunity}
-                      currentUserId={user?.id}
+                      currentUserId={profile?.id}
                     />
-                  ))}
-              </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
