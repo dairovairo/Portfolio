@@ -44,7 +44,7 @@ function ConversationRow({ conv, onClick, showOnline }) {
         <div className="w-12 h-12 rounded-full flex items-center justify-center font-display font-bold border-2 text-lg" style={{ borderColor: color.hex, background: `${color.hex}15` }}>
           {partner.avatar_url ? <img src={partner.avatar_url} alt="" className="w-full h-full rounded-full object-cover" /> : partner.display_name?.[0]?.toUpperCase()}
         </div>
-        <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
+        {online && <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card bg-green-400" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-0.5">

@@ -14,7 +14,7 @@ export const SETTINGS_DEFAULTS_DARK = {
   otherBubbleTextColor:'#e2e8f0',  // light grey text
   tickColorSent:       '#ffffff',  // blanco — tick individual (enviado, no entregado)
   tickColorUnread:     '#ffffff',  // blanco — doble tick entregado
-  tickColorRead:       '#ffffff',  // blanco — doble tick leído
+  tickColorRead:       '#1d9bf0',  // azul — doble tick leído
 };
 
 export const SETTINGS_DEFAULTS_LIGHT = {
@@ -26,7 +26,7 @@ export const SETTINGS_DEFAULTS_LIGHT = {
   otherBubbleTextColor:'#1e293b',  // dark text on light grey
   tickColorSent:       '#ffffff',  // blanco — tick individual light theme
   tickColorUnread:     '#ffffff',  // blanco — doble tick entregado light theme
-  tickColorRead:       '#ffffff',  // blanco — doble tick leído light theme
+  tickColorRead:       '#1d9bf0',  // azul — doble tick leído light theme
 };
 
 // Default set (dark is the app default theme)

@@ -184,7 +184,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between mt-1 mb-4">
             <span className="text-xs font-mono" style={{ color: color.hex }}>{color.label}</span>
             <span className="text-xs text-surface-muted/60">
-              {formatRelativeTime(profile?.battery_updated_at)}
+              Última actualización: {formatRelativeTime(profile?.battery_updated_at)}
             </span>
           </div>
 

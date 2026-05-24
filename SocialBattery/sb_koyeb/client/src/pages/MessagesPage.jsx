@@ -178,10 +178,11 @@ function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
 
 function OnlineDot({ lastSeenAt, className = '' }) {
   const online = isOnline(lastSeenAt);
+  if (!online) return null;
   return (
     <span
-      className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${online ? 'bg-green-400' : 'bg-slate-600'} ${className}`}
-      title={online ? 'En línea' : `Visto ${formatRelativeTime(lastSeenAt)}`}
+      className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 bg-green-400 ${className}`}
+      title="En línea"
     />
   );
 }
@@ -665,7 +666,7 @@ export default function MessagesPage() {
                       : friend.display_name?.[0]?.toUpperCase()
                     }
                   </div>
-                  <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-bg ${friendOnline ? 'bg-green-400' : 'bg-slate-600'}`} />
+                  {friendOnline && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-bg bg-green-400" />}
                 </div>
               </button>
               <button onClick={() => navigate(`/user/${friend.id}`)} className="flex-1 text-left">

@@ -47,7 +47,7 @@ export default function FriendCard({ friend, onClick }) {
           @{friend.username}
         </div>
         <div className="text-xs text-surface-muted mt-1">
-          {formatRelativeTime(friend.battery_updated_at)}
+          Última actualización: {formatRelativeTime(friend.battery_updated_at)}
         </div>
       </div>
 
