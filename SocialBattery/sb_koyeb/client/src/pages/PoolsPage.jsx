@@ -147,14 +147,14 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl overflow-hidden"
+        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl flex flex-col max-h-[85vh]"
         onClick={e => e.stopPropagation()}
       >
-        {/* Handle */}
-        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-1" />
+        {/* Handle — fijo */}
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-1 flex-shrink-0" />
 
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-surface-border">
+        {/* Header — fijo */}
+        <div className="flex-shrink-0 px-5 py-3 border-b border-surface-border">
           <div className="flex items-center gap-2">
             <span className="text-2xl">{getActivityEmoji(pool.activity)}</span>
             <div className="flex-1 min-w-0">
@@ -173,12 +173,10 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
           )}
         </div>
 
-        {/* Participants list */}
-        <div className="overflow-y-auto px-5 py-3 max-h-[40vh]">
+        {/* Lista de participantes — ocupa el espacio restante y hace scroll */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-display font-bold text-surface-text">
-              Apuntados
-            </h4>
+            <h4 className="text-sm font-display font-bold text-surface-text">Apuntados</h4>
             <span className="text-xs font-mono text-surface-muted">
               {pool.participant_count}/{pool.max_people}
             </span>
@@ -196,7 +194,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
             <div className="space-y-2">
               {participants.map((p, idx) => {
                 const batteryColor = getBatteryColor(p.battery_level ?? 50);
-                const isFirst = idx === 0; // creator is always first
+                const isFirst = idx === 0;
                 return (
                   <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-bg/50 transition-colors">
                     <div
@@ -234,7 +232,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
             </div>
           )}
 
-          {/* Empty spots */}
+          {/* Plazas vacías */}
           {pool.spots_left > 0 && pool.status === 'open' && (
             <div className="mt-3 space-y-1.5">
               {Array.from({ length: Math.min(pool.spots_left, 3) }).map((_, i) => (
@@ -254,8 +252,8 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
           )}
         </div>
 
-        {/* Actions */}
-        <div className="border-t border-surface-border px-5 py-3 pb-safe">
+        {/* Botones — siempre visibles, pegados al fondo */}
+        <div className="flex-shrink-0 border-t border-surface-border px-5 py-3">
           {canJoin && (
             <button
               onClick={() => { onJoin(pool.id); onClose(); }}
