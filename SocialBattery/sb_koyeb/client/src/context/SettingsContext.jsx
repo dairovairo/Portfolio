@@ -216,6 +216,12 @@ export function SettingsProvider({ children }) {
   const setShowOnline = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.showOnline, String(v));
     setShowOnlineState(v);
+    // When going offline, notify server immediately so friends see us as offline
+    if (!v) {
+      import('../lib/api').then(({ api }) => {
+        api.patch('/users/me/go-offline').catch(() => {});
+      });
+    }
   }, []);
 
   const setShowLastSeen = useCallback((v) => {

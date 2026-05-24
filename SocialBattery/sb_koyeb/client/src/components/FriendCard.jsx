@@ -1,8 +1,10 @@
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { isOnline } from '../hooks/usePresence';
+import { useSettings } from '../context/SettingsContext';
 
 export default function FriendCard({ friend, online: onlineProp, onClick }) {
   const color = getBatteryColor(friend.battery_level ?? 50);
+  const { showLastSeen } = useSettings();
   // If caller passes online prop (reactive), use it; otherwise fall back to local check
   const online = onlineProp !== undefined ? onlineProp : isOnline(friend.last_seen_at);
 
@@ -46,9 +48,11 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
         <div className="text-xs text-surface-muted font-mono mt-0.5">
           @{friend.username}
         </div>
-        <div className="text-xs text-surface-muted mt-1">
-          Última actualización: {formatRelativeTime(friend.battery_updated_at)}
-        </div>
+        {showLastSeen && (
+          <div className="text-xs text-surface-muted mt-1">
+            Última actualización: {formatRelativeTime(friend.battery_updated_at)}
+          </div>
+        )}
       </div>
 
       {/* Battery level */}

@@ -78,6 +78,17 @@ router.patch('/me/seen', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
+// PATCH /api/users/me/go-offline — immediately mark user as offline (privacy: showOnline=false)
+router.patch('/me/go-offline', requireAuth, async (req, res) => {
+  // Set last_seen_at far in the past so presence checks return false immediately
+  const farPast = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago
+  await supabase
+    .from('users')
+    .update({ last_seen_at: farPast })
+    .eq('id', req.user.id);
+  res.json({ success: true });
+});
+
 // GET /api/users/search?q=username
 router.get('/search', requireAuth, async (req, res) => {
   const { q } = req.query;

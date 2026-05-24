@@ -677,8 +677,8 @@ export default function MessagesPage() {
                   <span className={`text-xs ${friendOnline && showOnline ? 'text-green-400' : 'text-slate-600'}`}>
                     {showOnline && friendOnline
                       ? '· En línea'
-                      : showLastSeen && friend.last_seen_at
-                        ? `· ${formatRelativeTime(friend.last_seen_at)}`
+                      : showLastSeen && friend.battery_updated_at
+                        ? `· Bat. ${formatRelativeTime(friend.battery_updated_at)}`
                         : null}
                   </span>
                 </div>

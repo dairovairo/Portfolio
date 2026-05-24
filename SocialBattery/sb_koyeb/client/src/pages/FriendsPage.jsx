@@ -37,14 +37,15 @@ function BatteryBadge({ level, isEstimated }) {
   );
 }
 
-function OnlineLabel({ friend }) {
+function OnlineLabel({ friend, showLastSeen }) {
+  if (!showLastSeen) return null;
   if (!friend.battery_updated_at) return <span className="text-xs text-slate-700 font-mono">Sin actualizar</span>;
   return <span className="text-xs text-slate-500 font-mono">Última actualización: {formatRelativeTime(friend.battery_updated_at)}</span>;
 }
 
 // ── Friend Row ──────────────────────────────────────────────────────────────
 
-function FriendRow({ friend, onMessage, onRemove, myBattery, online }) {
+function FriendRow({ friend, onMessage, onRemove, myBattery, online, showLastSeen }) {
   const navigate = useNavigate();
   const diff = Math.abs((friend.battery_level ?? 50) - myBattery);
   return (
@@ -58,7 +59,7 @@ function FriendRow({ friend, onMessage, onRemove, myBattery, online }) {
             <span className="font-display font-semibold text-surface-text text-sm truncate">{friend.display_name || friend.username}</span>
             {diff <= 15 && <span className="text-xs bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-md font-mono flex-shrink-0">~tuyo</span>}
           </div>
-          <OnlineLabel friend={friend} />
+          <OnlineLabel friend={friend} showLastSeen={showLastSeen} />
         </button>
       </div>
       <div className="flex items-center gap-1.5">
@@ -222,7 +223,7 @@ function GroupRow({ group, onClick, onDelete }) {
 
 export default function FriendsPage() {
   const { profile } = useAuth();
-  const { showOnline } = useSettings();
+  const { showOnline, showLastSeen } = useSettings();
   const navigate = useNavigate();
   const myBattery = profile?.battery_level ?? 50;
 
@@ -429,7 +430,7 @@ export default function FriendsPage() {
               <>
                 {friends.map(f => (
                   <FriendRow key={f.id} friend={f} myBattery={myBattery} online={!!effectiveOnlineMap[f.id]}
-                    onMessage={() => navigate(`/messages/${f.id}`)} onRemove={removeFriend} />
+                    onMessage={() => navigate(`/messages/${f.id}`)} onRemove={removeFriend} showLastSeen={showLastSeen} />
                 ))}
               </>
             )}

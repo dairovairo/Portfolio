@@ -562,11 +562,11 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar última vez</div>
+                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar última vez de actualización de batería</div>
                   <div className="text-xs text-surface-muted">
                     {showLastSeen
-                      ? 'Se muestra cuándo fue tu última actividad en los chats'
-                      : 'Tu última conexión queda oculta en los chats privados'}
+                      ? 'Se muestra cuándo fue la última vez que tú y tus amigos actualizaron su batería'
+                      : 'La fecha de última actualización de batería queda oculta para todos'}
                   </div>
                 </div>
                 <Toggle enabled={showLastSeen} onToggle={() => setShowLastSeen(!showLastSeen)} />
