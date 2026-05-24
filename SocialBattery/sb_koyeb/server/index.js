@@ -71,5 +71,4 @@ cron.schedule('0 0 * * *', async () => {
 // ── Start ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🔋 SocialBattery server running on port ${PORT} (Phase 10)`);
-  estimateBatteries().catch(console.error);
 });
