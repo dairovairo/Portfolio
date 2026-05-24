@@ -1,33 +1,35 @@
 import { createContext, useContext, useState, useCallback } from 'react';
-import { api } from '../lib/api';
 
 const SettingsContext = createContext(null);
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
+// Bubble colours optimised for each theme, both designed to pair nicely with
+// the default blue read-tick (#1d9bf0).
 export const SETTINGS_DEFAULTS_DARK = {
-  myBubbleColor:       '#1a5c3a',
+  myBubbleColor:       '#1a5c3a',  // dark emerald — clear contrast with blue ticks
   myBubbleOpacity:     1,
-  myBubbleTextColor:   '#d1fae5',
-  otherBubbleColor:    '#1e293b',
+  myBubbleTextColor:   '#d1fae5',  // soft mint text on dark green
+  otherBubbleColor:    '#1e293b',  // slate-800 — distinct from #0a0a0f bg
   otherBubbleOpacity:  1,
-  otherBubbleTextColor:'#e2e8f0',
-  tickColorSent:       '#ffffff',  // blanco por defecto
-  tickColorUnread:     '#ffffff',  // blanco por defecto — doble tick entregado
-  tickColorRead:       '#ffffff',  // blanco por defecto — doble tick leído
+  otherBubbleTextColor:'#e2e8f0',  // light grey text
+  tickColorSent:       '#ffffff',  // blanco — tick individual (enviado, no entregado)
+  tickColorUnread:     '#ffffff',  // blanco — doble tick entregado
+  tickColorRead:       '#ffffff',  // blanco — doble tick leído
 };
 
 export const SETTINGS_DEFAULTS_LIGHT = {
-  myBubbleColor:       '#16a34a',
+  myBubbleColor:       '#16a34a',  // green-600 — vibrant on light bg, pairs with blue ticks
   myBubbleOpacity:     1,
-  myBubbleTextColor:   '#ffffff',
-  otherBubbleColor:    '#f1f5f9',
+  myBubbleTextColor:   '#ffffff',  // white text on green
+  otherBubbleColor:    '#f1f5f9',  // slate-100 — soft on white bg
   otherBubbleOpacity:  1,
-  otherBubbleTextColor:'#1e293b',
-  tickColorSent:       '#ffffff',  // blanco por defecto
-  tickColorUnread:     '#ffffff',  // blanco por defecto — doble tick entregado
-  tickColorRead:       '#ffffff',  // blanco por defecto — doble tick leído
+  otherBubbleTextColor:'#1e293b',  // dark text on light grey
+  tickColorSent:       '#ffffff',  // blanco — tick individual light theme
+  tickColorUnread:     '#ffffff',  // blanco — doble tick entregado light theme
+  tickColorRead:       '#ffffff',  // blanco — doble tick leído light theme
 };
 
+// Default set (dark is the app default theme)
 export const SETTINGS_DEFAULTS = SETTINGS_DEFAULTS_DARK;
 
 const STORAGE_KEYS = {
@@ -66,16 +68,13 @@ function hexToRgba(hex, opacity) {
   return `rgba(${r},${g},${b},${opacity})`;
 }
 
-// Sincroniza preferencias de privacidad con el servidor (sin bloquear)
-function syncPrivacy(updates) {
-  api.patch('/users/me/privacy', updates).catch(() => {});
-}
-
 export function SettingsProvider({ children }) {
+  // Personal chat wallpaper (shared for all personal chats)
   const [chatWallpaper, setChatWallpaperState] = useState(
     () => loadStorage(STORAGE_KEYS.chatWallpaper, null)
   );
 
+  // My bubble
   const [myBubbleColor, setMyBubbleColorState] = useState(
     () => loadStorage(STORAGE_KEYS.myBubbleColor, SETTINGS_DEFAULTS.myBubbleColor)
   );
@@ -86,6 +85,7 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.myBubbleTextColor, SETTINGS_DEFAULTS.myBubbleTextColor)
   );
 
+  // Other people's bubble
   const [otherBubbleColor, setOtherBubbleColorState] = useState(
     () => loadStorage(STORAGE_KEYS.otherBubbleColor, SETTINGS_DEFAULTS.otherBubbleColor)
   );
@@ -96,6 +96,7 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.otherBubbleTextColor, SETTINGS_DEFAULTS.otherBubbleTextColor)
   );
 
+  // Tick colours
   const [tickColorSent, setTickColorSentState] = useState(
     () => loadStorage(STORAGE_KEYS.tickColorSent, SETTINGS_DEFAULTS.tickColorSent)
   );
@@ -121,12 +122,16 @@ export function SettingsProvider({ children }) {
   );
 
   // ── Privacy preferences ───────────────────────────────────────────────────
+  // readReceipts: when OFF, we don't send read_at to the server so senders
+  // can't see when we've read their messages (and we hide theirs too, mutual).
   const [readReceipts, setReadReceiptsState] = useState(
     () => loadStorage(STORAGE_KEYS.readReceipts, 'true') === 'true'
   );
+
   const [showOnline, setShowOnlineState] = useState(
     () => loadStorage(STORAGE_KEYS.showOnline, 'true') === 'true'
   );
+
   const [showLastSeen, setShowLastSeenState] = useState(
     () => loadStorage(STORAGE_KEYS.showLastSeen, 'true') === 'true'
   );
@@ -203,25 +208,19 @@ export function SettingsProvider({ children }) {
     setMuteGroupChatsState(v);
   }, []);
 
-  // Privacy setters — sincronizan con el servidor para que otros usuarios
-  // respeten estas preferencias (ej: no enviar confirmaciones de lectura,
-  // ocultar última vez, no emitir presencia)
   const setReadReceipts = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.readReceipts, String(v));
     setReadReceiptsState(v);
-    syncPrivacy({ read_receipts: v });
   }, []);
 
   const setShowOnline = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.showOnline, String(v));
     setShowOnlineState(v);
-    syncPrivacy({ show_online: v });
   }, []);
 
   const setShowLastSeen = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.showLastSeen, String(v));
     setShowLastSeenState(v);
-    syncPrivacy({ show_last_seen: v });
   }, []);
 
   // ── reset to defaults ─────────────────────────────────────────────────────
@@ -261,7 +260,7 @@ export function SettingsProvider({ children }) {
     } catch {}
   }, []);
 
-  // ── derived styles ─────────────────────────────────────────────────────────
+  // ── derived styles (include text color so bubbles inherit it) ─────────────
 
   const myBubbleStyle = {
     backgroundColor: myBubbleOpacity < 1
@@ -279,23 +278,31 @@ export function SettingsProvider({ children }) {
 
   return (
     <SettingsContext.Provider value={{
+      // personal wallpaper
       chatWallpaper, setChatWallpaper,
+      // group wallpapers
       getGroupWallpaper, setGroupWallpaper,
+      // bubble colours
       myBubbleColor, setMyBubbleColor,
       myBubbleOpacity, setMyBubbleOpacity,
       myBubbleTextColor, setMyBubbleTextColor,
       otherBubbleColor, setOtherBubbleColor,
       otherBubbleOpacity, setOtherBubbleOpacity,
       otherBubbleTextColor, setOtherBubbleTextColor,
+      // tick colours
       tickColorSent, setTickColorSent,
       tickColorUnread, setTickColorUnread,
       tickColorRead, setTickColorRead,
+      // reset
       resetMessagingDefaults,
+      // derived styles
       myBubbleStyle, otherBubbleStyle,
+      // notification preferences
       muteBatteryChanges, setMuteBatteryChanges,
       muteAllNotifications, setMuteAllNotifications,
       mutePersonalChats, setMutePersonalChats,
       muteGroupChats, setMuteGroupChats,
+      // privacy
       readReceipts, setReadReceipts,
       showOnline, setShowOnline,
       showLastSeen, setShowLastSeen,

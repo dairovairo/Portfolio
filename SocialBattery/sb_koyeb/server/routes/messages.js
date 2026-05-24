@@ -188,33 +188,13 @@ router.patch('/:friendId/read', requireAuth, async (req, res) => {
   const { friendId } = req.params;
   const now = new Date().toISOString();
 
-  // Respetar preferencia de privacidad del receptor (yo, el que lee)
-  // Si tengo desactivadas las confirmaciones de lectura, solo marco como entregado
-  const { data: me } = await supabase
-    .from('users')
-    .select('privacy_read_receipts')
-    .eq('id', userId)
-    .single();
-
-  const readReceiptsEnabled = me?.privacy_read_receipts !== false; // default: true
-
-  if (readReceiptsEnabled) {
-    // Marcar como entregado Y leído (tick color personalizado del emisor)
-    await supabase
-      .from('messages')
-      .update({ delivered_at: now, read_at: now })
-      .eq('sender_id', friendId)
-      .eq('receiver_id', userId)
-      .is('read_at', null);
-  } else {
-    // Solo marcar como entregado — no revelar cuándo lo leí
-    await supabase
-      .from('messages')
-      .update({ delivered_at: now })
-      .eq('sender_id', friendId)
-      .eq('receiver_id', userId)
-      .is('delivered_at', null);
-  }
+  // Set both delivered_at and read_at
+  await supabase
+    .from('messages')
+    .update({ delivered_at: now, read_at: now })
+    .eq('sender_id', friendId)
+    .eq('receiver_id', userId)
+    .is('read_at', null);
 
   res.json({ success: true });
 });
