@@ -184,15 +184,52 @@ function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, on
   );
 }
 
+// ── Tick colour picker ────────────────────────────────────────────────────────
+
+function TickColorPicker({ label, description, color, onChange }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
+        {description && <div className="text-xs text-surface-muted">{description}</div>}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Swatch preview with double tick */}
+        <span style={{ color }} className="inline-flex items-center">
+          <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </span>
+        <input
+          type="color"
+          value={color}
+          onChange={e => onChange(e.target.value)}
+          className="h-8 w-16 rounded-lg cursor-pointer bg-transparent border border-surface-border"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Live preview ──────────────────────────────────────────────────────────────
 
-function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextColor, otherBubbleColor, otherBubbleOpacity, otherBubbleTextColor }) {
+function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextColor, otherBubbleColor, otherBubbleOpacity, otherBubbleTextColor, tickColorUnread, tickColorRead }) {
   const myStyle = { backgroundColor: bubbleRgba(myBubbleColor, myBubbleOpacity), color: myBubbleTextColor };
   const otherStyle = { backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity), color: otherBubbleTextColor };
 
+  const TickDouble = ({ colorOverride }) => (
+    <span style={{ color: colorOverride }} className="inline-flex items-center ml-1">
+      <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
+
   return (
     <div
-      className="rounded-xl overflow-hidden min-h-[120px] p-3 space-y-2 bg-cover bg-center"
+      className="rounded-xl overflow-hidden min-h-[140px] p-3 space-y-2 bg-cover bg-center"
       style={wallpaper
         ? { backgroundImage: `url(${wallpaper})` }
         : { backgroundColor: 'var(--sb-bg)' }
@@ -211,7 +248,11 @@ function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextCo
           className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
           style={myStyle}
         >
-          ¡Todo genial! 🔋
+          <span>¡Todo genial! 🔋</span>
+          <div className="flex items-center justify-end gap-0.5 opacity-70 mt-0.5">
+            <span className="text-[10px]">12:34</span>
+            <TickDouble colorOverride={tickColorUnread} />
+          </div>
         </div>
       </div>
       <div className="flex">
@@ -220,6 +261,18 @@ function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextCo
           style={otherStyle}
         >
           ¿Quedamos este finde? 🤝
+        </div>
+      </div>
+      <div className="flex flex-row-reverse">
+        <div
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
+          style={myStyle}
+        >
+          <span>¡Claro que sí! 🎉</span>
+          <div className="flex items-center justify-end gap-0.5 opacity-70 mt-0.5">
+            <span className="text-[10px]">12:35</span>
+            <TickDouble colorOverride={tickColorRead} />
+          </div>
         </div>
       </div>
     </div>
@@ -290,6 +343,8 @@ export default function SettingsPage() {
     otherBubbleColor, setOtherBubbleColor,
     otherBubbleOpacity, setOtherBubbleOpacity,
     otherBubbleTextColor, setOtherBubbleTextColor,
+    tickColorUnread, setTickColorUnread,
+    tickColorRead, setTickColorRead,
     resetMessagingDefaults,
     muteBatteryChanges, setMuteBatteryChanges,
     muteAllNotifications, setMuteAllNotifications,
@@ -421,6 +476,27 @@ export default function SettingsPage() {
             </div>
           </SubSection>
 
+          {/* Confirmaciones de lectura (ticks) */}
+          <SubSection title="Mensajería · Ticks de lectura">
+            <p className="text-xs text-surface-muted -mt-1 mb-3">
+              Personaliza el color de los ticks que indican el estado de tus mensajes.
+            </p>
+            <div className="space-y-3">
+              <TickColorPicker
+                label="Tick enviado / recibido"
+                description="Doble tick gris — mensaje entregado"
+                color={tickColorUnread}
+                onChange={setTickColorUnread}
+              />
+              <TickColorPicker
+                label="Tick de leído"
+                description="Doble tick — confirmación de lectura"
+                color={tickColorRead}
+                onChange={setTickColorRead}
+              />
+            </div>
+          </SubSection>
+
           {/* Vista previa */}
           <SubSection title="Vista previa">
             <ChatPreview
@@ -431,6 +507,8 @@ export default function SettingsPage() {
               otherBubbleColor={otherBubbleColor}
               otherBubbleOpacity={otherBubbleOpacity}
               otherBubbleTextColor={otherBubbleTextColor}
+              tickColorUnread={tickColorUnread}
+              tickColorRead={tickColorRead}
             />
           </SubSection>
         </AccordionSection>

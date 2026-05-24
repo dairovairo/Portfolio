@@ -3,15 +3,32 @@ import { createContext, useContext, useState, useCallback } from 'react';
 const SettingsContext = createContext(null);
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
-// Good colours for the dark theme (deep purple sender, dark navy receiver)
-export const SETTINGS_DEFAULTS = {
-  myBubbleColor:       '#7c3aed',  // accent purple — great on dark bg
+// Bubble colours optimised for each theme, both designed to pair nicely with
+// the default blue read-tick (#1d9bf0).
+export const SETTINGS_DEFAULTS_DARK = {
+  myBubbleColor:       '#1a5c3a',  // dark emerald — clear contrast with blue ticks
   myBubbleOpacity:     1,
-  myBubbleTextColor:   '#ffffff',  // white text on purple
-  otherBubbleColor:    '#1e293b',  // slate-800 — clearly distinct from #0a0a0f bg
+  myBubbleTextColor:   '#d1fae5',  // soft mint text on dark green
+  otherBubbleColor:    '#1e293b',  // slate-800 — distinct from #0a0a0f bg
   otherBubbleOpacity:  1,
-  otherBubbleTextColor:'#e2e8f0',  // light grey text on dark navy
+  otherBubbleTextColor:'#e2e8f0',  // light grey text
+  tickColorUnread:     '#64748b',  // slate-500 — grey for sent/delivered
+  tickColorRead:       '#1d9bf0',  // sky blue — read confirmation
 };
+
+export const SETTINGS_DEFAULTS_LIGHT = {
+  myBubbleColor:       '#16a34a',  // green-600 — vibrant on light bg, pairs with blue ticks
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#ffffff',  // white text on green
+  otherBubbleColor:    '#f1f5f9',  // slate-100 — soft on white bg
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#1e293b',  // dark text on light grey
+  tickColorUnread:     '#94a3b8',  // slate-400 — grey for light theme
+  tickColorRead:       '#1d9bf0',  // same blue tick on light theme
+};
+
+// Default set (dark is the app default theme)
+export const SETTINGS_DEFAULTS = SETTINGS_DEFAULTS_DARK;
 
 const STORAGE_KEYS = {
   chatWallpaper:         'sb-chat-wallpaper',
@@ -21,6 +38,8 @@ const STORAGE_KEYS = {
   otherBubbleColor:      'sb-other-bubble-color',
   otherBubbleOpacity:    'sb-other-bubble-opacity',
   otherBubbleTextColor:  'sb-other-bubble-text-color',
+  tickColorUnread:       'sb-tick-color-unread',
+  tickColorRead:         'sb-tick-color-read',
   // notifications
   muteBatteryChanges:    'sb-mute-battery-changes',
   muteAllNotifications:  'sb-mute-all-notifications',
@@ -70,6 +89,14 @@ export function SettingsProvider({ children }) {
   );
   const [otherBubbleTextColor, setOtherBubbleTextColorState] = useState(
     () => loadStorage(STORAGE_KEYS.otherBubbleTextColor, SETTINGS_DEFAULTS.otherBubbleTextColor)
+  );
+
+  // Tick colours
+  const [tickColorUnread, setTickColorUnreadState] = useState(
+    () => loadStorage(STORAGE_KEYS.tickColorUnread, SETTINGS_DEFAULTS.tickColorUnread)
+  );
+  const [tickColorRead, setTickColorReadState] = useState(
+    () => loadStorage(STORAGE_KEYS.tickColorRead, SETTINGS_DEFAULTS.tickColorRead)
   );
 
   // ── Notification preferences ──────────────────────────────────────────────
@@ -130,6 +157,16 @@ export function SettingsProvider({ children }) {
     setOtherBubbleTextColorState(hex);
   }, []);
 
+  const setTickColorUnread = useCallback((hex) => {
+    localStorage.setItem(STORAGE_KEYS.tickColorUnread, hex);
+    setTickColorUnreadState(hex);
+  }, []);
+
+  const setTickColorRead = useCallback((hex) => {
+    localStorage.setItem(STORAGE_KEYS.tickColorRead, hex);
+    setTickColorReadState(hex);
+  }, []);
+
   const setMuteBatteryChanges = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteBatteryChanges, String(v));
     setMuteBatteryChangesState(v);
@@ -165,12 +202,16 @@ export function SettingsProvider({ children }) {
     localStorage.setItem(STORAGE_KEYS.otherBubbleColor,     d.otherBubbleColor);
     localStorage.setItem(STORAGE_KEYS.otherBubbleOpacity,   String(d.otherBubbleOpacity));
     localStorage.setItem(STORAGE_KEYS.otherBubbleTextColor, d.otherBubbleTextColor);
+    localStorage.setItem(STORAGE_KEYS.tickColorUnread,      d.tickColorUnread);
+    localStorage.setItem(STORAGE_KEYS.tickColorRead,        d.tickColorRead);
     setMyBubbleColorState(d.myBubbleColor);
     setMyBubbleOpacityState(d.myBubbleOpacity);
     setMyBubbleTextColorState(d.myBubbleTextColor);
     setOtherBubbleColorState(d.otherBubbleColor);
     setOtherBubbleOpacityState(d.otherBubbleOpacity);
     setOtherBubbleTextColorState(d.otherBubbleTextColor);
+    setTickColorUnreadState(d.tickColorUnread);
+    setTickColorReadState(d.tickColorRead);
   }, []);
 
   // ── group wallpaper helpers ───────────────────────────────────────────────
@@ -215,6 +256,9 @@ export function SettingsProvider({ children }) {
       otherBubbleColor, setOtherBubbleColor,
       otherBubbleOpacity, setOtherBubbleOpacity,
       otherBubbleTextColor, setOtherBubbleTextColor,
+      // tick colours
+      tickColorUnread, setTickColorUnread,
+      tickColorRead, setTickColorRead,
       // reset
       resetMessagingDefaults,
       // derived styles

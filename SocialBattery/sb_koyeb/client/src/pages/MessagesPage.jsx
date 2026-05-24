@@ -23,7 +23,9 @@ function hexToRgba(hex, opacity) {
 // delivered→ ✓✓ gris
 // read     → ✓✓ color acento
 
-function MessageTick({ msg, hideReadTick = false }) {
+function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tickColorUnread = '#64748b' }) {
+  const colorRead   = msg._tickColorRead   ?? tickColorRead;
+  const colorUnread = msg._tickColorUnread ?? tickColorUnread;
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
 
   if (isOptimistic) {
@@ -39,7 +41,7 @@ function MessageTick({ msg, hideReadTick = false }) {
   // When read receipts are off, treat read_at as delivered (grey double tick)
   if (msg.read_at && !hideReadTick) {
     return (
-      <span className="ml-1 inline-flex items-center" title="Leído" style={{ color: 'var(--color-accent-glow, #7c6af7)' }}>
+      <span className="ml-1 inline-flex items-center" title="Leído" style={{ color: colorRead }}>
         <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -50,7 +52,7 @@ function MessageTick({ msg, hideReadTick = false }) {
 
   if (msg.delivered_at || msg.read_at) {
     return (
-      <span className="ml-1 inline-flex items-center opacity-50" title="Recibido">
+      <span className="ml-1 inline-flex items-center" title="Recibido" style={{ color: colorUnread }}>
         <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -359,7 +361,7 @@ export default function MessagesPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts } = useSettings();
+  const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts, tickColorRead, tickColorUnread } = useSettings();
 
   const [friend, setFriend] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -597,7 +599,7 @@ export default function MessagesPage() {
     if (Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(profile?.id)) return false;
     return true;
   // Inject _readReceipts flag so bubbles can decide whether to show coloured tick
-  }).map(msg => ({ ...msg, _readReceipts: readReceipts }));
+  }).map(msg => ({ ...msg, _readReceipts: readReceipts, _tickColorRead: tickColorRead, _tickColorUnread: tickColorUnread }));
 
   const grouped = [];
   let lastDate = null;
