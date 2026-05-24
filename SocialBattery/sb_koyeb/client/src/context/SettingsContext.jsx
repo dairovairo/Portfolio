@@ -26,6 +26,8 @@ const STORAGE_KEYS = {
   muteAllNotifications:  'sb-mute-all-notifications',
   mutePersonalChats:     'sb-mute-personal-chats',
   muteGroupChats:        'sb-mute-group-chats',
+  // privacy
+  readReceipts:          'sb-read-receipts',
 };
 
 function loadStorage(key, fallback) {
@@ -84,6 +86,13 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.muteGroupChats, 'false') === 'true'
   );
 
+  // ── Privacy preferences ───────────────────────────────────────────────────
+  // readReceipts: when OFF, we don't send read_at to the server so senders
+  // can't see when we've read their messages (and we hide theirs too, mutual).
+  const [readReceipts, setReadReceiptsState] = useState(
+    () => loadStorage(STORAGE_KEYS.readReceipts, 'true') === 'true'
+  );
+
   // ── setters ──────────────────────────────────────────────────────────────
 
   const setChatWallpaper = useCallback((dataUrl) => {
@@ -139,6 +148,11 @@ export function SettingsProvider({ children }) {
   const setMuteGroupChats = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteGroupChats, String(v));
     setMuteGroupChatsState(v);
+  }, []);
+
+  const setReadReceipts = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.readReceipts, String(v));
+    setReadReceiptsState(v);
   }, []);
 
   // ── reset to defaults ─────────────────────────────────────────────────────
@@ -210,6 +224,8 @@ export function SettingsProvider({ children }) {
       muteAllNotifications, setMuteAllNotifications,
       mutePersonalChats, setMutePersonalChats,
       muteGroupChats, setMuteGroupChats,
+      // privacy
+      readReceipts, setReadReceipts,
     }}>
       {children}
     </SettingsContext.Provider>

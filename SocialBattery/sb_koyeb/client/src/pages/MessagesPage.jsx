@@ -23,7 +23,7 @@ function hexToRgba(hex, opacity) {
 // delivered→ ✓✓ gris
 // read     → ✓✓ color acento
 
-function MessageTick({ msg }) {
+function MessageTick({ msg, hideReadTick = false }) {
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
 
   if (isOptimistic) {
@@ -36,7 +36,8 @@ function MessageTick({ msg }) {
     );
   }
 
-  if (msg.read_at) {
+  // When read receipts are off, treat read_at as delivered (grey double tick)
+  if (msg.read_at && !hideReadTick) {
     return (
       <span className="ml-1 inline-flex items-center" title="Leído" style={{ color: 'var(--color-accent-glow, #7c6af7)' }}>
         <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -47,7 +48,7 @@ function MessageTick({ msg }) {
     );
   }
 
-  if (msg.delivered_at) {
+  if (msg.delivered_at || msg.read_at) {
     return (
       <span className="ml-1 inline-flex items-center opacity-50" title="Recibido">
         <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -251,7 +252,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
         </div>
         <div className="text-xs mt-2 opacity-60 flex items-center justify-end gap-1">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-          {isMe && <MessageTick msg={msg} />}
+          {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
       </div>
     </div>
@@ -284,7 +285,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress })
         <p className="text-sm leading-relaxed break-words">{msg.content}</p>
         <div className="text-xs mt-1 opacity-60 flex items-center justify-end gap-1">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-          {isMe && <MessageTick msg={msg} />}
+          {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
       </div>
     </div>
@@ -358,7 +359,7 @@ export default function MessagesPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { chatWallpaper, myBubbleStyle, otherBubbleStyle } = useSettings();
+  const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts } = useSettings();
 
   const [friend, setFriend] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -412,7 +413,7 @@ export default function MessagesPage() {
         setFriend(user);
         setMessages(msgs || []);
         setClearedAt(cleared_at || null);
-        api.patch(`/messages/${friendId}/read`).catch(() => {});
+        if (readReceipts) api.patch(`/messages/${friendId}/read`).catch(() => {});
       } catch (e) {
         console.error(e);
       } finally {
@@ -444,7 +445,7 @@ export default function MessagesPage() {
       }, (payload) => {
         if (payload.new.receiver_id === profile.id) {
           setMessages(m => [...m, payload.new]);
-          api.patch(`/messages/${friendId}/read`).catch(() => {});
+          if (readReceipts) api.patch(`/messages/${friendId}/read`).catch(() => {});
         }
       })
       // My message sent from another device
@@ -595,7 +596,8 @@ export default function MessagesPage() {
     // Hide messages deleted for me (deleted_for_self)
     if (Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(profile?.id)) return false;
     return true;
-  });
+  // Inject _readReceipts flag so bubbles can decide whether to show coloured tick
+  }).map(msg => ({ ...msg, _readReceipts: readReceipts }));
 
   const grouped = [];
   let lastDate = null;

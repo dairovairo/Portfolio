@@ -147,14 +147,14 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl max-h-[62vh] flex flex-col"
+        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Handle */}
-        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-1 flex-shrink-0" />
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-1" />
 
         {/* Header */}
-        <div className="px-5 py-3 border-b border-surface-border flex-shrink-0">
+        <div className="px-5 py-3 border-b border-surface-border">
           <div className="flex items-center gap-2">
             <span className="text-2xl">{getActivityEmoji(pool.activity)}</span>
             <div className="flex-1 min-w-0">
@@ -174,7 +174,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
         </div>
 
         {/* Participants list */}
-        <div className="overflow-y-auto px-5 py-3 max-h-[22vh]">
+        <div className="overflow-y-auto px-5 py-3 max-h-[40vh]">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-display font-bold text-surface-text">
               Apuntados
@@ -255,7 +255,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
         </div>
 
         {/* Actions */}
-        <div className="flex-shrink-0 border-t border-surface-border px-5 py-3">
+        <div className="border-t border-surface-border px-5 py-3 pb-safe">
           {canJoin && (
             <button
               onClick={() => { onJoin(pool.id); onClose(); }}
