@@ -875,7 +875,7 @@ export default function CommunityPage() {
               onClick={() => setTab('planning')}
               className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'planning'
-                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >

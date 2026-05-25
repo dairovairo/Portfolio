@@ -356,7 +356,7 @@ function Toggle({ enabled, onToggle }) {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { isDark, toggle: toggleTheme } = useTheme();
+  const { theme, isDark, setTheme } = useTheme();
   const { signOut, updatePassword } = useAuth();
   const { showToast } = useToast();
   const {
@@ -370,6 +370,7 @@ export default function SettingsPage() {
     tickColorUnread, setTickColorUnread,
     tickColorRead, setTickColorRead,
     tickColorSent, setTickColorSent,
+    applyMessagingThemeDefaults,
     resetMessagingDefaults,
     muteBatteryChanges, setMuteBatteryChanges,
     muteAllNotifications, setMuteAllNotifications,
@@ -392,9 +393,15 @@ export default function SettingsPage() {
     setOpenSection(prev => prev === id ? null : id);
   }
 
+  function selectTheme(nextTheme) {
+    setTheme(nextTheme);
+    applyMessagingThemeDefaults(nextTheme);
+    setResetConfirm(false);
+  }
+
   function handleReset() {
     if (resetConfirm) {
-      resetMessagingDefaults();
+      resetMessagingDefaults(theme);
       setResetConfirm(false);
     } else {
       setResetConfirm(true);
@@ -472,7 +479,7 @@ export default function SettingsPage() {
           <SubSection title="Temas">
             <div className="flex gap-2">
               <button
-                onClick={() => { if (isDark) toggleTheme(); }}
+                onClick={() => selectTheme('light')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
                   !isDark
                     ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
@@ -482,7 +489,7 @@ export default function SettingsPage() {
                 ☀️ Claro
               </button>
               <button
-                onClick={() => { if (!isDark) toggleTheme(); }}
+                onClick={() => selectTheme('dark')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
                   isDark
                     ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
