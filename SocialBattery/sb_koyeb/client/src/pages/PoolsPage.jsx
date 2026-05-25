@@ -210,7 +210,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
                       <div className="text-sm font-display font-semibold text-surface-text truncate flex items-center gap-1.5">
                         {p.display_name}
                         {isFirst && (
-                          <span className="text-xs font-mono text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded-full">
+                          <span className="text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-full">
                             Organiza
                           </span>
                         )}
@@ -313,7 +313,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
                 🌐 Amigos
               </span>
             ) : (
-              <span className="text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-mono">
+              <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
                 🔒 Privado
               </span>
             )}
@@ -323,7 +323,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
               </span>
             )}
             {pool.is_creator && (
-              <span className="text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-mono">
+              <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
                 Tuyo
               </span>
             )}
@@ -605,7 +605,7 @@ function CreatePoolModal({ onClose, onCreate }) {
                 <div className="text-xs text-surface-muted mt-0.5">Todos tus amigos lo ven</div>
               </button>
               <button type="button" onClick={() => setVisibility(false)}
-                className={`p-3 rounded-xl border text-left transition-all ${!form.is_public ? 'border-purple-500/50 bg-purple-500/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'}`}>
+                className={`p-3 rounded-xl border text-left transition-all ${!form.is_public ? 'border-accent-primary/50 bg-accent-primary/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'}`}>
                 <div className="text-lg mb-1">🔒</div>
                 <div className="text-sm font-display font-semibold text-surface-text">Privado</div>
                 <div className="text-xs text-surface-muted mt-0.5">Solo quien tú elijas</div>
@@ -615,8 +615,8 @@ function CreatePoolModal({ onClose, onCreate }) {
 
           {/* Private: invite section */}
           {!form.is_public && (
-            <div className="bg-surface-bg border border-purple-500/20 rounded-2xl p-4 space-y-4">
-              <p className="text-xs text-purple-400 font-mono">
+            <div className="bg-surface-bg border border-accent-primary/20 rounded-2xl p-4 space-y-4">
+              <p className="text-xs text-accent-glow font-mono">
                 🔒 Elige quién puede ver y unirse a este plan
               </p>
 
@@ -629,7 +629,7 @@ function CreatePoolModal({ onClose, onCreate }) {
                       <button key={g.id} type="button" onClick={() => toggleGroup(g.id)}
                         className={`w-full p-2.5 rounded-xl border flex items-center gap-3 transition-all text-left ${
                           form.group_id === g.id
-                            ? 'border-purple-500/50 bg-purple-500/10'
+                            ? 'border-accent-primary/50 bg-accent-primary/10'
                             : 'border-surface-border bg-surface-card hover:border-surface-border/60'
                         }`}>
                         <span className="text-lg">👥</span>
@@ -637,7 +637,7 @@ function CreatePoolModal({ onClose, onCreate }) {
                           <div className="text-sm font-display font-semibold text-surface-text truncate">{g.name}</div>
                           <div className="text-xs text-surface-muted">{g.member_count} miembros</div>
                         </div>
-                        {form.group_id === g.id && <span className="text-purple-400">✓</span>}
+                        {form.group_id === g.id && <span className="text-accent-glow">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -658,7 +658,7 @@ function CreatePoolModal({ onClose, onCreate }) {
                 <label className="block text-xs font-mono text-surface-muted mb-2">
                   Amigos individuales
                   {form.invited_user_ids.length > 0 && (
-                    <span className="ml-2 text-purple-400">({form.invited_user_ids.length} seleccionados)</span>
+                    <span className="ml-2 text-accent-glow">({form.invited_user_ids.length} seleccionados)</span>
                   )}
                 </label>
                 <FriendPicker

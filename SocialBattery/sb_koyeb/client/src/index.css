@@ -21,22 +21,22 @@
   --sb-text:       #e2e8f0;
   --sb-muted:      #64748b;
   --sb-subtle:     #334155;
-  --sb-accent:     #7c3aed;
-  --sb-accent-glow:#a855f7;
+  --sb-accent:     rgb(0, 133, 130);
+  --sb-accent-glow:rgb(35, 196, 190);
   color-scheme: dark;
 }
 
 /* ── Light theme ────────────────────────────────────────────── */
 [data-theme="light"] {
-  --sb-bg:         #f8f7ff;
+  --sb-bg:         #f4fbfb;
   --sb-card:       #ffffff;
-  --sb-border:     #e2e0f0;
-  --sb-hover:      #f0eeff;
+  --sb-border:     #d8eeee;
+  --sb-hover:      #e9f8f7;
   --sb-text:       #1a1a2e;
   --sb-muted:      #6b7280;
   --sb-subtle:     #9ca3af;
-  --sb-accent:     #7c3aed;
-  --sb-accent-glow:#6d28d9;
+  --sb-accent:     rgb(0, 133, 130);
+  --sb-accent-glow:rgb(0, 112, 109);
   color-scheme: light;
 }
 

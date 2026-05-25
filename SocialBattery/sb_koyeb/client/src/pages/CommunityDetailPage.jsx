@@ -512,7 +512,7 @@ export default function CommunityDetailPage() {
                   </span>
                 )}
                 {community.organization && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
                     {community.organization}
                   </span>
                 )}
@@ -536,7 +536,7 @@ export default function CommunityDetailPage() {
             ) : (
               <button
                 onClick={handleJoinCommunity}
-                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-display font-semibold transition-all"
+                className="px-4 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-semibold transition-all"
               >
                 Unirse
               </button>

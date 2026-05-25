@@ -187,7 +187,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
           <p className="text-xs text-surface-muted mt-0.5">
             por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
             {event.community_name && (
-              <span> · en <span className="text-purple-300">{event.community_name}</span></span>
+              <span> · en <span className="text-accent-glow">{event.community_name}</span></span>
             )}
             {event.organization && (
               <span> · org <span className="text-amber-300/90">{event.organization}</span></span>
@@ -329,7 +329,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
           <p className="text-xs text-surface-muted mt-0.5 line-clamp-1">{community.description}</p>
         )}
         {community.organization && (
-          <p className="text-xs text-purple-300/80 font-mono mt-1">{community.organization}</p>
+          <p className="text-xs text-accent-glow/80 font-mono mt-1">{community.organization}</p>
         )}
         <p className="text-xs text-surface-muted font-mono mt-1">
           👥 {community.member_count || 0} miembros · por {community.creator_name || 'Alguien'}
@@ -633,8 +633,8 @@ function CreateCommunityModal({ onClose, onCreate }) {
                   onClick={() => set('category', form.category === cat ? '' : cat)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                     form.category === cat
-                      ? 'border-purple-500/60 bg-purple-500/20 text-purple-400'
-                      : 'border-surface-border text-surface-muted hover:border-purple-500/30'
+                      ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                      : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
                   }`}
                 >
                   {getCommunityEmoji(cat)} {cat}
@@ -674,8 +674,8 @@ function CreateCommunityModal({ onClose, onCreate }) {
           </div>
 
           {/* Info card */}
-          <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-3">
-            <p className="text-xs text-purple-400/80 font-mono leading-relaxed">
+          <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3">
+            <p className="text-xs text-accent-glow/80 font-mono leading-relaxed">
               💡 Tu comunidad será visible para todos los usuarios de SocialBattery. Cualquiera podrá unirse y participar.
             </p>
           </div>
@@ -689,7 +689,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
           <button
             onClick={handleSubmit}
             disabled={saving || !form.name.trim()}
-            className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
+            className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '👥 Crear comunidad'}
           </button>
@@ -885,7 +885,7 @@ export default function CommunityPage() {
               onClick={() => setTab('communities')}
               className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'communities'
-                  ? 'bg-purple-600 text-white shadow-sm'
+                  ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
@@ -987,7 +987,7 @@ export default function CommunityPage() {
                 value={communitySearch}
                 onChange={e => setCommunitySearch(e.target.value)}
                 placeholder="Buscar comunidades..."
-                className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
+                className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
 
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
@@ -998,8 +998,8 @@ export default function CommunityPage() {
                     onClick={() => setCommunityCategoryFilter(cat)}
                     className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-all ${
                       communityCategoryFilter === cat
-                        ? 'border-purple-500/60 bg-purple-500/20 text-purple-300'
-                        : 'border-surface-border text-surface-muted hover:border-purple-500/30'
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
                     }`}
                   >
                     {cat === ALL_COMMUNITY_CATEGORIES ? '🌐' : getCommunityEmoji(cat)} {cat}
@@ -1015,7 +1015,7 @@ export default function CommunityPage() {
                 <p className="text-sm text-surface-muted mb-6">¡Crea la primera comunidad!</p>
                 <button
                   onClick={() => setShowCreateCommunity(true)}
-                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-display font-semibold text-sm transition-all"
+                  className="px-6 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-semibold text-sm transition-all"
                 >
                   + Crear comunidad
                 </button>
@@ -1032,7 +1032,7 @@ export default function CommunityPage() {
                         setCommunitySearch('');
                         setCommunityCategoryFilter(ALL_COMMUNITY_CATEGORIES);
                       }}
-                      className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-purple-500/40 font-display font-semibold text-sm transition-all"
+                      className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                     >
                       Limpiar filtros
                     </button>
