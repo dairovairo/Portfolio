@@ -65,6 +65,39 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function getDaysUntilLabel(dateStr) {
+  if (!dateStr) return '';
+  const time = new Date(dateStr).getTime();
+  if (Number.isNaN(time)) return '';
+  const diffMs = time - Date.now();
+  if (diffMs < 0) return 'Ya empezó';
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return 'Empieza hoy';
+  if (days === 1) return 'Falta 1 día';
+  return `Faltan ${days} días`;
+}
+
+function getEventTime(event) {
+  const time = new Date(event.event_date).getTime();
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
+}
+
+function isUpcomingEvent(event) {
+  return getEventTime(event) >= Date.now();
+}
+
+function sortEventsByProximity(eventList = []) {
+  const now = Date.now();
+  return [...eventList].sort((a, b) => {
+    const aTime = getEventTime(a);
+    const bTime = getEventTime(b);
+    const aPast = aTime < now;
+    const bPast = bTime < now;
+    if (aPast !== bPast) return aPast ? 1 : -1;
+    return aPast ? bTime - aTime : aTime - bTime;
+  });
+}
+
 function PopularityBar({ count, max }) {
   const pct = max > 0 ? Math.min(100, (count / max) * 100) : 0;
   const color = pct >= 75 ? '#a855f7' : pct >= 40 ? '#7c3aed' : '#4f46e5';
@@ -84,12 +117,17 @@ function PopularityBar({ count, max }) {
 }
 
 // ── Event Card ────────────────────────────────────────────────────────────────
-function EventCard({ event, rank, onJoin, onLeave, currentUserId }) {
+function EventCard({ event, rank, onJoin, onLeave, onLike, onEventClick, currentUserId }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [liking, setLiking] = useState(false);
   const isJoined = event.attendees?.includes(currentUserId);
   const isPast = new Date(event.event_date) < new Date();
+  const isLiked = Boolean(event.liked_by_current_user);
   const emoji = getEventEmoji(event.category);
+  const daysLabel = getDaysUntilLabel(event.event_date);
+  const clickCount = event.click_count || 0;
+  const likeCount = event.like_count || 0;
 
   const rankColors = {
     1: { ring: 'border-yellow-400/60', glow: '#facc1520', label: '🥇' },
@@ -98,7 +136,8 @@ function EventCard({ event, rank, onJoin, onLeave, currentUserId }) {
   };
   const rankStyle = rankColors[rank] || { ring: 'border-surface-border', glow: 'transparent', label: null };
 
-  async function handleJoin() {
+  async function handleJoin(e) {
+    e?.stopPropagation();
     if (isJoined || isPast || joining) return;
     setJoining(true);
     try {
@@ -108,7 +147,8 @@ function EventCard({ event, rank, onJoin, onLeave, currentUserId }) {
     }
   }
 
-  async function handleLeave() {
+  async function handleLeave(e) {
+    e?.stopPropagation();
     if (!isJoined || leaving) return;
     setLeaving(true);
     try {
@@ -118,9 +158,30 @@ function EventCard({ event, rank, onJoin, onLeave, currentUserId }) {
     }
   }
 
+  async function handleLike(e) {
+    e.stopPropagation();
+    if (liking || !onLike) return;
+    setLiking(true);
+    try {
+      await onLike(event.id);
+    } finally {
+      setLiking(false);
+    }
+  }
+
+  function handleCardClick() {
+    onEventClick?.(event.id);
+  }
+
   return (
     <div
-      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30`}
+      role="button"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={e => {
+        if (e.target === e.currentTarget && e.key === 'Enter') handleCardClick();
+      }}
+      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30 cursor-pointer`}
       style={{ boxShadow: rank <= 3 ? `0 0 20px ${rankStyle.glow}` : undefined }}
     >
       {/* Rank badge */}
@@ -166,15 +227,39 @@ function EventCard({ event, rank, onJoin, onLeave, currentUserId }) {
           )}
 
           {/* Date + location */}
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-xs text-slate-500 font-mono flex items-center gap-1">
               📅 {formatEventDate(event.event_date)}
             </span>
+            {daysLabel && (
+              <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
+                ⏳ {daysLabel}
+              </span>
+            )}
             {event.location && (
               <span className="text-xs text-slate-500 font-mono flex items-center gap-1 truncate">
                 📍 {event.location}
               </span>
             )}
+          </div>
+
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            <span className="text-xs font-mono text-slate-500 px-2 py-1 rounded-lg bg-surface-bg border border-surface-border">
+              👁 {clickCount} clicks
+            </span>
+            <button
+              type="button"
+              onClick={handleLike}
+              disabled={liking}
+              aria-pressed={isLiked}
+              className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${
+                isLiked
+                  ? 'border-pink-500/40 bg-pink-500/15 text-pink-300'
+                  : 'border-surface-border bg-surface-bg text-slate-500 hover:border-pink-500/30 hover:text-pink-300'
+              }`}
+            >
+              {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
+            </button>
           </div>
 
           {/* Popularity bar */}
@@ -706,6 +791,40 @@ export default function CommunityPage() {
     }
   }
 
+  async function handleLikeEvent(eventId) {
+    try {
+      await api.post(`/community/events/${eventId}/like`, {});
+      await fetchEvents();
+    } catch (e) {
+      showToast(e.message || 'Error al cambiar el like', 'error');
+    }
+  }
+
+  async function handleEventClick(eventId) {
+    const event = events.find(ev => ev.id === eventId);
+    const shouldOptimisticallyCount = event && !event.clicked_by_current_user;
+
+    if (shouldOptimisticallyCount) {
+      setEvents(prev => prev.map(ev => (
+        ev.id === eventId
+          ? { ...ev, click_count: (ev.click_count || 0) + 1, clicked_by_current_user: true }
+          : ev
+      )));
+    }
+
+    try {
+      await api.post(`/community/events/${eventId}/click`, {});
+    } catch (_e) {
+      if (shouldOptimisticallyCount) {
+        setEvents(prev => prev.map(ev => (
+          ev.id === eventId
+            ? { ...ev, click_count: Math.max(0, (ev.click_count || 1) - 1), clicked_by_current_user: false }
+            : ev
+        )));
+      }
+    }
+  }
+
   async function handleJoinCommunity(communityId) {
     try {
       await api.post(`/community/communities/${communityId}/join`, {});
@@ -726,9 +845,15 @@ export default function CommunityPage() {
     }
   }
 
-  // Sort events by popularity (attendee_count DESC)
-  const sortedEvents = [...events].sort((a, b) => (b.attendee_count || 0) - (a.attendee_count || 0));
-  const maxAttendees = sortedEvents[0]?.attendee_count || 1;
+  const sortedEvents = sortEventsByProximity(events);
+  const planningEvents = sortEventsByProximity(events.filter(event => (
+    isUpcomingEvent(event) && event.attendee_ids?.includes(profile?.id)
+  )));
+  const headerSubtitle = tab === 'events'
+    ? `${events.length} eventos`
+    : tab === 'planning'
+      ? `${planningEvents.length} planificados`
+      : null;
   const normalizedCommunitySearch = normalizeText(communitySearch);
   const filteredCommunities = communities
     .filter(community => {
@@ -756,17 +881,19 @@ export default function CommunityPage() {
           <div>
             <h1 className="font-display font-bold text-surface-text text-xl">Comunidad</h1>
             <p className="text-xs text-surface-muted font-mono">
-              {tab === 'events' ? `${events.length} eventos` : communityCountLabel}
+              {headerSubtitle || communityCountLabel}
             </p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => tab === 'events' ? setShowCreateEvent(true) : setShowCreateCommunity(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-semibold transition-all active:scale-95"
-            >
-              <span className="text-base leading-none">+</span>
-              {tab === 'events' ? 'Evento' : 'Comunidad'}
-            </button>
+            {tab !== 'planning' && (
+              <button
+                onClick={() => tab === 'events' ? setShowCreateEvent(true) : setShowCreateCommunity(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-semibold transition-all active:scale-95"
+              >
+                <span className="text-base leading-none">+</span>
+                {tab === 'events' ? 'Evento' : 'Comunidad'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -782,6 +909,16 @@ export default function CommunityPage() {
               }`}
             >
               🌐 Eventos
+            </button>
+            <button
+              onClick={() => setTab('planning')}
+              className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
+                tab === 'planning'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-surface-muted hover:text-surface-text'
+              }`}
+            >
+              📅 Plan
             </button>
             <button
               onClick={() => setTab('communities')}
@@ -802,7 +939,7 @@ export default function CommunityPage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div className="text-3xl animate-pulse">
-              {tab === 'events' ? '🌐' : '👥'}
+              {tab === 'events' ? '🌐' : tab === 'planning' ? '📅' : '👥'}
             </div>
             <p className="text-surface-muted font-mono text-sm">Cargando...</p>
           </div>
@@ -810,8 +947,8 @@ export default function CommunityPage() {
           <>
             {/* Events title */}
             <div className="mb-4">
-              <h2 className="font-display font-bold text-surface-text text-lg">Eventos populares</h2>
-              <p className="text-xs text-surface-muted">Ordenados por número de asistentes</p>
+              <h2 className="font-display font-bold text-surface-text text-lg">Eventos por proximidad</h2>
+              <p className="text-xs text-surface-muted">Los eventos más cercanos aparecen primero</p>
             </div>
 
             {sortedEvents.length === 0 ? (
@@ -828,14 +965,49 @@ export default function CommunityPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {sortedEvents.map((event, index) => (
+                {sortedEvents.map(event => (
                   <EventCard
                     key={event.id}
                     event={{ ...event, attendees: event.attendee_ids || [] }}
-                    rank={index + 1}
-                    maxAttendees={maxAttendees}
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
+                    onLike={handleLikeEvent}
+                    onEventClick={handleEventClick}
+                    currentUserId={profile?.id}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        ) : tab === 'planning' ? (
+          <>
+            <div className="mb-4">
+              <h2 className="font-display font-bold text-surface-text text-lg">Planificación</h2>
+              <p className="text-xs text-surface-muted">Eventos futuros en los que estás apuntado</p>
+            </div>
+
+            {planningEvents.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-5xl mb-4">📅</div>
+                <p className="font-display font-bold text-surface-text mb-1">Sin planes pendientes</p>
+                <p className="text-sm text-surface-muted mb-6">Apúntate a un evento para verlo aquí.</p>
+                <button
+                  onClick={() => setTab('events')}
+                  className="px-6 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-semibold text-sm transition-all"
+                >
+                  Ver eventos
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {planningEvents.map(event => (
+                  <EventCard
+                    key={event.id}
+                    event={{ ...event, attendees: event.attendee_ids || [] }}
+                    onJoin={handleJoinEvent}
+                    onLeave={handleLeaveEvent}
+                    onLike={handleLikeEvent}
+                    onEventClick={handleEventClick}
                     currentUserId={profile?.id}
                   />
                 ))}

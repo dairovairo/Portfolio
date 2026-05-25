@@ -60,15 +60,49 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function getDaysUntilLabel(dateStr) {
+  if (!dateStr) return '';
+  const time = new Date(dateStr).getTime();
+  if (Number.isNaN(time)) return '';
+  const diffMs = time - Date.now();
+  if (diffMs < 0) return 'Ya empezó';
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return 'Empieza hoy';
+  if (days === 1) return 'Falta 1 día';
+  return `Faltan ${days} días`;
+}
+
+function getEventTime(event) {
+  const time = new Date(event.event_date).getTime();
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
+}
+
+function sortEventsByProximity(eventList = []) {
+  const now = Date.now();
+  return [...eventList].sort((a, b) => {
+    const aTime = getEventTime(a);
+    const bTime = getEventTime(b);
+    const aPast = aTime < now;
+    const bPast = bTime < now;
+    if (aPast !== bPast) return aPast ? 1 : -1;
+    return aPast ? bTime - aTime : aTime - bTime;
+  });
+}
+
 const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', 'Otro'];
 
-function EventCard({ event, currentUserId, onJoin, onLeave }) {
+function EventCard({ event, currentUserId, onJoin, onLeave, onLike, onEventClick }) {
   const [busy, setBusy] = useState(false);
+  const [liking, setLiking] = useState(false);
   const isJoined = event.attendee_ids?.includes(currentUserId);
   const isPast = new Date(event.event_date) < new Date();
+  const isLiked = Boolean(event.liked_by_current_user);
   const emoji = getEventEmoji(event.category);
+  const daysLabel = getDaysUntilLabel(event.event_date);
 
-  async function run(action) {
+  async function run(action, e) {
+    e?.stopPropagation();
+    if (!action) return;
     setBusy(true);
     try {
       await action(event.id);
@@ -77,8 +111,31 @@ function EventCard({ event, currentUserId, onJoin, onLeave }) {
     }
   }
 
+  async function handleLike(e) {
+    e.stopPropagation();
+    if (liking || !onLike) return;
+    setLiking(true);
+    try {
+      await onLike(event.id);
+    } finally {
+      setLiking(false);
+    }
+  }
+
+  function handleCardClick() {
+    onEventClick?.(event.id);
+  }
+
   return (
-    <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={e => {
+        if (e.target === e.currentTarget && e.key === 'Enter') handleCardClick();
+      }}
+      className="bg-surface-card border border-surface-border rounded-2xl p-4 transition-all hover:border-accent-primary/30 cursor-pointer"
+    >
       <div className="flex gap-3">
         <div className="w-11 h-11 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
           {emoji}
@@ -102,8 +159,25 @@ function EventCard({ event, currentUserId, onJoin, onLeave }) {
           )}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-xs text-slate-500 font-mono">📅 {formatEventDate(event.event_date)}</span>
+            {daysLabel && <span className="text-xs text-amber-300/90 font-mono">⏳ {daysLabel}</span>}
             {event.location && <span className="text-xs text-slate-500 font-mono">📍 {event.location}</span>}
+          </div>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span className="text-xs text-slate-500 font-mono">👥 {event.attendee_count || 0}</span>
+            <span className="text-xs text-slate-500 font-mono">👁 {event.click_count || 0} clicks</span>
+            <button
+              type="button"
+              onClick={handleLike}
+              disabled={liking}
+              aria-pressed={isLiked}
+              className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${
+                isLiked
+                  ? 'border-pink-500/40 bg-pink-500/15 text-pink-300'
+                  : 'border-surface-border bg-surface-bg text-slate-500 hover:border-pink-500/30 hover:text-pink-300'
+              }`}
+            >
+              {liking ? '...' : `${isLiked ? '♥' : '♡'} ${event.like_count || 0}`}
+            </button>
           </div>
           <div className="mt-3 flex items-center gap-2 flex-wrap">
             {isJoined ? (
@@ -112,7 +186,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave }) {
                   ✓ Apuntado
                 </span>
                 <button
-                  onClick={() => run(onLeave)}
+                  onClick={e => run(onLeave, e)}
                   disabled={busy}
                   className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
                 >
@@ -125,7 +199,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave }) {
               </span>
             ) : (
               <button
-                onClick={() => run(onJoin)}
+                onClick={e => run(onJoin, e)}
                 disabled={busy}
                 className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50"
               >
@@ -261,25 +335,29 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName }) {
   );
 }
 
-function EventSection({ title, empty, events, currentUserId, onJoin, onLeave }) {
+function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, onLike, onEventClick }) {
+  const sortedEvents = sortEventsByProximity(events);
+
   return (
     <section className="space-y-3">
       <div>
         <h2 className="font-display font-bold text-surface-text text-base">{title}</h2>
-        <p className="text-xs text-surface-muted">{events.length} eventos</p>
+        <p className="text-xs text-surface-muted">{sortedEvents.length} eventos</p>
       </div>
-      {events.length === 0 ? (
+      {sortedEvents.length === 0 ? (
         <div className="text-center py-8 border border-surface-border rounded-2xl bg-surface-card">
           <p className="text-sm text-surface-muted">{empty}</p>
         </div>
       ) : (
-        events.map(event => (
+        sortedEvents.map(event => (
           <EventCard
             key={event.id}
             event={event}
             currentUserId={currentUserId}
             onJoin={onJoin}
             onLeave={onLeave}
+            onLike={onLike}
+            onEventClick={onEventClick}
           />
         ))
       )}
@@ -359,6 +437,45 @@ export default function CommunityDetailPage() {
       await load();
     } catch (e) {
       showToast(e.message || 'Error al salir del evento', 'error');
+    }
+  }
+
+  async function handleLikeEvent(eventId) {
+    try {
+      await api.post(`/community/events/${eventId}/like`, {});
+      await load();
+    } catch (e) {
+      showToast(e.message || 'Error al cambiar el like', 'error');
+    }
+  }
+
+  function updateLocalEvent(eventId, updater) {
+    setCurrentEvents(prev => prev.map(event => event.id === eventId ? updater(event) : event));
+    setPastEvents(prev => prev.map(event => event.id === eventId ? updater(event) : event));
+  }
+
+  async function handleEventClick(eventId) {
+    const event = [...currentEvents, ...pastEvents].find(ev => ev.id === eventId);
+    const shouldOptimisticallyCount = event && !event.clicked_by_current_user;
+
+    if (shouldOptimisticallyCount) {
+      updateLocalEvent(eventId, ev => ({
+        ...ev,
+        click_count: (ev.click_count || 0) + 1,
+        clicked_by_current_user: true,
+      }));
+    }
+
+    try {
+      await api.post(`/community/events/${eventId}/click`, {});
+    } catch (_e) {
+      if (shouldOptimisticallyCount) {
+        updateLocalEvent(eventId, ev => ({
+          ...ev,
+          click_count: Math.max(0, (ev.click_count || 1) - 1),
+          clicked_by_current_user: false,
+        }));
+      }
     }
   }
 
@@ -467,6 +584,8 @@ export default function CommunityDetailPage() {
           currentUserId={profile?.id}
           onJoin={handleJoinEvent}
           onLeave={handleLeaveEvent}
+          onLike={handleLikeEvent}
+          onEventClick={handleEventClick}
         />
         <EventSection
           title="Eventos pasados"
@@ -475,6 +594,8 @@ export default function CommunityDetailPage() {
           currentUserId={profile?.id}
           onJoin={handleJoinEvent}
           onLeave={handleLeaveEvent}
+          onLike={handleLikeEvent}
+          onEventClick={handleEventClick}
         />
       </main>
 

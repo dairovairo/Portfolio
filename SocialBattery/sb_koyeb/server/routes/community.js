@@ -101,21 +101,65 @@ async function getCommunityAdminState(communityId, userId) {
   };
 }
 
-async function enrichEvents(db, events = []) {
-  return Promise.all((events || []).map(async (ev) => {
-    const { data: attendees, count } = await db
-      .from('community_event_attendees')
-      .select('user_id', { count: 'exact' })
-      .eq('event_id', ev.id);
+async function selectEventRows(db, table, eventIds) {
+  const { data, error } = await db
+    .from(table)
+    .select('event_id, user_id')
+    .in('event_id', eventIds);
 
-    return {
-      ...ev,
-      creator_name: ev.creator?.display_name || ev.creator?.username || 'Alguien',
-      community_name: ev.community?.name || null,
-      organization: ev.community?.organization || null,
-      attendee_count: count || 0,
-      attendee_ids: (attendees || []).map(a => a.user_id),
-    };
+  if (!error) return data || [];
+  if (error.code === '42P01' || error.code === '42703') return [];
+  throw error;
+}
+
+function countByEvent(rows = []) {
+  return rows.reduce((acc, row) => {
+    acc[row.event_id] = (acc[row.event_id] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+async function enrichEvents(db, events = [], currentUserId = null) {
+  const eventList = events || [];
+  const eventIds = eventList.map(ev => ev.id).filter(Boolean);
+  if (eventIds.length === 0) return eventList;
+
+  const [attendees, clicks, likes] = await Promise.all([
+    selectEventRows(db, 'community_event_attendees', eventIds),
+    selectEventRows(db, 'community_event_clicks', eventIds),
+    selectEventRows(db, 'community_event_likes', eventIds),
+  ]);
+
+  const attendeeCountByEvent = countByEvent(attendees);
+  const clickCountByEvent = countByEvent(clicks);
+  const likeCountByEvent = countByEvent(likes);
+  const attendeeIdsByEvent = attendees.reduce((acc, row) => {
+    if (!acc[row.event_id]) acc[row.event_id] = [];
+    acc[row.event_id].push(row.user_id);
+    return acc;
+  }, {});
+  const likedEventIds = new Set(
+    currentUserId
+      ? likes.filter(row => row.user_id === currentUserId).map(row => row.event_id)
+      : []
+  );
+  const clickedEventIds = new Set(
+    currentUserId
+      ? clicks.filter(row => row.user_id === currentUserId).map(row => row.event_id)
+      : []
+  );
+
+  return eventList.map(ev => ({
+    ...ev,
+    creator_name: ev.creator?.display_name || ev.creator?.username || 'Alguien',
+    community_name: ev.community?.name || null,
+    organization: ev.community?.organization || null,
+    attendee_count: attendeeCountByEvent[ev.id] || 0,
+    attendee_ids: attendeeIdsByEvent[ev.id] || [],
+    click_count: clickCountByEvent[ev.id] || 0,
+    like_count: likeCountByEvent[ev.id] || 0,
+    clicked_by_current_user: clickedEventIds.has(ev.id),
+    liked_by_current_user: likedEventIds.has(ev.id),
   }));
 }
 
@@ -142,12 +186,11 @@ router.get('/events', requireAuth, async (req, res) => {
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
-      .order('created_at', { ascending: false });
+      .order('event_date', { ascending: true });
 
     if (error) throw error;
 
-    const enriched = await enrichEvents(db, events || []);
-    enriched.sort((a, b) => b.attendee_count - a.attendee_count);
+    const enriched = await enrichEvents(db, events || [], req.user.id);
 
     res.json({ events: enriched });
   } catch (err) {
@@ -286,6 +329,87 @@ router.post('/events/:id/leave', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/community/events/:id/click
+router.post('/events/:id/click', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensurePublicProfile(req.user);
+
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (eventError) throw eventError;
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const { error } = await supabase
+      .from('community_event_clicks')
+      .upsert(
+        { event_id: id, user_id: userId, clicked_at: new Date().toISOString() },
+        { onConflict: 'event_id,user_id' }
+      );
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[community] POST /events/:id/click error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al registrar el click') });
+  }
+});
+
+// POST /api/community/events/:id/like
+router.post('/events/:id/like', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensurePublicProfile(req.user);
+
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (eventError) throw eventError;
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const { data: existing, error: existingError } = await supabase
+      .from('community_event_likes')
+      .select('event_id')
+      .eq('event_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existingError) throw existingError;
+
+    if (existing) {
+      const { error } = await supabase
+        .from('community_event_likes')
+        .delete()
+        .eq('event_id', id)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+      return res.json({ liked: false });
+    }
+
+    const { error } = await supabase
+      .from('community_event_likes')
+      .insert({ event_id: id, user_id: userId });
+
+    if (error) throw error;
+    res.json({ liked: true });
+  } catch (err) {
+    console.error('[community] POST /events/:id/like error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al cambiar el like') });
+  }
+});
+
 // GET /api/community/communities
 router.get('/communities', requireAuth, async (req, res) => {
   const db = getUserSupabase(req);
@@ -364,7 +488,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
 
     if (eventsError) throw eventsError;
 
-    const enrichedEvents = await enrichEvents(db, events || []);
+    const enrichedEvents = await enrichEvents(db, events || [], userId);
     const splitEvents = splitEventsByDate(enrichedEvents);
 
     res.json({
