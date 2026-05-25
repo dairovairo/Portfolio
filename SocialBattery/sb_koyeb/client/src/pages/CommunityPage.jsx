@@ -98,26 +98,8 @@ function sortEventsByProximity(eventList = []) {
   });
 }
 
-function PopularityBar({ count, max }) {
-  const pct = max > 0 ? Math.min(100, (count / max) * 100) : 0;
-  const color = pct >= 75 ? '#a855f7' : pct >= 40 ? '#7c3aed' : '#4f46e5';
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1 bg-surface-bg rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, backgroundColor: color, boxShadow: `0 0 6px ${color}60` }}
-        />
-      </div>
-      <span className="text-xs font-mono text-surface-muted flex-shrink-0">
-        {count} 👥
-      </span>
-    </div>
-  );
-}
-
 // ── Event Card ────────────────────────────────────────────────────────────────
-function EventCard({ event, rank, onJoin, onLeave, onLike, onEventClick, currentUserId }) {
+function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -126,7 +108,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onEventClick, current
   const isLiked = Boolean(event.liked_by_current_user);
   const emoji = getEventEmoji(event.category);
   const daysLabel = getDaysUntilLabel(event.event_date);
-  const clickCount = event.click_count || 0;
+  const attendeeCount = event.attendee_count || 0;
   const likeCount = event.like_count || 0;
 
   const rankColors = {
@@ -169,19 +151,9 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onEventClick, current
     }
   }
 
-  function handleCardClick() {
-    onEventClick?.(event.id);
-  }
-
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={handleCardClick}
-      onKeyDown={e => {
-        if (e.target === e.currentTarget && e.key === 'Enter') handleCardClick();
-      }}
-      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30 cursor-pointer`}
+      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30`}
       style={{ boxShadow: rank <= 3 ? `0 0 20px ${rankStyle.glow}` : undefined }}
     >
       {/* Rank badge */}
@@ -217,6 +189,9 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onEventClick, current
             {event.community_name && (
               <span> · en <span className="text-purple-300">{event.community_name}</span></span>
             )}
+            {event.organization && (
+              <span> · org <span className="text-amber-300/90">{event.organization}</span></span>
+            )}
           </p>
 
           {/* Description */}
@@ -245,7 +220,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onEventClick, current
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span className="text-xs font-mono text-slate-500 px-2 py-1 rounded-lg bg-surface-bg border border-surface-border">
-              👁 {clickCount} clicks
+              👥 {attendeeCount} apuntados
             </span>
             <button
               type="button"
@@ -260,11 +235,6 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onEventClick, current
             >
               {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
             </button>
-          </div>
-
-          {/* Popularity bar */}
-          <div className="mt-2.5">
-            <PopularityBar count={event.attendee_count || 0} max={event.max_attendees || 100} />
           </div>
 
           {/* Join button */}
@@ -411,6 +381,7 @@ function CreateEventModal({ onClose, onCreate }) {
     title: '',
     description: '',
     category: '',
+    organization: '',
     event_date: defaultDate,
     location: '',
     max_attendees: 50,
@@ -501,6 +472,21 @@ function CreateEventModal({ onClose, onCreate }) {
               maxLength={500}
               rows={3}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
+            />
+          </div>
+
+          {/* Organization */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Organización <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={form.organization}
+              onChange={e => set('organization', e.target.value)}
+              placeholder="Ej: Universidad, asociación, club..."
+              maxLength={120}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
           </div>
 
@@ -800,31 +786,6 @@ export default function CommunityPage() {
     }
   }
 
-  async function handleEventClick(eventId) {
-    const event = events.find(ev => ev.id === eventId);
-    const shouldOptimisticallyCount = event && !event.clicked_by_current_user;
-
-    if (shouldOptimisticallyCount) {
-      setEvents(prev => prev.map(ev => (
-        ev.id === eventId
-          ? { ...ev, click_count: (ev.click_count || 0) + 1, clicked_by_current_user: true }
-          : ev
-      )));
-    }
-
-    try {
-      await api.post(`/community/events/${eventId}/click`, {});
-    } catch (_e) {
-      if (shouldOptimisticallyCount) {
-        setEvents(prev => prev.map(ev => (
-          ev.id === eventId
-            ? { ...ev, click_count: Math.max(0, (ev.click_count || 1) - 1), clicked_by_current_user: false }
-            : ev
-        )));
-      }
-    }
-  }
-
   async function handleJoinCommunity(communityId) {
     try {
       await api.post(`/community/communities/${communityId}/join`, {});
@@ -972,7 +933,6 @@ export default function CommunityPage() {
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
-                    onEventClick={handleEventClick}
                     currentUserId={profile?.id}
                   />
                 ))}
@@ -1007,7 +967,6 @@ export default function CommunityPage() {
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
-                    onEventClick={handleEventClick}
                     currentUserId={profile?.id}
                   />
                 ))}

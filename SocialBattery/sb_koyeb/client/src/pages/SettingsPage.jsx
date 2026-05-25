@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -355,6 +357,8 @@ function Toggle({ enabled, onToggle }) {
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { isDark, toggle: toggleTheme } = useTheme();
+  const { signOut, updatePassword } = useAuth();
+  const { showToast } = useToast();
   const {
     chatWallpaper, setChatWallpaper,
     myBubbleColor, setMyBubbleColor,
@@ -379,6 +383,10 @@ export default function SettingsPage() {
   // Only one section open at a time
   const [openSection, setOpenSection] = useState(null);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [loggingOut, setLoggingOut] = useState(false);
 
   function toggleSection(id) {
     setOpenSection(prev => prev === id ? null : id);
@@ -391,6 +399,46 @@ export default function SettingsPage() {
     } else {
       setResetConfirm(true);
       setTimeout(() => setResetConfirm(false), 3000);
+    }
+  }
+
+  function setPasswordField(key, value) {
+    setPasswordForm(prev => ({ ...prev, [key]: value }));
+    setPasswordError('');
+  }
+
+  async function handlePasswordChange() {
+    if (passwordForm.password.length < 6) {
+      setPasswordError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirm) {
+      setPasswordError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setSavingPassword(true);
+    setPasswordError('');
+    try {
+      await updatePassword(passwordForm.password);
+      setPasswordForm({ password: '', confirm: '' });
+      showToast('Contraseña actualizada', 'success');
+    } catch (e) {
+      setPasswordError(e.message || 'No se pudo cambiar la contraseña.');
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await signOut();
+      showToast('Sesión cerrada', 'success');
+      navigate('/auth', { replace: true });
+    } catch (e) {
+      showToast(e.message || 'No se pudo cerrar sesión', 'error');
+      setLoggingOut(false);
     }
   }
 
@@ -690,6 +738,39 @@ export default function SettingsPage() {
           title="Cuenta"
           subtitle="Perfil, sesión y datos"
         >
+          <SubSection title="Seguridad">
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={passwordForm.password}
+                onChange={e => setPasswordField('password', e.target.value)}
+                placeholder="Nueva contraseña"
+                autoComplete="new-password"
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+              <input
+                type="password"
+                value={passwordForm.confirm}
+                onChange={e => setPasswordField('confirm', e.target.value)}
+                placeholder="Repetir contraseña"
+                autoComplete="new-password"
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+              {passwordError && (
+                <p className="text-xs text-red-400 font-mono bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                  {passwordError}
+                </p>
+              )}
+              <button
+                onClick={handlePasswordChange}
+                disabled={savingPassword || !passwordForm.password || !passwordForm.confirm}
+                className="w-full py-2.5 rounded-xl bg-accent-primary/10 border border-accent-primary/20 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/20 transition-colors disabled:opacity-50"
+              >
+                {savingPassword ? 'Guardando...' : 'Cambiar contraseña'}
+              </button>
+            </div>
+          </SubSection>
+
           <SubSection title="Sesión">
             <div className="space-y-1">
               <InfoRow label="Versión" value="Phase 8" />
@@ -699,6 +780,13 @@ export default function SettingsPage() {
               className="mt-3 w-full py-2.5 rounded-xl bg-accent-primary/10 border border-accent-primary/20 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/20 transition-colors"
             >
               Editar perfil
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="mt-3 w-full py-2.5 rounded-xl border border-red-500/25 text-sm font-display font-semibold text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            >
+              {loggingOut ? 'Cerrando...' : 'Cerrar sesión'}
             </button>
           </SubSection>
         </AccordionSection>

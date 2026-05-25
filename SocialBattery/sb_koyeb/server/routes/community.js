@@ -124,14 +124,12 @@ async function enrichEvents(db, events = [], currentUserId = null) {
   const eventIds = eventList.map(ev => ev.id).filter(Boolean);
   if (eventIds.length === 0) return eventList;
 
-  const [attendees, clicks, likes] = await Promise.all([
+  const [attendees, likes] = await Promise.all([
     selectEventRows(db, 'community_event_attendees', eventIds),
-    selectEventRows(db, 'community_event_clicks', eventIds),
     selectEventRows(db, 'community_event_likes', eventIds),
   ]);
 
   const attendeeCountByEvent = countByEvent(attendees);
-  const clickCountByEvent = countByEvent(clicks);
   const likeCountByEvent = countByEvent(likes);
   const attendeeIdsByEvent = attendees.reduce((acc, row) => {
     if (!acc[row.event_id]) acc[row.event_id] = [];
@@ -143,22 +141,15 @@ async function enrichEvents(db, events = [], currentUserId = null) {
       ? likes.filter(row => row.user_id === currentUserId).map(row => row.event_id)
       : []
   );
-  const clickedEventIds = new Set(
-    currentUserId
-      ? clicks.filter(row => row.user_id === currentUserId).map(row => row.event_id)
-      : []
-  );
 
   return eventList.map(ev => ({
     ...ev,
     creator_name: ev.creator?.display_name || ev.creator?.username || 'Alguien',
     community_name: ev.community?.name || null,
-    organization: ev.community?.organization || null,
+    organization: ev.organization || ev.community?.organization || null,
     attendee_count: attendeeCountByEvent[ev.id] || 0,
     attendee_ids: attendeeIdsByEvent[ev.id] || [],
-    click_count: clickCountByEvent[ev.id] || 0,
     like_count: likeCountByEvent[ev.id] || 0,
-    clicked_by_current_user: clickedEventIds.has(ev.id),
     liked_by_current_user: likedEventIds.has(ev.id),
   }));
 }
@@ -181,7 +172,7 @@ router.get('/events', requireAuth, async (req, res) => {
     const { data: events, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, location,
+        id, title, description, category, event_date, location, organization,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
@@ -201,7 +192,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, async (req, res) => {
-  const { title, description, category, event_date, location, max_attendees, community_id } = req.body;
+  const { title, description, category, event_date, location, max_attendees, community_id, organization } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -235,6 +226,7 @@ router.post('/events', requireAuth, async (req, res) => {
         category: category?.trim() || null,
         event_date,
         location: location?.trim() || null,
+        organization: organization?.trim() || null,
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
@@ -326,38 +318,6 @@ router.post('/events/:id/leave', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /events/:id/leave error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al salir del evento') });
-  }
-});
-
-// POST /api/community/events/:id/click
-router.post('/events/:id/click', requireAuth, async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  try {
-    await ensurePublicProfile(req.user);
-
-    const { data: event, error: eventError } = await supabase
-      .from('community_events')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (eventError) throw eventError;
-    if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
-
-    const { error } = await supabase
-      .from('community_event_clicks')
-      .upsert(
-        { event_id: id, user_id: userId, clicked_at: new Date().toISOString() },
-        { onConflict: 'event_id,user_id' }
-      );
-
-    if (error) throw error;
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[community] POST /events/:id/click error:', err);
-    res.status(500).json({ error: communityErrorMessage(err, 'Error al registrar el click') });
   }
 });
 
@@ -478,7 +438,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: events, error: eventsError } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, location,
+        id, title, description, category, event_date, location, organization,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)

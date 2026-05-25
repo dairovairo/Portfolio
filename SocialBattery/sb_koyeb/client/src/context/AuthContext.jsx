@@ -75,7 +75,14 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setSession(null);
     setProfile(null);
+  };
+
+  const updatePassword = async (password) => {
+    const { data, error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    return data;
   };
 
   const refreshProfile = async () => {
@@ -101,6 +108,7 @@ export function AuthProvider({ children }) {
       signUp,
       signIn,
       signOut,
+      updatePassword,
       refreshProfile,
       completeOnboarding,
     }}>

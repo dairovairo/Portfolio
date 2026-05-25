@@ -91,7 +91,7 @@ function sortEventsByProximity(eventList = []) {
 
 const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', 'Otro'];
 
-function EventCard({ event, currentUserId, onJoin, onLeave, onLike, onEventClick }) {
+function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
   const [busy, setBusy] = useState(false);
   const [liking, setLiking] = useState(false);
   const isJoined = event.attendee_ids?.includes(currentUserId);
@@ -122,20 +122,8 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike, onEventClick
     }
   }
 
-  function handleCardClick() {
-    onEventClick?.(event.id);
-  }
-
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleCardClick}
-      onKeyDown={e => {
-        if (e.target === e.currentTarget && e.key === 'Enter') handleCardClick();
-      }}
-      className="bg-surface-card border border-surface-border rounded-2xl p-4 transition-all hover:border-accent-primary/30 cursor-pointer"
-    >
+    <div className="bg-surface-card border border-surface-border rounded-2xl p-4 transition-all hover:border-accent-primary/30">
       <div className="flex gap-3">
         <div className="w-11 h-11 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
           {emoji}
@@ -153,6 +141,9 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike, onEventClick
           </div>
           <p className="text-xs text-surface-muted mt-0.5">
             por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
+            {event.organization && (
+              <span> · org <span className="text-amber-300/90">{event.organization}</span></span>
+            )}
           </p>
           {event.description && (
             <p className="text-xs text-surface-muted mt-1.5 leading-relaxed">{event.description}</p>
@@ -163,8 +154,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike, onEventClick
             {event.location && <span className="text-xs text-slate-500 font-mono">📍 {event.location}</span>}
           </div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs text-slate-500 font-mono">👥 {event.attendee_count || 0}</span>
-            <span className="text-xs text-slate-500 font-mono">👁 {event.click_count || 0} clicks</span>
+            <span className="text-xs text-slate-500 font-mono">👥 {event.attendee_count || 0} apuntados</span>
             <button
               type="button"
               onClick={handleLike}
@@ -213,7 +203,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike, onEventClick
   );
 }
 
-function CreateCommunityEventModal({ onClose, onCreate, communityName }) {
+function CreateCommunityEventModal({ onClose, onCreate, communityName, communityOrganization }) {
   const minDate = new Date(Date.now() + 30 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
@@ -221,6 +211,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName }) {
     title: '',
     description: '',
     category: '',
+    organization: communityOrganization || '',
     event_date: defaultDate,
     location: '',
     max_attendees: 50,
@@ -297,6 +288,13 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName }) {
             maxLength={500}
             className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
           />
+          <input
+            value={form.organization}
+            onChange={e => set('organization', e.target.value)}
+            placeholder="Organización que crea el evento (opcional)"
+            maxLength={120}
+            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+          />
           <div className="grid grid-cols-2 gap-3">
             <input
               type="datetime-local"
@@ -335,7 +333,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName }) {
   );
 }
 
-function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, onLike, onEventClick }) {
+function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, onLike }) {
   const sortedEvents = sortEventsByProximity(events);
 
   return (
@@ -357,7 +355,6 @@ function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, on
             onJoin={onJoin}
             onLeave={onLeave}
             onLike={onLike}
-            onEventClick={onEventClick}
           />
         ))
       )}
@@ -446,36 +443,6 @@ export default function CommunityDetailPage() {
       await load();
     } catch (e) {
       showToast(e.message || 'Error al cambiar el like', 'error');
-    }
-  }
-
-  function updateLocalEvent(eventId, updater) {
-    setCurrentEvents(prev => prev.map(event => event.id === eventId ? updater(event) : event));
-    setPastEvents(prev => prev.map(event => event.id === eventId ? updater(event) : event));
-  }
-
-  async function handleEventClick(eventId) {
-    const event = [...currentEvents, ...pastEvents].find(ev => ev.id === eventId);
-    const shouldOptimisticallyCount = event && !event.clicked_by_current_user;
-
-    if (shouldOptimisticallyCount) {
-      updateLocalEvent(eventId, ev => ({
-        ...ev,
-        click_count: (ev.click_count || 0) + 1,
-        clicked_by_current_user: true,
-      }));
-    }
-
-    try {
-      await api.post(`/community/events/${eventId}/click`, {});
-    } catch (_e) {
-      if (shouldOptimisticallyCount) {
-        updateLocalEvent(eventId, ev => ({
-          ...ev,
-          click_count: Math.max(0, (ev.click_count || 1) - 1),
-          clicked_by_current_user: false,
-        }));
-      }
     }
   }
 
@@ -585,7 +552,6 @@ export default function CommunityDetailPage() {
           onJoin={handleJoinEvent}
           onLeave={handleLeaveEvent}
           onLike={handleLikeEvent}
-          onEventClick={handleEventClick}
         />
         <EventSection
           title="Eventos pasados"
@@ -595,13 +561,13 @@ export default function CommunityDetailPage() {
           onJoin={handleJoinEvent}
           onLeave={handleLeaveEvent}
           onLike={handleLikeEvent}
-          onEventClick={handleEventClick}
         />
       </main>
 
       {showCreateEvent && (
         <CreateCommunityEventModal
           communityName={community.name}
+          communityOrganization={community.organization}
           onClose={() => setShowCreateEvent(false)}
           onCreate={handleCreateEvent}
         />
