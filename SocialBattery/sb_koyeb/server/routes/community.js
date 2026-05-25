@@ -30,7 +30,7 @@ function communityErrorMessage(err, fallback) {
   if (err?.code === '42501') {
     return 'No tienes permisos para realizar esta accion.';
   }
-  if (err?.code === '42P01') {
+  if (err?.code === '42P01' || err?.code === '42703') {
     return 'Falta aplicar la migracion de comunidad en Supabase.';
   }
   return fallback;
@@ -76,8 +76,60 @@ async function ensurePublicProfile(user) {
   if (!afterInsert) throw insertError;
 }
 
-// ── GET /api/community/events ─────────────────────────────────────────────────
-// Returns all events sorted by attendee_count DESC
+async function getCommunityAdminState(communityId, userId) {
+  const { data: community, error: communityError } = await supabase
+    .from('communities')
+    .select('id, creator_id')
+    .eq('id', communityId)
+    .single();
+
+  if (communityError || !community) {
+    return { community: null, membership: null, isAdmin: false };
+  }
+
+  const { data: membership } = await supabase
+    .from('community_members')
+    .select('role')
+    .eq('community_id', communityId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  return {
+    community,
+    membership,
+    isAdmin: community.creator_id === userId || membership?.role === 'admin',
+  };
+}
+
+async function enrichEvents(db, events = []) {
+  return Promise.all((events || []).map(async (ev) => {
+    const { data: attendees, count } = await db
+      .from('community_event_attendees')
+      .select('user_id', { count: 'exact' })
+      .eq('event_id', ev.id);
+
+    return {
+      ...ev,
+      creator_name: ev.creator?.display_name || ev.creator?.username || 'Alguien',
+      community_name: ev.community?.name || null,
+      organization: ev.community?.organization || null,
+      attendee_count: count || 0,
+      attendee_ids: (attendees || []).map(a => a.user_id),
+    };
+  }));
+}
+
+function splitEventsByDate(events) {
+  const now = Date.now();
+  const current_events = events.filter(ev => new Date(ev.event_date).getTime() >= now);
+  const past_events = events
+    .filter(ev => new Date(ev.event_date).getTime() < now)
+    .sort((a, b) => new Date(b.event_date) - new Date(a.event_date));
+
+  return { current_events, past_events };
+}
+
+// GET /api/community/events
 router.get('/events', requireAuth, async (req, res) => {
   const db = getUserSupabase(req);
 
@@ -86,45 +138,30 @@ router.get('/events', requireAuth, async (req, res) => {
       .from('community_events')
       .select(`
         id, title, description, category, event_date, location,
-        max_attendees, creator_id, created_at,
-        creator:users!community_events_creator_id_fkey(display_name, username)
+        max_attendees, creator_id, community_id, created_at,
+        creator:users!community_events_creator_id_fkey(display_name, username),
+        community:communities!community_events_community_id_fkey(id, name, organization)
       `)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    // For each event, get attendee count and IDs
-    const enriched = await Promise.all((events || []).map(async (ev) => {
-      const { data: attendees, count } = await db
-        .from('community_event_attendees')
-        .select('user_id', { count: 'exact' })
-        .eq('event_id', ev.id);
-
-      return {
-        ...ev,
-        creator_name: ev.creator?.display_name || ev.creator?.username || 'Alguien',
-        attendee_count: count || 0,
-        attendee_ids: (attendees || []).map(a => a.user_id),
-      };
-    }));
-
-    // Sort by popularity (attendee_count DESC)
+    const enriched = await enrichEvents(db, events || []);
     enriched.sort((a, b) => b.attendee_count - a.attendee_count);
 
     res.json({ events: enriched });
   } catch (err) {
     console.error('[community] GET /events error:', err);
-    res.status(500).json({ error: 'Error al obtener los eventos' });
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener los eventos') });
   }
 });
 
-// ── POST /api/community/events ────────────────────────────────────────────────
+// POST /api/community/events
 router.post('/events', requireAuth, async (req, res) => {
-  const { title, description, category, event_date, location, max_attendees } = req.body;
+  const { title, description, category, event_date, location, max_attendees, community_id } = req.body;
   const userId = req.user.id;
-  const db = supabase;
 
-  if (!title?.trim()) return res.status(400).json({ error: 'El título es obligatorio' });
+  if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
   if (!event_date) return res.status(400).json({ error: 'La fecha es obligatoria' });
   if (Number.isNaN(new Date(event_date).getTime())) {
     return res.status(400).json({ error: 'La fecha no es valida' });
@@ -138,7 +175,16 @@ router.post('/events', requireAuth, async (req, res) => {
   try {
     await ensurePublicProfile(req.user);
 
-    const { data: event, error } = await db
+    const communityId = community_id || null;
+    if (communityId) {
+      const { community, isAdmin } = await getCommunityAdminState(communityId, userId);
+      if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'Solo el administrador puede publicar eventos en esta comunidad' });
+      }
+    }
+
+    const { data: event, error } = await supabase
       .from('community_events')
       .insert({
         title: title.trim(),
@@ -148,14 +194,14 @@ router.post('/events', requireAuth, async (req, res) => {
         location: location?.trim() || null,
         max_attendees: maxAttendees,
         creator_id: userId,
+        community_id: communityId,
       })
       .select()
       .single();
 
     if (error) throw error;
 
-    // Auto-join creator as attendee
-    const { error: attendeeError } = await db
+    const { error: attendeeError } = await supabase
       .from('community_event_attendees')
       .upsert(
         { event_id: event.id, user_id: userId },
@@ -173,51 +219,46 @@ router.post('/events', requireAuth, async (req, res) => {
   }
 });
 
-// ── POST /api/community/events/:id/join ──────────────────────────────────────
+// POST /api/community/events/:id/join
 router.post('/events/:id/join', requireAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
-  const db = getUserSupabase(req);
 
   try {
-    const { data: event, error: evErr } = await db
+    const { data: event, error: evErr } = await supabase
       .from('community_events')
       .select('id, max_attendees, event_date')
       .eq('id', id)
       .single();
 
     if (evErr || !event) return res.status(404).json({ error: 'Evento no encontrado' });
-
     if (new Date(event.event_date) < new Date()) {
       return res.status(400).json({ error: 'El evento ya ha pasado' });
     }
 
-    // Check if already joined
-    const { data: existing } = await db
+    const { data: existing } = await supabase
       .from('community_event_attendees')
       .select('user_id')
       .eq('event_id', id)
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (existing) return res.status(400).json({ error: 'Ya estás apuntado a este evento' });
+    if (existing) return res.status(400).json({ error: 'Ya estas apuntado a este evento' });
 
-    // Check capacity
-    const { count } = await db
+    const { count } = await supabase
       .from('community_event_attendees')
       .select('*', { count: 'exact', head: true })
       .eq('event_id', id);
 
     if (event.max_attendees && count >= event.max_attendees) {
-      return res.status(400).json({ error: 'El evento está lleno' });
+      return res.status(400).json({ error: 'El evento esta lleno' });
     }
 
-    const { error: joinError } = await db
+    const { error: joinError } = await supabase
       .from('community_event_attendees')
       .insert({ event_id: id, user_id: userId });
 
     if (joinError) throw joinError;
-
     res.json({ ok: true });
   } catch (err) {
     console.error('[community] POST /events/:id/join error:', err);
@@ -225,15 +266,36 @@ router.post('/events/:id/join', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/community/communities ───────────────────────────────────────────
+// POST /api/community/events/:id/leave
+router.post('/events/:id/leave', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { error } = await supabase
+      .from('community_event_attendees')
+      .delete()
+      .eq('event_id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[community] POST /events/:id/leave error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al salir del evento') });
+  }
+});
+
+// GET /api/community/communities
 router.get('/communities', requireAuth, async (req, res) => {
   const db = getUserSupabase(req);
+  const userId = req.user.id;
 
   try {
     const { data: communities, error } = await db
       .from('communities')
       .select(`
-        id, name, description, category, creator_id, created_at,
+        id, name, description, category, organization, creator_id, created_at,
         creator:users!communities_creator_id_fkey(display_name, username)
       `)
       .order('created_at', { ascending: false });
@@ -243,41 +305,104 @@ router.get('/communities', requireAuth, async (req, res) => {
     const enriched = await Promise.all((communities || []).map(async (comm) => {
       const { data: members, count } = await db
         .from('community_members')
-        .select('user_id', { count: 'exact' })
+        .select('user_id, role', { count: 'exact' })
         .eq('community_id', comm.id);
+      const currentMembership = (members || []).find(m => m.user_id === userId);
 
       return {
         ...comm,
         creator_name: comm.creator?.display_name || comm.creator?.username || 'Alguien',
         member_count: count || 0,
         member_ids: (members || []).map(m => m.user_id),
+        admin_ids: (members || []).filter(m => m.role === 'admin').map(m => m.user_id),
+        current_user_role: comm.creator_id === userId ? 'admin' : currentMembership?.role || null,
+        is_admin: comm.creator_id === userId || currentMembership?.role === 'admin',
       };
     }));
 
     res.json({ communities: enriched });
   } catch (err) {
     console.error('[community] GET /communities error:', err);
-    res.status(500).json({ error: 'Error al obtener las comunidades' });
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener las comunidades') });
   }
 });
 
-// ── POST /api/community/communities ─────────────────────────────────────────
-router.post('/communities', requireAuth, async (req, res) => {
-  const { name, description, category } = req.body;
+// GET /api/community/communities/:id
+router.get('/communities/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
   const userId = req.user.id;
-  const db = supabase;
+  const db = getUserSupabase(req);
+
+  try {
+    const { data: community, error } = await db
+      .from('communities')
+      .select(`
+        id, name, description, category, organization, creator_id, created_at,
+        creator:users!communities_creator_id_fkey(display_name, username)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error || !community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+
+    const { data: members, count } = await db
+      .from('community_members')
+      .select('user_id, role, joined_at')
+      .eq('community_id', id);
+    const currentMembership = (members || []).find(m => m.user_id === userId);
+
+    const { data: events, error: eventsError } = await db
+      .from('community_events')
+      .select(`
+        id, title, description, category, event_date, location,
+        max_attendees, creator_id, community_id, created_at,
+        creator:users!community_events_creator_id_fkey(display_name, username),
+        community:communities!community_events_community_id_fkey(id, name, organization)
+      `)
+      .eq('community_id', id)
+      .order('event_date', { ascending: true });
+
+    if (eventsError) throw eventsError;
+
+    const enrichedEvents = await enrichEvents(db, events || []);
+    const splitEvents = splitEventsByDate(enrichedEvents);
+
+    res.json({
+      community: {
+        ...community,
+        creator_name: community.creator?.display_name || community.creator?.username || 'Alguien',
+        member_count: count || 0,
+        member_ids: (members || []).map(m => m.user_id),
+        admin_ids: (members || []).filter(m => m.role === 'admin').map(m => m.user_id),
+        current_user_role: community.creator_id === userId ? 'admin' : currentMembership?.role || null,
+        is_member: Boolean(currentMembership),
+        is_admin: community.creator_id === userId || currentMembership?.role === 'admin',
+      },
+      ...splitEvents,
+    });
+  } catch (err) {
+    console.error('[community] GET /communities/:id error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener la comunidad') });
+  }
+});
+
+// POST /api/community/communities
+router.post('/communities', requireAuth, async (req, res) => {
+  const { name, description, category, organization } = req.body;
+  const userId = req.user.id;
 
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
   try {
     await ensurePublicProfile(req.user);
 
-    const { data: community, error } = await db
+    const { data: community, error } = await supabase
       .from('communities')
       .insert({
         name: name.trim(),
         description: description?.trim() || null,
         category: category?.trim() || null,
+        organization: organization?.trim() || null,
         creator_id: userId,
       })
       .select()
@@ -285,11 +410,10 @@ router.post('/communities', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
-    // Auto-join creator as member
-    const { error: memberError } = await db
+    const { error: memberError } = await supabase
       .from('community_members')
       .upsert(
-        { community_id: community.id, user_id: userId },
+        { community_id: community.id, user_id: userId, role: 'admin' },
         { onConflict: 'community_id,user_id', ignoreDuplicates: true }
       );
 
@@ -304,14 +428,13 @@ router.post('/communities', requireAuth, async (req, res) => {
   }
 });
 
-// ── POST /api/community/communities/:id/join ─────────────────────────────────
+// POST /api/community/communities/:id/join
 router.post('/communities/:id/join', requireAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
-  const db = getUserSupabase(req);
 
   try {
-    const { data: community } = await db
+    const { data: community } = await supabase
       .from('communities')
       .select('id')
       .eq('id', id)
@@ -319,7 +442,7 @@ router.post('/communities/:id/join', requireAuth, async (req, res) => {
 
     if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
 
-    const { data: existing } = await db
+    const { data: existing } = await supabase
       .from('community_members')
       .select('user_id')
       .eq('community_id', id)
@@ -328,16 +451,65 @@ router.post('/communities/:id/join', requireAuth, async (req, res) => {
 
     if (existing) return res.status(400).json({ error: 'Ya eres miembro de esta comunidad' });
 
-    const { error: joinError } = await db
+    const { error: joinError } = await supabase
       .from('community_members')
-      .insert({ community_id: id, user_id: userId });
+      .insert({ community_id: id, user_id: userId, role: 'member' });
 
     if (joinError) throw joinError;
-
     res.json({ ok: true });
   } catch (err) {
     console.error('[community] POST /communities/:id/join error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al unirse a la comunidad') });
+  }
+});
+
+// POST /api/community/communities/:id/leave
+router.post('/communities/:id/leave', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: membership, error: memberErr } = await supabase
+      .from('community_members')
+      .select('role')
+      .eq('community_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (memberErr) throw memberErr;
+    if (!membership) return res.status(400).json({ error: 'No eres miembro de esta comunidad' });
+
+    const { data: community, error: commErr } = await supabase
+      .from('communities')
+      .select('creator_id')
+      .eq('id', id)
+      .single();
+
+    if (commErr || !community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+
+    if (membership.role === 'admin' || community.creator_id === userId) {
+      const { count: adminCount } = await supabase
+        .from('community_members')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('community_id', id)
+        .eq('role', 'admin');
+
+      if ((adminCount || 0) <= 1) {
+        return res.status(400).json({ error: 'El ultimo administrador no puede salir de la comunidad' });
+      }
+    }
+
+    const { error } = await supabase
+      .from('community_members')
+      .delete()
+      .eq('community_id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/leave error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al salir de la comunidad') });
   }
 });
 

@@ -1,5 +1,5 @@
 // SocialBattery Service Worker — Phase 8
-const CACHE_NAME = 'socialbattery-v3';
+const CACHE_NAME = 'socialbattery-v4';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell

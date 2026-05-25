@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -83,8 +84,9 @@ function PopularityBar({ count, max }) {
 }
 
 // ── Event Card ────────────────────────────────────────────────────────────────
-function EventCard({ event, rank, onJoin, currentUserId }) {
+function EventCard({ event, rank, onJoin, onLeave, currentUserId }) {
   const [joining, setJoining] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const isJoined = event.attendees?.includes(currentUserId);
   const isPast = new Date(event.event_date) < new Date();
   const emoji = getEventEmoji(event.category);
@@ -103,6 +105,16 @@ function EventCard({ event, rank, onJoin, currentUserId }) {
       await onJoin(event.id);
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function handleLeave() {
+    if (!isJoined || leaving) return;
+    setLeaving(true);
+    try {
+      await onLeave(event.id);
+    } finally {
+      setLeaving(false);
     }
   }
 
@@ -141,6 +153,9 @@ function EventCard({ event, rank, onJoin, currentUserId }) {
           {/* Creator */}
           <p className="text-xs text-surface-muted mt-0.5">
             por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
+            {event.community_name && (
+              <span> · en <span className="text-purple-300">{event.community_name}</span></span>
+            )}
           </p>
 
           {/* Description */}
@@ -169,14 +184,23 @@ function EventCard({ event, rank, onJoin, currentUserId }) {
 
           {/* Join button */}
           <div className="mt-3">
-            {isPast ? (
+            {isPast && !isJoined ? (
               <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
                 Evento pasado
               </span>
             ) : isJoined ? (
-              <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1 w-fit">
-                ✓ Apuntado
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1 w-fit">
+                  ✓ Apuntado
+                </span>
+                <button
+                  onClick={handleLeave}
+                  disabled={leaving}
+                  className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
+                >
+                  {leaving ? '...' : 'Salir'}
+                </button>
+              </div>
             ) : (
               <button
                 onClick={handleJoin}
@@ -194,8 +218,9 @@ function EventCard({ event, rank, onJoin, currentUserId }) {
 }
 
 // ── Community Card ────────────────────────────────────────────────────────────
-function CommunityCard({ community, onJoin, currentUserId }) {
+function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
   const [joining, setJoining] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const isMember = community.members?.includes(currentUserId);
   const emoji = getCommunityEmoji(community.category);
 
@@ -209,8 +234,27 @@ function CommunityCard({ community, onJoin, currentUserId }) {
     }
   }
 
+  async function handleLeave(e) {
+    e.stopPropagation();
+    if (!isMember || leaving) return;
+    setLeaving(true);
+    try {
+      await onLeave(community.id);
+    } finally {
+      setLeaving(false);
+    }
+  }
+
   return (
-    <div className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-3 transition-all hover:border-accent-primary/30">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(community.id)}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') onOpen(community.id);
+      }}
+      className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-3 transition-all hover:border-accent-primary/30 cursor-pointer"
+    >
       <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
         {emoji}
       </div>
@@ -229,19 +273,35 @@ function CommunityCard({ community, onJoin, currentUserId }) {
         {community.description && (
           <p className="text-xs text-surface-muted mt-0.5 line-clamp-1">{community.description}</p>
         )}
+        {community.organization && (
+          <p className="text-xs text-purple-300/80 font-mono mt-1">{community.organization}</p>
+        )}
         <p className="text-xs text-surface-muted font-mono mt-1">
           👥 {community.member_count || 0} miembros · por {community.creator_name || 'Alguien'}
+          {community.is_admin && <span className="text-yellow-300"> · admin</span>}
         </p>
       </div>
 
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 flex items-center gap-2">
         {isMember ? (
-          <span className="text-xs font-mono text-green-400 px-2.5 py-1 rounded-xl bg-green-500/10 border border-green-500/20">
-            ✓
-          </span>
+          <>
+            <span className="text-xs font-mono text-green-400 px-2.5 py-1 rounded-xl bg-green-500/10 border border-green-500/20">
+              ✓
+            </span>
+            <button
+              onClick={handleLeave}
+              disabled={leaving}
+              className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
+            >
+              {leaving ? '...' : 'Salir'}
+            </button>
+          </>
         ) : (
           <button
-            onClick={handleJoin}
+            onClick={e => {
+              e.stopPropagation();
+              handleJoin();
+            }}
             disabled={joining}
             className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl bg-accent-primary/20 hover:bg-accent-primary/30 text-accent-glow border border-accent-primary/30 transition-all disabled:opacity-50"
           >
@@ -441,6 +501,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
     name: '',
     description: '',
     category: '',
+    organization: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -511,6 +572,21 @@ function CreateCommunityModal({ onClose, onCreate }) {
             </div>
           </div>
 
+          {/* Organization */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Organización <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={form.organization}
+              onChange={e => set('organization', e.target.value)}
+              placeholder="Ej: Universidad, asociación, club..."
+              maxLength={120}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
           {/* Description */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
@@ -554,6 +630,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CommunityPage() {
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
 
@@ -619,6 +696,16 @@ export default function CommunityPage() {
     }
   }
 
+  async function handleLeaveEvent(eventId) {
+    try {
+      await api.post(`/community/events/${eventId}/leave`, {});
+      showToast('Has salido del evento', 'success');
+      await fetchEvents();
+    } catch (e) {
+      showToast(e.message || 'Error al salir del evento', 'error');
+    }
+  }
+
   async function handleJoinCommunity(communityId) {
     try {
       await api.post(`/community/communities/${communityId}/join`, {});
@@ -626,6 +713,16 @@ export default function CommunityPage() {
       await fetchCommunities();
     } catch (e) {
       showToast(e.message || 'Error al unirse', 'error');
+    }
+  }
+
+  async function handleLeaveCommunity(communityId) {
+    try {
+      await api.post(`/community/communities/${communityId}/leave`, {});
+      showToast('Has salido de la comunidad', 'success');
+      await fetchCommunities();
+    } catch (e) {
+      showToast(e.message || 'Error al salir de la comunidad', 'error');
     }
   }
 
@@ -639,6 +736,7 @@ export default function CommunityPage() {
         community.name,
         community.description,
         community.category,
+        community.organization,
         community.creator_name,
       ].filter(Boolean).join(' ')).includes(normalizedCommunitySearch);
 
@@ -737,6 +835,7 @@ export default function CommunityPage() {
                     rank={index + 1}
                     maxAttendees={maxAttendees}
                     onJoin={handleJoinEvent}
+                    onLeave={handleLeaveEvent}
                     currentUserId={profile?.id}
                   />
                 ))}
@@ -814,6 +913,8 @@ export default function CommunityPage() {
                       key={community.id}
                       community={{ ...community, members: community.member_ids || [] }}
                       onJoin={handleJoinCommunity}
+                      onLeave={handleLeaveCommunity}
+                      onOpen={(id) => navigate(`/community/${id}`)}
                       currentUserId={profile?.id}
                     />
                     ))}
