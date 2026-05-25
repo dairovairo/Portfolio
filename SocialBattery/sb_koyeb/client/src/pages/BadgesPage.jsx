@@ -22,13 +22,13 @@ function BadgeCard({ badge, assignment, currentUserId }) {
       {isMine && (
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"
-          style={{ background: 'radial-gradient(circle at 50% 0%, rgba(0,133,130,0.12) 0%, transparent 60%)' }}
+          style={{ background: 'radial-gradient(circle at 50% 0%, rgba(0,148,158,0.12) 0%, transparent 60%)' }}
         />
       )}
 
       <div
         className={`text-4xl relative z-10 ${assignment ? '' : 'grayscale'}`}
-        style={isMine ? { filter: 'drop-shadow(0 0 10px rgba(0,133,130,0.5))' } : {}}
+        style={isMine ? { filter: 'drop-shadow(0 0 10px rgba(0,148,158,0.5))' } : {}}
       >
         {badge.emoji}
       </div>
@@ -197,8 +197,8 @@ export default function BadgesPage() {
               <div
                 className="w-14 h-14 rounded-full flex items-center justify-center text-2xl border-2 border-accent-primary/40 flex-shrink-0"
                 style={{
-                  background: 'radial-gradient(circle at 50% 50%, rgba(0,133,130,0.2) 0%, transparent 70%)',
-                  boxShadow: '0 0 20px rgba(0,133,130,0.25)',
+                  background: 'radial-gradient(circle at 50% 50%, rgba(0,148,158,0.2) 0%, transparent 70%)',
+                  boxShadow: '0 0 20px rgba(0,148,158,0.25)',
                 }}
               >
                 🏅
@@ -218,8 +218,8 @@ export default function BadgesPage() {
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${progress}%`,
-                  background: 'linear-gradient(to right, rgb(0, 133, 130), rgb(35, 196, 190))',
-                  boxShadow: '0 0 8px rgba(0,133,130,0.4)',
+                  background: 'linear-gradient(to right, rgb(0, 148, 158), rgb(45, 212, 220))',
+                  boxShadow: '0 0 8px rgba(0,148,158,0.4)',
                 }}
               />
             </div>
