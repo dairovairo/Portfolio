@@ -47,8 +47,8 @@ function fallbackUsername(user) {
   return `user_${idPart}`;
 }
 
-async function ensurePublicProfile(db, user) {
-  const { data: existing, error: selectError } = await db
+async function ensurePublicProfile(user) {
+  const { data: existing, error: selectError } = await supabase
     .from('users')
     .select('id')
     .eq('id', user.id)
@@ -57,7 +57,7 @@ async function ensurePublicProfile(db, user) {
   if (selectError) throw selectError;
   if (existing) return;
 
-  const { error: insertError } = await db
+  const { error: insertError } = await supabase
     .from('users')
     .insert({
       id: user.id,
@@ -67,7 +67,7 @@ async function ensurePublicProfile(db, user) {
 
   if (!insertError) return;
 
-  const { data: afterInsert } = await db
+  const { data: afterInsert } = await supabase
     .from('users')
     .select('id')
     .eq('id', user.id)
@@ -122,7 +122,7 @@ router.get('/events', requireAuth, async (req, res) => {
 router.post('/events', requireAuth, async (req, res) => {
   const { title, description, category, event_date, location, max_attendees } = req.body;
   const userId = req.user.id;
-  const db = getUserSupabase(req);
+  const db = supabase;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El título es obligatorio' });
   if (!event_date) return res.status(400).json({ error: 'La fecha es obligatoria' });
@@ -136,7 +136,7 @@ router.post('/events', requireAuth, async (req, res) => {
   }
 
   try {
-    await ensurePublicProfile(db, req.user);
+    await ensurePublicProfile(req.user);
 
     const { data: event, error } = await db
       .from('community_events')
@@ -265,12 +265,12 @@ router.get('/communities', requireAuth, async (req, res) => {
 router.post('/communities', requireAuth, async (req, res) => {
   const { name, description, category } = req.body;
   const userId = req.user.id;
-  const db = getUserSupabase(req);
+  const db = supabase;
 
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
   try {
-    await ensurePublicProfile(db, req.user);
+    await ensurePublicProfile(req.user);
 
     const { data: community, error } = await db
       .from('communities')

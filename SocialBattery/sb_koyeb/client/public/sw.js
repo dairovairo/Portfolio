@@ -1,5 +1,5 @@
 // SocialBattery Service Worker — Phase 8
-const CACHE_NAME = 'socialbattery-v2';
+const CACHE_NAME = 'socialbattery-v3';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell
@@ -20,7 +20,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for API, cache-first for assets
+// Fetch: network-first so deployed JS/CSS updates are not trapped by old cache.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -29,18 +29,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for static assets
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      const networkFetch = fetch(event.request).then(response => {
+    fetch(event.request)
+      .then(response => {
         if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
         return response;
-      });
-      return cached || networkFetch;
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 

@@ -5,8 +5,16 @@ import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function normalizeText(value = '') {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function getEventEmoji(category = '') {
-  const c = category.toLowerCase();
+  const c = normalizeText(category);
   if (/música|musica|concierto|concert/.test(c)) return '🎵';
   if (/deporte|sport|fútbol|futbol|tenis|running/.test(c)) return '⚽';
   if (/arte|art|exposición|exposicion|museo/.test(c)) return '🎨';
@@ -23,7 +31,7 @@ function getEventEmoji(category = '') {
 }
 
 function getCommunityEmoji(category = '') {
-  const c = category.toLowerCase();
+  const c = normalizeText(category);
   if (/música|musica/.test(c)) return '🎵';
   if (/deporte|sport/.test(c)) return '⚽';
   if (/tecnología|tech|código/.test(c)) return '💻';
@@ -415,15 +423,6 @@ const COMMUNITY_CATEGORIES = ['Música', 'Deporte', 'Tecnología', 'Arte', 'Viaj
 const ALL_COMMUNITY_CATEGORIES = 'Todo';
 const COMMUNITY_CATEGORY_FILTERS = [ALL_COMMUNITY_CATEGORIES, ...COMMUNITY_CATEGORIES];
 const KNOWN_COMMUNITY_CATEGORIES = COMMUNITY_CATEGORIES.filter(cat => cat !== 'Otro');
-
-function normalizeText(value = '') {
-  return value
-    .toString()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-}
 
 function matchesCommunityCategory(community, selectedCategory) {
   if (selectedCategory === ALL_COMMUNITY_CATEGORIES) return true;
