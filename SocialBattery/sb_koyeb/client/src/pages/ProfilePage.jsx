@@ -460,61 +460,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* ── Settings ── */}
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
-          <h3 className="font-display font-semibold text-surface-text text-sm mb-1">Ajustes</h3>
 
-          {/* Theme toggle */}
-          <div className="flex items-center justify-between py-2 border-b border-surface-border">
-            <div>
-              <div className="text-sm font-display font-medium text-surface-text">
-                <span className="sb-symbol mr-1" aria-hidden="true">
-                  {theme === 'dark' ? '☾' : '☼'}
-                </span>
-                {theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}
-              </div>
-              <div className="text-xs text-surface-muted">Apariencia de la app</div>
-            </div>
-            <button
-              onClick={toggleTheme}
-              className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
-                theme === 'light' ? 'bg-accent-primary' : 'bg-surface-border'
-              }`}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
-                theme === 'light' ? 'left-7' : 'left-1'
-              }`} />
-            </button>
-          </div>
-
-          {/* Push notifications */}
-          {('Notification' in window) && (
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <div className="text-sm font-display font-medium text-surface-text">🔔 Notificaciones push</div>
-                <div className="text-xs text-surface-muted">
-                  {permission === 'granted'
-                    ? subscribed ? 'Activadas' : 'Concedidas'
-                    : permission === 'denied' ? 'Bloqueadas en el navegador'
-                    : 'Recibe avisos cuando quieran quedar'}
-                </div>
-              </div>
-              {permission !== 'denied' && (
-                <button
-                  onClick={handlePushToggle}
-                  disabled={subscribed}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-display font-semibold transition-all ${
-                    subscribed
-                      ? 'bg-green-500/10 text-green-400 border border-green-500/20 cursor-default'
-                      : 'bg-accent-primary/15 text-accent-glow border border-accent-primary/30 hover:bg-accent-primary/25'
-                  }`}
-                >
-                  {subscribed ? '✓ Activas' : 'Activar'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
 
         {/* ── Danger zone ── */}
         <div className="bg-surface-card border border-red-500/10 rounded-2xl p-4">

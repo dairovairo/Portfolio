@@ -6,10 +6,16 @@ import { api } from '../lib/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function ensureAbsoluteUrl(url) {
-  if (!url) return url;
-  const trimmed = url.trim();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  if (!url) return null;
+  const trimmed = url.trim().replace(/\s+/g, '');
+  if (!trimmed) return null;
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    new URL(withProtocol); // validate
+    return withProtocol;
+  } catch {
+    return null;
+  }
 }
 
 function formatDateTime(dateStr) {
@@ -406,7 +412,7 @@ export default function EventDetailPage() {
             }
           </InfoRow>
 
-          {event.url && (
+          {event.url && ensureAbsoluteUrl(event.url) && (
             <InfoRow icon="🔗" label="Enlace">
               <a
                 href={ensureAbsoluteUrl(event.url)}
