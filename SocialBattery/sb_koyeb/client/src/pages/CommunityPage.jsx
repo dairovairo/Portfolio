@@ -267,12 +267,20 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
                 📍 {event.location}
               </span>
             )}
+            {event.url && (
+              <a
+                href={event.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="text-xs text-accent-glow/80 font-mono flex items-center gap-1 hover:text-accent-glow truncate"
+              >
+                🔗 Ver más
+              </a>
+            )}
           </div>
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs font-mono text-slate-500 px-2 py-1 rounded-lg bg-surface-bg border border-surface-border">
-              👥 {attendeeCount} apuntados
-            </span>
             <button
               type="button"
               onClick={handleLike}
@@ -288,7 +296,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
             </button>
           </div>
 
-          {/* Join button */}
+          {/* Planning button */}
           <div className="mt-3">
             {isPast && !isJoined ? (
               <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
@@ -297,14 +305,14 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
             ) : isJoined ? (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1 w-fit">
-                  ✓ Apuntado
+                  📅 En tu planificación
                 </span>
                 <button
                   onClick={handleLeave}
                   disabled={leaving}
                   className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
                 >
-                  {leaving ? '...' : 'Salir'}
+                  {leaving ? '...' : 'Quitar'}
                 </button>
               </div>
             ) : (
@@ -313,7 +321,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
                 disabled={joining}
                 className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50 active:scale-95"
               >
-                {joining ? '...' : '+ Apuntarme'}
+                {joining ? '...' : '📅 Añadir a planificación'}
               </button>
             )}
           </div>
@@ -362,8 +370,10 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
       className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-3 transition-all hover:border-accent-primary/30 cursor-pointer"
     >
       <div className="relative w-12 h-12 flex-shrink-0">
-        <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl border border-surface-border">
-          {emoji}
+        <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl border border-surface-border overflow-hidden">
+          {community.cover_image_url ? (
+            <img src={community.cover_image_url} alt="" className="h-full w-full object-cover" />
+          ) : emoji}
         </div>
         {hasNewEvents && (
           <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-surface-card" />
@@ -386,6 +396,17 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
         )}
         {community.organization && (
           <p className="text-xs text-accent-glow/80 font-mono mt-1">{community.organization}</p>
+        )}
+        {community.url && (
+          <a
+            href={community.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-xs text-accent-glow/80 font-mono mt-0.5 hover:text-accent-glow flex items-center gap-1 w-fit"
+          >
+            🔗 Ver más
+          </a>
         )}
         <p className="text-xs text-surface-muted font-mono mt-1">
           👥 {community.member_count || 0} miembros · por {community.creator_name || 'Alguien'}
@@ -444,6 +465,7 @@ function CreateEventModal({ onClose, onCreate }) {
     event_date: defaultDate,
     ends_at: '',
     location: '',
+    url: '',
     max_attendees: 50,
   });
   const [coverFile, setCoverFile] = useState(null);
@@ -652,6 +674,21 @@ function CreateEventModal({ onClose, onCreate }) {
             />
           </div>
 
+          {/* URL */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              URL <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              placeholder="Ej: https://eventbrite.com/mi-evento"
+              maxLength={500}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
           {/* Cover */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
@@ -749,7 +786,11 @@ function CreateCommunityModal({ onClose, onCreate }) {
     category: '',
     custom_category: '',
     organization: '',
+    url: '',
   });
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState('');
+  const coverInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
@@ -765,6 +806,25 @@ function CreateCommunityModal({ onClose, onCreate }) {
     }));
   }
 
+  async function handleCoverChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setError('La foto no puede superar 3MB');
+      e.target.value = '';
+      return;
+    }
+    setCoverFile(file);
+    setCoverPreview(await readFileAsDataUrl(file));
+    setError('');
+  }
+
+  function clearCover() {
+    setCoverFile(null);
+    setCoverPreview('');
+    if (coverInputRef.current) coverInputRef.current.value = '';
+  }
+
   async function handleSubmit() {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
     if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
@@ -774,7 +834,14 @@ function CreateCommunityModal({ onClose, onCreate }) {
     setError('');
     setSaving(true);
     try {
-      await onCreate({ ...form, category: resolvedCategory, custom_category: undefined });
+      const formData = new FormData();
+      formData.append('name', form.name.trim());
+      if (form.description.trim()) formData.append('description', form.description.trim());
+      if (resolvedCategory) formData.append('category', resolvedCategory);
+      if (form.organization.trim()) formData.append('organization', form.organization.trim());
+      if (form.url.trim()) formData.append('url', form.url.trim());
+      if (coverFile) formData.append('cover', coverFile);
+      await onCreate(formData);
       onClose();
     } catch (e) {
       setError(e.message || 'Error al crear la comunidad');
@@ -872,6 +939,60 @@ function CreateCommunityModal({ onClose, onCreate }) {
             />
           </div>
 
+          {/* URL */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              URL <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              placeholder="Ej: https://discord.gg/mi-comunidad"
+              maxLength={500}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Photo */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Foto de la comunidad <span className="text-slate-600">(opcional)</span>
+            </label>
+            {coverPreview ? (
+              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                <div className="aspect-[16/9]">
+                  <img src={coverPreview} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="truncate text-xs text-surface-muted">{coverFile?.name}</span>
+                  <button
+                    type="button"
+                    onClick={clearCover}
+                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
+              >
+                Elegir foto de la galería
+              </button>
+            )}
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+          </div>
+
           {/* Info card */}
           <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3">
             <p className="text-xs text-accent-glow/80 font-mono leading-relaxed">
@@ -959,8 +1080,8 @@ export default function CommunityPage() {
     return data;
   }
 
-  async function handleCreateCommunity(form) {
-    const data = await api.post('/community/communities', form);
+  async function handleCreateCommunity(formData) {
+    const data = await api.postForm('/community/communities', formData);
     showToast('¡Comunidad creada! 👥', 'success');
     await fetchCommunities();
     return data;
@@ -1018,13 +1139,14 @@ export default function CommunityPage() {
   }
 
   const sortedEvents = sortEventsByProximity(events);
+  const sortedEventsByLikes = [...events].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
   const planningEvents = sortEventsByProximity(events.filter(event => (
     isUpcomingEvent(event) && event.attendee_ids?.includes(profile?.id)
   )));
 
   // ── Event search + filter ──────────────────────────────────────────────────
   const normalizedEventSearch = normalizeText(eventSearch);
-  const filteredSortedEvents = sortedEvents.filter(event => {
+  const filteredSortedEvents = sortedEventsByLikes.filter(event => {
     const matchesSearch = !normalizedEventSearch || normalizeText([
       event.title,
       event.description,
