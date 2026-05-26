@@ -17,6 +17,7 @@ import GroupChatPage from './pages/GroupChatPage';
 import SettingsPage from './pages/SettingsPage';
 import CommunityPage from './pages/CommunityPage';
 import CommunityDetailPage from './pages/CommunityDetailPage';
+import EventDetailPage from './pages/EventDetailPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 
 function AppRoutes() {
@@ -65,6 +66,7 @@ function AppRoutes() {
       <Route path="/badges"                   element={<BadgesPage />} />
       <Route path="/settings"                 element={<SettingsPage />} />
       <Route path="/community"               element={<CommunityPage />} />
+      <Route path="/community/event/:eventId"  element={<EventDetailPage />} />
       <Route path="/community/:communityId"   element={<CommunityDetailPage />} />
       <Route path="*"                         element={<Navigate to="/" replace />} />
     </Routes>
