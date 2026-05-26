@@ -7,12 +7,21 @@ const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyCommunityMembers } = require('../lib/webpush');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
+const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
 
 function uploadEventCover(req, res, next) {
   eventCoverUpload.single('cover')(req, res, err => {
     if (!err) return next();
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return res.status(status).json({ error: err.message || 'No se pudo subir la portada' });
+  });
+}
+
+function uploadCommunityCover(req, res, next) {
+  communityCoverUpload.single('cover')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
   });
 }
 
@@ -210,7 +219,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization } = req.body;
+  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -271,6 +280,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         location: eventLocation,
         organization: organization?.trim() || null,
         cover_image_url: coverImageUrl,
+        url: url?.trim() || null,
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
@@ -536,14 +546,23 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
 });
 
 // POST /api/community/communities
-router.post('/communities', requireAuth, async (req, res) => {
-  const { name, description, category, organization } = req.body;
+router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) => {
+  const { name, description, category, organization, url } = req.body;
   const userId = req.user.id;
 
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
   try {
     await ensurePublicProfile(req.user);
+
+    let coverImageUrl = null;
+    if (req.file) {
+      coverImageUrl = await storeImage({
+        file: req.file,
+        objectName: `community-covers/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 4500000,
+      });
+    }
 
     const { data: community, error } = await supabase
       .from('communities')
@@ -552,6 +571,8 @@ router.post('/communities', requireAuth, async (req, res) => {
         description: description?.trim() || null,
         category: category?.trim() || null,
         organization: organization?.trim() || null,
+        url: url?.trim() || null,
+        cover_image_url: coverImageUrl,
         creator_id: userId,
       })
       .select()

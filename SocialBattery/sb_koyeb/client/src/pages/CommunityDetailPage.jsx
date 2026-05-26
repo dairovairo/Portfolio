@@ -206,7 +206,6 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
             {event.location && <span className="text-xs text-slate-500 font-mono">📍 {event.location}</span>}
           </div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs text-slate-500 font-mono">👥 {event.attendee_count || 0} apuntados</span>
             <button
               type="button"
               onClick={handleLike}
@@ -225,14 +224,14 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
             {isJoined ? (
               <>
                 <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20">
-                  ✓ Apuntado
+                  📅 En tu planificación
                 </span>
                 <button
                   onClick={e => run(onLeave, e)}
                   disabled={busy}
                   className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
                 >
-                  {busy ? '...' : 'Salir'}
+                  {busy ? '...' : 'Quitar'}
                 </button>
               </>
             ) : isPast ? (
@@ -245,7 +244,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
                 disabled={busy}
                 className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50"
               >
-                {busy ? '...' : '+ Apuntarme'}
+                {busy ? '...' : '📅 Añadir a planificación'}
               </button>
             )}
           </div>
@@ -269,6 +268,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     event_date: defaultDate,
     ends_at: '',
     location: '',
+    url: '',
     max_attendees: 50,
   });
   const [coverFile, setCoverFile] = useState(null);
@@ -443,6 +443,19 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               onChange={e => set('location', e.target.value)}
               placeholder="Ubicación"
               maxLength={200}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              URL <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              placeholder="Ej: https://eventbrite.com/mi-evento"
+              maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
           </div>
