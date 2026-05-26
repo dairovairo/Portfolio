@@ -60,6 +60,15 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatEventDateRange(event) {
+  const start = formatEventDate(event.event_date);
+  if (!event.ends_at) return start;
+  const end = new Date(event.ends_at);
+  if (Number.isNaN(end.getTime())) return start;
+  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return `${start} - fin ${endLabel}`;
+}
+
 function getDaysUntilLabel(dateStr) {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
@@ -77,19 +86,26 @@ function getEventTime(event) {
   return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
 }
 
+function getEventEndTime(event) {
+  const endTime = event.ends_at ? new Date(event.ends_at).getTime() : NaN;
+  if (!Number.isNaN(endTime)) return endTime;
+  return getEventTime(event);
+}
+
 function sortEventsByProximity(eventList = []) {
   const now = Date.now();
   return [...eventList].sort((a, b) => {
     const aTime = getEventTime(a);
     const bTime = getEventTime(b);
-    const aPast = aTime < now;
-    const bPast = bTime < now;
+    const aPast = getEventEndTime(a) < now;
+    const bPast = getEventEndTime(b) < now;
     if (aPast !== bPast) return aPast ? 1 : -1;
     return aPast ? bTime - aTime : aTime - bTime;
   });
 }
 
-const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', 'Otro'];
+const OTHER_CATEGORY = 'Otro';
+const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', OTHER_CATEGORY];
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -105,7 +121,7 @@ function buildEventFormData(form, extra = {}) {
   const payload = { ...form, ...extra };
 
   Object.entries(payload).forEach(([key, value]) => {
-    if (key === 'cover_file') return;
+    if (key === 'cover_file' || key === 'custom_category') return;
     if (value !== undefined && value !== null && value !== '') {
       formData.append(key, String(value));
     }
@@ -119,7 +135,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
   const [busy, setBusy] = useState(false);
   const [liking, setLiking] = useState(false);
   const isJoined = event.attendee_ids?.includes(currentUserId);
-  const isPast = new Date(event.event_date) < new Date();
+  const isPast = new Date(event.ends_at || event.event_date) < new Date();
   const isLiked = Boolean(event.liked_by_current_user);
   const emoji = getEventEmoji(event.category);
   const daysLabel = getDaysUntilLabel(event.event_date);
@@ -184,7 +200,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
             <p className="text-xs text-surface-muted mt-1.5 leading-relaxed">{event.description}</p>
           )}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
-            <span className="text-xs text-slate-500 font-mono">📅 {formatEventDate(event.event_date)}</span>
+            <span className="text-xs text-slate-500 font-mono">📅 {formatEventDateRange(event)}</span>
             {daysLabel && <span className="text-xs text-amber-300/90 font-mono">⏳ {daysLabel}</span>}
             {event.location && <span className="text-xs text-slate-500 font-mono">📍 {event.location}</span>}
           </div>
@@ -247,8 +263,10 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     title: '',
     description: '',
     category: '',
+    custom_category: '',
     organization: communityOrganization || '',
     event_date: defaultDate,
+    ends_at: '',
     location: '',
     max_attendees: 50,
   });
@@ -256,8 +274,17 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   const [coverPreview, setCoverPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
+
+  function selectCategory(cat) {
+    setForm(f => ({
+      ...f,
+      category: f.category === cat ? '' : cat,
+      custom_category: cat === OTHER_CATEGORY && f.category !== cat ? f.custom_category : '',
+    }));
+  }
 
   async function handleCoverChange(e) {
     const file = e.target.files?.[0];
@@ -280,13 +307,25 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
 
   async function handleSubmit() {
     if (!form.title.trim()) { setError('El título es obligatorio'); return; }
+    if (!form.event_date) { setError('La fecha es obligatoria'); return; }
+    if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
+      setError('Especifica la categoria');
+      return;
+    }
+    if (form.ends_at && new Date(form.ends_at) <= new Date(form.event_date)) {
+      setError('La fecha fin debe ser posterior al inicio');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       await onCreate({
         ...form,
+        category: resolvedCategory,
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
+        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
         max_attendees: parseInt(form.max_attendees, 10) || 50,
       });
       onClose();
@@ -302,7 +341,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center gap-3 mb-6">
-          <span className="text-3xl">{getEventEmoji(form.category)}</span>
+          <span className="text-3xl">{getEventEmoji(resolvedCategory || form.category)}</span>
           <div>
             <h2 className="font-display font-bold text-surface-text text-lg">Publicar evento</h2>
             <p className="text-xs text-surface-muted">{communityName}</p>
@@ -326,7 +365,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => set('category', form.category === cat ? '' : cat)}
+                  onClick={() => selectCategory(cat)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                     form.category === cat
                       ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
@@ -337,6 +376,16 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 </button>
               ))}
             </div>
+            {form.category === OTHER_CATEGORY && (
+              <input
+                type="text"
+                value={form.custom_category}
+                onChange={e => set('custom_category', e.target.value)}
+                placeholder="Escribe la categoría"
+                maxLength={60}
+                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            )}
           </div>
           <textarea
             value={form.description}
@@ -354,29 +403,48 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
           />
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha y hora *</label>
+              <input
+                type="datetime-local"
+                value={form.event_date}
+                min={defaultDate}
+                onChange={e => set('event_date', e.target.value)}
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <input
+                type="datetime-local"
+                value={form.ends_at}
+                min={form.event_date || defaultDate}
+                onChange={e => set('ends_at', e.target.value)}
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Máx. asistentes</label>
+              <input
+                type="number"
+                value={form.max_attendees}
+                min={2}
+                max={10000}
+                onChange={e => set('max_attendees', e.target.value)}
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
             <input
-              type="datetime-local"
-              value={form.event_date}
-              min={defaultDate}
-              onChange={e => set('event_date', e.target.value)}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-            />
-            <input
-              type="number"
-              value={form.max_attendees}
-              min={2}
-              max={10000}
-              onChange={e => set('max_attendees', e.target.value)}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              value={form.location}
+              onChange={e => set('location', e.target.value)}
+              placeholder="Ubicación"
+              maxLength={200}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
           </div>
-          <input
-            value={form.location}
-            onChange={e => set('location', e.target.value)}
-            placeholder="Ubicación"
-            maxLength={200}
-            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-          />
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
               Portada <span className="text-slate-600">(opcional)</span>
@@ -417,7 +485,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim()}
+            disabled={saving || !form.title.trim() || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50"
           >
             {saving ? 'Creando...' : 'Publicar evento'}

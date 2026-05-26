@@ -104,7 +104,7 @@ router.get('/', requireAuth, async (req, res) => {
     let query = supabase
       .from('hangout_pools')
       .select(`
-        id, activity, description, location_hint, scheduled_at,
+        id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, group_id, status, created_at, creator_id,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
@@ -216,7 +216,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     const { data: pool, error } = await supabase
       .from('hangout_pools')
       .select(`
-        id, activity, description, location_hint, scheduled_at,
+        id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, group_id, status, created_at, creator_id,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
@@ -272,7 +272,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const {
-    activity, description, location_hint, scheduled_at,
+    activity, description, location_hint, scheduled_at, ends_at,
     max_people = 4, is_public = false,
     group_id = null,
     invited_user_ids = [],   // NEW: individual friend invites for private pools
@@ -280,10 +280,30 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (!activity?.trim()) return res.status(400).json({ error: 'activity is required' });
   if (!scheduled_at) return res.status(400).json({ error: 'scheduled_at is required' });
-  if (new Date(scheduled_at) <= new Date()) {
+  const startDate = new Date(scheduled_at);
+  if (Number.isNaN(startDate.getTime())) {
+    return res.status(400).json({ error: 'scheduled_at is not valid' });
+  }
+  if (startDate <= new Date()) {
     return res.status(400).json({ error: 'scheduled_at must be in the future' });
   }
-  if (max_people < 2 || max_people > 50) {
+  const location = location_hint?.trim();
+  if (!location) return res.status(400).json({ error: 'location_hint is required' });
+
+  let endDateIso = null;
+  if (ends_at) {
+    const endDate = new Date(ends_at);
+    if (Number.isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: 'ends_at is not valid' });
+    }
+    if (endDate <= startDate) {
+      return res.status(400).json({ error: 'ends_at must be after scheduled_at' });
+    }
+    endDateIso = endDate.toISOString();
+  }
+
+  const maxPeople = parseInt(max_people, 10);
+  if (Number.isNaN(maxPeople) || maxPeople < 2 || maxPeople > 50) {
     return res.status(400).json({ error: 'max_people must be between 2 and 50' });
   }
   if (!is_public && !group_id && (!invited_user_ids || invited_user_ids.length === 0)) {
@@ -297,15 +317,16 @@ router.post('/', requireAuth, async (req, res) => {
         creator_id: userId,
         activity: activity.trim(),
         description: description?.trim() || null,
-        location_hint: location_hint?.trim() || null,
-        scheduled_at,
-        max_people: parseInt(max_people),
+        location_hint: location,
+        scheduled_at: startDate.toISOString(),
+        ends_at: endDateIso,
+        max_people: maxPeople,
         is_public: Boolean(is_public),
         group_id: group_id || null,
         status: 'open',
       })
       .select(`
-        id, activity, description, location_hint, scheduled_at,
+        id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, status, created_at,
         creator:creator_id(id, username, display_name, avatar_url)
       `)
@@ -451,12 +472,12 @@ router.delete('/:id/leave', requireAuth, async (req, res) => {
 router.patch('/:id', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const poolId = req.params.id;
-  const { activity, description, location_hint, scheduled_at, max_people, is_public, status } = req.body;
+  const { activity, description, location_hint, scheduled_at, ends_at, max_people, is_public, status } = req.body;
 
   try {
     const { data: pool } = await supabase
       .from('hangout_pools')
-      .select('creator_id, status, max_people')
+      .select('creator_id, status, max_people, scheduled_at')
       .eq('id', poolId)
       .single();
 
@@ -466,8 +487,33 @@ router.patch('/:id', requireAuth, async (req, res) => {
     const updates = {};
     if (activity !== undefined) updates.activity = activity.trim();
     if (description !== undefined) updates.description = description?.trim() || null;
-    if (location_hint !== undefined) updates.location_hint = location_hint?.trim() || null;
-    if (scheduled_at !== undefined) updates.scheduled_at = scheduled_at;
+    if (location_hint !== undefined) {
+      const location = location_hint?.trim();
+      if (!location) return res.status(400).json({ error: 'location_hint is required' });
+      updates.location_hint = location;
+    }
+    if (scheduled_at !== undefined) {
+      const startDate = new Date(scheduled_at);
+      if (Number.isNaN(startDate.getTime())) {
+        return res.status(400).json({ error: 'scheduled_at is not valid' });
+      }
+      updates.scheduled_at = startDate.toISOString();
+    }
+    if (ends_at !== undefined) {
+      const referenceStart = new Date(updates.scheduled_at || pool.scheduled_at);
+      if (ends_at === null || ends_at === '') {
+        updates.ends_at = null;
+      } else {
+        const endDate = new Date(ends_at);
+        if (Number.isNaN(endDate.getTime())) {
+          return res.status(400).json({ error: 'ends_at is not valid' });
+        }
+        if (endDate <= referenceStart) {
+          return res.status(400).json({ error: 'ends_at must be after scheduled_at' });
+        }
+        updates.ends_at = endDate.toISOString();
+      }
+    }
     if (max_people !== undefined) updates.max_people = parseInt(max_people);
     if (is_public !== undefined) updates.is_public = Boolean(is_public);
     if (status !== undefined && ['open', 'closed', 'cancelled'].includes(status)) {

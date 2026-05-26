@@ -167,9 +167,15 @@ async function enrichEvents(db, events = [], currentUserId = null) {
 
 function splitEventsByDate(events) {
   const now = Date.now();
-  const current_events = events.filter(ev => new Date(ev.event_date).getTime() >= now);
+  const getEndTime = ev => {
+    const endTime = ev.ends_at ? new Date(ev.ends_at).getTime() : NaN;
+    if (!Number.isNaN(endTime)) return endTime;
+    const startTime = new Date(ev.event_date).getTime();
+    return Number.isNaN(startTime) ? 0 : startTime;
+  };
+  const current_events = events.filter(ev => getEndTime(ev) >= now);
   const past_events = events
-    .filter(ev => new Date(ev.event_date).getTime() < now)
+    .filter(ev => getEndTime(ev) < now)
     .sort((a, b) => new Date(b.event_date) - new Date(a.event_date));
 
   return { current_events, past_events };
@@ -183,7 +189,7 @@ router.get('/events', requireAuth, async (req, res) => {
     const { data: events, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, location, organization, cover_image_url,
+        id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
@@ -203,13 +209,28 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, location, max_attendees, community_id, organization } = req.body;
+  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
   if (!event_date) return res.status(400).json({ error: 'La fecha es obligatoria' });
-  if (Number.isNaN(new Date(event_date).getTime())) {
+  const eventDate = new Date(event_date);
+  if (Number.isNaN(eventDate.getTime())) {
     return res.status(400).json({ error: 'La fecha no es valida' });
+  }
+  const eventLocation = location?.trim();
+  if (!eventLocation) return res.status(400).json({ error: 'La ubicacion es obligatoria' });
+
+  let endDateIso = null;
+  if (ends_at) {
+    const endDate = new Date(ends_at);
+    if (Number.isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: 'La fecha fin no es valida' });
+    }
+    if (endDate <= eventDate) {
+      return res.status(400).json({ error: 'La fecha fin debe ser posterior al inicio' });
+    }
+    endDateIso = endDate.toISOString();
   }
 
   const maxAttendees = Number.parseInt(max_attendees, 10) || 50;
@@ -244,8 +265,9 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         title: title.trim(),
         description: description?.trim() || null,
         category: category?.trim() || null,
-        event_date,
-        location: location?.trim() || null,
+        event_date: eventDate.toISOString(),
+        ends_at: endDateIso,
+        location: eventLocation,
         organization: organization?.trim() || null,
         cover_image_url: coverImageUrl,
         max_attendees: maxAttendees,
@@ -283,12 +305,12 @@ router.post('/events/:id/join', requireAuth, async (req, res) => {
   try {
     const { data: event, error: evErr } = await supabase
       .from('community_events')
-      .select('id, max_attendees, event_date')
+      .select('id, max_attendees, event_date, ends_at')
       .eq('id', id)
       .single();
 
     if (evErr || !event) return res.status(404).json({ error: 'Evento no encontrado' });
-    if (new Date(event.event_date) < new Date()) {
+    if (new Date(event.ends_at || event.event_date) < new Date()) {
       return res.status(400).json({ error: 'El evento ya ha pasado' });
     }
 
@@ -459,7 +481,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: events, error: eventsError } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, location, organization, cover_image_url,
+        id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)

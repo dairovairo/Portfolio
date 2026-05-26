@@ -21,13 +21,15 @@ router.post('/avatar', requireAuth, uploadAvatar, async (req, res) => {
     const url = await storeImage({
       file: req.file,
       objectName: `avatars/${req.user.id}`,
-      fallbackMaxLength: 100000,
+      fallbackMaxLength: 3000000,
     });
 
-    await supabase
+    const { error } = await supabase
       .from('users')
       .update({ avatar_url: url })
       .eq('id', req.user.id);
+
+    if (error) throw error;
 
     res.json({ url });
   } catch (err) {

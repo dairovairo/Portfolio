@@ -65,6 +65,15 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatEventDateRange(event) {
+  const start = formatEventDate(event.event_date);
+  if (!event.ends_at) return start;
+  const end = new Date(event.ends_at);
+  if (Number.isNaN(end.getTime())) return start;
+  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return `${start} - fin ${endLabel}`;
+}
+
 function getDaysUntilLabel(dateStr) {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
@@ -82,8 +91,14 @@ function getEventTime(event) {
   return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
 }
 
+function getEventEndTime(event) {
+  const endTime = event.ends_at ? new Date(event.ends_at).getTime() : NaN;
+  if (!Number.isNaN(endTime)) return endTime;
+  return getEventTime(event);
+}
+
 function isUpcomingEvent(event) {
-  return getEventTime(event) >= Date.now();
+  return getEventEndTime(event) >= Date.now();
 }
 
 function sortEventsByProximity(eventList = []) {
@@ -91,8 +106,8 @@ function sortEventsByProximity(eventList = []) {
   return [...eventList].sort((a, b) => {
     const aTime = getEventTime(a);
     const bTime = getEventTime(b);
-    const aPast = aTime < now;
-    const bPast = bTime < now;
+    const aPast = getEventEndTime(a) < now;
+    const bPast = getEventEndTime(b) < now;
     if (aPast !== bPast) return aPast ? 1 : -1;
     return aPast ? bTime - aTime : aTime - bTime;
   });
@@ -113,7 +128,7 @@ function buildEventFormData(form, extra = {}) {
   const payload = { ...form, ...extra };
 
   Object.entries(payload).forEach(([key, value]) => {
-    if (key === 'cover_file') return;
+    if (key === 'cover_file' || key === 'custom_category') return;
     if (value !== undefined && value !== null && value !== '') {
       formData.append(key, String(value));
     }
@@ -128,7 +143,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
   const isJoined = event.attendees?.includes(currentUserId);
-  const isPast = new Date(event.event_date) < new Date();
+  const isPast = new Date(event.ends_at || event.event_date) < new Date();
   const isLiked = Boolean(event.liked_by_current_user);
   const emoji = getEventEmoji(event.category);
   const daysLabel = getDaysUntilLabel(event.event_date);
@@ -239,7 +254,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
           {/* Date + location */}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-xs text-slate-500 font-mono flex items-center gap-1">
-              📅 {formatEventDate(event.event_date)}
+              📅 {formatEventDateRange(event)}
             </span>
             {daysLabel && (
               <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
@@ -404,7 +419,8 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
 }
 
 // ── Create Event Modal ────────────────────────────────────────────────────────
-const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', 'Otro'];
+const OTHER_CATEGORY = 'Otro';
+const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', OTHER_CATEGORY];
 
 function CreateEventModal({ onClose, onCreate }) {
   const now = new Date();
@@ -417,8 +433,10 @@ function CreateEventModal({ onClose, onCreate }) {
     title: '',
     description: '',
     category: '',
+    custom_category: '',
     organization: '',
     event_date: defaultDate,
+    ends_at: '',
     location: '',
     max_attendees: 50,
   });
@@ -426,9 +444,18 @@ function CreateEventModal({ onClose, onCreate }) {
   const [coverPreview, setCoverPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const emoji = getEventEmoji(form.category);
+  const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
+  const emoji = getEventEmoji(resolvedCategory || form.category);
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
+
+  function selectCategory(cat) {
+    setForm(f => ({
+      ...f,
+      category: f.category === cat ? '' : cat,
+      custom_category: cat === OTHER_CATEGORY && f.category !== cat ? f.custom_category : '',
+    }));
+  }
 
   async function handleCoverChange(e) {
     const file = e.target.files?.[0];
@@ -452,13 +479,24 @@ function CreateEventModal({ onClose, onCreate }) {
   async function handleSubmit() {
     if (!form.title.trim()) { setError('El título es obligatorio'); return; }
     if (!form.event_date) { setError('La fecha es obligatoria'); return; }
+    if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
+      setError('Especifica la categoria');
+      return;
+    }
+    if (form.ends_at && new Date(form.ends_at) <= new Date(form.event_date)) {
+      setError('La fecha fin debe ser posterior al inicio');
+      return;
+    }
     setError('');
     setSaving(true);
     try {
       await onCreate({
         ...form,
+        category: resolvedCategory,
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
+        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
         max_attendees: parseInt(form.max_attendees) || 50,
       });
       onClose();
@@ -505,7 +543,7 @@ function CreateEventModal({ onClose, onCreate }) {
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => set('category', form.category === cat ? '' : cat)}
+                  onClick={() => selectCategory(cat)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                     form.category === cat
                       ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
@@ -516,6 +554,16 @@ function CreateEventModal({ onClose, onCreate }) {
                 </button>
               ))}
             </div>
+            {form.category === OTHER_CATEGORY && (
+              <input
+                type="text"
+                value={form.custom_category}
+                onChange={e => set('custom_category', e.target.value)}
+                placeholder="Escribe la categoría"
+                maxLength={60}
+                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            )}
           </div>
 
           {/* Description */}
@@ -561,6 +609,16 @@ function CreateEventModal({ onClose, onCreate }) {
               />
             </div>
             <div>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <input
+                type="datetime-local"
+                value={form.ends_at}
+                min={form.event_date || defaultDate}
+                onChange={e => set('ends_at', e.target.value)}
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            </div>
+            <div className="col-span-2">
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Máx. asistentes</label>
               <input
                 type="number"
@@ -576,7 +634,7 @@ function CreateEventModal({ onClose, onCreate }) {
           {/* Location */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Ubicación <span className="text-slate-600">(opcional)</span>
+              Ubicación *
             </label>
             <input
               type="text"
@@ -635,7 +693,7 @@ function CreateEventModal({ onClose, onCreate }) {
 
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim()}
+            disabled={saving || !form.title.trim() || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '🌐 Publicar evento'}
@@ -647,16 +705,16 @@ function CreateEventModal({ onClose, onCreate }) {
 }
 
 // ── Create Community Modal ────────────────────────────────────────────────────
-const COMMUNITY_CATEGORIES = ['Música', 'Deporte', 'Tecnología', 'Arte', 'Viajes', 'Cocina', 'Juego', 'Bienestar', 'Fotografía', 'Otro'];
+const COMMUNITY_CATEGORIES = ['Música', 'Deporte', 'Tecnología', 'Arte', 'Viajes', 'Cocina', 'Juego', 'Bienestar', 'Fotografía', OTHER_CATEGORY];
 const ALL_COMMUNITY_CATEGORIES = 'Todo';
 const COMMUNITY_CATEGORY_FILTERS = [ALL_COMMUNITY_CATEGORIES, ...COMMUNITY_CATEGORIES];
-const KNOWN_COMMUNITY_CATEGORIES = COMMUNITY_CATEGORIES.filter(cat => cat !== 'Otro');
+const KNOWN_COMMUNITY_CATEGORIES = COMMUNITY_CATEGORIES.filter(cat => cat !== OTHER_CATEGORY);
 
 function matchesCommunityCategory(community, selectedCategory) {
   if (selectedCategory === ALL_COMMUNITY_CATEGORIES) return true;
 
   const category = (community.category || '').trim();
-  if (selectedCategory === 'Otro') {
+  if (selectedCategory === OTHER_CATEGORY) {
     if (!category) return true;
     return !KNOWN_COMMUNITY_CATEGORIES.some(cat => normalizeText(cat) === normalizeText(category));
   }
@@ -669,20 +727,34 @@ function CreateCommunityModal({ onClose, onCreate }) {
     name: '',
     description: '',
     category: '',
+    custom_category: '',
     organization: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const emoji = getCommunityEmoji(form.category);
+  const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
+  const emoji = getCommunityEmoji(resolvedCategory || form.category);
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
 
+  function selectCategory(cat) {
+    setForm(f => ({
+      ...f,
+      category: f.category === cat ? '' : cat,
+      custom_category: cat === OTHER_CATEGORY && f.category !== cat ? f.custom_category : '',
+    }));
+  }
+
   async function handleSubmit() {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
+    if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
+      setError('Especifica la categoria');
+      return;
+    }
     setError('');
     setSaving(true);
     try {
-      await onCreate(form);
+      await onCreate({ ...form, category: resolvedCategory, custom_category: undefined });
       onClose();
     } catch (e) {
       setError(e.message || 'Error al crear la comunidad');
@@ -727,7 +799,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => set('category', form.category === cat ? '' : cat)}
+                  onClick={() => selectCategory(cat)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                     form.category === cat
                       ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
@@ -738,6 +810,16 @@ function CreateCommunityModal({ onClose, onCreate }) {
                 </button>
               ))}
             </div>
+            {form.category === OTHER_CATEGORY && (
+              <input
+                type="text"
+                value={form.custom_category}
+                onChange={e => set('custom_category', e.target.value)}
+                placeholder="Escribe la categoría"
+                maxLength={60}
+                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            )}
           </div>
 
           {/* Organization */}
@@ -785,7 +867,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.name.trim()}
+            disabled={saving || !form.name.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '👥 Crear comunidad'}

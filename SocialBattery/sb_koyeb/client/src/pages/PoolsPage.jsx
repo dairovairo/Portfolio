@@ -50,6 +50,15 @@ function formatPoolDate(dateStr) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatPoolDateRange(pool) {
+  const start = formatPoolDate(pool.scheduled_at);
+  if (!pool.ends_at) return start;
+  const end = new Date(pool.ends_at);
+  if (Number.isNaN(end.getTime())) return start;
+  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return `${start} - fin ${endLabel}`;
+}
+
 function formatInputDateTime(dateStr) {
   const d = new Date(dateStr);
   const pad = n => String(n).padStart(2, '0');
@@ -159,7 +168,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
             <span className="text-2xl">{getActivityEmoji(pool.activity)}</span>
             <div className="flex-1 min-w-0">
               <h3 className="font-display font-bold text-surface-text truncate">{pool.activity}</h3>
-              <p className="text-xs text-surface-muted font-mono">{formatPoolDate(pool.scheduled_at)}</p>
+              <p className="text-xs text-surface-muted font-mono">{formatPoolDateRange(pool)}</p>
             </div>
             <StatusBadge status={pool.status} />
           </div>
@@ -339,7 +348,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
       <div className="space-y-1.5 mb-3">
         <div className="flex items-center gap-2 text-xs text-surface-muted">
           <span>🕐</span>
-          <span className="font-mono">{formatPoolDate(pool.scheduled_at)}</span>
+          <span className="font-mono">{formatPoolDateRange(pool)}</span>
         </div>
         {pool.location_hint && (
           <div className="flex items-center gap-2 text-xs text-surface-muted">
@@ -492,6 +501,7 @@ function CreatePoolModal({ onClose, onCreate }) {
     description: '',
     location_hint: '',
     scheduled_at: minDate,
+    ends_at: '',
     max_people: 4,
     is_public: true,
     group_id: null,
@@ -521,6 +531,11 @@ function CreatePoolModal({ onClose, onCreate }) {
   async function handleSubmit() {
     if (!form.activity.trim()) { setError('La actividad es obligatoria'); return; }
     if (!form.scheduled_at) { setError('La fecha es obligatoria'); return; }
+    if (!form.location_hint.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (form.ends_at && new Date(form.ends_at) <= new Date(form.scheduled_at)) {
+      setError('La fecha fin debe ser posterior al inicio');
+      return;
+    }
     if (!form.is_public && !hasPrivateTarget) {
       setError('Elige al menos un grupo o un amigo para el plan privado');
       return;
@@ -531,6 +546,7 @@ function CreatePoolModal({ onClose, onCreate }) {
       await onCreate({
         ...form,
         scheduled_at: new Date(form.scheduled_at).toISOString(),
+        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
         max_people: parseInt(form.max_people),
       });
       onClose();
@@ -580,6 +596,11 @@ function CreatePoolModal({ onClose, onCreate }) {
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
             <div>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <input type="datetime-local" value={form.ends_at} min={form.scheduled_at || minDate} onChange={e => set('ends_at', e.target.value)}
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
+            </div>
+            <div className="col-span-2">
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Personas máx.</label>
               <input type="number" value={form.max_people} min={2} max={50} onChange={e => set('max_people', parseInt(e.target.value) || 2)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
@@ -588,7 +609,7 @@ function CreatePoolModal({ onClose, onCreate }) {
 
           {/* Location */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación <span className="text-slate-600">(opcional)</span></label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
             <input type="text" value={form.location_hint} onChange={e => set('location_hint', e.target.value)}
               placeholder="Ej: Plaza Mayor, cerca de la estación..." maxLength={150}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
@@ -671,7 +692,7 @@ function CreatePoolModal({ onClose, onCreate }) {
 
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
 
-          <button onClick={handleSubmit} disabled={saving || !form.activity.trim()}
+          <button onClick={handleSubmit} disabled={saving || !form.activity.trim() || !form.location_hint.trim()}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text font-display font-bold text-sm transition-all disabled:opacity-50">
             {saving ? 'Creando...' : '🚀 Crear plan'}
           </button>
