@@ -313,11 +313,7 @@ export default function EventDetailPage() {
           <div className="flex items-center gap-4 mt-4 pt-3 border-t border-surface-border">
             <div className="text-center">
               <p className="text-base font-display font-bold text-surface-text">{event.attendee_count || 0}</p>
-              <p className="text-[10px] font-mono text-surface-muted">asistentes</p>
-            </div>
-            <div className="text-center">
-              <p className="text-base font-display font-bold text-surface-text">{event.max_attendees}</p>
-              <p className="text-[10px] font-mono text-surface-muted">plazas</p>
+              <p className="text-[10px] font-mono text-surface-muted">planificaciones</p>
             </div>
             <div className="text-center">
               <p className="text-base font-display font-bold text-surface-text">{event.like_count || 0}</p>

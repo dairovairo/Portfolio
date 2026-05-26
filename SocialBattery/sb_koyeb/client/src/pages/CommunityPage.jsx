@@ -305,6 +305,9 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             >
               {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
             </button>
+            <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-accent-primary/20 bg-accent-primary/10 text-accent-glow flex items-center gap-1">
+              📅 {attendeeCount} planificaciones
+            </span>
             {event.price != null && parseFloat(event.price) > 0 ? (
               <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300">
                 💳 {parseFloat(event.price).toFixed(2)}€
@@ -1201,6 +1204,7 @@ export default function CommunityPage() {
   // ── Event search + filter ──────────────────────────────────────────────────
   const normalizedEventSearch = normalizeText(eventSearch);
   const filteredSortedEvents = sortedEventsByLikes.filter(event => {
+    if (!isUpcomingEvent(event)) return false;
     const matchesSearch = !normalizedEventSearch || normalizeText([
       event.title,
       event.description,
@@ -1218,9 +1222,10 @@ export default function CommunityPage() {
     return matchesSearch && matchesEventCategory(event, eventCategoryFilter) && matchesPrice;
   });
   const isEventFiltered = normalizedEventSearch || eventCategoryFilter !== ALL_EVENT_CATEGORIES || eventPriceFilter !== 'all';
+  const upcomingEventsTotal = events.filter(isUpcomingEvent).length;
   const eventCountLabel = isEventFiltered
-    ? `${filteredSortedEvents.length}/${events.length} eventos`
-    : `${events.length} eventos`;
+    ? `${filteredSortedEvents.length}/${upcomingEventsTotal} eventos`
+    : `${upcomingEventsTotal} eventos`;
   const headerSubtitle = tab === 'events'
     ? eventCountLabel
     : tab === 'planning'
