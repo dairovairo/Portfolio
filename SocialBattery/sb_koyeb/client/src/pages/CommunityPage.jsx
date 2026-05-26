@@ -87,6 +87,13 @@ function getDaysUntilLabel(dateStr) {
   return `Faltan ${days} días`;
 }
 
+function ensureAbsoluteUrl(url) {
+  if (!url) return url;
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 function getEventTime(event) {
   const time = new Date(event.event_date).getTime();
   return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
@@ -256,15 +263,15 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             </p>
           )}
 
-          {/* Date + location */}
+          {/* Days left + location */}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
-            <span className="text-xs text-slate-500 font-mono flex items-center gap-1">
-              📅 {formatEventDateRange(event)}
-            </span>
             {daysLabel && (
               <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
                 ⏳ {daysLabel}
               </span>
+            )}
+            {isPast && !daysLabel && (
+              <span className="text-xs text-slate-500 font-mono">Ya pasó</span>
             )}
             {event.location && (
               <span className="text-xs text-slate-500 font-mono flex items-center gap-1 truncate">
@@ -273,7 +280,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             )}
             {event.url && (
               <a
-                href={event.url}
+                href={ensureAbsoluteUrl(event.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
@@ -412,7 +419,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
         )}
         {community.url && (
           <a
-            href={community.url}
+            href={ensureAbsoluteUrl(community.url)}
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
