@@ -60,8 +60,8 @@ export default function BadgeUnlockModal({ badges = [], onClose }) {
           <div
             className="w-24 h-24 mx-auto mb-5 rounded-full flex items-center justify-center text-5xl border-2 border-accent-primary/50"
             style={{
-              background: 'radial-gradient(circle at 50% 50%, rgba(124,58,237,0.25) 0%, transparent 70%)',
-              boxShadow: '0 0 40px rgba(124,58,237,0.4), 0 0 80px rgba(124,58,237,0.15)',
+              background: 'radial-gradient(circle at 50% 50%, rgba(0,148,158,0.25) 0%, transparent 70%)',
+              boxShadow: '0 0 40px rgba(0,148,158,0.4), 0 0 80px rgba(0,148,158,0.15)',
             }}
           >
             {badge.emoji}

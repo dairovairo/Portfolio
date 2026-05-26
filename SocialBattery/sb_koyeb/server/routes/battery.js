@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { checkAndAwardBadges } = require('../jobs/badges');
+const { applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 
 // PATCH /api/battery — update battery level
 router.patch('/', requireAuth, async (req, res) => {
@@ -98,12 +99,14 @@ router.get('/friends', requireAuth, async (req, res) => {
 
   const { data: friends, error } = await supabase
     .from('users')
-    .select('id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at')
+    .select('id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at')
     .in('id', friendIds)
     .order('battery_level', { ascending: false });
 
   if (error) return res.status(500).json({ error: 'Failed to fetch friends' });
-  res.json({ friends });
+  const normalizedFriends = applyBatteryExpiryToUsers(friends)
+    .sort((a, b) => (b.battery_level ?? -1) - (a.battery_level ?? -1));
+  res.json({ friends: normalizedFriends });
 });
 
 module.exports = router;

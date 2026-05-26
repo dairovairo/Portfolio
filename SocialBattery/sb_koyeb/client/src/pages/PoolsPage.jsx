@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 function getActivityEmoji(activity = '') {
   const a = activity.toLowerCase();
@@ -49,6 +50,15 @@ function formatPoolDate(dateStr) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatPoolDateRange(pool) {
+  const start = formatPoolDate(pool.scheduled_at);
+  if (!pool.ends_at) return start;
+  const end = new Date(pool.ends_at);
+  if (Number.isNaN(end.getTime())) return start;
+  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return `${start} - fin ${endLabel}`;
+}
+
 function formatInputDateTime(dateStr) {
   const d = new Date(dateStr);
   const pad = n => String(n).padStart(2, '0');
@@ -58,10 +68,10 @@ function formatInputDateTime(dateStr) {
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
-    open:      { label: 'Abierto',    cls: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    full:      { label: 'Completo',   cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-    closed:    { label: 'Cerrado',    cls: 'bg-slate-600/30 text-surface-muted border-slate-600/30' },
-    cancelled: { label: 'Cancelado',  cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
+    open:      { label: 'Abierto',   cls: 'bg-green-500/20 text-green-400 border-green-500/30' },
+    full:      { label: 'Completo',  cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+    closed:    { label: 'Cerrado',   cls: 'bg-slate-600/30 text-surface-muted border-slate-600/30' },
+    cancelled: { label: 'Cancelado', cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
   };
   const cfg = map[status] || map.open;
   return (
@@ -90,19 +100,213 @@ function CapacityBar({ current, max }) {
   );
 }
 
+// ── Avatar stack ──────────────────────────────────────────────────────────────
+function AvatarStack({ participants = [], total = 0, size = 'sm' }) {
+  const shown = participants.slice(0, 4);
+  const extra = total - shown.length;
+  const dim = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-8 h-8 text-xs';
+
+  return (
+    <div className="flex items-center">
+      <div className="flex -space-x-1.5">
+        {shown.map((p, i) => (
+          <div
+            key={p.id}
+            className={`${dim} rounded-full border-2 border-surface-card flex items-center justify-center font-display font-bold bg-accent-primary/20 text-accent-glow flex-shrink-0`}
+            style={{ zIndex: shown.length - i }}
+            title={p.display_name}
+          >
+            {p.avatar_url
+              ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+              : (p.display_name?.[0] || '?').toUpperCase()
+            }
+          </div>
+        ))}
+        {extra > 0 && (
+          <div
+            className={`${dim} rounded-full border-2 border-surface-card bg-surface-bg text-surface-muted flex items-center justify-center font-mono flex-shrink-0`}
+          >
+            +{extra}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Participants sheet (bottom drawer) ────────────────────────────────────────
+function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving }) {
+  // Fetch full participant list
+  const [participants, setParticipants] = useState(pool.participants_preview || []);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    api.get(`/pools/${pool.id}`)
+      .then(({ pool: full }) => setParticipants(full.participants || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [pool.id]);
+
+  const isPast = new Date(pool.scheduled_at) <= new Date();
+  const canJoin = pool.status === 'open' && !pool.has_joined && !isPast && pool.status !== 'cancelled';
+  const canLeave = pool.has_joined && !pool.is_creator && !isPast;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl flex flex-col max-h-[85vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle — fijo */}
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-1 flex-shrink-0" />
+
+        {/* Header — fijo */}
+        <div className="flex-shrink-0 px-5 py-3 border-b border-surface-border">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{getActivityEmoji(pool.activity)}</span>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-display font-bold text-surface-text truncate">{pool.activity}</h3>
+              <p className="text-xs text-surface-muted font-mono">{formatPoolDateRange(pool)}</p>
+            </div>
+            <StatusBadge status={pool.status} />
+          </div>
+          {pool.description && (
+            <p className="text-sm text-surface-muted mt-2 leading-relaxed">{pool.description}</p>
+          )}
+          {pool.location_hint && (
+            <p className="text-xs text-surface-muted mt-1 flex items-center gap-1.5">
+              <span>📍</span>{pool.location_hint}
+            </p>
+          )}
+        </div>
+
+        {/* Lista de participantes — ocupa el espacio restante y hace scroll */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-display font-bold text-surface-text">Apuntados</h4>
+            <span className="text-xs font-mono text-surface-muted">
+              {pool.participant_count}/{pool.max_people}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-10 bg-surface-bg rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : participants.length === 0 ? (
+            <p className="text-surface-muted text-sm text-center py-4">Nadie apuntado aún</p>
+          ) : (
+            <div className="space-y-2">
+              {participants.map((p, idx) => {
+                const batteryColor = getBatteryColor(p.battery_level ?? 50);
+                const isFirst = idx === 0;
+                return (
+                  <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-bg/50 transition-colors">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
+                      style={{ borderColor: batteryColor?.hex, background: `${batteryColor?.hex}15` }}
+                    >
+                      {p.avatar_url
+                        ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                        : (p.display_name?.[0] || '?').toUpperCase()
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-display font-semibold text-surface-text truncate flex items-center gap-1.5">
+                        {p.display_name}
+                        {isFirst && (
+                          <span className="text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-full">
+                            Organiza
+                          </span>
+                        )}
+                      </div>
+                      {p.battery_level != null && (
+                        <span className="text-xs font-mono" style={{ color: batteryColor?.hex }}>
+                          🔋 {p.battery_level}%
+                        </span>
+                      )}
+                    </div>
+                    {p.joined_at && (
+                      <span className="text-xs text-slate-600 font-mono flex-shrink-0">
+                        {formatRelativeTime(p.joined_at)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Plazas vacías */}
+          {pool.spots_left > 0 && pool.status === 'open' && (
+            <div className="mt-3 space-y-1.5">
+              {Array.from({ length: Math.min(pool.spots_left, 3) }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-2 rounded-xl border border-dashed border-surface-border/50 opacity-40">
+                  <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
+                    <span className="text-slate-600 text-xs">?</span>
+                  </div>
+                  <span className="text-xs text-slate-600 font-mono">Plaza libre</span>
+                </div>
+              ))}
+              {pool.spots_left > 3 && (
+                <p className="text-xs text-slate-600 font-mono text-center">
+                  +{pool.spots_left - 3} plazas libres más
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Botones — siempre visibles, pegados al fondo */}
+        <div className="flex-shrink-0 border-t border-surface-border px-5 py-3">
+          {canJoin && (
+            <button
+              onClick={() => { onJoin(pool.id); onClose(); }}
+              disabled={joining === pool.id || pool.status === 'full'}
+              className="w-full py-3 rounded-2xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-bold transition-all disabled:opacity-50"
+            >
+              {joining === pool.id ? 'Uniéndose...' : '🚀 Unirse al plan'}
+            </button>
+          )}
+          {canLeave && (
+            <button
+              onClick={() => { onLeave(pool.id); onClose(); }}
+              disabled={leaving === pool.id}
+              className="w-full py-3 rounded-2xl bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-400 text-sm font-display font-bold border border-slate-600/30 hover:border-red-500/30 transition-all disabled:opacity-50"
+            >
+              {leaving === pool.id ? 'Saliendo...' : 'Salir del plan'}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="w-full mt-2 py-2 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Pool Card ──────────────────────────────────────────────────────────────────
-function PoolCard({ pool, onJoin, onLeave, onCancel, onDetail, joining, leaving }) {
+function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leaving }) {
   const emoji = getActivityEmoji(pool.activity);
   const canJoin = pool.status === 'open' && !pool.has_joined;
   const isPast = new Date(pool.scheduled_at) <= new Date();
 
   return (
     <div
-      className={`bg-surface-card border rounded-2xl p-4 transition-all duration-200 ${
+      className={`bg-surface-card border rounded-2xl p-4 transition-all duration-200 cursor-pointer ${
         pool.status === 'cancelled' ? 'border-red-500/20 opacity-60' :
         pool.has_joined ? 'border-accent-primary/30 shadow-sm shadow-accent-primary/10' :
-        'border-surface-border hover:border-surface-border/80'
+        'border-surface-border hover:border-surface-border/60'
       }`}
+      onClick={() => onOpenDetail(pool)}
     >
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
@@ -113,9 +317,13 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onDetail, joining, leaving 
               {pool.activity}
             </h3>
             <StatusBadge status={pool.status} />
-            {pool.is_public && (
+            {pool.is_public ? (
               <span className="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded-full font-mono">
-                Público
+                🌐 Amigos
+              </span>
+            ) : (
+              <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
+                🔒 Privado
               </span>
             )}
             {pool.has_joined && !pool.is_creator && (
@@ -124,7 +332,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onDetail, joining, leaving 
               </span>
             )}
             {pool.is_creator && (
-              <span className="text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-mono">
+              <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
                 Tuyo
               </span>
             )}
@@ -140,7 +348,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onDetail, joining, leaving 
       <div className="space-y-1.5 mb-3">
         <div className="flex items-center gap-2 text-xs text-surface-muted">
           <span>🕐</span>
-          <span className="font-mono">{formatPoolDate(pool.scheduled_at)}</span>
+          <span className="font-mono">{formatPoolDateRange(pool)}</span>
         </div>
         {pool.location_hint && (
           <div className="flex items-center gap-2 text-xs text-surface-muted">
@@ -159,15 +367,26 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onDetail, joining, leaving 
 
       {/* Capacity */}
       <CapacityBar current={pool.participant_count} max={pool.max_people} />
-      {pool.spots_left > 0 && pool.status === 'open' && (
-        <p className="text-xs text-surface-muted mt-1 font-mono">
-          {pool.spots_left} {pool.spots_left === 1 ? 'plaza libre' : 'plazas libres'}
-        </p>
-      )}
 
-      {/* Actions */}
+      {/* Participants preview — always visible */}
+      <div
+        className="mt-3 flex items-center gap-2"
+        onClick={e => { e.stopPropagation(); onOpenDetail(pool); }}
+      >
+        <AvatarStack participants={pool.participants_preview || []} total={pool.participant_count} />
+        <span className="text-xs text-surface-muted">
+          {pool.participant_count === 0
+            ? 'Sin participantes aún'
+            : pool.participant_count === 1
+            ? '1 persona apuntada'
+            : `${pool.participant_count} personas apuntadas`}
+        </span>
+        <span className="ml-auto text-xs text-accent-glow font-mono">Ver →</span>
+      </div>
+
+      {/* Actions — stop propagation so clicks don't open the sheet */}
       {!isPast && pool.status !== 'cancelled' && pool.status !== 'closed' && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex gap-2" onClick={e => e.stopPropagation()}>
           {canJoin ? (
             <button
               onClick={() => onJoin(pool.id)}
@@ -202,6 +421,78 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onDetail, joining, leaving 
   );
 }
 
+// ── Friend / Group multi-picker ───────────────────────────────────────────────
+function FriendPicker({ selected, onChange, label = 'Amigos' }) {
+  const [friends, setFriends] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    api.get('/friends')
+      .then(({ friends: data }) => setFriends((data || []).filter(f => f.status === 'accepted')))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = friends.filter(f =>
+    !search || f.display_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function toggle(id) {
+    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+  }
+
+  if (loading) return <div className="h-10 bg-surface-bg rounded-xl animate-pulse" />;
+  if (!friends.length) return (
+    <p className="text-xs text-surface-muted bg-surface-bg border border-surface-border rounded-xl p-3 text-center">
+      No tienes amigos aún
+    </p>
+  );
+
+  return (
+    <div>
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Buscar amigo..."
+        className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors mb-2"
+      />
+      <div className="space-y-1.5 max-h-44 overflow-y-auto">
+        {filtered.map(f => {
+          const isSelected = selected.includes(f.id);
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => toggle(f.id)}
+              className={`w-full flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
+                isSelected
+                  ? 'border-accent-primary/50 bg-accent-primary/10'
+                  : 'border-surface-border bg-surface-bg hover:border-surface-border/60'
+              }`}
+            >
+              <div className="w-7 h-7 rounded-full bg-accent-primary/20 flex items-center justify-center text-xs font-display font-bold text-accent-glow flex-shrink-0">
+                {f.avatar_url
+                  ? <img src={f.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                  : (f.display_name?.[0] || '?').toUpperCase()
+                }
+              </div>
+              <span className="flex-1 text-sm font-display font-semibold text-surface-text truncate">
+                {f.display_name || f.username}
+              </span>
+              {isSelected && <span className="text-accent-glow text-sm flex-shrink-0">✓</span>}
+            </button>
+          );
+        })}
+        {filtered.length === 0 && (
+          <p className="text-xs text-surface-muted text-center py-2">Sin resultados</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Create Pool Modal ─────────────────────────────────────────────────────────
 function CreatePoolModal({ onClose, onCreate }) {
   const minDate = formatInputDateTime(new Date(Date.now() + 30 * 60 * 1000));
@@ -210,9 +501,11 @@ function CreatePoolModal({ onClose, onCreate }) {
     description: '',
     location_hint: '',
     scheduled_at: minDate,
+    ends_at: '',
     max_people: 4,
     is_public: true,
     group_id: null,
+    invited_user_ids: [],
   });
   const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -226,24 +519,39 @@ function CreatePoolModal({ onClose, onCreate }) {
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
 
   function setVisibility(isPublic) {
-    setForm(f => ({ ...f, is_public: isPublic, group_id: null }));
+    setForm(f => ({ ...f, is_public: isPublic, group_id: null, invited_user_ids: [] }));
   }
+
+  function toggleGroup(id) {
+    setForm(f => ({ ...f, group_id: f.group_id === id ? null : id }));
+  }
+
+  const hasPrivateTarget = !form.is_public && (form.group_id || form.invited_user_ids.length > 0);
 
   async function handleSubmit() {
     if (!form.activity.trim()) { setError('La actividad es obligatoria'); return; }
     if (!form.scheduled_at) { setError('La fecha es obligatoria'); return; }
-    if (!form.is_public && !form.group_id) { setError('Elige un grupo para el pool privado'); return; }
+    if (!form.location_hint.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (form.ends_at && new Date(form.ends_at) <= new Date(form.scheduled_at)) {
+      setError('La fecha fin debe ser posterior al inicio');
+      return;
+    }
+    if (!form.is_public && !hasPrivateTarget) {
+      setError('Elige al menos un grupo o un amigo para el plan privado');
+      return;
+    }
     setError('');
     setSaving(true);
     try {
       await onCreate({
         ...form,
         scheduled_at: new Date(form.scheduled_at).toISOString(),
+        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
         max_people: parseInt(form.max_people),
       });
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear el pool');
+      setError(e.message || 'Error al crear el plan');
     } finally {
       setSaving(false);
     }
@@ -252,13 +560,13 @@ function CreatePoolModal({ onClose, onCreate }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
 
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">{emoji}</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">Crear pool</h2>
+            <h2 className="font-display font-bold text-surface-text text-lg">Crear plan</h2>
             <p className="text-xs text-surface-muted">Propón un plan, tus amigos se unirán</p>
           </div>
         </div>
@@ -288,6 +596,11 @@ function CreatePoolModal({ onClose, onCreate }) {
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
             <div>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <input type="datetime-local" value={form.ends_at} min={form.scheduled_at || minDate} onChange={e => set('ends_at', e.target.value)}
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
+            </div>
+            <div className="col-span-2">
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Personas máx.</label>
               <input type="number" value={form.max_people} min={2} max={50} onChange={e => set('max_people', parseInt(e.target.value) || 2)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
@@ -296,13 +609,13 @@ function CreatePoolModal({ onClose, onCreate }) {
 
           {/* Location */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación <span className="text-slate-600">(opcional)</span></label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
             <input type="text" value={form.location_hint} onChange={e => set('location_hint', e.target.value)}
               placeholder="Ej: Plaza Mayor, cerca de la estación..." maxLength={150}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
           </div>
 
-          {/* Visibility: Public / Private */}
+          {/* Visibility */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-2">Visibilidad</label>
             <div className="grid grid-cols-2 gap-2">
@@ -310,51 +623,78 @@ function CreatePoolModal({ onClose, onCreate }) {
                 className={`p-3 rounded-xl border text-left transition-all ${form.is_public ? 'border-accent-primary bg-accent-primary/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'}`}>
                 <div className="text-lg mb-1">🌐</div>
                 <div className="text-sm font-display font-semibold text-surface-text">Público</div>
-                <div className="text-xs text-surface-muted mt-0.5">Visible para todos tus amigos</div>
+                <div className="text-xs text-surface-muted mt-0.5">Todos tus amigos lo ven</div>
               </button>
               <button type="button" onClick={() => setVisibility(false)}
-                className={`p-3 rounded-xl border text-left transition-all ${!form.is_public ? 'border-purple-500/50 bg-purple-500/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'}`}>
+                className={`p-3 rounded-xl border text-left transition-all ${!form.is_public ? 'border-accent-primary/50 bg-accent-primary/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'}`}>
                 <div className="text-lg mb-1">🔒</div>
                 <div className="text-sm font-display font-semibold text-surface-text">Privado</div>
-                <div className="text-xs text-surface-muted mt-0.5">Solo para un grupo</div>
+                <div className="text-xs text-surface-muted mt-0.5">Solo quien tú elijas</div>
               </button>
             </div>
           </div>
 
-          {/* Group selector (only when private) */}
+          {/* Private: invite section */}
           {!form.is_public && (
-            <div>
-              <label className="block text-xs font-mono text-surface-muted mb-2">Elige el grupo *</label>
-              {groups.length === 0 ? (
-                <div className="bg-surface-bg border border-surface-border rounded-xl p-4 text-center">
-                  <p className="text-surface-muted text-sm">No tienes grupos creados aún</p>
-                  <p className="text-xs text-slate-600 mt-1">Ve a Amigos → Grupos → Crear grupo</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {groups.map(g => (
-                    <button key={g.id} type="button" onClick={() => set('group_id', g.id)}
-                      className={`w-full p-3 rounded-xl border flex items-center gap-3 transition-all text-left ${
-                        form.group_id === g.id ? 'border-purple-500/50 bg-purple-500/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'
-                      }`}>
-                      <span className="text-xl">👥</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-display font-semibold text-surface-text truncate">{g.name}</div>
-                        <div className="text-xs text-surface-muted">{g.member_count} miembros</div>
-                      </div>
-                      {form.group_id === g.id && <span className="text-purple-400 text-sm">✓</span>}
-                    </button>
-                  ))}
+            <div className="bg-surface-bg border border-accent-primary/20 rounded-2xl p-4 space-y-4">
+              <p className="text-xs text-accent-glow font-mono">
+                🔒 Elige quién puede ver y unirse a este plan
+              </p>
+
+              {/* Groups */}
+              {groups.length > 0 && (
+                <div>
+                  <label className="block text-xs font-mono text-surface-muted mb-2">Por grupo</label>
+                  <div className="space-y-2">
+                    {groups.map(g => (
+                      <button key={g.id} type="button" onClick={() => toggleGroup(g.id)}
+                        className={`w-full p-2.5 rounded-xl border flex items-center gap-3 transition-all text-left ${
+                          form.group_id === g.id
+                            ? 'border-accent-primary/50 bg-accent-primary/10'
+                            : 'border-surface-border bg-surface-card hover:border-surface-border/60'
+                        }`}>
+                        <span className="text-lg">👥</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-display font-semibold text-surface-text truncate">{g.name}</div>
+                          <div className="text-xs text-surface-muted">{g.member_count} miembros</div>
+                        </div>
+                        {form.group_id === g.id && <span className="text-accent-glow">✓</span>}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* Divider */}
+              {groups.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 border-t border-surface-border" />
+                  <span className="text-xs text-slate-600 font-mono">y/o</span>
+                  <div className="flex-1 border-t border-surface-border" />
+                </div>
+              )}
+
+              {/* Individual friends */}
+              <div>
+                <label className="block text-xs font-mono text-surface-muted mb-2">
+                  Amigos individuales
+                  {form.invited_user_ids.length > 0 && (
+                    <span className="ml-2 text-accent-glow">({form.invited_user_ids.length} seleccionados)</span>
+                  )}
+                </label>
+                <FriendPicker
+                  selected={form.invited_user_ids}
+                  onChange={ids => set('invited_user_ids', ids)}
+                />
+              </div>
             </div>
           )}
 
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
 
-          <button onClick={handleSubmit} disabled={saving || !form.activity.trim()}
+          <button onClick={handleSubmit} disabled={saving || !form.activity.trim() || !form.location_hint.trim()}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text font-display font-bold text-sm transition-all disabled:opacity-50">
-            {saving ? 'Creando...' : '🚀 Crear pool'}
+            {saving ? 'Creando...' : '🚀 Crear plan'}
           </button>
         </div>
       </div>
@@ -376,15 +716,16 @@ export default function PoolsPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
 
-  const [pools, setPools] = useState([]);           // for 'active' tab
-  const [myCreated, setMyCreated] = useState([]);   // for 'myplans' tab – creados
-  const [myJoined, setMyJoined] = useState([]);     // for 'myplans' tab – unidos
+  const [pools, setPools] = useState([]);
+  const [myCreated, setMyCreated] = useState([]);
+  const [myJoined, setMyJoined] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('active');          // active | myplans
+  const [tab, setTab] = useState('active');
   const [showCreate, setShowCreate] = useState(false);
   const [joining, setJoining] = useState(null);
   const [leaving, setLeaving] = useState(null);
   const [toast, setToast] = useState(null);
+  const [detailPool, setDetailPool] = useState(null); // pool for participants sheet
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -398,13 +739,11 @@ export default function PoolsPage() {
         const { pools: data } = await api.get('/pools?filter=active&limit=30');
         setPools(data || []);
       } else {
-        // Fetch both mine (created) and joined in parallel
         const [mineRes, joinedRes] = await Promise.all([
           api.get('/pools?filter=mine&limit=50'),
           api.get('/pools?filter=joined&limit=50'),
         ]);
         const created = (mineRes.pools || []).filter(isActive);
-        // Joined list: exclude pools the user created (avoid duplicates)
         const createdIds = new Set(created.map(p => p.id));
         const joined = (joinedRes.pools || []).filter(p => isActive(p) && !createdIds.has(p.id));
         setMyCreated(sortByDate(created));
@@ -421,7 +760,6 @@ export default function PoolsPage() {
     fetchPools(tab);
   }, [tab, fetchPools]);
 
-  // Realtime: refresh when pools change
   useEffect(() => {
     if (!profile?.id) return;
     const channel = supabase
@@ -436,7 +774,7 @@ export default function PoolsPage() {
 
   async function handleCreate(formData) {
     await api.post('/pools', formData);
-    showToast('¡Pool creado! 🎉');
+    showToast('¡Plan creado! 🎉');
     setTab('myplans');
     fetchPools('myplans');
   }
@@ -458,7 +796,7 @@ export default function PoolsPage() {
     setLeaving(poolId);
     try {
       const { cancelled } = await api.delete(`/pools/${poolId}/leave`);
-      showToast(cancelled ? 'Pool cancelado' : 'Has salido del pool');
+      showToast(cancelled ? 'Plan cancelado' : 'Has salido del plan');
       fetchPools(tab);
     } catch (e) {
       showToast(e.message || 'Error al salir', 'error');
@@ -468,23 +806,27 @@ export default function PoolsPage() {
   }
 
   async function handleCancel(poolId) {
-    if (!confirm('¿Cancelar este pool? Los participantes serán notificados.')) return;
+    if (!confirm('¿Cancelar este plan? Los participantes serán notificados.')) return;
     try {
       await api.delete(`/pools/${poolId}`);
-      showToast('Pool cancelado');
+      showToast('Plan cancelado');
       fetchPools(tab);
     } catch (e) {
       showToast(e.message || 'Error al cancelar', 'error');
     }
   }
 
-  const poolCardProps = { onJoin: handleJoin, onLeave: handleLeave, onCancel: handleCancel, joining, leaving };
+  const poolCardProps = {
+    onJoin: handleJoin,
+    onLeave: handleLeave,
+    onCancel: handleCancel,
+    onOpenDetail: setDetailPool,
+    joining,
+    leaving,
+  };
 
-  // Active tab: split active vs past
   const activePools = sortByDate(pools.filter(isActive));
   const pastPools   = pools.filter(p => !isActive(p));
-
-  // Myplans tab: empty check
   const myplansEmpty = myCreated.length === 0 && myJoined.length === 0;
 
   return (
@@ -509,8 +851,8 @@ export default function PoolsPage() {
       <div className="max-w-lg mx-auto px-4 pt-4">
         <div className="flex gap-1 bg-surface-card border border-surface-border rounded-xl p-1 mb-5">
           {[
-            { key: 'active',   label: '🌐 Activos' },
-            { key: 'myplans',  label: '✓ Mis planes' },
+            { key: 'active',  label: '🌐 Activos' },
+            { key: 'myplans', label: '✓ Mis planes' },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -532,22 +874,21 @@ export default function PoolsPage() {
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-44 bg-surface-card rounded-2xl animate-pulse border border-surface-border" />
+              <div key={i} className="h-52 bg-surface-card rounded-2xl animate-pulse border border-surface-border" />
             ))}
           </div>
 
         ) : tab === 'active' ? (
-          // ── Active tab ──────────────────────────────────────────────────────
           pools.length === 0 ? (
             <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
               <div className="text-5xl mb-4">🤝</div>
-              <p className="text-slate-300 font-display font-semibold mb-1">Sin pools activos</p>
-              <p className="text-slate-500 text-sm mb-5">Crea un pool o espera a que tus amigos propongan planes</p>
+              <p className="text-slate-300 font-display font-semibold mb-1">Sin planes activos</p>
+              <p className="text-slate-500 text-sm mb-5">Crea un plan o espera a que tus amigos propongan algo</p>
               <button
                 onClick={() => setShowCreate(true)}
                 className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold"
               >
-                + Crear pool
+                + Crear plan
               </button>
             </div>
           ) : (
@@ -571,18 +912,17 @@ export default function PoolsPage() {
           )
 
         ) : (
-          // ── Mis planes tab ──────────────────────────────────────────────────
           myplansEmpty ? (
             <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
               <div className="text-5xl mb-4">📅</div>
               <p className="text-slate-300 font-display font-semibold mb-1">Sin planes activos</p>
-              <p className="text-slate-500 text-sm mb-5">Crea un pool o únete a los de tus amigos</p>
+              <p className="text-slate-500 text-sm mb-5">Crea un plan o únete a los de tus amigos</p>
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={() => setShowCreate(true)}
                   className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold"
                 >
-                  + Crear pool
+                  + Crear plan
                 </button>
                 <button
                   onClick={() => setTab('active')}
@@ -594,8 +934,6 @@ export default function PoolsPage() {
             </div>
           ) : (
             <div className="space-y-6">
-
-              {/* ── Planes que has creado ── */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-base">🗓️</span>
@@ -605,26 +943,19 @@ export default function PoolsPage() {
                 {myCreated.length === 0 ? (
                   <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
                     <p className="text-slate-500 text-sm">No has creado ningún plan activo</p>
-                    <button
-                      onClick={() => setShowCreate(true)}
-                      className="mt-3 text-xs text-accent-glow font-display font-semibold"
-                    >
-                      + Crear pool
+                    <button onClick={() => setShowCreate(true)} className="mt-3 text-xs text-accent-glow font-display font-semibold">
+                      + Crear plan
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {myCreated.map(pool => (
-                      <PoolCard key={pool.id} pool={pool} {...poolCardProps} />
-                    ))}
+                    {myCreated.map(pool => <PoolCard key={pool.id} pool={pool} {...poolCardProps} />)}
                   </div>
                 )}
               </div>
 
-              {/* Divider */}
               <div className="border-t border-surface-border" />
 
-              {/* ── Planes a los que te has unido ── */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-base">🚀</span>
@@ -634,26 +965,32 @@ export default function PoolsPage() {
                 {myJoined.length === 0 ? (
                   <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
                     <p className="text-slate-500 text-sm">Aún no te has unido a ningún plan</p>
-                    <button
-                      onClick={() => setTab('active')}
-                      className="mt-3 text-xs text-accent-glow font-display font-semibold"
-                    >
+                    <button onClick={() => setTab('active')} className="mt-3 text-xs text-accent-glow font-display font-semibold">
                       🔍 Ver planes activos
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {myJoined.map(pool => (
-                      <PoolCard key={pool.id} pool={pool} {...poolCardProps} />
-                    ))}
+                    {myJoined.map(pool => <PoolCard key={pool.id} pool={pool} {...poolCardProps} />)}
                   </div>
                 )}
               </div>
-
             </div>
           )
         )}
       </main>
+
+      {/* Participants sheet */}
+      {detailPool && (
+        <ParticipantsSheet
+          pool={detailPool}
+          onClose={() => setDetailPool(null)}
+          onJoin={handleJoin}
+          onLeave={handleLeave}
+          joining={joining}
+          leaving={leaving}
+        />
+      )}
 
       {/* Create Pool Modal */}
       {showCreate && (
@@ -665,13 +1002,11 @@ export default function PoolsPage() {
 
       {/* Toast */}
       {toast && (
-        <div
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl font-display font-semibold text-sm shadow-xl transition-all ${
-            toast.type === 'error'
-              ? 'bg-red-500/90 text-surface-text border border-red-400/30'
-              : 'bg-green-500/90 text-surface-text border border-green-400/30'
-          }`}
-        >
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl font-display font-semibold text-sm shadow-xl transition-all ${
+          toast.type === 'error'
+            ? 'bg-red-500/90 text-surface-text border border-red-400/30'
+            : 'bg-green-500/90 text-surface-text border border-green-400/30'
+        }`}>
           {toast.msg}
         </div>
       )}

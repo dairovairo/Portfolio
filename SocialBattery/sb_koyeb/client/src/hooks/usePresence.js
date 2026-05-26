@@ -15,12 +15,16 @@ export function isOnline(lastSeenAt) {
 /**
  * Global presence manager: broadcasts heartbeats and tracks other users' presence.
  * Used once at the app level (in AuthContext or App).
+ * If showOnline is false, heartbeats are skipped so the user appears offline.
  */
-export function usePresenceBroadcast(userId) {
+export function usePresenceBroadcast(userId, showOnline = true) {
   const intervalRef = useRef(null);
 
   useEffect(() => {
     if (!userId) return;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    if (!showOnline) return; // privacy: don't broadcast presence
 
     // Immediately mark online
     api.patch('/users/me/seen').catch(() => {});
@@ -33,7 +37,7 @@ export function usePresenceBroadcast(userId) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [userId]);
+  }, [userId, showOnline]);
 }
 
 /**

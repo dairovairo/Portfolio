@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -184,15 +186,60 @@ function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, on
   );
 }
 
+// ── Tick colour picker ────────────────────────────────────────────────────────
+
+function TickColorPicker({ label, description, color, onChange }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
+        {description && <div className="text-xs text-surface-muted">{description}</div>}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Swatch preview with double tick */}
+        <span style={{ color }} className="inline-flex items-center">
+          <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </span>
+        <input
+          type="color"
+          value={color}
+          onChange={e => onChange(e.target.value)}
+          className="h-8 w-16 rounded-lg cursor-pointer bg-transparent border border-surface-border"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Live preview ──────────────────────────────────────────────────────────────
 
-function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextColor, otherBubbleColor, otherBubbleOpacity, otherBubbleTextColor }) {
+function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextColor, otherBubbleColor, otherBubbleOpacity, otherBubbleTextColor, tickColorSent, tickColorUnread, tickColorRead }) {
   const myStyle = { backgroundColor: bubbleRgba(myBubbleColor, myBubbleOpacity), color: myBubbleTextColor };
   const otherStyle = { backgroundColor: bubbleRgba(otherBubbleColor, otherBubbleOpacity), color: otherBubbleTextColor };
 
+  const TickSingle = ({ color }) => (
+    <span style={{ color }} className="inline-flex items-center ml-1 opacity-80">
+      <svg width="11" height="9" viewBox="0 0 11 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
+
+  const TickDouble = ({ colorOverride }) => (
+    <span style={{ color: colorOverride }} className="inline-flex items-center ml-1">
+      <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
+
   return (
     <div
-      className="rounded-xl overflow-hidden min-h-[120px] p-3 space-y-2 bg-cover bg-center"
+      className="rounded-xl overflow-hidden min-h-[140px] p-3 space-y-2 bg-cover bg-center"
       style={wallpaper
         ? { backgroundImage: `url(${wallpaper})` }
         : { backgroundColor: 'var(--sb-bg)' }
@@ -211,7 +258,23 @@ function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextCo
           className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
           style={myStyle}
         >
-          ¡Todo genial! 🔋
+          <span>¡Ahora mismo te escribo! <span className="sb-symbol" aria-hidden="true">✎</span></span>
+          <div className="flex items-center justify-end gap-0.5 opacity-70 mt-0.5">
+            <span className="text-[10px]">12:33</span>
+            <TickSingle color={tickColorSent} />
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-row-reverse">
+        <div
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
+          style={myStyle}
+        >
+          <span>¡Todo genial! 🔋</span>
+          <div className="flex items-center justify-end gap-0.5 opacity-70 mt-0.5">
+            <span className="text-[10px]">12:34</span>
+            <TickDouble colorOverride={tickColorUnread} />
+          </div>
         </div>
       </div>
       <div className="flex">
@@ -220,6 +283,18 @@ function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextCo
           style={otherStyle}
         >
           ¿Quedamos este finde? 🤝
+        </div>
+      </div>
+      <div className="flex flex-row-reverse">
+        <div
+          className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
+          style={myStyle}
+        >
+          <span>¡Claro que sí! 🎉</span>
+          <div className="flex items-center justify-end gap-0.5 opacity-70 mt-0.5">
+            <span className="text-[10px]">12:35</span>
+            <TickDouble colorOverride={tickColorRead} />
+          </div>
         </div>
       </div>
     </div>
@@ -243,13 +318,36 @@ function Toggle({ enabled, onToggle }) {
   return (
     <button
       onClick={onToggle}
-      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-        enabled ? 'bg-accent-primary' : 'bg-surface-border'
-      }`}
+      role="switch"
+      aria-checked={enabled}
+      style={{
+        width: 44,
+        height: 26,
+        borderRadius: 999,
+        flexShrink: 0,
+        position: 'relative',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background 0.2s',
+        background: enabled ? 'var(--sb-accent)' : 'var(--sb-border)',
+        padding: 0,
+      }}
     >
-      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-        enabled ? 'translate-x-5' : 'translate-x-0.5'
-      }`} />
+      <span
+        style={{
+          position: 'absolute',
+          top: 3,
+          left: 3,
+          width: 20,
+          height: 20,
+          borderRadius: '50%',
+          background: '#ffffff',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+          transition: 'transform 0.2s',
+          transform: enabled ? 'translateX(18px)' : 'translateX(0px)',
+          display: 'block',
+        }}
+      />
     </button>
   );
 }
@@ -258,7 +356,9 @@ function Toggle({ enabled, onToggle }) {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { isDark, toggle: toggleTheme } = useTheme();
+  const { theme, isDark, setTheme } = useTheme();
+  const { signOut, updatePassword } = useAuth();
+  const { showToast } = useToast();
   const {
     chatWallpaper, setChatWallpaper,
     myBubbleColor, setMyBubbleColor,
@@ -267,20 +367,41 @@ export default function SettingsPage() {
     otherBubbleColor, setOtherBubbleColor,
     otherBubbleOpacity, setOtherBubbleOpacity,
     otherBubbleTextColor, setOtherBubbleTextColor,
+    tickColorUnread, setTickColorUnread,
+    tickColorRead, setTickColorRead,
+    tickColorSent, setTickColorSent,
+    applyMessagingThemeDefaults,
     resetMessagingDefaults,
+    muteBatteryChanges, setMuteBatteryChanges,
+    muteAllNotifications, setMuteAllNotifications,
+    mutePersonalChats, setMutePersonalChats,
+    muteGroupChats, setMuteGroupChats,
+    readReceipts, setReadReceipts,
+    showOnline, setShowOnline,
+    showLastSeen, setShowLastSeen,
   } = useSettings();
 
   // Only one section open at a time
   const [openSection, setOpenSection] = useState(null);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [loggingOut, setLoggingOut] = useState(false);
 
   function toggleSection(id) {
     setOpenSection(prev => prev === id ? null : id);
   }
 
+  function selectTheme(nextTheme) {
+    setTheme(nextTheme);
+    applyMessagingThemeDefaults(nextTheme);
+    setResetConfirm(false);
+  }
+
   function handleReset() {
     if (resetConfirm) {
-      resetMessagingDefaults();
+      resetMessagingDefaults(theme);
       setResetConfirm(false);
     } else {
       setResetConfirm(true);
@@ -288,10 +409,45 @@ export default function SettingsPage() {
     }
   }
 
-  // Local privacy toggles (UI only — extend with real logic as needed)
-  const [showBattery, setShowBattery] = useState(true);
-  const [showOnline, setShowOnline] = useState(true);
-  const [showLastSeen, setShowLastSeen] = useState(true);
+  function setPasswordField(key, value) {
+    setPasswordForm(prev => ({ ...prev, [key]: value }));
+    setPasswordError('');
+  }
+
+  async function handlePasswordChange() {
+    if (passwordForm.password.length < 6) {
+      setPasswordError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirm) {
+      setPasswordError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setSavingPassword(true);
+    setPasswordError('');
+    try {
+      await updatePassword(passwordForm.password);
+      setPasswordForm({ password: '', confirm: '' });
+      showToast('Contraseña actualizada', 'success');
+    } catch (e) {
+      setPasswordError(e.message || 'No se pudo cambiar la contraseña.');
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await signOut();
+      showToast('Sesión cerrada', 'success');
+      navigate('/auth', { replace: true });
+    } catch (e) {
+      showToast(e.message || 'No se pudo cerrar sesión', 'error');
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-surface-bg">
@@ -323,24 +479,26 @@ export default function SettingsPage() {
           <SubSection title="Temas">
             <div className="flex gap-2">
               <button
-                onClick={() => { if (isDark) toggleTheme(); }}
+                onClick={() => selectTheme('light')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
                   !isDark
                     ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
                     : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
                 }`}
               >
-                ☀️ Claro
+                <span className={`sb-symbol ${isDark ? 'text-surface-text' : ''}`} aria-hidden="true">☼</span>
+                Claro
               </button>
               <button
-                onClick={() => { if (!isDark) toggleTheme(); }}
+                onClick={() => selectTheme('dark')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
                   isDark
                     ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
                     : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
                 }`}
               >
-                🌙 Oscuro
+                <span className={`sb-symbol ${!isDark ? 'text-slate-950' : ''}`} aria-hidden="true">☾</span>
+                Oscuro
               </button>
             </div>
           </SubSection>
@@ -393,6 +551,33 @@ export default function SettingsPage() {
             </div>
           </SubSection>
 
+          {/* Confirmaciones de lectura (ticks) */}
+          <SubSection title="Mensajería · Ticks de lectura">
+            <p className="text-xs text-surface-muted -mt-1 mb-3">
+              Personaliza el color de los ticks que indican el estado de tus mensajes.
+            </p>
+            <div className="space-y-3">
+              <TickColorPicker
+                label="Tick enviado"
+                description="Tick individual — mensaje enviado (no entregado aún)"
+                color={tickColorSent}
+                onChange={setTickColorSent}
+              />
+              <TickColorPicker
+                label="Tick enviado / recibido"
+                description="Doble tick gris — mensaje entregado"
+                color={tickColorUnread}
+                onChange={setTickColorUnread}
+              />
+              <TickColorPicker
+                label="Tick de leído"
+                description="Doble tick — confirmación de lectura"
+                color={tickColorRead}
+                onChange={setTickColorRead}
+              />
+            </div>
+          </SubSection>
+
           {/* Vista previa */}
           <SubSection title="Vista previa">
             <ChatPreview
@@ -403,6 +588,9 @@ export default function SettingsPage() {
               otherBubbleColor={otherBubbleColor}
               otherBubbleOpacity={otherBubbleOpacity}
               otherBubbleTextColor={otherBubbleTextColor}
+              tickColorSent={tickColorSent}
+              tickColorUnread={tickColorUnread}
+              tickColorRead={tickColorRead}
             />
           </SubSection>
         </AccordionSection>
@@ -420,24 +608,44 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar batería</div>
-                  <div className="text-xs text-surface-muted">Tus amigos pueden ver tu nivel de batería social</div>
-                </div>
-                <Toggle enabled={showBattery} onToggle={() => setShowBattery(v => !v)} />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <div>
                   <div className="text-sm font-display font-semibold text-surface-text">Mostrar en línea</div>
-                  <div className="text-xs text-surface-muted">Otros pueden ver cuando estás activo</div>
+                  <div className="text-xs text-surface-muted">
+                    {showOnline
+                      ? 'Tus amigos pueden ver cuando estás activo ahora mismo'
+                      : 'Apareces como desconectado — tampoco verás el estado de otros'}
+                  </div>
                 </div>
-                <Toggle enabled={showOnline} onToggle={() => setShowOnline(v => !v)} />
+                <Toggle enabled={showOnline} onToggle={() => setShowOnline(!showOnline)} />
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar última vez</div>
-                  <div className="text-xs text-surface-muted">Visible en chats privados</div>
+                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar última vez de actualización de batería</div>
+                  <div className="text-xs text-surface-muted">
+                    {showLastSeen
+                      ? 'Se muestra cuándo fue la última vez que tú y tus amigos actualizaron su batería'
+                      : 'La fecha de última actualización de batería queda oculta para todos'}
+                  </div>
                 </div>
-                <Toggle enabled={showLastSeen} onToggle={() => setShowLastSeen(v => !v)} />
+                <Toggle enabled={showLastSeen} onToggle={() => setShowLastSeen(!showLastSeen)} />
+              </div>
+
+              <div className="border-t border-surface-border" />
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Confirmación de lectura
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    {readReceipts
+                      ? 'Los demás ven cuándo lees sus mensajes (✓✓ en color) y tú ves los suyos'
+                      : 'No se envía confirmación de lectura — tampoco recibirás la de otros'}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={readReceipts}
+                  onToggle={() => setReadReceipts(!readReceipts)}
+                />
               </div>
             </div>
           </SubSection>
@@ -450,17 +658,83 @@ export default function SettingsPage() {
           onToggle={toggleSection}
           icon="🔔"
           title="Notificaciones"
-          subtitle="Mensajes, quedadas y solicitudes"
+          subtitle="Mensajes, batería y alertas"
         >
           <SubSection title="General">
-            <div className="space-y-1">
-              <InfoRow label="Notificaciones push" value="Activadas" />
-              <InfoRow label="Sonidos" value="Activados" />
-              <InfoRow label="Vibración" value="Activada" />
+            <div className="space-y-4">
+
+              {/* Silenciar todas */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Silenciar notificaciones
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    Desactiva todas las notificaciones del sistema
+                  </div>
+                </div>
+                <Toggle
+                  enabled={muteAllNotifications}
+                  onToggle={() => setMuteAllNotifications(!muteAllNotifications)}
+                />
+              </div>
+
+              {/* Sub-toggles — solo visibles si las notifs están activadas */}
+              {!muteAllNotifications && (
+                <div className="pl-4 border-l-2 border-surface-border space-y-4 animate-slide-down">
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar chats personales
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de mensajes directos
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={mutePersonalChats}
+                      onToggle={() => setMutePersonalChats(!mutePersonalChats)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar grupos privados
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de grupos
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteGroupChats}
+                      onToggle={() => setMuteGroupChats(!muteGroupChats)}
+                    />
+                  </div>
+
+                </div>
+              )}
+
+              <div className="border-t border-surface-border" />
+
+              {/* Silenciar cambios de batería — independiente del mute global */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Silenciar cambios de batería
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    No te avisaremos cuando un amigo actualice su energía
+                  </div>
+                </div>
+                <Toggle
+                  enabled={muteBatteryChanges}
+                  onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
+                />
+              </div>
+
             </div>
-            <p className="text-xs text-surface-muted mt-2">
-              Gestiona los permisos detallados desde los ajustes de tu dispositivo.
-            </p>
           </SubSection>
         </AccordionSection>
 
@@ -473,6 +747,39 @@ export default function SettingsPage() {
           title="Cuenta"
           subtitle="Perfil, sesión y datos"
         >
+          <SubSection title="Seguridad">
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={passwordForm.password}
+                onChange={e => setPasswordField('password', e.target.value)}
+                placeholder="Nueva contraseña"
+                autoComplete="new-password"
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+              <input
+                type="password"
+                value={passwordForm.confirm}
+                onChange={e => setPasswordField('confirm', e.target.value)}
+                placeholder="Repetir contraseña"
+                autoComplete="new-password"
+                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+              {passwordError && (
+                <p className="text-xs text-red-400 font-mono bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                  {passwordError}
+                </p>
+              )}
+              <button
+                onClick={handlePasswordChange}
+                disabled={savingPassword || !passwordForm.password || !passwordForm.confirm}
+                className="w-full py-2.5 rounded-xl bg-accent-primary/10 border border-accent-primary/20 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/20 transition-colors disabled:opacity-50"
+              >
+                {savingPassword ? 'Guardando...' : 'Cambiar contraseña'}
+              </button>
+            </div>
+          </SubSection>
+
           <SubSection title="Sesión">
             <div className="space-y-1">
               <InfoRow label="Versión" value="Phase 8" />
@@ -482,6 +789,13 @@ export default function SettingsPage() {
               className="mt-3 w-full py-2.5 rounded-xl bg-accent-primary/10 border border-accent-primary/20 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/20 transition-colors"
             >
               Editar perfil
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="mt-3 w-full py-2.5 rounded-xl border border-red-500/25 text-sm font-display font-semibold text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            >
+              {loggingOut ? 'Cerrando...' : 'Cerrar sesión'}
             </button>
           </SubSection>
         </AccordionSection>

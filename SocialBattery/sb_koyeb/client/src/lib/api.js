@@ -5,6 +5,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 async function apiFetch(path, options = {}, retries = 3) {
   const method = options.method || 'GET';
   const canRetry = method === 'GET' || method === 'HEAD';
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   // Si no hay sesión aún, esperar hasta 2s antes de rendirse
   let session = null;
@@ -20,11 +21,11 @@ async function apiFetch(path, options = {}, retries = 3) {
     res = await fetch(`${BASE_URL}${path}`, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: isFormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
     });
   } catch (networkErr) {
     // Failed to fetch = servidor dormido o sin red
@@ -55,6 +56,7 @@ async function apiFetch(path, options = {}, retries = 3) {
 export const api = {
   get: (path) => apiFetch(path),
   post: (path, body) => apiFetch(path, { method: 'POST', body }),
+  postForm: (path, formData) => apiFetch(path, { method: 'POST', body: formData }),
   patch: (path, body) => apiFetch(path, { method: 'PATCH', body }),
   delete: (path) => apiFetch(path, { method: 'DELETE' }),
 };
