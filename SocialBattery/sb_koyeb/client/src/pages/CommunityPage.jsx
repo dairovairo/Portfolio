@@ -88,10 +88,16 @@ function getDaysUntilLabel(dateStr) {
 }
 
 function ensureAbsoluteUrl(url) {
-  if (!url) return url;
-  const trimmed = url.trim();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  if (!url) return null;
+  const trimmed = url.trim().replace(/\s+/g, '');
+  if (!trimmed) return null;
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    new URL(withProtocol); // validate
+    return withProtocol;
+  } catch {
+    return null;
+  }
 }
 
 function getEventTime(event) {
@@ -278,7 +284,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
                 📍 {event.location}
               </span>
             )}
-            {event.url && (
+            {event.url && ensureAbsoluteUrl(event.url) && (
               <a
                 href={ensureAbsoluteUrl(event.url)}
                 target="_blank"
@@ -420,7 +426,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
         {community.organization && (
           <p className="text-xs text-accent-glow/80 font-mono mt-1">{community.organization}</p>
         )}
-        {community.url && (
+        {community.url && ensureAbsoluteUrl(community.url) && (
           <a
             href={ensureAbsoluteUrl(community.url)}
             target="_blank"
