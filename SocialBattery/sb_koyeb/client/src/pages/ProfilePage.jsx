@@ -172,19 +172,9 @@ export default function ProfilePage() {
 
     setUploadingAvatar(true);
     try {
-      const { supabase } = await import('../lib/supabase');
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
       const formData = new FormData();
       formData.append('avatar', file);
-      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/users/avatar`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      await api.postForm('/users/avatar', formData);
       await refreshProfile();
       addToast('Foto actualizada ✓', 'success');
     } catch (err) {

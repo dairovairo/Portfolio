@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
+const { applyBatteryExpiry } = require('../lib/batteryExpiry');
 
 // ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -10,8 +11,8 @@ router.get('/', requireAuth, async (req, res) => {
   const { data: friendships, error: fErr } = await supabase
     .from('friendships')
     .select(`
-      requester:requester_id(id, username, display_name, avatar_url, battery_level, last_seen_at),
-      addressee:addressee_id(id, username, display_name, avatar_url, battery_level, last_seen_at)
+      requester:requester_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
+      addressee:addressee_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .eq('status', 'accepted')
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
@@ -21,7 +22,7 @@ router.get('/', requireAuth, async (req, res) => {
   const friendsMap = {};
   (friendships || []).forEach(f => {
     const friend = f.requester?.id === userId ? f.addressee : f.requester;
-    if (friend) friendsMap[friend.id] = friend;
+    if (friend) friendsMap[friend.id] = applyBatteryExpiry(friend);
   });
 
   const { data: messages, error: mErr } = await supabase
@@ -29,8 +30,8 @@ router.get('/', requireAuth, async (req, res) => {
     .select(`
       id, content, type, hangout_status, created_at, read_at, delivered_at,
       deleted_for_everyone, deleted_for_self,
-      sender:sender_id(id, username, display_name, avatar_url, battery_level, last_seen_at),
-      receiver:receiver_id(id, username, display_name, avatar_url, battery_level, last_seen_at)
+      sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
+      receiver:receiver_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
     .order('created_at', { ascending: false })
@@ -41,7 +42,7 @@ router.get('/', requireAuth, async (req, res) => {
   const convMap = {};
   (messages || []).forEach(msg => {
     const isMe = msg.sender.id === userId;
-    const partner = isMe ? msg.receiver : msg.sender;
+    const partner = applyBatteryExpiry(isMe ? msg.receiver : msg.sender);
     if (!friendsMap[partner.id]) return;
 
     // Skip messages deleted for me

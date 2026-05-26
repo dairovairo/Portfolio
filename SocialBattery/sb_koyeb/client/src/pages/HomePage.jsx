@@ -8,7 +8,7 @@ import BatterySlider from '../components/BatterySlider';
 import FriendCard from '../components/FriendCard';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import BottomNav from '../components/BottomNav';
-import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
 
@@ -327,7 +327,7 @@ export default function HomePage() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
 
   useEffect(() => {
-    if (profile) setBattery(profile.battery_level ?? 50);
+    if (profile) setBattery(getEffectiveBatteryLevel(profile));
   }, [profile]);
 
   const fetchFriends = useCallback(async () => {
@@ -410,12 +410,10 @@ export default function HomePage() {
     fetchGroups();
   }
 
-  const pendingUpdate = profile && (
-    !profile.battery_updated_at ||
-    new Date(profile.battery_updated_at).toDateString() !== new Date().toDateString()
-  );
+  const profileBatteryLevel = profile ? getEffectiveBatteryLevel(profile) : battery;
+  const pendingUpdate = profile && isBatteryExpired(profile.battery_updated_at);
 
-  const color = getBatteryColor(profile?.battery_level ?? 50);
+  const color = getBatteryColor(profileBatteryLevel);
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
@@ -503,7 +501,7 @@ export default function HomePage() {
                 className="font-display text-4xl font-bold"
                 style={{ color: color.hex, textShadow: `0 0 25px ${color.hex}50` }}
               >
-                {profile?.battery_level ?? battery}
+                {profileBatteryLevel}
               </span>
               <span className="text-surface-muted text-lg font-display">%</span>
             </div>

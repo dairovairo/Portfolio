@@ -2,54 +2,37 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
-const multer = require('multer');
-const path = require('path');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|webp|gif/;
-    const ok = allowed.test(path.extname(file.originalname).toLowerCase()) &&
-               allowed.test(file.mimetype);
-    cb(ok ? null : new Error('Only image files allowed'), ok);
-  },
-});
+const upload = createImageUpload({ maxSizeMb: 2 });
+
+function uploadAvatar(req, res, next) {
+  upload.single('avatar')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la imagen' });
+  });
+}
 
 // POST /api/users/avatar — upload avatar to Supabase Storage
-router.post('/avatar', requireAuth, upload.single('avatar'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file provided' });
-
-  const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
-  const fileName = `avatars/${req.user.id}${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from('avatars')
-    .upload(fileName, req.file.buffer, {
-      contentType: req.file.mimetype,
-      upsert: true,
+router.post('/avatar', requireAuth, uploadAvatar, async (req, res) => {
+  try {
+    const url = await storeImage({
+      file: req.file,
+      objectName: `avatars/${req.user.id}`,
+      fallbackMaxLength: 100000,
     });
 
-  if (uploadError) {
-    // Fallback: store as base64 data URL (works without storage bucket)
-    const base64 = req.file.buffer.toString('base64');
-    const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
-    // Update avatar_url with data URL (keep it short for profile pictures)
-    if (dataUrl.length > 100000) {
-      return res.status(413).json({ error: 'Image too large for storage fallback' });
-    }
-    await supabase.from('users').update({ avatar_url: dataUrl }).eq('id', req.user.id);
-    return res.json({ url: dataUrl });
+    await supabase
+      .from('users')
+      .update({ avatar_url: url })
+      .eq('id', req.user.id);
+
+    res.json({ url });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'No se pudo subir la imagen' });
   }
-
-  const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-
-  await supabase
-    .from('users')
-    .update({ avatar_url: publicUrl })
-    .eq('id', req.user.id);
-
-  res.json({ url: publicUrl });
 });
 
 // POST /api/users/push-subscribe — store push subscription
@@ -104,7 +87,7 @@ router.get('/search', requireAuth, async (req, res) => {
     .limit(10);
 
   if (error) return res.status(500).json({ error: 'Search failed' });
-  res.json({ users: data });
+  res.json({ users: applyBatteryExpiryToUsers(data) });
 });
 
 // GET /api/users/:id/stats — public stats for any user profile
@@ -179,7 +162,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'User not found' });
-  res.json({ user: data });
+  res.json({ user: applyBatteryExpiry(data) });
 });
 
 // PATCH /api/users/me — update profile
@@ -202,7 +185,7 @@ router.patch('/me', requireAuth, async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: 'Update failed' });
-  res.json({ user: data });
+  res.json({ user: applyBatteryExpiry(data) });
 });
 
 module.exports = router;

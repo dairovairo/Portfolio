@@ -63,7 +63,15 @@ export function AuthProvider({ children }) {
 
   const signUp = async (email, password) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
+    if (error) {
+      if (/already|registered|exists/i.test(error.message || '')) {
+        throw new Error('Esta cuenta ya pertenece a un usuario');
+      }
+      throw error;
+    }
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('Esta cuenta ya pertenece a un usuario');
+    }
     return data;
   };
 

@@ -1,6 +1,24 @@
 /**
  * Returns Tailwind color class and hex based on battery level
  */
+export const BATTERY_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function isBatteryExpired(updatedAt, now = Date.now()) {
+  if (!updatedAt) return true;
+  const updatedTime = new Date(updatedAt).getTime();
+  return Number.isNaN(updatedTime) || now - updatedTime >= BATTERY_TTL_MS;
+}
+
+export function getEffectiveBatteryLevel(userOrLevel, updatedAt) {
+  if (typeof userOrLevel === 'object' && userOrLevel !== null) {
+    return isBatteryExpired(userOrLevel.battery_updated_at)
+      ? 0
+      : userOrLevel.battery_level ?? 0;
+  }
+
+  return isBatteryExpired(updatedAt) ? 0 : userOrLevel ?? 0;
+}
+
 export function getBatteryColor(level) {
   if (level <= 15) return { tw: 'text-red-500', hex: '#ef4444', label: 'Agotado' };
   if (level <= 30) return { tw: 'text-orange-500', hex: '#f97316', label: 'Bajo' };
@@ -26,6 +44,7 @@ export function getBatteryEmoji(level) {
 export function formatRelativeTime(dateStr) {
   if (!dateStr) return 'Sin actualizar hoy';
   const diff = Date.now() - new Date(dateStr).getTime();
+  if (Number.isNaN(diff) || diff >= BATTERY_TTL_MS) return 'Caducada';
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Ahora mismo';
   if (mins < 60) return `Hace ${mins}min`;

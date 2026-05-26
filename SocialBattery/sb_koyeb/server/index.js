@@ -14,7 +14,7 @@ const badgesRoutes    = require('./routes/badges');
 const poolsRoutes     = require('./routes/pools');
 const groupsRoutes    = require('./routes/groups');
 const communityRoutes = require('./routes/community');
-const { estimateBatteries } = require('./jobs/estimateBattery');
+const { expireStaleBatteries } = require('./lib/batteryExpiry');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,8 +52,10 @@ app.get('/api/health', (req, res) => {
 
 // ── Cron Jobs ──────────────────────────────────────────────────────────────
 cron.schedule('0 * * * *', () => {
-  console.log('[CRON] Running battery estimation...');
-  estimateBatteries();
+  console.log('[CRON] Expiring stale batteries...');
+  expireStaleBatteries().catch(err => {
+    console.error('[CRON] Battery expiry failed:', err);
+  });
 });
 
 cron.schedule('0 0 * * *', async () => {

@@ -3,6 +3,17 @@ const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+
+const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
+
+function uploadEventCover(req, res, next) {
+  eventCoverUpload.single('cover')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la portada' });
+  });
+}
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseRequestKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -172,7 +183,7 @@ router.get('/events', requireAuth, async (req, res) => {
     const { data: events, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, location, organization,
+        id, title, description, category, event_date, location, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
@@ -191,7 +202,7 @@ router.get('/events', requireAuth, async (req, res) => {
 });
 
 // POST /api/community/events
-router.post('/events', requireAuth, async (req, res) => {
+router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, location, max_attendees, community_id, organization } = req.body;
   const userId = req.user.id;
 
@@ -218,6 +229,15 @@ router.post('/events', requireAuth, async (req, res) => {
       }
     }
 
+    let coverImageUrl = req.body.cover_image_url?.trim() || null;
+    if (req.file) {
+      coverImageUrl = await storeImage({
+        file: req.file,
+        objectName: `event-covers/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 4500000,
+      });
+    }
+
     const { data: event, error } = await supabase
       .from('community_events')
       .insert({
@@ -227,6 +247,7 @@ router.post('/events', requireAuth, async (req, res) => {
         event_date,
         location: location?.trim() || null,
         organization: organization?.trim() || null,
+        cover_image_url: coverImageUrl,
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
@@ -438,7 +459,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: events, error: eventsError } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, location, organization,
+        id, title, description, category, event_date, location, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)

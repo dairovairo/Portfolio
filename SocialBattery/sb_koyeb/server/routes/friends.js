@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { checkConnectorBadgeForUsers } = require('../jobs/badges');
+const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 
 // POST /api/friends/request — send friend request
 router.post('/request', requireAuth, async (req, res) => {
@@ -68,14 +69,18 @@ router.get('/requests', requireAuth, async (req, res) => {
     .from('friendships')
     .select(`
       id, created_at,
-      requester:requester_id(id, username, display_name, avatar_url, battery_level, last_seen_at)
+      requester:requester_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .eq('addressee_id', req.user.id)
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: 'Failed to fetch requests' });
-  res.json({ requests: data });
+  const requests = (data || []).map(request => ({
+    ...request,
+    requester: applyBatteryExpiry(request.requester),
+  }));
+  res.json({ requests });
 });
 
 // GET /api/friends — list accepted friends
@@ -95,9 +100,9 @@ router.get('/', requireAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: 'Failed to fetch friends' });
 
   // Flatten: return the friend (not me)
-  const friends = (data || []).map(f =>
+  const friends = applyBatteryExpiryToUsers((data || []).map(f =>
     f.requester?.id === userId ? f.addressee : f.requester
-  )
+  ))
     .filter(Boolean)
     .sort((a, b) => (b.battery_level ?? -1) - (a.battery_level ?? -1));
 

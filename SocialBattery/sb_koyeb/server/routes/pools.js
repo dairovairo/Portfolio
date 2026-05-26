@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { checkOrganizerBadgeForUser } = require('../jobs/badges');
+const { applyBatteryExpiry } = require('../lib/batteryExpiry');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,12 +81,15 @@ async function canAccessPool(pool, userId, friendIds) {
 function buildParticipantPreview(rawParticipants) {
   return (rawParticipants || [])
     .slice(0, 6)
-    .map(p => ({
-      id: p.user?.id,
-      display_name: p.user?.display_name,
-      avatar_url: p.user?.avatar_url,
-      battery_level: p.user?.battery_level,
-    }))
+    .map(p => {
+      const user = applyBatteryExpiry(p.user);
+      return {
+        id: user?.id,
+        display_name: user?.display_name,
+        avatar_url: user?.avatar_url,
+        battery_level: user?.battery_level,
+      };
+    })
     .filter(p => p.id);
 }
 
@@ -102,10 +106,10 @@ router.get('/', requireAuth, async (req, res) => {
       .select(`
         id, activity, description, location_hint, scheduled_at,
         max_people, is_public, group_id, status, created_at, creator_id,
-        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated),
+        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
           joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level)
+          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
         )
       `)
       .order('scheduled_at', { ascending: true })
@@ -187,6 +191,7 @@ router.get('/', requireAuth, async (req, res) => {
       const isCreator = pool.creator?.id === userId;
       return {
         ...pool,
+        creator: applyBatteryExpiry(pool.creator),
         pool_participants: undefined,
         participant_count: participantCount,
         participants_preview: buildParticipantPreview(participants),
@@ -213,10 +218,10 @@ router.get('/:id', requireAuth, async (req, res) => {
       .select(`
         id, activity, description, location_hint, scheduled_at,
         max_people, is_public, group_id, status, created_at, creator_id,
-        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated),
+        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
           joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated)
+          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
         )
       `)
       .eq('id', req.params.id)
@@ -233,17 +238,21 @@ router.get('/:id', requireAuth, async (req, res) => {
     const isCreator = pool.creator?.id === userId;
 
     // Full participant list for detail view
-    const participantList = participants.map(p => ({
-      id: p.user?.id,
-      display_name: p.user?.display_name,
-      avatar_url: p.user?.avatar_url,
-      battery_level: p.user?.battery_level,
-      joined_at: p.joined_at,
-    })).filter(p => p.id);
+    const participantList = participants.map(p => {
+      const user = applyBatteryExpiry(p.user);
+      return {
+        id: user?.id,
+        display_name: user?.display_name,
+        avatar_url: user?.avatar_url,
+        battery_level: user?.battery_level,
+        joined_at: p.joined_at,
+      };
+    }).filter(p => p.id);
 
     res.json({
       pool: {
         ...pool,
+        creator: applyBatteryExpiry(pool.creator),
         pool_participants: undefined,
         participant_count: participants.length,
         participants: participantList,

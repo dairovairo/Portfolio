@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
+const { expireUserBatteryIfNeeded } = require('../lib/batteryExpiry');
 
 // POST /api/auth/profile — called after Supabase signup to create public profile
 router.post('/profile', requireAuth, async (req, res) => {
@@ -70,7 +71,8 @@ router.get('/me', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'Profile not found. Please complete setup.' });
   }
 
-  res.json({ user: data });
+  const user = await expireUserBatteryIfNeeded(data);
+  res.json({ user });
 });
 
 module.exports = router;

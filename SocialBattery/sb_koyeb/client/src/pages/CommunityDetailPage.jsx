@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
@@ -91,6 +91,30 @@ function sortEventsByProximity(eventList = []) {
 
 const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', 'Otro'];
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = event => resolve(event.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildEventFormData(form, extra = {}) {
+  const formData = new FormData();
+  const payload = { ...form, ...extra };
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (key === 'cover_file') return;
+    if (value !== undefined && value !== null && value !== '') {
+      formData.append(key, String(value));
+    }
+  });
+
+  if (form.cover_file) formData.append('cover', form.cover_file);
+  return formData;
+}
+
 function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
   const [busy, setBusy] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -124,6 +148,17 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
 
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4 transition-all hover:border-accent-primary/30">
+      {event.cover_image_url && (
+        <div className="mb-3 aspect-[16/9] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+          <img
+            src={event.cover_image_url}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        </div>
+      )}
+
       <div className="flex gap-3">
         <div className="w-11 h-11 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
           {emoji}
@@ -207,6 +242,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   const minDate = new Date(Date.now() + 30 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
+  const coverInputRef = useRef(null);
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -216,10 +252,31 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     location: '',
     max_attendees: 50,
   });
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
+
+  async function handleCoverChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setError('La portada no puede superar 3MB');
+      e.target.value = '';
+      return;
+    }
+    setCoverFile(file);
+    setCoverPreview(await readFileAsDataUrl(file));
+    setError('');
+  }
+
+  function clearCover() {
+    setCoverFile(null);
+    setCoverPreview('');
+    if (coverInputRef.current) coverInputRef.current.value = '';
+  }
 
   async function handleSubmit() {
     if (!form.title.trim()) { setError('El título es obligatorio'); return; }
@@ -228,6 +285,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     try {
       await onCreate({
         ...form,
+        cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         max_attendees: parseInt(form.max_attendees, 10) || 50,
       });
@@ -319,6 +377,43 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             maxLength={200}
             className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
           />
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Portada <span className="text-slate-600">(opcional)</span>
+            </label>
+            {coverPreview ? (
+              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                <div className="aspect-[16/9]">
+                  <img src={coverPreview} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="truncate text-xs text-surface-muted">{coverFile?.name}</span>
+                  <button
+                    type="button"
+                    onClick={clearCover}
+                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
+              >
+                Elegir foto de la galería
+              </button>
+            )}
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+          </div>
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
           <button
             onClick={handleSubmit}
@@ -392,7 +487,7 @@ export default function CommunityDetailPage() {
   }, [load]);
 
   async function handleCreateEvent(form) {
-    await api.post('/community/events', { ...form, community_id: communityId });
+    await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
     showToast('Evento publicado', 'success');
     await load();
   }
