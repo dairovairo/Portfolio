@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 
+// La applicationServerKey debe coincidir con VAPID_PUBLIC_KEY del server.
+// Configúrala en client/.env como VITE_VAPID_PUBLIC_KEY.
+const VAPID_PUBLIC_KEY =
+  import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+  // Clave de demo — reemplazar con la real si no se usa la variable de entorno
+  'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+
 export function usePush() {
   const [permission, setPermission] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
@@ -31,13 +38,9 @@ export function usePush() {
   const subscribe = async () => {
     try {
       const reg = await navigator.serviceWorker.ready;
-      // We use a dummy VAPID key — in production replace with real one
-      // For now just save the subscription endpoint to backend for future use
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'
-        ),
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
       const json = sub.toJSON();
       await api.post('/users/push-subscribe', {

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
 
 function normalizeText(value = '') {
@@ -530,6 +531,7 @@ export default function CommunityDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { clearCommunityBadge } = useCommunityNotifications();
   const [community, setCommunity] = useState(null);
   const [currentEvents, setCurrentEvents] = useState([]);
   const [pastEvents, setPastEvents] = useState([]);
@@ -552,6 +554,7 @@ export default function CommunityDetailPage() {
 
   useEffect(() => {
     load();
+    clearCommunityBadge(communityId);
   }, [load]);
 
   async function handleCreateEvent(form) {
