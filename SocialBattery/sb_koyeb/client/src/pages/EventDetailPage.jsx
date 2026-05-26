@@ -5,6 +5,13 @@ import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function ensureAbsoluteUrl(url) {
+  if (!url) return url;
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 function formatDateTime(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
@@ -406,7 +413,7 @@ export default function EventDetailPage() {
           {event.url && (
             <InfoRow icon="🔗" label="Enlace">
               <a
-                href={event.url}
+                href={ensureAbsoluteUrl(event.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-accent-glow hover:underline break-all"
