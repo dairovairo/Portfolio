@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
+const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 
 // ── GET /api/groups — list my groups (owned + member) ───────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -14,7 +15,7 @@ router.get('/', requireAuth, async (req, res) => {
           id, name, created_at,
           owner:owner_id(id, username, display_name, avatar_url),
           friend_group_members(
-            user:user_id(id, username, display_name, avatar_url, battery_level)
+            user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
           )
         )
       `)
@@ -26,7 +27,7 @@ router.get('/', requireAuth, async (req, res) => {
       .map(row => {
         const g = row.group;
         if (!g) return null;
-        const members = (g.friend_group_members || []).map(m => m.user).filter(Boolean);
+        const members = applyBatteryExpiryToUsers((g.friend_group_members || []).map(m => m.user).filter(Boolean));
         return {
           id: g.id,
           name: g.name,
@@ -40,10 +41,62 @@ router.get('/', requireAuth, async (req, res) => {
       .filter(Boolean)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+    // Fetch last message for each group
+    if (groups.length > 0) {
+      const groupIds = groups.map(g => g.id);
+      const { data: lastMsgs } = await supabase
+        .from('group_messages')
+        .select('group_id, created_at, sender_id, content')
+        .in('group_id', groupIds)
+        .order('created_at', { ascending: false });
+
+      const lastMsgMap = {};
+      (lastMsgs || []).forEach(msg => {
+        if (!lastMsgMap[msg.group_id]) lastMsgMap[msg.group_id] = msg;
+      });
+      groups.forEach(g => { g.last_message = lastMsgMap[g.id] || null; });
+    }
+
     res.json({ groups });
   } catch (err) {
     console.error('[GROUPS] GET /', err);
     res.status(500).json({ error: 'Failed to fetch groups' });
+  }
+});
+
+// ── GET /api/groups/unread-counts — count unread messages per group ──────────
+router.get('/unread-counts', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  let reads = {};
+  try { reads = JSON.parse(req.query.reads || '{}'); } catch {}
+
+  try {
+    // Get all groups this user belongs to
+    const { data: memberships } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('user_id', userId);
+
+    const groupIds = (memberships || []).map(m => m.group_id);
+    if (groupIds.length === 0) return res.json({ counts: {} });
+
+    const counts = {};
+    await Promise.all(groupIds.map(async (groupId) => {
+      const since = reads[groupId];
+      let query = supabase
+        .from('group_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', groupId)
+        .neq('sender_id', userId);
+      if (since) query = query.gt('created_at', since);
+      const { count } = await query;
+      counts[groupId] = count || 0;
+    }));
+
+    res.json({ counts });
+  } catch (err) {
+    console.error('[GROUPS] GET /unread-counts', err);
+    res.status(500).json({ error: 'Failed to fetch unread counts' });
   }
 });
 
@@ -103,7 +156,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         owner:owner_id(id, username, display_name, avatar_url),
         friend_group_members(
           joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, last_seen_at)
+          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
         )
       `)
       .eq('id', req.params.id)
@@ -111,7 +164,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     if (error || !group) return res.status(404).json({ error: 'Group not found' });
 
-    const members = (group.friend_group_members || []).map(m => m.user).filter(Boolean);
+    const members = applyBatteryExpiryToUsers((group.friend_group_members || []).map(m => m.user).filter(Boolean));
     res.json({
       group: {
         ...group,
@@ -249,14 +302,19 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .from('group_messages')
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level)
+        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('group_id', req.params.id)
       .order('created_at', { ascending: true })
       .limit(limit);
 
     if (error) throw error;
-    res.json({ messages: data });
+    res.json({
+      messages: (data || []).map(message => ({
+        ...message,
+        sender: applyBatteryExpiry(message.sender),
+      })),
+    });
   } catch (err) {
     console.error('[GROUPS] GET /:id/messages', err);
     res.status(500).json({ error: 'Failed to fetch messages' });
@@ -287,12 +345,17 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level)
+        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
 
     if (error) throw error;
-    res.status(201).json({ message: data });
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
   } catch (err) {
     console.error('[GROUPS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });

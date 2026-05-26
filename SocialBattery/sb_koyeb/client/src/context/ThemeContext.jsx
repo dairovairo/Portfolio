@@ -17,14 +17,15 @@ export function ThemeProvider({ children }) {
     // Update PWA theme-color meta
     const meta = document.getElementById('theme-color-meta');
     if (meta) {
-      meta.setAttribute('content', theme === 'light' ? '#f8f7ff' : '#0a0a0f');
+      meta.setAttribute('content', theme === 'light' ? '#f4fbfb' : '#0a0a0f');
     }
   }, [theme]);
 
+  const setAppTheme = (nextTheme) => setTheme(nextTheme === 'light' ? 'light' : 'dark');
   const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle, isDark: theme === 'dark' }}>
+    <ThemeContext.Provider value={{ theme, setTheme: setAppTheme, toggle, isDark: theme === 'dark' }}>
       {children}
     </ThemeContext.Provider>
   );

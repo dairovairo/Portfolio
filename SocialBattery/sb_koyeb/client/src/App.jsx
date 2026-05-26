@@ -15,6 +15,9 @@ import PoolsPage from './pages/PoolsPage';
 import BadgesPage from './pages/BadgesPage';
 import GroupChatPage from './pages/GroupChatPage';
 import SettingsPage from './pages/SettingsPage';
+import CommunityPage from './pages/CommunityPage';
+import CommunityDetailPage from './pages/CommunityDetailPage';
+import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile } = useAuth();
@@ -61,6 +64,8 @@ function AppRoutes() {
       <Route path="/pools"                    element={<PoolsPage />} />
       <Route path="/badges"                   element={<BadgesPage />} />
       <Route path="/settings"                 element={<SettingsPage />} />
+      <Route path="/community"               element={<CommunityPage />} />
+      <Route path="/community/:communityId"   element={<CommunityDetailPage />} />
       <Route path="*"                         element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -73,7 +78,9 @@ export default function App() {
         <SettingsProvider>
           <ToastProvider>
             <AuthProvider>
-              <AppRoutes />
+              <CommunityNotificationsProvider>
+                <AppRoutes />
+              </CommunityNotificationsProvider>
             </AuthProvider>
           </ToastProvider>
         </SettingsProvider>

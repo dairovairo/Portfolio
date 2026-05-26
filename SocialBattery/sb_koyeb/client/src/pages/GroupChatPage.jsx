@@ -6,6 +6,11 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 
+// ── Mark group as read in localStorage ───────────────────────────────────────
+function markGroupRead(groupId) {
+  localStorage.setItem(`grp_read_${groupId}`, new Date().toISOString());
+}
+
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function Avatar({ user, size = 'sm' }) {
@@ -36,7 +41,147 @@ function IdentityPill({ badge }) {
   );
 }
 
-function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser }) {
+// ── Add Member Modal ──────────────────────────────────────────────────────────
+
+function AddMemberModal({ group, onClose, onAdded }) {
+  const [friends, setFriends] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(null);
+  const [search, setSearch] = useState('');
+
+  const memberIds = new Set((group?.members || []).map(m => m.id));
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { friends: data } = await api.get('/friends');
+        setFriends(data || []);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    }
+    load();
+  }, []);
+
+  const eligible = friends.filter(f =>
+    !memberIds.has(f.id) &&
+    (f.display_name?.toLowerCase().includes(search.toLowerCase()) ||
+     f.username?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  async function handleAdd(friend) {
+    setAdding(friend.id);
+    try {
+      await api.post(`/groups/${group.id}/members`, { user_id: friend.id });
+      onAdded(friend);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface-card border border-surface-border rounded-t-3xl p-5 w-full max-w-lg space-y-4 animate-slide-up max-h-[75vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between flex-shrink-0">
+          <div>
+            <div className="font-display font-bold text-surface-text">Añadir miembro</div>
+            <div className="text-xs text-surface-muted font-mono">{group.name}</div>
+          </div>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+
+        <input
+          type="text"
+          placeholder="Buscar amigos..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-shrink-0 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
+        />
+
+        <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+          {loading ? (
+            [1, 2, 3].map(i => <div key={i} className="h-14 bg-surface-bg rounded-2xl animate-pulse" />)
+          ) : eligible.length === 0 ? (
+            <div className="text-center text-slate-500 text-sm py-8">
+              {friends.filter(f => !memberIds.has(f.id)).length === 0
+                ? 'Todos tus amigos ya están en el grupo'
+                : 'No se encontraron amigos'}
+            </div>
+          ) : (
+            eligible.map(friend => {
+              const color = getBatteryColor(friend.battery_level ?? 50);
+              const isAdding = adding === friend.id;
+              return (
+                <div key={friend.id} className="bg-surface-bg border border-surface-border rounded-2xl p-3 flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center font-display font-bold border-2 flex-shrink-0 text-sm"
+                    style={{ borderColor: color.hex, background: `${color.hex}15` }}
+                  >
+                    {friend.avatar_url
+                      ? <img src={friend.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                      : (friend.display_name || friend.username)?.[0]?.toUpperCase()
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{friend.display_name || friend.username}</div>
+                    <div className="text-xs text-surface-muted font-mono">@{friend.username} · 🔋 {friend.battery_level ?? '—'}%</div>
+                  </div>
+                  <button
+                    onClick={() => handleAdd(friend)}
+                    disabled={isAdding}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-accent-primary/20 text-accent-glow border border-accent-primary/30 text-xs font-display font-semibold hover:bg-accent-primary/30 transition-colors disabled:opacity-50"
+                  >
+                    {isAdding ? '...' : '+ Añadir'}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Confirm modal ─────────────────────────────────────────────────────────────
+
+function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
+      <div
+        className="bg-surface-card border border-surface-border rounded-t-3xl p-5 w-full max-w-lg space-y-4 animate-slide-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="font-display font-bold text-surface-text">{title}</div>
+        <p className="text-sm text-surface-muted leading-relaxed">{message}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl bg-surface-bg border border-surface-border text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Group info panel ──────────────────────────────────────────────────────────
+
+function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser, onAddMember, onLeaveGroup, onDeleteGroup, onRemoveMember }) {
+  const [confirmAction, setConfirmAction] = useState(null);
+
   const identitiesByUser = assignments.reduce((acc, assignment) => {
     if (!acc[assignment.userId]) acc[assignment.userId] = [];
     acc[assignment.userId].push(assignment);
@@ -44,92 +189,165 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
   }, {});
 
   const members = group?.members || [];
+  const isOwner = group?.owner?.id === currentUserId;
+
+  function handleConfirm() {
+    if (!confirmAction) return;
+    if (confirmAction.type === 'leave') onLeaveGroup();
+    else if (confirmAction.type === 'delete') onDeleteGroup();
+    else if (confirmAction.type === 'remove') onRemoveMember(confirmAction.memberId);
+    setConfirmAction(null);
+  }
 
   return (
-    <div className="border-b border-surface-border bg-surface-bg/95 backdrop-blur-xl flex-shrink-0">
-      <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="font-display font-bold text-surface-text text-sm">Integrantes</div>
-            <div className="text-xs text-surface-muted font-mono">
-              {members.length} miembros · {assignments.length} identidades activas
+    <>
+      <div className="border-b border-surface-border bg-surface-bg/95 backdrop-blur-xl flex-shrink-0">
+        <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-display font-bold text-surface-text text-sm">Integrantes</div>
+              <div className="text-xs text-surface-muted font-mono">
+                {members.length} miembros · {assignments.length} identidades activas
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {loading && <span className="text-xs text-surface-muted font-mono animate-pulse">Calculando...</span>}
+              {isOwner && (
+                <button
+                  onClick={onAddMember}
+                  className="text-xs bg-accent-primary/15 text-accent-glow border border-accent-primary/25 px-3 py-1.5 rounded-xl font-display font-semibold hover:bg-accent-primary/25 transition-colors flex items-center gap-1"
+                >
+                  <span>+</span> Añadir
+                </button>
+              )}
             </div>
           </div>
-          {loading && <span className="text-xs text-surface-muted font-mono animate-pulse">Calculando...</span>}
-        </div>
 
-        <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
-          {members.map(member => {
-            const memberIdentities = identitiesByUser[member.id] || [];
-            const isOwner = group?.owner?.id === member.id;
-            const isMe = currentUserId === member.id;
-            const color = getBatteryColor(member.battery_level ?? 50);
+          <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+            {members.map(member => {
+              const memberIdentities = identitiesByUser[member.id] || [];
+              const isOwnerMember = group?.owner?.id === member.id;
+              const isMe = currentUserId === member.id;
+              const color = getBatteryColor(member.battery_level ?? 50);
+              const canRemove = isOwner && !isOwnerMember;
 
-            return (
-              <div key={member.id} className="bg-surface-card border border-surface-border rounded-2xl p-3">
-                <div className="flex items-start gap-3">
-                  <button onClick={() => onOpenUser(member.id)} className="flex-shrink-0">
-                    <Avatar user={member} size="md" />
-                  </button>
-
-                  <div className="flex-1 min-w-0">
-                    <button onClick={() => onOpenUser(member.id)} className="text-left w-full">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-display font-semibold text-surface-text text-sm truncate">
-                          {member.display_name || member.username}
-                        </span>
-                        {isMe && (
-                          <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
-                            Tu
-                          </span>
-                        )}
-                        {isOwner && (
-                          <span className="text-[11px] text-surface-muted bg-surface-bg border border-surface-border px-1.5 py-0.5 rounded-md flex-shrink-0">
-                            Owner
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-surface-muted font-mono truncate">@{member.username}</div>
+              return (
+                <div key={member.id} className="bg-surface-card border border-surface-border rounded-2xl p-3">
+                  <div className="flex items-start gap-3">
+                    <button onClick={() => onOpenUser(member.id)} className="flex-shrink-0">
+                      <Avatar user={member} size="md" />
                     </button>
 
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {memberIdentities.length > 0 ? (
-                        memberIdentities.map(identity => (
-                          <IdentityPill key={identity.badgeId} badge={identity.badge} />
-                        ))
-                      ) : (
-                        <span className="text-xs text-slate-600 font-mono">Sin identidad activa</span>
+                    <div className="flex-1 min-w-0">
+                      <button onClick={() => onOpenUser(member.id)} className="text-left w-full">
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                          <span className="font-display font-semibold text-surface-text text-sm truncate">
+                            {member.display_name || member.username}
+                          </span>
+                          {isMe && (
+                            <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                              Tú
+                            </span>
+                          )}
+                          {isOwnerMember && (
+                            <span className="text-[11px] text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                              Administrador
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-surface-muted font-mono truncate">@{member.username}</div>
+                      </button>
+
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {memberIdentities.length > 0 ? (
+                          memberIdentities.map(identity => (
+                            <IdentityPill key={identity.badgeId} badge={identity.badge} />
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-600 font-mono">Sin identidad activa</span>
+                        )}
+                      </div>
+
+                      {member.last_seen_at && (
+                        <div className="text-[11px] text-surface-muted/70 font-mono mt-2">
+                          {formatRelativeTime(member.last_seen_at)}
+                        </div>
                       )}
                     </div>
 
-                    {member.last_seen_at && (
-                      <div className="text-[11px] text-surface-muted/70 font-mono mt-2">
-                        {formatRelativeTime(member.last_seen_at)}
+                    <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                      <div className="font-display font-bold tabular-nums text-sm" style={{ color: color.hex }}>
+                        {member.battery_level ?? '—'}%
                       </div>
-                    )}
-                  </div>
-
-                  <div className="flex-shrink-0 text-right">
-                    <div className="font-display font-bold tabular-nums text-sm" style={{ color: color.hex }}>
-                      {member.battery_level ?? '—'}%
+                      {member.battery_is_estimated && (
+                        <div className="text-[11px] text-yellow-400 font-mono">estimada</div>
+                      )}
+                      {canRemove && (
+                        <button
+                          onClick={() => setConfirmAction({ type: 'remove', memberId: member.id, memberName: member.display_name || member.username })}
+                          className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg font-display font-semibold hover:bg-red-500/20 transition-colors"
+                        >
+                          Expulsar
+                        </button>
+                      )}
                     </div>
-                    {member.battery_is_estimated && (
-                      <div className="text-[11px] text-yellow-400 font-mono">estimada</div>
-                    )}
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {!loading && assignments.length === 0 && (
-          <div className="bg-surface-card/50 border border-surface-border rounded-2xl p-3 text-xs text-surface-muted leading-relaxed">
-            Aun no hay identidades activas. Se calculan con la actividad del grupo y, al conseguir una, la insignia queda desbloqueada en el perfil para siempre.
+              );
+            })}
           </div>
-        )}
+
+          {!loading && assignments.length === 0 && (
+            <div className="bg-surface-card/50 border border-surface-border rounded-2xl p-3 text-xs text-surface-muted leading-relaxed">
+              Aun no hay identidades activas. Se calculan con la actividad del grupo y, al conseguir una, la insignia queda desbloqueada en el perfil para siempre.
+            </div>
+          )}
+
+          {/* Danger zone */}
+          <div className="pt-1 border-t border-surface-border/50">
+            {isOwner ? (
+              <button
+                onClick={() => setConfirmAction({ type: 'delete' })}
+                className="w-full py-2.5 rounded-xl text-sm font-display font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+              >
+                🗑️ Eliminar grupo
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmAction({ type: 'leave' })}
+                className="w-full py-2.5 rounded-xl text-sm font-display font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+              >
+                🚪 Salir del grupo
+              </button>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+
+      {confirmAction && (
+        <ConfirmModal
+          title={
+            confirmAction.type === 'delete' ? 'Eliminar grupo' :
+            confirmAction.type === 'leave'  ? 'Salir del grupo' :
+            `Expulsar a ${confirmAction.memberName}`
+          }
+          message={
+            confirmAction.type === 'delete'
+              ? 'Se eliminará el grupo y todos sus mensajes permanentemente. Esta acción no se puede deshacer.'
+              : confirmAction.type === 'leave'
+              ? 'Dejarás de ser miembro de este grupo y perderás el acceso al chat.'
+              : `${confirmAction.memberName} será expulsado del grupo y perderá el acceso al chat.`
+          }
+          confirmLabel={
+            confirmAction.type === 'delete' ? 'Eliminar' :
+            confirmAction.type === 'leave'  ? 'Salir' :
+            'Expulsar'
+          }
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -249,6 +467,7 @@ export default function GroupChatPage() {
   const [badgeData, setBadgeData] = useState({ badges: [], assignments: [] });
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
   const [loadingIdentities, setLoadingIdentities] = useState(true);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
@@ -287,6 +506,8 @@ export default function GroupChatPage() {
           badges: badgesResult.badges || [],
           assignments: badgesResult.assignments || [],
         });
+        // Mark as read when entering the chat
+        markGroupRead(groupId);
       } catch (e) {
         console.error(e);
         showToast('Error al cargar el chat', 'error');
@@ -305,6 +526,11 @@ export default function GroupChatPage() {
   useEffect(() => {
     if (messages.length > 0) scrollToBottom();
   }, [messages.length, scrollToBottom]);
+
+  // Mark as read whenever new messages arrive while viewing the chat
+  useEffect(() => {
+    if (messages.length > 0) markGroupRead(groupId);
+  }, [messages.length, groupId]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -337,6 +563,52 @@ export default function GroupChatPage() {
   function handleClearGroupWallpaper() {
     setGroupWallpaper(groupId, null);
     setGroupWallpaperState(null);
+  }
+
+  function handleMemberAdded(friend) {
+    setGroup(prev => {
+      if (!prev) return prev;
+      const alreadyThere = prev.members.some(m => m.id === friend.id);
+      if (alreadyThere) return prev;
+      const newMembers = [...prev.members, friend];
+      return { ...prev, members: newMembers, member_count: newMembers.length };
+    });
+    showToast(`${friend.display_name || friend.username} añadido al grupo`);
+  }
+
+  async function handleLeaveGroup() {
+    try {
+      await api.delete(`/groups/${groupId}/members/${profile.id}`);
+      navigate('/messages', { replace: true });
+    } catch (e) {
+      console.error(e);
+      showToast('Error al salir del grupo', 'error');
+    }
+  }
+
+  async function handleDeleteGroup() {
+    try {
+      await api.delete(`/groups/${groupId}`);
+      navigate('/messages', { replace: true });
+    } catch (e) {
+      console.error(e);
+      showToast('Error al eliminar el grupo', 'error');
+    }
+  }
+
+  async function handleRemoveMember(memberId) {
+    try {
+      await api.delete(`/groups/${groupId}/members/${memberId}`);
+      setGroup(prev => {
+        if (!prev) return prev;
+        const newMembers = prev.members.filter(m => m.id !== memberId);
+        return { ...prev, members: newMembers, member_count: newMembers.length };
+      });
+      showToast('Miembro expulsado del grupo');
+    } catch (e) {
+      console.error(e);
+      showToast('Error al expulsar al miembro', 'error');
+    }
   }
 
   async function sendText() {
@@ -448,6 +720,10 @@ export default function GroupChatPage() {
           loading={loadingIdentities}
           currentUserId={profile?.id}
           onOpenUser={(userId) => navigate(`/user/${userId}`)}
+          onAddMember={() => setShowAddMember(true)}
+          onLeaveGroup={handleLeaveGroup}
+          onDeleteGroup={handleDeleteGroup}
+          onRemoveMember={handleRemoveMember}
         />
       )}
 
@@ -520,6 +796,18 @@ export default function GroupChatPage() {
           onSet={handleSetGroupWallpaper}
           onClear={handleClearGroupWallpaper}
           onClose={() => setShowWallpaperModal(false)}
+        />
+      )}
+
+      {/* Add member modal */}
+      {showAddMember && group && (
+        <AddMemberModal
+          group={group}
+          onClose={() => setShowAddMember(false)}
+          onAdded={(friend) => {
+            handleMemberAdded(friend);
+            setShowAddMember(false);
+          }}
         />
       )}
     </div>

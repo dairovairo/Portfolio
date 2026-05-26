@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 function BadgeCard({ badge, assignment, currentUserId }) {
   const holder = assignment?.user;
   const isMine = assignment?.userId === currentUserId;
+  const statusLabel = assignment ? 'Desbloqueada' : 'Bloqueada';
 
   return (
     <div
@@ -17,18 +18,28 @@ function BadgeCard({ badge, assignment, currentUserId }) {
           ? 'bg-surface-card border-surface-border'
           : 'bg-surface-card/30 border-surface-border opacity-45'
       }`}
-      title={badge.description}
+      title={`${badge.description || badge.name} · ${statusLabel}`}
     >
+      <span
+        className={`absolute top-2 right-2 sb-symbol text-sm z-10 ${
+          assignment ? 'text-accent-glow' : 'text-surface-muted'
+        }`}
+        aria-label={statusLabel}
+        title={statusLabel}
+      >
+        {assignment ? '🔓︎' : '🔒︎'}
+      </span>
+
       {isMine && (
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"
-          style={{ background: 'radial-gradient(circle at 50% 0%, rgba(124,58,237,0.12) 0%, transparent 60%)' }}
+          style={{ background: 'radial-gradient(circle at 50% 0%, rgba(0,148,158,0.12) 0%, transparent 60%)' }}
         />
       )}
 
       <div
         className={`text-4xl relative z-10 ${assignment ? '' : 'grayscale'}`}
-        style={isMine ? { filter: 'drop-shadow(0 0 10px rgba(168,85,247,0.5))' } : {}}
+        style={isMine ? { filter: 'drop-shadow(0 0 10px rgba(0,148,158,0.5))' } : {}}
       >
         {badge.emoji}
       </div>
@@ -197,8 +208,8 @@ export default function BadgesPage() {
               <div
                 className="w-14 h-14 rounded-full flex items-center justify-center text-2xl border-2 border-accent-primary/40 flex-shrink-0"
                 style={{
-                  background: 'radial-gradient(circle at 50% 50%, rgba(124,58,237,0.2) 0%, transparent 70%)',
-                  boxShadow: '0 0 20px rgba(124,58,237,0.25)',
+                  background: 'radial-gradient(circle at 50% 50%, rgba(0,148,158,0.2) 0%, transparent 70%)',
+                  boxShadow: '0 0 20px rgba(0,148,158,0.25)',
                 }}
               >
                 🏅
@@ -218,8 +229,8 @@ export default function BadgesPage() {
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${progress}%`,
-                  background: 'linear-gradient(to right, #7c3aed, #a855f7)',
-                  boxShadow: '0 0 8px rgba(168,85,247,0.4)',
+                  background: 'linear-gradient(to right, rgb(0, 148, 158), rgb(45, 212, 220))',
+                  boxShadow: '0 0 8px rgba(0,148,158,0.4)',
                 }}
               />
             </div>

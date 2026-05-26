@@ -242,7 +242,7 @@ export default function UserProfilePage() {
               </span>
             </div>
             <div className="text-xs text-slate-600 mt-2 font-mono">
-              {formatRelativeTime(user.battery_updated_at)}
+              Última actualización: {formatRelativeTime(user.battery_updated_at)}
             </div>
           </div>
 

@@ -4,9 +4,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Syne', 'sans-serif'],
-        body:    ['DM Sans', 'sans-serif'],
-        mono:    ['DM Mono', 'monospace'],
+        display: ['Syne', 'Noto Emoji', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'sans-serif'],
+        body:    ['DM Sans', 'Noto Emoji', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'sans-serif'],
+        mono:    ['DM Mono', 'Noto Emoji', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'monospace'],
       },
       colors: {
         charge: {

@@ -3,18 +3,32 @@ import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { usePresenceBroadcast } from '../hooks/usePresence';
 import { useMessageNotifications } from '../hooks/useMessageNotifications';
+import { useSettings } from './SettingsContext';
 
 const AuthContext = createContext(null);
 
-// Inner component that handles presence (needs userId from context)
 function PresenceBroadcaster({ userId }) {
-  usePresenceBroadcast(userId);
+  const { showOnline } = useSettings();
+  usePresenceBroadcast(userId, showOnline);
   return null;
 }
 
-// Inner component that handles message notifications (needs profile from context)
 function MessageNotificationsBroadcaster({ profile }) {
-  useMessageNotifications(profile);
+  const {
+    muteAllNotifications,
+    mutePersonalChats,
+    muteGroupChats,
+    muteBatteryChanges,
+    showOnline,
+    showLastSeen,
+  } = useSettings();
+
+  useMessageNotifications(profile, {
+    muteAllNotifications,
+    mutePersonalChats,
+    muteGroupChats,
+    muteBatteryChanges,
+  });
   return null;
 }
 
@@ -49,7 +63,15 @@ export function AuthProvider({ children }) {
 
   const signUp = async (email, password) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
+    if (error) {
+      if (/already|registered|exists/i.test(error.message || '')) {
+        throw new Error('Esta cuenta ya pertenece a un usuario');
+      }
+      throw error;
+    }
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('Esta cuenta ya pertenece a un usuario');
+    }
     return data;
   };
 
@@ -61,7 +83,14 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setSession(null);
     setProfile(null);
+  };
+
+  const updatePassword = async (password) => {
+    const { data, error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    return data;
   };
 
   const refreshProfile = async () => {
@@ -87,6 +116,7 @@ export function AuthProvider({ children }) {
       signUp,
       signIn,
       signOut,
+      updatePassword,
       refreshProfile,
       completeOnboarding,
     }}>

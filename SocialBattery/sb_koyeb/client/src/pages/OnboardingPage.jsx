@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 import { getBatteryColor } from '../lib/battery';
 
 const STEPS = [
@@ -83,15 +84,7 @@ export default function OnboardingPage() {
           const formData = new FormData();
           formData.append('avatar', avatarFile);
           try {
-            const res = await fetch(
-              `${import.meta.env.VITE_API_URL || ''}/api/users/avatar`,
-              {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${(await import('../lib/supabase')).supabase.auth.getSession().then(r => r.data.session?.access_token)}` },
-                body: formData,
-              }
-            );
-            const data = await res.json();
+            const data = await api.postForm('/users/avatar', formData);
             if (data.url) avatarUrl = data.url;
           } catch { /* avatar upload optional */ }
         }
