@@ -258,7 +258,7 @@ function ChatPreview({ wallpaper, myBubbleColor, myBubbleOpacity, myBubbleTextCo
           className="max-w-[75%] rounded-2xl px-3 py-2 text-xs"
           style={myStyle}
         >
-          <span>¡Ahora mismo te escribo! ✏️</span>
+          <span>¡Ahora mismo te escribo! <span className="sb-symbol" aria-hidden="true">✎</span></span>
           <div className="flex items-center justify-end gap-0.5 opacity-70 mt-0.5">
             <span className="text-[10px]">12:33</span>
             <TickSingle color={tickColorSent} />
@@ -486,7 +486,8 @@ export default function SettingsPage() {
                     : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
                 }`}
               >
-                ☀️ Claro
+                <span className={`sb-symbol ${isDark ? 'text-surface-text' : ''}`} aria-hidden="true">☼</span>
+                Claro
               </button>
               <button
                 onClick={() => selectTheme('dark')}
@@ -496,7 +497,8 @@ export default function SettingsPage() {
                     : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
                 }`}
               >
-                🌙 Oscuro
+                <span className={`sb-symbol ${!isDark ? 'text-slate-950' : ''}`} aria-hidden="true">☾</span>
+                Oscuro
               </button>
             </div>
           </SubSection>

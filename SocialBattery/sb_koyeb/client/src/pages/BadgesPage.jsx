@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 function BadgeCard({ badge, assignment, currentUserId }) {
   const holder = assignment?.user;
   const isMine = assignment?.userId === currentUserId;
+  const statusLabel = assignment ? 'Desbloqueada' : 'Bloqueada';
 
   return (
     <div
@@ -17,8 +18,18 @@ function BadgeCard({ badge, assignment, currentUserId }) {
           ? 'bg-surface-card border-surface-border'
           : 'bg-surface-card/30 border-surface-border opacity-45'
       }`}
-      title={badge.description}
+      title={`${badge.description || badge.name} · ${statusLabel}`}
     >
+      <span
+        className={`absolute top-2 right-2 sb-symbol text-sm z-10 ${
+          assignment ? 'text-accent-glow' : 'text-surface-muted'
+        }`}
+        aria-label={statusLabel}
+        title={statusLabel}
+      >
+        {assignment ? '🔓︎' : '🔒︎'}
+      </span>
+
       {isMine && (
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"

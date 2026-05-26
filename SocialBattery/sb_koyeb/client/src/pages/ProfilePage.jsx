@@ -63,22 +63,28 @@ function StatsGrid({ stats }) {
 }
 
 function BadgeCard({ badge, earned }) {
+  const statusLabel = earned ? 'Desbloqueada' : 'Bloqueada';
+
   return (
     <div
-      className={`rounded-2xl p-3 border text-center transition-all ${
+      className={`relative rounded-2xl p-3 border text-center transition-all ${
         earned
           ? 'bg-surface-card border-accent-primary/30 shadow-sm shadow-accent-primary/10'
           : 'bg-surface-card/40 border-surface-border opacity-40'
       }`}
-      title={badge.description}
+      title={`${badge.description || badge.name} · ${statusLabel}`}
     >
+      <span
+        className={`absolute top-2 right-2 sb-symbol text-sm ${
+          earned ? 'text-accent-glow' : 'text-surface-muted'
+        }`}
+        aria-label={statusLabel}
+        title={statusLabel}
+      >
+        {earned ? '🔓︎' : '🔒︎'}
+      </span>
       <div className="text-2xl mb-1">{badge.emoji}</div>
       <div className="text-xs font-display font-semibold text-surface-text leading-tight">{badge.name}</div>
-      {earned && (
-        <div className="text-xs text-surface-muted mt-0.5 font-mono">
-          Desbloqueada
-        </div>
-      )}
     </div>
   );
 }
@@ -215,10 +221,16 @@ export default function ProfilePage() {
           <h1 className="font-display font-bold text-surface-text flex-1">Mi Perfil</h1>
           <button
             onClick={toggleTheme}
-            className="text-surface-muted hover:text-surface-text transition-colors text-lg p-1"
+            className={`transition-colors text-lg p-1 ${
+              theme === 'dark'
+                ? 'text-surface-text hover:text-white'
+                : 'text-slate-950 hover:text-surface-text'
+            }`}
             title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            <span className="sb-symbol text-xl" aria-hidden="true">
+              {theme === 'dark' ? '☼' : '☾'}
+            </span>
           </button>
           <button
             onClick={signOut}
@@ -274,9 +286,10 @@ export default function ProfilePage() {
                 <button
                   onClick={() => { setDisplayName(profile?.display_name || ''); setBio(profile?.bio || ''); setEditing(true); }}
                   className="bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5
-                    text-xs font-display font-semibold text-surface-muted hover:text-surface-text transition-all"
+                    text-xs font-display font-semibold text-surface-text hover:text-accent-glow transition-all flex items-center gap-1.5"
                 >
-                  ✏️ Editar
+                  <span className="sb-symbol text-sm" aria-hidden="true">✎</span>
+                  Editar
                 </button>
               )}
             </div>
@@ -465,7 +478,10 @@ export default function ProfilePage() {
           <div className="flex items-center justify-between py-2 border-b border-surface-border">
             <div>
               <div className="text-sm font-display font-medium text-surface-text">
-                {theme === 'dark' ? '🌙 Modo oscuro' : '☀️ Modo claro'}
+                <span className="sb-symbol mr-1" aria-hidden="true">
+                  {theme === 'dark' ? '☾' : '☼'}
+                </span>
+                {theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}
               </div>
               <div className="text-xs text-surface-muted">Apariencia de la app</div>
             </div>

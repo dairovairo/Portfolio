@@ -61,6 +61,13 @@ select {
   font-variant-emoji: text;
 }
 
+.sb-symbol {
+  color: currentColor;
+  font-family: 'Noto Emoji', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', sans-serif;
+  font-variant-emoji: text;
+  line-height: 1;
+}
+
 /* ── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--sb-bg); }
