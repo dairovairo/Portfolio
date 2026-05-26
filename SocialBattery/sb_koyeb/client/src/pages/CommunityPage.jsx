@@ -139,7 +139,7 @@ function buildEventFormData(form, extra = {}) {
   return formData;
 }
 
-function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
+function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -193,7 +193,11 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
 
   return (
     <div
-      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30`}
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen?.(event.id)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpen?.(event.id); }}
+      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30 cursor-pointer`}
       style={{ boxShadow: rank <= 3 ? `0 0 20px ${rankStyle.glow}` : undefined }}
     >
       {/* Rank badge */}
@@ -294,10 +298,19 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
             >
               {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
             </button>
+            {event.price != null && parseFloat(event.price) > 0 ? (
+              <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                💳 {parseFloat(event.price).toFixed(2)}€
+              </span>
+            ) : (
+              <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-green-500/25 bg-green-500/10 text-green-400">
+                ✓ Gratis
+              </span>
+            )}
           </div>
 
           {/* Planning button */}
-          <div className="mt-3">
+          <div className="mt-3" onClick={e => e.stopPropagation()}>
             {isPast && !isJoined ? (
               <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
                 Evento pasado
@@ -466,6 +479,8 @@ function CreateEventModal({ onClose, onCreate }) {
     ends_at: '',
     location: '',
     url: '',
+    price: '',
+    additional_info: '',
     max_attendees: 50,
   });
   const [coverFile, setCoverFile] = useState(null);
@@ -686,6 +701,37 @@ function CreateEventModal({ onClose, onCreate }) {
               placeholder="Ej: https://eventbrite.com/mi-evento"
               maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Price */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Precio <span className="text-slate-600">(€ · vacío o 0 = gratis)</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={e => set('price', e.target.value)}
+              placeholder="Ej: 5.00"
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Additional info */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Información adicional <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={form.additional_info}
+              onChange={e => set('additional_info', e.target.value)}
+              placeholder="Dress code, qué traer, instrucciones de acceso, requisitos..."
+              maxLength={1000}
+              rows={3}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
             />
           </div>
 
@@ -1036,6 +1082,7 @@ export default function CommunityPage() {
   const [communityCategoryFilter, setCommunityCategoryFilter] = useState(ALL_COMMUNITY_CATEGORIES);
   const [eventSearch, setEventSearch] = useState('');
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
+  const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
@@ -1156,9 +1203,14 @@ export default function CommunityPage() {
       event.creator_name,
       event.community_name,
     ].filter(Boolean).join(' ')).includes(normalizedEventSearch);
-    return matchesSearch && matchesEventCategory(event, eventCategoryFilter);
+    const matchesPrice = eventPriceFilter === 'all'
+      ? true
+      : eventPriceFilter === 'free'
+        ? (!event.price || parseFloat(event.price) === 0)
+        : (event.price && parseFloat(event.price) > 0);
+    return matchesSearch && matchesEventCategory(event, eventCategoryFilter) && matchesPrice;
   });
-  const isEventFiltered = normalizedEventSearch || eventCategoryFilter !== ALL_EVENT_CATEGORIES;
+  const isEventFiltered = normalizedEventSearch || eventCategoryFilter !== ALL_EVENT_CATEGORIES || eventPriceFilter !== 'all';
   const eventCountLabel = isEventFiltered
     ? `${filteredSortedEvents.length}/${events.length} eventos`
     : `${events.length} eventos`;
@@ -1278,6 +1330,29 @@ export default function CommunityPage() {
                 placeholder="Buscar eventos..."
                 className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
+
+              {/* Free / Paid sub-tabs */}
+              <div className="flex gap-2">
+                {[
+                  { key: 'all', label: '🌐 Todos' },
+                  { key: 'free', label: '✓ Gratis' },
+                  { key: 'paid', label: '💳 De pago' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setEventPriceFilter(key)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
+                      eventPriceFilter === key
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                 {EVENT_CATEGORY_FILTERS.map(cat => (
                   <button
@@ -1317,6 +1392,7 @@ export default function CommunityPage() {
                   onClick={() => {
                     setEventSearch('');
                     setEventCategoryFilter(ALL_EVENT_CATEGORIES);
+                    setEventPriceFilter('all');
                   }}
                   className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                 >
@@ -1333,6 +1409,7 @@ export default function CommunityPage() {
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
+                    onOpen={(id) => navigate(`/community/event/${id}`)}
                     currentUserId={profile?.id}
                   />
                 ))}
@@ -1367,6 +1444,7 @@ export default function CommunityPage() {
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
+                    onOpen={(id) => navigate(`/community/event/${id}`)}
                     currentUserId={profile?.id}
                   />
                 ))}

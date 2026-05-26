@@ -200,7 +200,7 @@ router.get('/events', requireAuth, async (req, res) => {
       .from('community_events')
       .select(`
         id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
-        max_attendees, creator_id, community_id, created_at,
+        url, price, additional_info, max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
@@ -219,7 +219,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url } = req.body;
+  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url, price, additional_info } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -281,6 +281,8 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         organization: organization?.trim() || null,
         cover_image_url: coverImageUrl,
         url: url?.trim() || null,
+        price: price != null && price !== '' ? parseFloat(price) : null,
+        additional_info: additional_info?.trim() || null,
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
@@ -680,6 +682,114 @@ router.post('/communities/:id/leave', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /communities/:id/leave error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al salir de la comunidad') });
+  }
+});
+
+// GET /api/community/events/:id
+router.get('/events/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const db = getUserSupabase(req);
+
+  try {
+    const { data: event, error } = await db
+      .from('community_events')
+      .select(`
+        id, title, description, category, event_date, ends_at, location, organization,
+        cover_image_url, url, price, additional_info, max_attendees, creator_id, community_id, created_at,
+        creator:users!community_events_creator_id_fkey(display_name, username),
+        community:communities!community_events_community_id_fkey(id, name, organization)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const [enriched] = await enrichEvents(db, [event], req.user.id);
+    res.json({ event: enriched });
+  } catch (err) {
+    console.error('[community] GET /events/:id error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener el evento') });
+  }
+});
+
+// GET /api/community/events/:id/updates
+router.get('/events/:id/updates', requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data: updates, error } = await supabase
+      .from('event_updates')
+      .select(`
+        id, content, created_at, creator_id,
+        creator:users!event_updates_creator_id_fkey(display_name, username, avatar_url)
+      `)
+      .eq('event_id', id)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    res.json({ updates: updates || [] });
+  } catch (err) {
+    console.error('[community] GET /events/:id/updates error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener actualizaciones') });
+  }
+});
+
+// POST /api/community/events/:id/updates
+router.post('/events/:id/updates', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { content } = req.body;
+  const userId = req.user.id;
+
+  if (!content?.trim()) return res.status(400).json({ error: 'El contenido es obligatorio' });
+  if (content.trim().length > 2000) return res.status(400).json({ error: 'Máximo 2000 caracteres' });
+
+  try {
+    // Only the event creator can post updates
+    const { data: event, error: evErr } = await supabase
+      .from('community_events')
+      .select('creator_id')
+      .eq('id', id)
+      .single();
+
+    if (evErr || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+    if (event.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el organizador puede publicar actualizaciones' });
+    }
+
+    const { data: update, error } = await supabase
+      .from('event_updates')
+      .insert({ event_id: id, creator_id: userId, content: content.trim() })
+      .select(`
+        id, content, created_at, creator_id,
+        creator:users!event_updates_creator_id_fkey(display_name, username, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ update });
+  } catch (err) {
+    console.error('[community] POST /events/:id/updates error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al publicar actualización') });
+  }
+});
+
+// DELETE /api/community/events/:id/updates/:updateId
+router.delete('/events/:id/updates/:updateId', requireAuth, async (req, res) => {
+  const { updateId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { error } = await supabase
+      .from('event_updates')
+      .delete()
+      .eq('id', updateId)
+      .eq('creator_id', userId);
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[community] DELETE /events/:id/updates/:updateId error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al eliminar actualización') });
   }
 });
 
