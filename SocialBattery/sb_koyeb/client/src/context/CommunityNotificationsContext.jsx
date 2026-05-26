@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase';
 
 const CommunityNotificationsContext = createContext({
   eventBadgeCount: 0,
+  communitiesWithEvents: new Set(),
   clearEventBadge: () => {},
+  clearCommunityBadge: () => {},
   refreshJoinedCommunities: () => {},
 });
 
@@ -12,17 +14,76 @@ export function useCommunityNotifications() {
   return useContext(CommunityNotificationsContext);
 }
 
-const STORAGE_KEY = 'sb_community_events_badge';
+const STORAGE_KEY        = 'sb_community_events_badge';
+const STORAGE_KEY_BY_COM = 'sb_community_events_by_community';
+
+const ICON  = '/icons/icon-192.png';
+const BADGE = '/icons/badge-72.png';
+
+// ── Dispara una notificación local con sonido (funciona aunque la app
+//    esté en background pero el SW activo). Para app cerrada, el server
+//    usa webpush que ya tiene su propia lógica.
+function fireLocalNotification({ title, body, tag, url }) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const opts = {
+    body,
+    icon: ICON,
+    badge: BADGE,
+    tag: tag || 'community-event',
+    renotify: true,
+    silent: false,
+    data: { url: url || '/community' },
+  };
+  try {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then(reg => reg.showNotification(title, opts))
+        .catch(() => { try { new Notification(title, opts); } catch {} });
+    } else {
+      new Notification(title, opts);
+    }
+  } catch { /* progressive enhancement */ }
+}
+
+// ── Serialize / deserialize el mapa { communityId -> count } ─────────────────
+function loadByComMap() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_BY_COM);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveByComMap(map) {
+  try { localStorage.setItem(STORAGE_KEY_BY_COM, JSON.stringify(map)); } catch {}
+}
+
+function totalCount(map) {
+  return Object.values(map).reduce((acc, n) => acc + n, 0);
+}
 
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
-  const [eventBadgeCount, setEventBadgeCount] = useState(() => {
-    try { return parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10) || 0; } catch { return 0; }
-  });
+
+  // eventsByCommunity: { [communityId: string]: number }
+  const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
   const joinedCommunityIdsRef = useRef(new Set());
   const channelRef = useRef(null);
 
-  // ── Load joined community IDs from Supabase ───────────────────────────────
+  // ── Derivados ──────────────────────────────────────────────────────────────
+  const eventBadgeCount     = totalCount(eventsByCommunity);
+  const communitiesWithEvents = new Set(
+    Object.entries(eventsByCommunity)
+      .filter(([, n]) => n > 0)
+      .map(([id]) => id)
+  );
+
+  // ── Persistencia ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    saveByComMap(eventsByCommunity);
+    try { localStorage.setItem(STORAGE_KEY, String(totalCount(eventsByCommunity))); } catch {}
+  }, [eventsByCommunity]);
+
+  // ── Carga los IDs de comunidades a las que pertenece el usuario ───────────
   const refreshJoinedCommunities = useCallback(async () => {
     if (!profile?.id) return;
     try {
@@ -33,25 +94,15 @@ export function CommunityNotificationsProvider({ children }) {
       if (data) {
         joinedCommunityIdsRef.current = new Set(data.map(m => m.community_id));
       }
-    } catch {
-      // non-fatal
-    }
+    } catch { /* non-fatal */ }
   }, [profile?.id]);
 
-  useEffect(() => {
-    refreshJoinedCommunities();
-  }, [refreshJoinedCommunities]);
+  useEffect(() => { refreshJoinedCommunities(); }, [refreshJoinedCommunities]);
 
-  // ── Persist badge count to localStorage ───────────────────────────────────
-  useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, String(eventBadgeCount)); } catch {}
-  }, [eventBadgeCount]);
-
-  // ── Supabase Realtime: subscribe to new community_events inserts ──────────
+  // ── Supabase Realtime: escucha inserts en community_events ────────────────
   useEffect(() => {
     if (!profile?.id) return;
 
-    // Clean up previous channel
     if (channelRef.current) {
       channelRef.current.unsubscribe();
       channelRef.current = null;
@@ -64,15 +115,27 @@ export function CommunityNotificationsProvider({ children }) {
         { event: 'INSERT', schema: 'public', table: 'community_events' },
         (payload) => {
           const newEvent = payload.new;
-          // Only show badge if:
-          // 1. Event belongs to a community the user has joined
-          // 2. The user is NOT the creator (no self-notification)
+          // Sólo notificar si:
+          // 1. El evento pertenece a una comunidad en la que está el usuario
+          // 2. El usuario NO es el creador
           if (
             newEvent?.community_id &&
             joinedCommunityIdsRef.current.has(newEvent.community_id) &&
             newEvent.creator_id !== profile.id
           ) {
-            setEventBadgeCount(c => c + 1);
+            // Incrementar badge por comunidad
+            setEventsByCommunity(prev => ({
+              ...prev,
+              [newEvent.community_id]: (prev[newEvent.community_id] || 0) + 1,
+            }));
+
+            // Disparar notificación local con sonido
+            fireLocalNotification({
+              title: '📅 Nuevo evento en tu comunidad',
+              body:  newEvent.title || 'Se ha creado un nuevo evento',
+              tag:   `community-event-${newEvent.id}`,
+              url:   '/community',
+            });
           }
         }
       )
@@ -86,15 +149,30 @@ export function CommunityNotificationsProvider({ children }) {
     };
   }, [profile?.id]);
 
-  // ── Clear badge (call when user opens Comunidad > Eventos) ────────────────
+  // ── Limpia todos los badges ───────────────────────────────────────────────
   const clearEventBadge = useCallback(() => {
-    setEventBadgeCount(0);
-    try { localStorage.setItem(STORAGE_KEY, '0'); } catch {}
+    setEventsByCommunity({});
+  }, []);
+
+  // ── Limpia el badge de una comunidad concreta ────────────────────────────
+  const clearCommunityBadge = useCallback((communityId) => {
+    if (!communityId) return;
+    setEventsByCommunity(prev => {
+      const next = { ...prev };
+      delete next[communityId];
+      return next;
+    });
   }, []);
 
   return (
     <CommunityNotificationsContext.Provider
-      value={{ eventBadgeCount, clearEventBadge, refreshJoinedCommunities }}
+      value={{
+        eventBadgeCount,
+        communitiesWithEvents,
+        clearEventBadge,
+        clearCommunityBadge,
+        refreshJoinedCommunities,
+      }}
     >
       {children}
     </CommunityNotificationsContext.Provider>

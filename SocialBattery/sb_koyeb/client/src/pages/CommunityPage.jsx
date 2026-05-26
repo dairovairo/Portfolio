@@ -324,7 +324,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
 }
 
 // ── Community Card ────────────────────────────────────────────────────────────
-function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
+function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasNewEvents }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const isMember = community.members?.includes(currentUserId);
@@ -361,8 +361,13 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
       }}
       className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-3 transition-all hover:border-accent-primary/30 cursor-pointer"
     >
-      <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
-        {emoji}
+      <div className="relative w-12 h-12 flex-shrink-0">
+        <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl border border-surface-border">
+          {emoji}
+        </div>
+        {hasNewEvents && (
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-surface-card" />
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -898,7 +903,7 @@ export default function CommunityPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearEventBadge, refreshJoinedCommunities } = useCommunityNotifications();
+  const { clearEventBadge, communitiesWithEvents, refreshJoinedCommunities } = useCommunityNotifications();
 
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -1108,13 +1113,18 @@ export default function CommunityPage() {
             </button>
             <button
               onClick={() => setTab('communities')}
-              className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
+              className={`relative flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'communities'
                   ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
               👥 Comunidades
+              {communitiesWithEvents.size > 0 && (
+                <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
+                  {communitiesWithEvents.size > 9 ? '9+' : communitiesWithEvents.size}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -1315,6 +1325,7 @@ export default function CommunityPage() {
                       onLeave={handleLeaveCommunity}
                       onOpen={(id) => navigate(`/community/${id}`)}
                       currentUserId={profile?.id}
+                      hasNewEvents={communitiesWithEvents.has(community.id)}
                     />
                     ))}
                   </div>
