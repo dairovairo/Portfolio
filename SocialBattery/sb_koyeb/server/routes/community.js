@@ -720,7 +720,7 @@ router.get('/events/:id/updates', requireAuth, async (req, res) => {
     const { data: updates, error } = await supabase
       .from('event_updates')
       .select(`
-        id, content, created_at, creator_id,
+        id, content, image_url, created_at, creator_id,
         creator:users!event_updates_creator_id_fkey(display_name, username, avatar_url)
       `)
       .eq('event_id', id)
@@ -737,11 +737,11 @@ router.get('/events/:id/updates', requireAuth, async (req, res) => {
 // POST /api/community/events/:id/updates
 router.post('/events/:id/updates', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { content } = req.body;
+  const { content, image_url } = req.body;
   const userId = req.user.id;
 
-  if (!content?.trim()) return res.status(400).json({ error: 'El contenido es obligatorio' });
-  if (content.trim().length > 2000) return res.status(400).json({ error: 'Máximo 2000 caracteres' });
+  if (!content?.trim() && !image_url) return res.status(400).json({ error: 'El contenido o imagen es obligatorio' });
+  if (content && content.trim().length > 2000) return res.status(400).json({ error: 'Máximo 2000 caracteres' });
 
   try {
     // Only the event creator can post updates
@@ -758,9 +758,9 @@ router.post('/events/:id/updates', requireAuth, async (req, res) => {
 
     const { data: update, error } = await supabase
       .from('event_updates')
-      .insert({ event_id: id, creator_id: userId, content: content.trim() })
+      .insert({ event_id: id, creator_id: userId, content: content?.trim() || '', image_url: image_url || null })
       .select(`
-        id, content, created_at, creator_id,
+        id, content, image_url, created_at, creator_id,
         creator:users!event_updates_creator_id_fkey(display_name, username, avatar_url)
       `)
       .single();
@@ -794,3 +794,20 @@ router.delete('/events/:id/updates/:updateId', requireAuth, async (req, res) => 
 });
 
 module.exports = router;
+
+// ── Upload image for event updates ────────────────────────────────────────────
+const eventUpdateImageUpload = createImageUpload({ maxSizeMb: 5 });
+router.post('/events/:id/updates/upload-image', requireAuth, eventUpdateImageUpload.single('image'), async (req, res) => {
+  try {
+    const url = await storeImage({
+      file: req.file,
+      bucket: 'avatars',
+      objectName: `event-updates/${req.params.id}-${Date.now()}`,
+      fallbackMaxLength: 2000000,
+    });
+    res.json({ url });
+  } catch (err) {
+    console.error('[community] upload-image error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Error al subir imagen' });
+  }
+});

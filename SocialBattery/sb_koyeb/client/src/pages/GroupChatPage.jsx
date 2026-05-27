@@ -474,6 +474,10 @@ export default function GroupChatPage() {
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState(null);
   const [groupWallpaper, setGroupWallpaperState] = useState(() => getGroupWallpaper(groupId));
+  const [grpImageFile, setGrpImageFile] = useState(null);
+  const [grpImagePreview, setGrpImagePreview] = useState(null);
+  const [sendingImage, setSendingImage] = useState(false);
+  const grpFileRef = useRef(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -640,6 +644,34 @@ export default function GroupChatPage() {
     }
   }
 
+  async function handleGrpImagePick(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('Imagen máximo 5MB', 'warning'); return; }
+    const preview = await new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = ev => res(ev.target.result); r.onerror = rej; r.readAsDataURL(file);
+    });
+    setGrpImageFile(file);
+    setGrpImagePreview(preview);
+    e.target.value = '';
+  }
+
+  async function sendGroupImage() {
+    if (!grpImageFile || sendingImage) return;
+    setSendingImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', grpImageFile);
+      const { url } = await api.postForm('/groups/upload-image', fd);
+      const { message } = await api.post(`/groups/${groupId}/messages`, { content: url, type: 'image' });
+      setMessages(m => [...m, message]);
+      setGrpImageFile(null);
+      setGrpImagePreview(null);
+    } catch (e) {
+      showToast('Error al enviar imagen', 'error');
+    } finally { setSendingImage(false); }
+  }
+
   const grouped = [];
   let lastDate = null;
   messages.forEach(msg => {
@@ -751,6 +783,26 @@ export default function GroupChatPage() {
             if (item.type === 'date') return <DateDivider key={item.key} date={item.date} />;
             const msg = item.msg;
             const isMe = msg.sender_id === profile?.id || msg.sender?.id === profile?.id;
+            if (msg.type === 'image') {
+              return (
+                <div key={item.key} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                  {!isMe && (
+                    <div className="w-8 h-8 rounded-full bg-surface-card border border-surface-border flex items-center justify-center text-sm overflow-hidden flex-shrink-0 self-end">
+                      {msg.sender?.avatar_url ? <img src={msg.sender.avatar_url} alt="" className="w-full h-full object-cover" /> : (msg.sender?.display_name?.[0] || '?')}
+                    </div>
+                  )}
+                  <div className={`max-w-[70%] rounded-2xl overflow-hidden border border-surface-border ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'} bg-surface-card`}>
+                    {!isMe && (
+                      <p className="text-xs font-display font-semibold text-accent-glow px-3 pt-2">{msg.sender?.display_name || msg.sender?.username}</p>
+                    )}
+                    <img src={msg.content} alt="Imagen" className="block max-h-64 w-auto object-cover" />
+                    <p className="text-[10px] font-mono text-surface-muted text-right px-2 pb-1.5 pt-0.5">
+                      {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
             return (
               <TextBubble
                 key={item.key}
@@ -768,22 +820,39 @@ export default function GroupChatPage() {
       {/* Input */}
       <div className="flex-shrink-0 border-t border-surface-border bg-surface-bg/95 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-4 py-3">
+          {grpImagePreview && (
+            <div className="relative mb-2">
+              <img src={grpImagePreview} alt="" className="max-h-40 rounded-xl object-cover border border-surface-border" />
+              <button
+                onClick={() => { setGrpImageFile(null); setGrpImagePreview(null); }}
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 text-white text-xs flex items-center justify-center"
+              >×</button>
+            </div>
+          )}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => grpFileRef.current?.click()}
+              title="Enviar foto"
+              className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all"
+            >
+              🖼️
+            </button>
+            <input ref={grpFileRef} type="file" accept="image/*" className="hidden" onChange={handleGrpImagePick} />
             <input
               ref={inputRef}
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } }}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); grpImageFile ? sendGroupImage() : sendText(); } }}
               placeholder="Escribe al grupo..."
               maxLength={1000}
               className="flex-1 bg-surface-card border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
             />
             <button
-              onClick={sendText}
-              disabled={!input.trim() || sending}
+              onClick={grpImageFile ? sendGroupImage : sendText}
+              disabled={(!input.trim() && !grpImageFile) || sending || sendingImage}
               className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent-primary disabled:opacity-40 text-surface-text flex items-center justify-center font-bold transition-all hover:bg-accent-primary/80 active:scale-95"
             >
-              {sending ? '…' : '→'}
+              {(sending || sendingImage) ? '…' : '→'}
             </button>
           </div>
         </div>

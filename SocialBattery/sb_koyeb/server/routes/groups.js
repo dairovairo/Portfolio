@@ -326,8 +326,8 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const { content, type = 'text' } = req.body;
 
-  if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
-  if (!['text', 'hangout_request'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+  if (!content?.trim() && type !== 'image') return res.status(400).json({ error: 'content is required' });
+  if (!['text', 'hangout_request', 'image'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
   try {
     // Check membership
@@ -342,7 +342,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 
     const { data, error } = await supabase
       .from('group_messages')
-      .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
+      .insert({ group_id: req.params.id, sender_id: userId, content: content?.trim() || '', type })
       .select(`
         id, content, type, created_at,
         sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
@@ -363,3 +363,21 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+
+const { createImageUpload: createGrpImgUpload, storeImage: storeGrpImage } = require('../lib/imageUpload');
+const groupMessageImageUpload = createGrpImgUpload({ maxSizeMb: 5 });
+
+// POST /api/groups/upload-image — upload image for group message
+router.post('/upload-image', requireAuth, groupMessageImageUpload.single('image'), async (req, res) => {
+  try {
+    const url = await storeGrpImage({
+      file: req.file,
+      bucket: 'avatars',
+      objectName: `group-msg/${req.user.id}-${Date.now()}`,
+      fallbackMaxLength: 2000000,
+    });
+    res.json({ url });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Error al subir imagen' });
+  }
+});
