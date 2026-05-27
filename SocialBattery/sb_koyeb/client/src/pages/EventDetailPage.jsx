@@ -99,16 +99,7 @@ function UpdateBubble({ update, isOwn, onDelete }) {
             {formatRelative(update.created_at)}
           </span>
         </div>
-        {update.image_url && (
-          <img
-            src={update.image_url}
-            alt="Imagen del organizador"
-            className="w-full rounded-xl object-cover max-h-72 mb-2 border border-surface-border"
-          />
-        )}
-        {update.content && (
-          <p className="text-sm text-surface-text leading-relaxed whitespace-pre-wrap">{update.content}</p>
-        )}
+        <p className="text-sm text-surface-text leading-relaxed whitespace-pre-wrap">{update.content}</p>
       </div>
       {isOwn && (
         <button
@@ -139,11 +130,8 @@ export default function EventDetailPage() {
   // update thread composer
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
-  const [updateImage, setUpdateImage] = useState(null);   // { file, preview }
-  const [uploadingImg, setUploadingImg] = useState(false);
   const textareaRef = useRef(null);
   const updatesEndRef = useRef(null);
-  const updateFileRef = useRef(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchEvent = useCallback(async () => {
@@ -222,38 +210,16 @@ export default function EventDetailPage() {
     } finally { setLiking(false); }
   }
 
-  async function handleUpdateImagePick(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { showToast('Imagen máximo 5MB', 'warning'); return; }
-    const preview = await new Promise((res, rej) => {
-      const r = new FileReader(); r.onload = ev => res(ev.target.result); r.onerror = rej; r.readAsDataURL(file);
-    });
-    setUpdateImage({ file, preview });
-    e.target.value = '';
-  }
-
   async function handlePostUpdate() {
-    if (!draft.trim() && !updateImage) return;
-    if (posting) return;
+    if (!draft.trim() || posting) return;
     setPosting(true);
     try {
-      let image_url = null;
-      if (updateImage?.file) {
-        setUploadingImg(true);
-        const fd = new FormData();
-        fd.append('image', updateImage.file);
-        const res = await api.postForm(`/community/events/${eventId}/updates/upload-image`, fd);
-        image_url = res.url;
-        setUploadingImg(false);
-      }
-      await api.post(`/community/events/${eventId}/updates`, { content: draft.trim(), image_url });
+      await api.post(`/community/events/${eventId}/updates`, { content: draft.trim() });
       setDraft('');
-      setUpdateImage(null);
       await fetchUpdates();
     } catch (e) {
       showToast(e.message || 'Error al publicar', 'error');
-    } finally { setPosting(false); setUploadingImg(false); }
+    } finally { setPosting(false); }
   }
 
   async function handleDeleteUpdate(updateId) {
@@ -509,16 +475,6 @@ export default function EventDetailPage() {
               <p className="text-xs font-mono text-accent-glow mb-2">
                 📣 Publicar actualización como organizador
               </p>
-              {/* Image preview */}
-              {updateImage && (
-                <div className="relative mb-2">
-                  <img src={updateImage.preview} alt="" className="w-full rounded-xl max-h-48 object-cover border border-surface-border" />
-                  <button
-                    onClick={() => setUpdateImage(null)}
-                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white text-xs flex items-center justify-center hover:bg-black/80"
-                  >×</button>
-                </div>
-              )}
               <textarea
                 ref={textareaRef}
                 value={draft}
@@ -528,24 +484,14 @@ export default function EventDetailPage() {
                 rows={3}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
               />
-              <input ref={updateFileRef} type="file" accept="image/*" className="hidden" onChange={handleUpdateImagePick} />
               <div className="flex items-center justify-between mt-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-slate-600">{draft.length}/2000</span>
-                  <button
-                    onClick={() => updateFileRef.current?.click()}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg border border-surface-border text-[10px] font-mono text-surface-muted hover:border-accent-primary/50 hover:text-accent-glow transition-all"
-                    title="Adjuntar foto"
-                  >
-                    🖼️ Foto
-                  </button>
-                </div>
+                <span className="text-[10px] font-mono text-slate-600">{draft.length}/2000</span>
                 <button
                   onClick={handlePostUpdate}
-                  disabled={posting || uploadingImg || (!draft.trim() && !updateImage)}
+                  disabled={posting || !draft.trim()}
                   className="px-5 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-bold transition-all disabled:opacity-50 active:scale-95"
                 >
-                  {uploadingImg ? 'Subiendo...' : posting ? 'Publicando...' : '📣 Publicar'}
+                  {posting ? 'Publicando...' : '📣 Publicar'}
                 </button>
               </div>
             </div>

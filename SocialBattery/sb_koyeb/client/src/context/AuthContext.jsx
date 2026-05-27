@@ -116,7 +116,6 @@ export function AuthProvider({ children }) {
       signUp,
       signIn,
       signOut,
-      resetPassword,
       updatePassword,
       refreshProfile,
       completeOnboarding,
