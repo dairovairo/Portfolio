@@ -211,16 +211,9 @@ export default function ProfilePage() {
           <h1 className="font-display font-bold text-surface-text flex-1">Mi Perfil</h1>
           <button
             onClick={signOut}
-            className="text-xs text-surface-muted hover:text-red-400 transition-colors font-mono mr-1"
+            className="text-xs text-surface-muted hover:text-red-400 transition-colors font-mono"
           >
             Salir
-          </button>
-          <button
-            onClick={() => navigate('/settings')}
-            title="Ajustes"
-            className="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-border text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-all text-lg"
-          >
-            ⚙️
           </button>
         </div>
       </nav>

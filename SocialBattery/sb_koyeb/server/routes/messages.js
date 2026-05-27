@@ -3,8 +3,6 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
-const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const messageImageUpload = createImageUpload({ maxSizeMb: 5 });
 
 // ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -127,10 +125,10 @@ router.post('/', requireAuth, async (req, res) => {
   const { receiver_id, content, type = 'text', hangout_time } = req.body;
   const senderId = req.user.id;
 
-  if (!receiver_id || (!content?.trim() && type !== 'image')) {
+  if (!receiver_id || !content?.trim()) {
     return res.status(400).json({ error: 'receiver_id and content are required' });
   }
-  if (!['text', 'hangout_request', 'image'].includes(type)) {
+  if (!['text', 'hangout_request'].includes(type)) {
     return res.status(400).json({ error: 'Invalid message type' });
   }
 
@@ -151,7 +149,7 @@ router.post('/', requireAuth, async (req, res) => {
   const insertData = {
     sender_id: senderId,
     receiver_id,
-    content: content?.trim() || '',
+    content: content.trim(),
     type,
   };
 
@@ -314,18 +312,3 @@ router.patch('/heartbeat', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
-
-// POST /api/messages/upload-image — upload image for DM
-router.post('/upload-image', requireAuth, messageImageUpload.single('image'), async (req, res) => {
-  try {
-    const url = await storeImage({
-      file: req.file,
-      bucket: 'avatars',
-      objectName: `msg-images/${req.user.id}-${Date.now()}`,
-      fallbackMaxLength: 2000000,
-    });
-    res.json({ url });
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Error al subir imagen' });
-  }
-});
