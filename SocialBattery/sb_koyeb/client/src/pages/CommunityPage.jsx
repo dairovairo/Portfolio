@@ -497,7 +497,6 @@ function CreateEventModal({ onClose, onCreate }) {
     url: '',
     price: '',
     additional_info: '',
-    max_attendees: 50,
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -556,7 +555,6 @@ function CreateEventModal({ onClose, onCreate }) {
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
-        max_attendees: parseInt(form.max_attendees) || 50,
       });
       onClose();
     } catch (e) {
@@ -655,7 +653,7 @@ function CreateEventModal({ onClose, onCreate }) {
             />
           </div>
 
-          {/* Date + max attendees */}
+          {/* Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha y hora *</label>
@@ -675,17 +673,6 @@ function CreateEventModal({ onClose, onCreate }) {
                 min={form.event_date || defaultDate}
                 onChange={e => set('ends_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Máx. asistentes</label>
-              <input
-                type="number"
-                value={form.max_attendees}
-                min={2}
-                max={10000}
-                onChange={e => set('max_attendees', e.target.value)}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
           </div>

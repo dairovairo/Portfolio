@@ -210,19 +210,6 @@ export default function ProfilePage() {
           </button>
           <h1 className="font-display font-bold text-surface-text flex-1">Mi Perfil</h1>
           <button
-            onClick={toggleTheme}
-            className={`transition-colors text-lg p-1 ${
-              theme === 'dark'
-                ? 'text-surface-text hover:text-white'
-                : 'text-slate-950 hover:text-surface-text'
-            }`}
-            title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
-          >
-            <span className="sb-symbol text-xl" aria-hidden="true">
-              {theme === 'dark' ? '☼' : '☾'}
-            </span>
-          </button>
-          <button
             onClick={signOut}
             className="text-xs text-surface-muted hover:text-red-400 transition-colors font-mono"
           >

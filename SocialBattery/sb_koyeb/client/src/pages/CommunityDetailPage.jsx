@@ -269,7 +269,6 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     ends_at: '',
     location: '',
     url: '',
-    max_attendees: 50,
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -327,7 +326,6 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
-        max_attendees: parseInt(form.max_attendees, 10) || 50,
       });
       onClose();
     } catch (e) {
@@ -414,7 +412,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
-            <div>
+            <div className="col-span-2">
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
               <input
                 type="datetime-local"
@@ -422,17 +420,6 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 min={form.event_date || defaultDate}
                 onChange={e => set('ends_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Máx. asistentes</label>
-              <input
-                type="number"
-                value={form.max_attendees}
-                min={2}
-                max={10000}
-                onChange={e => set('max_attendees', e.target.value)}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
           </div>
