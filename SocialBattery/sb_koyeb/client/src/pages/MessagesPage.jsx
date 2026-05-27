@@ -367,6 +367,10 @@ export default function MessagesPage() {
   const [showHangoutForm, setShowHangoutForm] = useState(false);
   const [respondingId, setRespondingId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [dmImageFile, setDmImageFile] = useState(null);
+  const [dmImagePreview, setDmImagePreview] = useState(null);
+  const [sendingImage, setSendingImage] = useState(false);
+  const dmFileRef = useRef(null);
 
   // Context menu (delete message)
   const [contextMenu, setContextMenu] = useState(null); // { msg }
@@ -528,6 +532,34 @@ export default function MessagesPage() {
       setSending(false);
       inputRef.current?.focus();
     }
+  }
+
+  async function handleDmImagePick(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('Imagen máximo 5MB', 'warning'); return; }
+    const preview = await new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = ev => res(ev.target.result); r.onerror = rej; r.readAsDataURL(file);
+    });
+    setDmImageFile(file);
+    setDmImagePreview(preview);
+    e.target.value = '';
+  }
+
+  async function sendImage() {
+    if (!dmImageFile || sendingImage) return;
+    setSendingImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', dmImageFile);
+      const { url } = await api.postForm('/messages/upload-image', fd);
+      const { message } = await api.post('/messages', { receiver_id: friendId, content: url, type: 'image' });
+      setMessages(m => [...m, message]);
+      setDmImageFile(null);
+      setDmImagePreview(null);
+    } catch (e) {
+      showToast('Error al enviar imagen', 'error');
+    } finally { setSendingImage(false); }
   }
 
   async function sendHangout(content, hangoutTime) {
@@ -774,6 +806,26 @@ export default function MessagesPage() {
               );
             }
 
+            if (msg.type === 'image') {
+              return (
+                <div key={item.key} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div
+                    className={`max-w-[78%] rounded-2xl overflow-hidden border border-surface-border ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
+                    style={isMe ? myBubbleStyle : otherBubbleStyle}
+                    onTouchStart={() => setContextMenu(msg)}
+                  >
+                    <img src={msg.content} alt="Imagen" className="block max-h-64 w-auto object-cover" />
+                    <div className="flex items-center justify-end gap-1 px-2 pb-1.5 pt-1">
+                      <span className="text-[10px] font-mono opacity-60">
+                        {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {isMe && <MessageTick msg={msg} />}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <TextBubble
                 key={item.key}
@@ -799,30 +851,50 @@ export default function MessagesPage() {
               sending={sending}
             />
           ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowHangoutForm(true)}
-                title="Proponer quedada"
-                className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all"
-              >
-                🤝
-              </button>
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } }}
-                placeholder="Escribe un mensaje..."
-                maxLength={1000}
-                className="flex-1 bg-surface-card border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
-              />
-              <button
-                onClick={sendText}
-                disabled={!input.trim() || sending}
-                className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent-primary disabled:opacity-40 text-surface-text flex items-center justify-center font-bold transition-all hover:bg-accent-primary/80 active:scale-95"
-              >
-                {sending ? '…' : '→'}
-              </button>
+            <div className="flex flex-col gap-2">
+              {/* Image preview */}
+              {dmImagePreview && (
+                <div className="relative">
+                  <img src={dmImagePreview} alt="" className="max-h-40 rounded-xl object-cover border border-surface-border" />
+                  <button
+                    onClick={() => { setDmImageFile(null); setDmImagePreview(null); }}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 text-white text-xs flex items-center justify-center"
+                  >×</button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowHangoutForm(true)}
+                  title="Proponer quedada"
+                  className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all"
+                >
+                  🤝
+                </button>
+                <button
+                  onClick={() => dmFileRef.current?.click()}
+                  title="Enviar foto"
+                  className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all"
+                >
+                  🖼️
+                </button>
+                <input ref={dmFileRef} type="file" accept="image/*" className="hidden" onChange={handleDmImagePick} />
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); dmImageFile ? sendImage() : sendText(); } }}
+                  placeholder="Escribe un mensaje..."
+                  maxLength={1000}
+                  className="flex-1 bg-surface-card border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
+                />
+                <button
+                  onClick={dmImageFile ? sendImage : sendText}
+                  disabled={(!input.trim() && !dmImageFile) || sending || sendingImage}
+                  className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent-primary disabled:opacity-40 text-surface-text flex items-center justify-center font-bold transition-all hover:bg-accent-primary/80 active:scale-95"
+                >
+                  {(sending || sendingImage) ? '…' : '→'}
+                </button>
+              </div>
             </div>
           )}
         </div>
