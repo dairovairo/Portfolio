@@ -3,6 +3,17 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+
+const groupMessageImageUpload = createImageUpload({ maxSizeMb: 5 });
+
+function uploadGroupMessageImage(req, res, next) {
+  groupMessageImageUpload.single('image')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
+  });
+}
 
 // ── GET /api/groups — list my groups (owned + member) ───────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -46,7 +57,7 @@ router.get('/', requireAuth, async (req, res) => {
       const groupIds = groups.map(g => g.id);
       const { data: lastMsgs } = await supabase
         .from('group_messages')
-        .select('group_id, created_at, sender_id, content')
+        .select('group_id, created_at, sender_id, content, type, image_url')
         .in('group_id', groupIds)
         .order('created_at', { ascending: false });
 
@@ -301,7 +312,7 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
     const { data, error } = await supabase
       .from('group_messages')
       .select(`
-        id, content, type, created_at,
+        id, content, type, image_url, created_at,
         sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('group_id', req.params.id)
@@ -322,12 +333,15 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
 });
 
 // ── POST /api/groups/:id/messages ────────────────────────────────────────────
-router.post('/:id/messages', requireAuth, async (req, res) => {
+router.post('/:id/messages', requireAuth, uploadGroupMessageImage, async (req, res) => {
   const userId = req.user.id;
   const { content, type = 'text' } = req.body;
+  const trimmedContent = content?.trim() || null;
+  const messageType = req.file ? 'image' : type;
 
-  if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
-  if (!['text', 'hangout_request'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+  if (!['text', 'hangout_request', 'image'].includes(messageType)) return res.status(400).json({ error: 'Invalid type' });
+  if (messageType !== 'image' && !trimmedContent) return res.status(400).json({ error: 'content is required' });
+  if (messageType === 'image' && !req.file) return res.status(400).json({ error: 'La foto es obligatoria' });
 
   try {
     // Check membership
@@ -340,11 +354,24 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 
     if (!membership) return res.status(403).json({ error: 'Not a member' });
 
+    let imageUrl = null;
+    if (req.file) {
+      try {
+        imageUrl = await storeImage({
+          file: req.file,
+          objectName: `group-message-images/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          fallbackMaxLength: 6500000,
+        });
+      } catch (err) {
+        return res.status(err.status || 500).json({ error: err.message || 'No se pudo subir la foto' });
+      }
+    }
+
     const { data, error } = await supabase
       .from('group_messages')
-      .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
+      .insert({ group_id: req.params.id, sender_id: userId, content: trimmedContent, type: messageType, image_url: imageUrl })
       .select(`
-        id, content, type, created_at,
+        id, content, type, image_url, created_at,
         sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
