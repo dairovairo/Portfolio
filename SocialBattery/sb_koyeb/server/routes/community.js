@@ -8,7 +8,7 @@ const { notifyCommunityMembers } = require('../lib/webpush');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
-const eventUpdateUpload = createImageUpload({ maxSizeMb: 5 });
+const eventUpdateImageUpload = createImageUpload({ maxSizeMb: 5 });
 
 function uploadEventCover(req, res, next) {
   eventCoverUpload.single('cover')(req, res, err => {
@@ -27,10 +27,10 @@ function uploadCommunityCover(req, res, next) {
 }
 
 function uploadEventUpdateImage(req, res, next) {
-  eventUpdateUpload.single('image')(req, res, err => {
+  eventUpdateImageUpload.single('image')(req, res, err => {
     if (!err) return next();
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
+    return res.status(status).json({ error: err.message || 'No se pudo subir la imagen' });
   });
 }
 
@@ -748,10 +748,16 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
   const { id } = req.params;
   const { content } = req.body;
   const userId = req.user.id;
-  const trimmedContent = content?.trim() || null;
 
-  if (!trimmedContent && !req.file) return res.status(400).json({ error: 'Escribe un anuncio o elige una foto' });
-  if (trimmedContent && trimmedContent.length > 2000) return res.status(400).json({ error: 'Máximo 2000 caracteres' });
+  const hasContent = content?.trim();
+  const hasImage = !!req.file;
+
+  if (!hasContent && !hasImage) {
+    return res.status(400).json({ error: 'Escribe un mensaje o adjunta una imagen' });
+  }
+  if (hasContent && hasContent.length > 2000) {
+    return res.status(400).json({ error: 'Máximo 2000 caracteres' });
+  }
 
   try {
     // Only the event creator can post updates
@@ -766,18 +772,25 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
       return res.status(403).json({ error: 'Solo el organizador puede publicar actualizaciones' });
     }
 
+    // Upload image to Supabase Storage if provided
     let imageUrl = null;
     if (req.file) {
       imageUrl = await storeImage({
         file: req.file,
-        objectName: `event-updates/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        fallbackMaxLength: 6500000,
+        bucket: 'avatars',
+        objectName: `event-updates/${userId}/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 300000,
       });
     }
 
     const { data: update, error } = await supabase
       .from('event_updates')
-      .insert({ event_id: id, creator_id: userId, content: trimmedContent, image_url: imageUrl })
+      .insert({
+        event_id: id,
+        creator_id: userId,
+        content: hasContent || null,
+        image_url: imageUrl,
+      })
       .select(`
         id, content, image_url, created_at, creator_id,
         creator:users!event_updates_creator_id_fkey(display_name, username, avatar_url)
@@ -788,7 +801,7 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
     res.status(201).json({ update });
   } catch (err) {
     console.error('[community] POST /events/:id/updates error:', err);
-    res.status(500).json({ error: communityErrorMessage(err, 'Error al publicar actualización') });
+    res.status(err.status || 500).json({ error: communityErrorMessage(err, 'Error al publicar actualización') });
   }
 });
 
