@@ -18,10 +18,11 @@ import SettingsPage from './pages/SettingsPage';
 import CommunityPage from './pages/CommunityPage';
 import CommunityDetailPage from './pages/CommunityDetailPage';
 import EventDetailPage from './pages/EventDetailPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 
 function AppRoutes() {
-  const { isLoading, isAuthenticated, hasProfile } = useAuth();
+  const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
 
   if (isLoading) {
     return (
@@ -31,6 +32,15 @@ function AppRoutes() {
           <div className="text-surface-muted font-mono text-sm">Cargando...</div>
         </div>
       </div>
+    );
+  }
+
+  // PASSWORD_RECOVERY: highest priority — always show reset page regardless of profile state
+  if (isPasswordRecovery) {
+    return (
+      <Routes>
+        <Route path="*" element={<ResetPasswordPage />} />
+      </Routes>
     );
   }
 
