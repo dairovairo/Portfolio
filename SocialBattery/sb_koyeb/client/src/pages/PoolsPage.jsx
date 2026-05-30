@@ -429,7 +429,7 @@ function FriendPicker({ selected, onChange, label = 'Amigos' }) {
 
   useEffect(() => {
     api.get('/friends')
-      .then(({ friends: data }) => setFriends((data || []).filter(f => f.status === 'accepted')))
+      .then(({ friends: data }) => setFriends(data || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
