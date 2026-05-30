@@ -3,17 +3,6 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
-const { createImageUpload, storeImage } = require('../lib/imageUpload');
-
-const messageImageUpload = createImageUpload({ maxSizeMb: 5 });
-
-function uploadMessageImage(req, res, next) {
-  messageImageUpload.single('image')(req, res, err => {
-    if (!err) return next();
-    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
-  });
-}
 
 // ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -39,7 +28,7 @@ router.get('/', requireAuth, async (req, res) => {
   const { data: messages, error: mErr } = await supabase
     .from('messages')
     .select(`
-      id, content, type, image_url, hangout_status, created_at, read_at, delivered_at,
+      id, content, type, hangout_status, created_at, read_at, delivered_at,
       deleted_for_everyone, deleted_for_self,
       sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
       receiver:receiver_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
@@ -132,23 +121,15 @@ router.get('/:friendId', requireAuth, async (req, res) => {
 });
 
 // ── POST /api/messages — send message ────────────────────────────────────────
-router.post('/', requireAuth, uploadMessageImage, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { receiver_id, content, type = 'text', hangout_time } = req.body;
   const senderId = req.user.id;
-  const trimmedContent = content?.trim() || null;
-  const messageType = req.file ? 'image' : type;
 
-  if (!receiver_id) {
-    return res.status(400).json({ error: 'receiver_id is required' });
+  if (!receiver_id || !content?.trim()) {
+    return res.status(400).json({ error: 'receiver_id and content are required' });
   }
-  if (!['text', 'hangout_request', 'image'].includes(messageType)) {
+  if (!['text', 'hangout_request'].includes(type)) {
     return res.status(400).json({ error: 'Invalid message type' });
-  }
-  if (messageType !== 'image' && !trimmedContent) {
-    return res.status(400).json({ error: 'content is required' });
-  }
-  if (messageType === 'image' && !req.file) {
-    return res.status(400).json({ error: 'La foto es obligatoria' });
   }
 
   const { data: friendship } = await supabase
@@ -165,28 +146,14 @@ router.post('/', requireAuth, uploadMessageImage, async (req, res) => {
     return res.status(403).json({ error: 'Solo puedes enviar mensajes a amigos' });
   }
 
-  let imageUrl = null;
-  if (req.file) {
-    try {
-      imageUrl = await storeImage({
-        file: req.file,
-        objectName: `message-images/${senderId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        fallbackMaxLength: 6500000,
-      });
-    } catch (err) {
-      return res.status(err.status || 500).json({ error: err.message || 'No se pudo subir la foto' });
-    }
-  }
-
   const insertData = {
     sender_id: senderId,
     receiver_id,
-    content: trimmedContent,
-    type: messageType,
-    image_url: imageUrl,
+    content: content.trim(),
+    type,
   };
 
-  if (messageType === 'hangout_request') {
+  if (type === 'hangout_request') {
     insertData.hangout_status = 'pending';
     if (hangout_time) insertData.hangout_time = hangout_time.trim();
   }
@@ -194,7 +161,7 @@ router.post('/', requireAuth, uploadMessageImage, async (req, res) => {
   const { data, error } = await supabase
     .from('messages')
     .insert(insertData)
-    .select('id, sender_id, receiver_id, content, type, image_url, hangout_status, hangout_time, read_at, delivered_at, deleted_for_everyone, deleted_for_self, created_at')
+    .select()
     .single();
 
   if (error) return res.status(500).json({ error: 'Failed to send message' });

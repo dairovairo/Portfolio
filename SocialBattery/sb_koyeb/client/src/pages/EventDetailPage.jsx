@@ -90,16 +90,29 @@ function InfoRow({ icon, label, children }) {
 function UpdateBubble({ update, isOwn, onDelete }) {
   return (
     <div className="flex flex-col gap-1">
-      <div className="bg-surface-card border border-surface-border rounded-2xl rounded-tl-sm px-4 py-3">
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <span className="text-xs font-display font-semibold text-accent-glow">
-            📣 {update.creator?.display_name || update.creator?.username || 'Organizador'}
-          </span>
-          <span className="text-[10px] font-mono text-surface-muted flex-shrink-0">
-            {formatRelative(update.created_at)}
-          </span>
+      <div className="bg-surface-card border border-surface-border rounded-2xl rounded-tl-sm overflow-hidden">
+        {update.image_url && (
+          <div className="w-full">
+            <img
+              src={update.image_url}
+              alt="Foto del evento"
+              className="w-full max-h-72 object-cover"
+            />
+          </div>
+        )}
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-display font-semibold text-accent-glow">
+              📣 {update.creator?.display_name || update.creator?.username || 'Organizador'}
+            </span>
+            <span className="text-[10px] font-mono text-surface-muted flex-shrink-0">
+              {formatRelative(update.created_at)}
+            </span>
+          </div>
+          {update.content && (
+            <p className="text-sm text-surface-text leading-relaxed whitespace-pre-wrap">{update.content}</p>
+          )}
         </div>
-        <p className="text-sm text-surface-text leading-relaxed whitespace-pre-wrap">{update.content}</p>
       </div>
       {isOwn && (
         <button
@@ -130,8 +143,11 @@ export default function EventDetailPage() {
   // update thread composer
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);   // File object
+  const [imagePreview, setImagePreview] = useState(null);     // Data URL for preview
   const textareaRef = useRef(null);
   const updatesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchEvent = useCallback(async () => {
@@ -210,12 +226,39 @@ export default function EventDetailPage() {
     } finally { setLiking(false); }
   }
 
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedImage(file);
+    const reader = new FileReader();
+    reader.onload = ev => setImagePreview(ev.target.result);
+    reader.readAsDataURL(file);
+    // reset input so the same file can be re-selected
+    e.target.value = '';
+  }
+
+  function handleRemoveImage() {
+    setSelectedImage(null);
+    setImagePreview(null);
+  }
+
   async function handlePostUpdate() {
-    if (!draft.trim() || posting) return;
+    const hasText = draft.trim();
+    const hasImage = !!selectedImage;
+    if ((!hasText && !hasImage) || posting) return;
     setPosting(true);
     try {
-      await api.post(`/community/events/${eventId}/updates`, { content: draft.trim() });
+      if (hasImage) {
+        const formData = new FormData();
+        if (hasText) formData.append('content', hasText);
+        formData.append('image', selectedImage);
+        await api.postForm(`/community/events/${eventId}/updates`, formData);
+      } else {
+        await api.post(`/community/events/${eventId}/updates`, { content: hasText });
+      }
       setDraft('');
+      setSelectedImage(null);
+      setImagePreview(null);
       await fetchUpdates();
     } catch (e) {
       showToast(e.message || 'Error al publicar', 'error');
@@ -475,6 +518,34 @@ export default function EventDetailPage() {
               <p className="text-xs font-mono text-accent-glow mb-2">
                 📣 Publicar actualización como organizador
               </p>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+
+              {/* Image preview */}
+              {imagePreview && (
+                <div className="relative mb-3 rounded-xl overflow-hidden border border-surface-border">
+                  <img
+                    src={imagePreview}
+                    alt="Vista previa"
+                    className="w-full max-h-48 object-cover"
+                  />
+                  <button
+                    onClick={handleRemoveImage}
+                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-black/60 text-white text-xs hover:bg-black/80 transition-colors"
+                    title="Eliminar imagen"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               <textarea
                 ref={textareaRef}
                 value={draft}
@@ -484,11 +555,25 @@ export default function EventDetailPage() {
                 rows={3}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
               />
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-[10px] font-mono text-slate-600">{draft.length}/2000</span>
+
+              <div className="flex items-center justify-between mt-2 gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-slate-600">{draft.length}/2000</span>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Adjuntar foto de la galería"
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono transition-all ${
+                      selectedImage
+                        ? 'border-accent-primary/40 bg-accent-primary/10 text-accent-glow'
+                        : 'border-surface-border text-slate-500 hover:border-accent-primary/30 hover:text-accent-glow'
+                    }`}
+                  >
+                    📷 {selectedImage ? '1 foto' : 'Foto'}
+                  </button>
+                </div>
                 <button
                   onClick={handlePostUpdate}
-                  disabled={posting || !draft.trim()}
+                  disabled={posting || (!draft.trim() && !selectedImage)}
                   className="px-5 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-bold transition-all disabled:opacity-50 active:scale-95"
                 >
                   {posting ? 'Publicando...' : '📣 Publicar'}
