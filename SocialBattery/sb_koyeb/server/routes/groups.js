@@ -3,6 +3,10 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+
+// Multer instance for group chat image uploads (8 MB max)
+const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 
 // ── GET /api/groups — list my groups (owned + member) ───────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -359,6 +363,65 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[GROUPS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── POST /api/groups/:id/messages/image — send an image to a group chat ───────
+router.post('/:id/messages/image', requireAuth, (req, res, next) => {
+  _groupImageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const userId = req.user.id;
+  const groupId = req.params.id;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Se requiere una imagen' });
+  }
+
+  try {
+    // Verify membership
+    const { data: membership } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Not a member' });
+
+    const imageUrl = await storeImage({
+      file: req.file,
+      bucket: 'chat-images',
+      objectName: `group/${groupId}/${Date.now()}`,
+      fallbackMaxLength: 8_000_000,
+    });
+
+    const { data, error } = await supabase
+      .from('group_messages')
+      .insert({
+        group_id: groupId,
+        sender_id: userId,
+        content: imageUrl,
+        type: 'image',
+      })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
+  } catch (e) {
+    console.error('[GROUPS] image upload error:', e);
+    return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
   }
 });
 

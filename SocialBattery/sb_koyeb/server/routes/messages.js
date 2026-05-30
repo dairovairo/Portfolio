@@ -3,6 +3,10 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+
+// Multer instance for chat image uploads (8 MB max)
+const _dmImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 
 // ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -309,6 +313,62 @@ router.patch('/heartbeat', requireAuth, async (req, res) => {
     .eq('id', req.user.id);
 
   res.json({ success: true });
+});
+
+// ── POST /api/messages/:receiverId/image — send an image in a DM ─────────────
+router.post('/:receiverId/image', requireAuth, (req, res, next) => {
+  _dmImageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const senderId = req.user.id;
+  const { receiverId } = req.params;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Se requiere una imagen' });
+  }
+
+  // Verify friendship before sending
+  const { data: friendship } = await supabase
+    .from('friendships')
+    .select('id')
+    .eq('status', 'accepted')
+    .or(
+      `and(requester_id.eq.${senderId},addressee_id.eq.${receiverId}),` +
+      `and(requester_id.eq.${receiverId},addressee_id.eq.${senderId})`
+    )
+    .single();
+
+  if (!friendship) {
+    return res.status(403).json({ error: 'Solo puedes enviar mensajes a amigos' });
+  }
+
+  try {
+    const imageUrl = await storeImage({
+      file: req.file,
+      bucket: 'chat-images',
+      objectName: `dm/${senderId}/${Date.now()}`,
+      fallbackMaxLength: 8_000_000,
+    });
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: senderId,
+        receiver_id: receiverId,
+        content: imageUrl,
+        type: 'image',
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: 'Failed to save image message' });
+    res.status(201).json({ message: data });
+  } catch (e) {
+    console.error('[MESSAGES] image upload error:', e);
+    return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
+  }
 });
 
 module.exports = router;

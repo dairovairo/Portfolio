@@ -376,6 +376,68 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
   );
 }
 
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
+  const [lightbox, setLightbox] = useState(false);
+  const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
+  const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
+
+  return (
+    <>
+      <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+        {!isMe && <Avatar user={msg.sender} />}
+        <div className="max-w-[75%]">
+          {!isMe && (
+            <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
+              {msg.sender?.display_name || msg.sender?.username}
+            </div>
+          )}
+          <div
+            className={`rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
+            style={bubbleStyle}
+          >
+            <div className="relative">
+              <img
+                src={msg.content}
+                alt="Imagen"
+                className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
+                onClick={() => { if (!isOptimistic) setLightbox(true); }}
+              />
+              {isOptimistic && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+            <div className="text-xs px-3 pb-2 pt-1 opacity-60">
+              {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
+          onClick={() => setLightbox(false)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl font-bold z-10 w-10 h-10 flex items-center justify-center"
+            onClick={() => setLightbox(false)}
+          >
+            ×
+          </button>
+          <img
+            src={msg.content}
+            alt="Imagen"
+            className="max-w-[95vw] max-h-[90vh] object-contain rounded-xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 function DateDivider({ date }) {
   const today = new Date().toDateString();
   const yesterday = new Date(Date.now() - 86400000).toDateString();
@@ -472,10 +534,12 @@ export default function GroupChatPage() {
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendingImage, setSendingImage] = useState(false);
   const [toast, setToast] = useState(null);
   const [groupWallpaper, setGroupWallpaperState] = useState(() => getGroupWallpaper(groupId));
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const photoInputRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -640,6 +704,39 @@ export default function GroupChatPage() {
     }
   }
 
+  async function handleGroupPhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setSendingImage(true);
+
+    const localUrl = URL.createObjectURL(file);
+    const optimisticId = `opt-img-${Date.now()}`;
+    const optimistic = {
+      id: optimisticId,
+      sender_id: profile.id,
+      sender: { id: profile.id, display_name: profile.display_name, avatar_url: profile.avatar_url },
+      content: localUrl,
+      type: 'image',
+      created_at: new Date().toISOString(),
+    };
+    setMessages(m => [...m, optimistic]);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const { message } = await api.postForm(`/groups/${groupId}/messages/image`, formData);
+      URL.revokeObjectURL(localUrl);
+      setMessages(m => m.map(msg => msg.id === optimisticId ? message : msg));
+    } catch (e) {
+      URL.revokeObjectURL(localUrl);
+      setMessages(m => m.filter(msg => msg.id !== optimisticId));
+      showToast('Error al enviar la imagen', 'error');
+    } finally {
+      setSendingImage(false);
+    }
+  }
+
   const grouped = [];
   let lastDate = null;
   messages.forEach(msg => {
@@ -751,6 +848,19 @@ export default function GroupChatPage() {
             if (item.type === 'date') return <DateDivider key={item.key} date={item.date} />;
             const msg = item.msg;
             const isMe = msg.sender_id === profile?.id || msg.sender?.id === profile?.id;
+
+            if (msg.type === 'image') {
+              return (
+                <ImageBubble
+                  key={item.key}
+                  msg={msg}
+                  isMe={isMe}
+                  myBubbleStyle={myBubbleStyle}
+                  otherBubbleStyle={otherBubbleStyle}
+                />
+              );
+            }
+
             return (
               <TextBubble
                 key={item.key}
@@ -769,6 +879,23 @@ export default function GroupChatPage() {
       <div className="flex-shrink-0 border-t border-surface-border bg-surface-bg/95 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              title="Enviar foto"
+              disabled={sendingImage}
+              className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all disabled:opacity-40"
+            >
+              {sendingImage ? (
+                <span className="w-4 h-4 border-2 border-surface-muted border-t-transparent rounded-full animate-spin" />
+              ) : '📷'}
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleGroupPhotoSelect}
+            />
             <input
               ref={inputRef}
               value={input}

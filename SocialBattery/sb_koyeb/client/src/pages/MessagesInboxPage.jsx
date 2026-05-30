@@ -28,15 +28,18 @@ function ConversationRow({ conv, onClick, showOnline }) {
   const color = getBatteryColor(partner.battery_level ?? 50);
   const online = showOnline && isOnline(partner.last_seen_at);
   const isHangout = lastMessage?.type === 'hangout_request';
+  const isImage = lastMessage?.type === 'image';
   const isNew = !lastMessage;
   const isDeletedForEveryone = lastMessage?.deleted_for_everyone;
   const preview = isNew
     ? '¡Ahora sois amigos! Di hola 👋'
     : isDeletedForEveryone
       ? '🚫 Mensaje eliminado'
-      : isHangout
-        ? `🤝 ${lastMessage.content}`
-        : lastMessage.content;
+      : isImage
+        ? '📷 Imagen'
+        : isHangout
+          ? `🤝 ${lastMessage.content}`
+          : lastMessage.content;
 
   return (
     <button onClick={onClick} className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left">
@@ -83,7 +86,9 @@ function GroupConversationRow({ group, unread, onClick }) {
         </div>
         <div className="flex items-center gap-2">
           <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : 'text-slate-500'}`}>
-            {lastMsg ? lastMsg.content : `${group.member_count} miembros`}
+            {lastMsg
+              ? (lastMsg.type === 'image' ? '📷 Imagen' : lastMsg.content)
+              : `${group.member_count} miembros`}
           </p>
           <span className="text-xs bg-accent-primary/15 text-accent-glow border border-accent-primary/20 px-1.5 py-0.5 rounded-full font-mono flex-shrink-0">Grupo</span>
         </div>
