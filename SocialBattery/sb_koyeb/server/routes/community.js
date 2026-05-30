@@ -314,8 +314,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
 
     // ── Push notification to community members (fire-and-forget) ─────────────
     if (communityId) {
-      const communityName = event.community_id ? communityId : null;
-      // Fetch community name for the notification body
+      // Fetch community name and notify all members (fire-and-forget)
       supabase
         .from('communities')
         .select('name')
@@ -326,7 +325,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           notifyCommunityMembers(supabase, communityId, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
-            url:   '/community',
+            url:   `/community/${communityId}`,
             tag:   `community-event-${event.id}`,
           });
         })

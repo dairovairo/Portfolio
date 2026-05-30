@@ -4,6 +4,7 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { checkOrganizerBadgeForUser } = require('../jobs/badges');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
+const { notifyUsers } = require('../lib/webpush');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -350,6 +351,44 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     const newBadgeId = await checkOrganizerBadgeForUser(userId).catch(() => null);
+
+    // ── Push notifications (fire-and-forget) ─────────────────────────────────
+    const creatorName = pool.creator?.display_name || pool.creator?.username || 'Un amigo';
+    const activityLabel = pool.activity.trim();
+    const notifPayload = {
+      title: `🎉 ${creatorName} propone una quedada`,
+      body: `${activityLabel}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
+      url: '/pools',
+      tag: `new-pool-${pool.id}`,
+    };
+
+    if (is_public) {
+      // Notify all accepted friends of the creator
+      getFriendIds(userId)
+        .then(friendIds => notifyUsers(supabase, friendIds, userId, notifPayload))
+        .catch(() => {});
+    } else {
+      // Notify group members + individually invited friends
+      const recipientIds = new Set();
+
+      const notifyPrivate = async () => {
+        if (group_id) {
+          const { data: groupMembers } = await supabase
+            .from('friend_group_members')
+            .select('user_id')
+            .eq('group_id', group_id)
+            .neq('user_id', userId);
+          (groupMembers || []).forEach(m => recipientIds.add(m.user_id));
+        }
+        if (invited_user_ids?.length) {
+          invited_user_ids.forEach(id => { if (id !== userId) recipientIds.add(id); });
+        }
+        if (recipientIds.size) {
+          await notifyUsers(supabase, [...recipientIds], userId, notifPayload);
+        }
+      };
+      notifyPrivate().catch(() => {});
+    }
 
     res.status(201).json({
       pool: {
