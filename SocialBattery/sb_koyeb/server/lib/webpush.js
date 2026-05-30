@@ -78,40 +78,32 @@ async function sendPushToSubscription(sub, payload) {
   return { expired: false };
 }
 
+
 /**
- * Send a push notification to all push-subscribed members of a community,
- * excluding the event creator.
+ * Send a push notification to a list of user IDs, excluding one user.
+ * Handles subscription lookup and expired endpoint cleanup automatically.
  *
- * @param {object} supabase   — Supabase admin client
- * @param {string} communityId
- * @param {string} creatorId  — excluded from notifications
- * @param {{ title: string, body: string, url?: string }} payload
+ * @param {object} supabase
+ * @param {string[]} userIds     — recipients
+ * @param {string}   excludeId  — user to exclude (e.g. the creator)
+ * @param {{ title: string, body: string, url?: string, tag?: string }} payload
  */
-async function notifyCommunityMembers(supabase, communityId, creatorId, payload) {
+async function notifyUsers(supabase, userIds, excludeId, payload) {
   init();
   if (!webpush) return;
+  if (!userIds?.length) return;
 
   try {
-    // 1. Get all community members (excluding creator)
-    const { data: members, error: membersErr } = await supabase
-      .from('community_members')
-      .select('user_id')
-      .eq('community_id', communityId)
-      .neq('user_id', creatorId);
+    const targetIds = userIds.filter(id => id !== excludeId);
+    if (!targetIds.length) return;
 
-    if (membersErr || !members?.length) return;
-
-    const memberIds = members.map(m => m.user_id);
-
-    // 2. Get their push subscriptions
     const { data: subs, error: subsErr } = await supabase
       .from('push_subscriptions')
       .select('user_id, endpoint, p256dh, auth')
-      .in('user_id', memberIds);
+      .in('user_id', targetIds);
 
     if (subsErr || !subs?.length) return;
 
-    // 3. Send push + collect expired endpoints
     const expiredEndpoints = [];
     await Promise.allSettled(
       subs.map(async sub => {
@@ -120,7 +112,6 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
       })
     );
 
-    // 4. Prune expired subscriptions (fire-and-forget)
     if (expiredEndpoints.length) {
       supabase
         .from('push_subscriptions')
@@ -130,8 +121,38 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
         .catch(() => {});
     }
   } catch (err) {
+    console.warn('[webpush] notifyUsers error:', err.message);
+  }
+}
+
+/**
+ * Send a push notification to all push-subscribed members of a community,
+ * excluding the event creator.
+ * Now delegates subscription fan-out to notifyUsers.
+ *
+ * @param {object} supabase
+ * @param {string} communityId
+ * @param {string} creatorId  — excluded from notifications
+ * @param {{ title: string, body: string, url?: string, tag?: string }} payload
+ */
+async function notifyCommunityMembers(supabase, communityId, creatorId, payload) {
+  init();
+  if (!webpush) return;
+
+  try {
+    const { data: members, error: membersErr } = await supabase
+      .from('community_members')
+      .select('user_id')
+      .eq('community_id', communityId)
+      .neq('user_id', creatorId);
+
+    if (membersErr || !members?.length) return;
+
+    const memberIds = members.map(m => m.user_id);
+    await notifyUsers(supabase, memberIds, creatorId, payload);
+  } catch (err) {
     console.warn('[webpush] notifyCommunityMembers error:', err.message);
   }
 }
 
-module.exports = { notifyCommunityMembers };
+module.exports = { notifyUsers, notifyCommunityMembers };
