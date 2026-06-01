@@ -254,97 +254,36 @@ export function useMessageNotifications(profile, settings) {
         channels.push(batteryCh);
       }
 
-      // ── 6. Nuevas quedadas públicas de amigos ──────────────────────────────
-      // Escucha INSERT en hangout_pools filtrando is_public=true.
-      // Filtramos por creator_id en el cliente porque Realtime no soporta IN.
-      if (friendIds.size > 0) {
-        const poolPublicCh = supabase
-          .channel(`notif-pools-public-${profile.id}`)
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'hangout_pools',
-            filter: 'is_public=eq.true',
-          }, async (payload) => {
-            const s = settingsRef.current;
-            if (s.muteAllNotifications) return;
-
-            const pool = payload.new;
-            if (!pool?.id) return;
-            if (pool.creator_id === profile.id) return;
-            if (!friendIds.has(pool.creator_id)) return;
-
-            if (!document.hidden && locationRef.current === '/pools') return;
-
-            let creatorName = 'Un amigo';
-            try {
-              const { data } = await supabase
-                .from('users')
-                .select('display_name, username')
-                .eq('id', pool.creator_id)
-                .single();
-              if (data) creatorName = data.display_name || `@${data.username}`;
-            } catch {}
-
-            fireNotification({
-              title: `🎉 ${creatorName} propone una quedada`,
-              body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
-              tag: `pool-${pool.id}`,
-              navigateTo: '/pools',
-            });
-          })
-          .subscribe();
-        channels.push(poolPublicCh);
-      }
-
-      // ── 7. Invitaciones privadas a quedadas ─────────────────────────────────
-      // Cuando el creador inserta filas en pool_invitees, el invitado recibe notif.
-      const poolInviteCh = supabase
-        .channel(`notif-pool-invites-${profile.id}`)
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'pool_invitees',
-          filter: `user_id=eq.${profile.id}`,
-        }, async (payload) => {
+      // ── 6 & 7. Quedadas (públicas de amigos + invitaciones privadas) ──────────
+      // El servidor emite un broadcast al canal personal `pool-notif-{userId}`
+      // con la service key (sin RLS), cubriendo ambos casos: pool pública de amigo
+      // y pool privada donde el usuario está invitado individualmente o via grupo.
+      const poolBroadcastCh = supabase
+        .channel(`pool-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_pool' }, (msg) => {
           const s = settingsRef.current;
           if (s.muteAllNotifications) return;
 
-          const invite = payload.new;
-          if (!invite?.pool_id) return;
+          const pool = msg.payload;
+          if (!pool?.pool_id) return;
+          if (pool.creator_id === profile.id) return;
 
           if (!document.hidden && locationRef.current === '/pools') return;
 
-          let activityLabel = 'Una quedada';
-          let creatorName   = 'Un amigo';
-          let locationHint  = '';
-          try {
-            const { data: pool } = await supabase
-              .from('hangout_pools')
-              .select('activity, location_hint, creator_id')
-              .eq('id', invite.pool_id)
-              .single();
-            if (pool) {
-              activityLabel = pool.activity || activityLabel;
-              locationHint  = pool.location_hint || '';
-              const { data: creator } = await supabase
-                .from('users')
-                .select('display_name, username')
-                .eq('id', pool.creator_id)
-                .single();
-              if (creator) creatorName = creator.display_name || `@${creator.username}`;
-            }
-          } catch {}
+          const creatorName = pool.creator_name || 'Un amigo';
+          const title = pool.is_public
+            ? `🎉 ${creatorName} propone una quedada`
+            : `🤝 ${creatorName} te invita a una quedada`;
 
           fireNotification({
-            title: `🤝 ${creatorName} te invita a una quedada`,
-            body: `${activityLabel}${locationHint ? ` · ${locationHint}` : ''}`,
-            tag: `pool-invite-${invite.pool_id}`,
+            title,
+            body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
+            tag: `pool-${pool.pool_id}`,
             navigateTo: '/pools',
           });
         })
         .subscribe();
-      channels.push(poolInviteCh);
+      channels.push(poolBroadcastCh);
     }
 
     setup();
