@@ -352,7 +352,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     const newBadgeId = await checkOrganizerBadgeForUser(userId).catch(() => null);
 
-    // ── Push notifications (fire-and-forget) ─────────────────────────────────
+    // ── Push + Realtime broadcast (fire-and-forget) ──────────────────────────
     const creatorName = pool.creator?.display_name || pool.creator?.username || 'Un amigo';
     const activityLabel = pool.activity.trim();
     const notifPayload = {
@@ -362,11 +362,39 @@ router.post('/', requireAuth, async (req, res) => {
       tag: `new-pool-${pool.id}`,
     };
 
+    // Broadcast a Realtime message to each recipient's personal channel so the
+    // client gets an in-app notification instantly when the app is open/background.
+    // This bypasses RLS entirely (service key) — same pattern as personal messages.
+    async function broadcastToUsers(recipientIds) {
+      const broadcastPayload = {
+        pool_id:       pool.id,
+        activity:      activityLabel,
+        location_hint: pool.location_hint || null,
+        creator_name:  creatorName,
+        creator_id:    userId,
+        is_public:     Boolean(is_public),
+      };
+      await Promise.allSettled(
+        recipientIds.map(recipientId =>
+          supabase
+            .channel(`pool-notif-${recipientId}`)
+            .send({
+              type: 'broadcast',
+              event: 'new_pool',
+              payload: broadcastPayload,
+            })
+        )
+      );
+    }
+
     if (is_public) {
       // Notify all accepted friends of the creator
-      getFriendIds(userId)
-        .then(friendIds => notifyUsers(supabase, friendIds, userId, notifPayload))
-        .catch(() => {});
+      getFriendIds(userId).then(async friendIds => {
+        await Promise.all([
+          notifyUsers(supabase, friendIds, userId, notifPayload),
+          broadcastToUsers(friendIds),
+        ]);
+      }).catch(() => {});
     } else {
       // Notify group members + individually invited friends
       const recipientIds = new Set();
@@ -384,7 +412,10 @@ router.post('/', requireAuth, async (req, res) => {
           invited_user_ids.forEach(id => { if (id !== userId) recipientIds.add(id); });
         }
         if (recipientIds.size) {
-          await notifyUsers(supabase, [...recipientIds], userId, notifPayload);
+          await Promise.all([
+            notifyUsers(supabase, [...recipientIds], userId, notifPayload),
+            broadcastToUsers([...recipientIds]),
+          ]);
         }
       };
       notifyPrivate().catch(() => {});
