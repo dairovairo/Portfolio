@@ -113,7 +113,7 @@ export function CommunityNotificationsProvider({ children }) {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'community_events' },
-        (payload) => {
+        async (payload) => {
           const newEvent = payload.new;
           // Sólo notificar si:
           // 1. El evento pertenece a una comunidad en la que está el usuario
@@ -129,12 +129,23 @@ export function CommunityNotificationsProvider({ children }) {
               [newEvent.community_id]: (prev[newEvent.community_id] || 0) + 1,
             }));
 
+            // Obtener nombre de la comunidad para la notificación
+            let communityLabel = 'tu comunidad';
+            try {
+              const { data: comm } = await supabase
+                .from('communities')
+                .select('name')
+                .eq('id', newEvent.community_id)
+                .single();
+              if (comm?.name) communityLabel = comm.name;
+            } catch {}
+
             // Disparar notificación local con sonido
             fireLocalNotification({
-              title: '📅 Nuevo evento en tu comunidad',
-              body:  newEvent.title || 'Se ha creado un nuevo evento',
+              title: `📅 Nuevo evento en ${communityLabel}`,
+              body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
               tag:   `community-event-${newEvent.id}`,
-              url:   '/community',
+              url:   `/community/${newEvent.community_id}`,
             });
           }
         }
