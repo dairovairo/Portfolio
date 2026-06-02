@@ -262,7 +262,7 @@ export function useMessageNotifications(profile, settings) {
         .channel(`pool-notif-${profile.id}`)
         .on('broadcast', { event: 'new_pool' }, (msg) => {
           const s = settingsRef.current;
-          if (s.muteAllNotifications) return;
+          if (s.muteAllNotifications || s.muteNewPools) return;
 
           const pool = msg.payload;
           if (!pool?.pool_id) return;
@@ -299,6 +299,8 @@ export function useMessageNotifications(profile, settings) {
           if (!data?.type) return;
 
           if (data.type === 'pool') {
+            if (s.mutePoolReminders) return;
+
             // Recordatorio de quedada a 10 minutos
             if (!document.hidden && locationRef.current === '/pools') return;
             const poolBody = data.location ? `${data.activity} · ${data.location}` : data.activity;
@@ -309,6 +311,8 @@ export function useMessageNotifications(profile, settings) {
               navigateTo: '/pools',
             });
           } else if (data.type === 'event') {
+            if (s.muteEventReminders) return;
+
             // Recordatorio de evento de comunidad a 24 horas
             const communityPath = data.community_id ? '/community/' + data.community_id : '/community';
             if (!document.hidden && locationRef.current === communityPath) return;

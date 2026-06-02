@@ -18,15 +18,19 @@ function MessageNotificationsBroadcaster({ profile }) {
     muteAllNotifications,
     mutePersonalChats,
     muteGroupChats,
+    muteNewPools,
+    muteEventReminders,
+    mutePoolReminders,
     muteBatteryChanges,
-    showOnline,
-    showLastSeen,
   } = useSettings();
 
   useMessageNotifications(profile, {
     muteAllNotifications,
     mutePersonalChats,
     muteGroupChats,
+    muteNewPools,
+    muteEventReminders,
+    mutePoolReminders,
     muteBatteryChanges,
   });
   return null;

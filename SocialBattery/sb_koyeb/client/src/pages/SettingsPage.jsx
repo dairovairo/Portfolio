@@ -679,19 +679,7 @@ export default function SettingsPage() {
                 </div>
                 <Toggle
                   enabled={muteAllNotifications}
-                  onToggle={() => {
-                    const next = !muteAllNotifications;
-                    setMuteAllNotifications(next);
-                    if (next) {
-                      setMutePersonalChats(true);
-                      setMuteGroupChats(true);
-                      setMuteNewEvents(true);
-                      setMuteNewPools(true);
-                      setMuteEventReminders(true);
-                      setMutePoolReminders(true);
-                      setMuteBatteryChanges(true);
-                    }
-                  }}
+                  onToggle={() => setMuteAllNotifications(!muteAllNotifications)}
                 />
               </div>
 
