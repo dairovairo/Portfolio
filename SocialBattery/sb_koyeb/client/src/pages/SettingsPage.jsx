@@ -376,6 +376,10 @@ export default function SettingsPage() {
     muteAllNotifications, setMuteAllNotifications,
     mutePersonalChats, setMutePersonalChats,
     muteGroupChats, setMuteGroupChats,
+    muteNewEvents, setMuteNewEvents,
+    muteNewPools, setMuteNewPools,
+    muteEventReminders, setMuteEventReminders,
+    mutePoolReminders, setMutePoolReminders,
     readReceipts, setReadReceipts,
     showOnline, setShowOnline,
     showLastSeen, setShowLastSeen,
@@ -658,7 +662,7 @@ export default function SettingsPage() {
           onToggle={toggleSection}
           icon="🔔"
           title="Notificaciones"
-          subtitle="Mensajes, batería y alertas"
+          subtitle="Mensajes, eventos, quedadas y alertas"
         >
           <SubSection title="General">
             <div className="space-y-4">
@@ -675,7 +679,18 @@ export default function SettingsPage() {
                 </div>
                 <Toggle
                   enabled={muteAllNotifications}
-                  onToggle={() => setMuteAllNotifications(!muteAllNotifications)}
+                  onToggle={() => {
+                    const next = !muteAllNotifications;
+                    setMuteAllNotifications(next);
+                    if (next) {
+                      setMutePersonalChats(true);
+                      setMuteGroupChats(true);
+                      setMuteNewEvents(true);
+                      setMuteNewPools(true);
+                      setMuteEventReminders(true);
+                      setMutePoolReminders(true);
+                    }
+                  }}
                 />
               </div>
 
@@ -713,6 +728,36 @@ export default function SettingsPage() {
                     />
                   </div>
 
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar nuevos eventos
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No te avisaremos cuando se cree un nuevo evento en tus comunidades
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteNewEvents}
+                      onToggle={() => setMuteNewEvents(!muteNewEvents)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar nuevas quedadas
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No te avisaremos cuando alguien proponga una nueva quedada
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteNewPools}
+                      onToggle={() => setMuteNewPools(!muteNewPools)}
+                    />
+                  </div>
+
                 </div>
               )}
 
@@ -732,6 +777,45 @@ export default function SettingsPage() {
                   enabled={muteBatteryChanges}
                   onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
                 />
+              </div>
+
+              <div className="border-t border-surface-border" />
+
+              {/* Recordatorios — independientes del mute global de mensajes */}
+              <div className="text-[11px] font-mono uppercase tracking-widest text-surface-muted pt-1">
+                Recordatorios
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar avisos de eventos
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás recordatorios de eventos en tu planificación
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteAllNotifications || muteEventReminders}
+                    onToggle={() => !muteAllNotifications && setMuteEventReminders(!muteEventReminders)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar avisos de quedadas
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás recordatorios de quedadas a las que te has unido
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteAllNotifications || mutePoolReminders}
+                    onToggle={() => !muteAllNotifications && setMutePoolReminders(!mutePoolReminders)}
+                  />
+                </div>
               </div>
 
             </div>
