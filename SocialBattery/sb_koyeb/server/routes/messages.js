@@ -33,7 +33,7 @@ router.get('/', requireAuth, async (req, res) => {
     .from('messages')
     .select(`
       id, content, type, hangout_status, created_at, read_at, delivered_at,
-      deleted_for_everyone, deleted_for_self,
+      image_url, deleted_for_everyone, deleted_for_self,
       sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
       receiver:receiver_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
@@ -358,6 +358,7 @@ router.post('/:receiverId/image', requireAuth, (req, res, next) => {
         sender_id: senderId,
         receiver_id: receiverId,
         content: imageUrl,
+        image_url: imageUrl,
         type: 'image',
       })
       .select()

@@ -50,7 +50,7 @@ router.get('/', requireAuth, async (req, res) => {
       const groupIds = groups.map(g => g.id);
       const { data: lastMsgs } = await supabase
         .from('group_messages')
-        .select('group_id, created_at, sender_id, content')
+        .select('group_id, created_at, sender_id, content, type, image_url')
         .in('group_id', groupIds)
         .order('created_at', { ascending: false });
 
