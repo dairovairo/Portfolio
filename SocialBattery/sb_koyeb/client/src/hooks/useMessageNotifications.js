@@ -284,6 +284,45 @@ export function useMessageNotifications(profile, settings) {
         })
         .subscribe();
       channels.push(poolBroadcastCh);
+
+      // ── 8. Recordatorios de quedadas y eventos de comunidad ─────────────────
+      // El servidor emite un broadcast al canal personal `reminder-{userId}` con
+      // la service key justo antes de que empiece la quedada (10 min) o el evento
+      // (24 h). El cliente lo recibe aquí y dispara la notificación local.
+      const reminderCh = supabase
+        .channel(`reminder-${profile.id}`)
+        .on('broadcast', { event: 'reminder' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications) return;
+
+          const data = msg.payload;
+          if (!data?.type) return;
+
+          if (data.type === 'pool') {
+            // Recordatorio de quedada a 10 minutos
+            if (!document.hidden && locationRef.current === '/pools') return;
+            const poolBody = data.location ? `${data.activity} · ${data.location}` : data.activity;
+            fireNotification({
+              title: '⏰ Tu quedada empieza en 10 minutos',
+              body:  poolBody,
+              tag:   'pool-reminder-' + data.pool_id,
+              navigateTo: '/pools',
+            });
+          } else if (data.type === 'event') {
+            // Recordatorio de evento de comunidad a 24 horas
+            const communityPath = data.community_id ? '/community/' + data.community_id : '/community';
+            if (!document.hidden && locationRef.current === communityPath) return;
+            const eventBody = data.location ? `${data.title} · ${data.location}` : data.title;
+            fireNotification({
+              title: '📅 Mañana tienes un evento en ' + (data.community_name || 'tu comunidad'),
+              body:  eventBody,
+              tag:   'event-reminder-' + data.event_id,
+              navigateTo: communityPath,
+            });
+          }
+        })
+        .subscribe();
+      channels.push(reminderCh);
     }
 
     setup();
