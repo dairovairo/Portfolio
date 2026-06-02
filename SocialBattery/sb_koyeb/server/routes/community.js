@@ -5,10 +5,7 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyCommunityMembers } = require('../lib/webpush');
-const {
-  DEFAULT_EVENT_REMINDER_MINUTES,
-  parseReminderMinutes,
-} = require('../lib/reminderLeadTime');
+const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -181,7 +178,7 @@ async function enrichEvents(db, events = [], currentUserId = null) {
   const currentReminderByEvent = currentUserId
     ? attendees.reduce((acc, row) => {
         if (row.user_id === currentUserId) {
-          acc[row.event_id] = row.reminder_minutes_before || DEFAULT_EVENT_REMINDER_MINUTES;
+          acc[row.event_id] = row.reminder_minutes_before ?? null;
         }
         return acc;
       }, {})
@@ -197,7 +194,7 @@ async function enrichEvents(db, events = [], currentUserId = null) {
     like_count: likeCountByEvent[ev.id] || 0,
     liked_by_current_user: likedEventIds.has(ev.id),
     current_user_reminder_minutes_before: attendeeIdsByEvent[ev.id]?.includes(currentUserId)
-      ? currentReminderByEvent[ev.id] || DEFAULT_EVENT_REMINDER_MINUTES
+      ? currentReminderByEvent[ev.id] ?? null
       : null,
   }));
 }
