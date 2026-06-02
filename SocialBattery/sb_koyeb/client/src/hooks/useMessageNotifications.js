@@ -314,7 +314,7 @@ export function useMessageNotifications(profile, settings) {
             if (!document.hidden && locationRef.current === communityPath) return;
             const eventBody = data.location ? `${data.title} · ${data.location}` : data.title;
             fireNotification({
-              title: '📅 Mañana tienes un evento en ' + (data.community_name || 'tu comunidad'),
+              title: data.community_name ? '📅 Mañana tienes un evento en ' + data.community_name : '📅 Mañana tienes un evento en tu agenda',
               body:  eventBody,
               tag:   'event-reminder-' + data.event_id,
               navigateTo: communityPath,
