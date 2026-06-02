@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { useSettings } from './SettingsContext';
 import { supabase } from '../lib/supabase';
 
 const CommunityNotificationsContext = createContext({
@@ -63,11 +64,17 @@ function totalCount(map) {
 
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
+  const { muteAllNotifications, muteNewEvents } = useSettings();
 
   // eventsByCommunity: { [communityId: string]: number }
   const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
   const joinedCommunityIdsRef = useRef(new Set());
+  const settingsRef = useRef({ muteAllNotifications, muteNewEvents });
   const channelRef = useRef(null);
+
+  useEffect(() => {
+    settingsRef.current = { muteAllNotifications, muteNewEvents };
+  }, [muteAllNotifications, muteNewEvents]);
 
   // ── Derivados ──────────────────────────────────────────────────────────────
   const eventBadgeCount     = totalCount(eventsByCommunity);
@@ -140,13 +147,16 @@ export function CommunityNotificationsProvider({ children }) {
               if (comm?.name) communityLabel = comm.name;
             } catch {}
 
-            // Disparar notificación local con sonido
-            fireLocalNotification({
-              title: `📅 Nuevo evento en ${communityLabel}`,
-              body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
-              tag:   `community-event-${newEvent.id}`,
-              url:   `/community/${newEvent.community_id}`,
-            });
+            const settings = settingsRef.current;
+            if (!settings.muteAllNotifications && !settings.muteNewEvents) {
+              // Disparar notificación local con sonido
+              fireLocalNotification({
+                title: `📅 Nuevo evento en ${communityLabel}`,
+                body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
+                tag:   `community-event-${newEvent.id}`,
+                url:   `/community/${newEvent.community_id}`,
+              });
+            }
           }
         }
       )
