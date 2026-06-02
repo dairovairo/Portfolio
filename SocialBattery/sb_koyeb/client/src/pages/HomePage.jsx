@@ -1,0 +1,660 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { useSettings } from '../context/SettingsContext';
+import { api } from '../lib/api';
+import BatterySlider from '../components/BatterySlider';
+import FriendCard from '../components/FriendCard';
+import BadgeUnlockModal from '../components/BadgeUnlockModal';
+import BottomNav from '../components/BottomNav';
+import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
+import { supabase } from '../lib/supabase';
+import { isOnline, useFriendsOnline } from '../hooks/usePresence';
+
+// ── Avatar helper ─────────────────────────────────────────────────────────────
+function Avatar({ user, size = 'sm', online = false }) {
+  const color = getBatteryColor(user.battery_level ?? 50);
+  const sz = size === 'sm' ? 'w-9 h-9 text-sm' : 'w-12 h-12 text-base';
+  return (
+    <div
+      className={`${sz} rounded-full flex items-center justify-center font-display font-bold border-2 flex-shrink-0 relative`}
+      style={{ borderColor: color.hex, boxShadow: `0 0 10px ${color.hex}20`, background: `${color.hex}15` }}
+    >
+      {user.avatar_url
+        ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+        : (user.display_name || user.username)?.[0]?.toUpperCase()
+      }
+      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
+    </div>
+  );
+}
+
+function BatteryBadge({ level, isEstimated }) {
+  const color = getBatteryColor(level ?? 50);
+  return (
+    <div className="flex items-center gap-1">
+      <span className="font-display font-bold tabular-nums text-sm" style={{ color: color.hex }}>{level ?? '—'}%</span>
+      {isEstimated && <span className="text-xs text-yellow-400">⚡</span>}
+    </div>
+  );
+}
+
+// ── Search friends modal ──────────────────────────────────────────────────────
+function SearchModal({ friends, onClose, onToast }) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState({});
+  const [sent, setSent] = useState(new Set());
+  const friendIds = new Set(friends.map(f => f.id));
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    if (!query.trim() || query.length < 2) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const { users } = await api.get(`/users/search?q=${encodeURIComponent(query)}`);
+        setResults(users || []);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  async function sendRequest(user) {
+    setActionLoading(l => ({ ...l, [user.id]: true }));
+    try {
+      await api.post('/friends/request', { addressee_id: user.id });
+      setSent(s => new Set([...s, user.id]));
+      onToast(`Solicitud enviada a @${user.username} 🤝`);
+    } catch (e) { onToast(e.message, 'error'); }
+    finally { setActionLoading(l => ({ ...l, [user.id]: false })); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-5 max-h-[80vh] flex flex-col">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-xl">🔍</span>
+          <h2 className="font-display font-bold text-surface-text flex-1">Buscar personas</h2>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Buscar por username..."
+          className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors mb-3"
+        />
+        <div className="overflow-y-auto flex-1 space-y-2">
+          {loading && <div className="text-center text-surface-muted text-sm py-6 animate-pulse">Buscando...</div>}
+          {!loading && query.length >= 2 && results.length === 0 && (
+            <div className="text-center text-surface-muted text-sm py-8">Sin resultados para "@{query}"</div>
+          )}
+          {!loading && query.length < 2 && (
+            <div className="text-center text-surface-muted text-sm py-8">
+              <div className="text-3xl mb-2">👥</div>
+              Escribe al menos 2 caracteres
+            </div>
+          )}
+          {results.map(user => {
+            const isFriend = friendIds.has(user.id);
+            const wasSent = sent.has(user.id);
+            return (
+              <div key={user.id} className="bg-surface-bg border border-surface-border rounded-2xl p-3 flex items-center gap-3">
+                <button onClick={() => navigate(`/user/${user.id}`)} className="flex-shrink-0">
+                  <Avatar user={user} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <button onClick={() => navigate(`/user/${user.id}`)} className="text-left">
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{user.display_name || user.username}</div>
+                    <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
+                  </button>
+                </div>
+                <BatteryBadge level={user.battery_level} isEstimated={user.battery_is_estimated} />
+                {isFriend ? (
+                  <span className="text-xs text-surface-muted border border-surface-border px-2 py-1 rounded-lg">✓ Amigos</span>
+                ) : wasSent ? (
+                  <span className="text-xs text-surface-muted border border-surface-border px-2 py-1 rounded-lg">✓ Enviado</span>
+                ) : (
+                  <button
+                    onClick={() => sendRequest(user)}
+                    disabled={actionLoading[user.id]}
+                    className="text-xs font-display font-semibold px-3 py-1.5 rounded-lg bg-accent-primary text-surface-text hover:bg-accent-primary/80 disabled:opacity-50 transition-all"
+                  >
+                    {actionLoading[user.id] ? '...' : '+ Añadir'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Friend requests modal ─────────────────────────────────────────────────────
+function RequestsModal({ onClose, onToast, onAccepted }) {
+  const navigate = useNavigate();
+  const { showOnline } = useSettings();
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState({});
+
+  useEffect(() => {
+    api.get('/friends/requests')
+      .then(({ requests: data }) => setRequests(data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function respond(requestId, status, username) {
+    setActionLoading(l => ({ ...l, [requestId]: true }));
+    try {
+      await api.patch(`/friends/request/${requestId}`, { status });
+      setRequests(r => r.filter(req => req.id !== requestId));
+      if (status === 'accepted') { onToast(`¡Ahora eres amigo de @${username}! 🎉`); onAccepted?.(); }
+      else onToast('Solicitud rechazada');
+    } catch (e) { onToast(e.message, 'error'); }
+    finally { setActionLoading(l => ({ ...l, [requestId]: false })); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-5 max-h-[80vh] flex flex-col">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-xl">🤝</span>
+          <h2 className="font-display font-bold text-surface-text flex-1">Solicitudes de amistad</h2>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-y-auto flex-1 space-y-2">
+          {loading && (
+            <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-16 bg-surface-bg rounded-2xl animate-pulse" />)}</div>
+          )}
+          {!loading && requests.length === 0 && (
+            <div className="text-center py-10">
+              <div className="text-4xl mb-3">📭</div>
+              <p className="text-surface-muted text-sm">Sin solicitudes pendientes</p>
+            </div>
+          )}
+          {requests.map(req => (
+            <div key={req.id} className="bg-surface-bg border border-surface-border rounded-2xl p-3 flex items-center gap-3">
+              <button onClick={() => navigate(`/user/${req.requester.id}`)} className="flex-shrink-0">
+                <Avatar user={req.requester} online={showOnline && isOnline(req.requester.last_seen_at)} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.display_name || req.requester.username}</div>
+                <div className="text-xs text-surface-muted font-mono">@{req.requester.username}</div>
+              </div>
+              <BatteryBadge level={req.requester.battery_level} />
+              <div className="flex gap-1.5 flex-shrink-0">
+                <button
+                  onClick={() => respond(req.id, 'accepted', req.requester.username)}
+                  disabled={actionLoading[req.id]}
+                  className="bg-green-500/20 text-green-400 border border-green-500/30 text-xs font-display font-semibold px-3 py-1.5 rounded-lg hover:bg-green-500/30 transition-all disabled:opacity-50"
+                >✓ Aceptar</button>
+                <button
+                  onClick={() => respond(req.id, 'rejected', req.requester.username)}
+                  disabled={actionLoading[req.id]}
+                  className="bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-display font-semibold px-2 py-1.5 rounded-lg hover:bg-red-500/20 transition-all disabled:opacity-50"
+                >✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Create group modal ────────────────────────────────────────────────────────
+function CreateGroupModal({ friends, onClose, onCreate }) {
+  const [name, setName] = useState('');
+  const [selected, setSelected] = useState(new Set());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function toggle(id) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function handleCreate() {
+    if (!name.trim()) { setError('El nombre del grupo es obligatorio'); return; }
+    setError('');
+    setSaving(true);
+    try {
+      await onCreate({ name: name.trim(), member_ids: [...selected] });
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Error al crear el grupo');
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-5 max-h-[85vh] flex flex-col">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-xl">👥</span>
+          <div className="flex-1">
+            <h2 className="font-display font-bold text-surface-text">Crear grupo</h2>
+            <p className="text-xs text-surface-muted">Grupo privado para quedadas</p>
+          </div>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+        <div className="mb-3">
+          <label className="block text-xs font-mono text-surface-muted mb-1.5">Nombre del grupo *</label>
+          <input
+            type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Ej: Los de siempre, Equipo fútbol..." maxLength={60} autoFocus
+            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+          />
+        </div>
+        <div className="mb-3 flex-1 overflow-y-auto">
+          <label className="block text-xs font-mono text-surface-muted mb-2">
+            Añadir amigos {selected.size > 0 && <span className="text-accent-glow">({selected.size} seleccionados)</span>}
+          </label>
+          {friends.length === 0
+            ? <p className="text-surface-muted text-sm text-center py-4">Aún no tienes amigos para añadir</p>
+            : (
+              <div className="space-y-2">
+                {friends.map(f => {
+                  const sel = selected.has(f.id);
+                  return (
+                    <div key={f.id} onClick={() => toggle(f.id)} className={`bg-surface-bg border rounded-2xl p-3 flex items-center gap-3 cursor-pointer transition-all ${sel ? 'border-accent-primary/50 bg-accent-primary/5' : 'border-surface-border'}`}>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs transition-all flex-shrink-0 ${sel ? 'border-accent-primary bg-accent-primary text-white' : 'border-slate-600'}`}>
+                        {sel ? '✓' : ''}
+                      </div>
+                      <Avatar user={f} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-display font-semibold text-surface-text text-sm truncate">{f.display_name || f.username}</div>
+                        <div className="text-xs text-surface-muted font-mono">@{f.username}</div>
+                      </div>
+                      <BatteryBadge level={f.battery_level} isEstimated={f.battery_is_estimated} />
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          }
+        </div>
+        {error && <p className="text-red-400 text-xs font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl mb-3">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
+            Cancelar
+          </button>
+          <button onClick={handleCreate} disabled={saving || !name.trim()} className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-semibold disabled:opacity-50 transition-all">
+            {saving ? 'Creando...' : '✓ Crear grupo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function HomePage() {
+  const { profile, refreshProfile } = useAuth();
+  const { addToast } = useToast();
+  const navigate = useNavigate();
+
+  const [battery, setBattery] = useState(profile?.battery_level ?? 50);
+  const [friends, setFriends] = useState([]);
+  const onlineMap = useFriendsOnline(friends);
+  const [groups, setGroups] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [loadingFriends, setLoadingFriends] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [newBadges, setNewBadges] = useState([]);
+
+  // Modal state
+  const [showSearch, setShowSearch] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+
+  useEffect(() => {
+    if (profile) setBattery(getEffectiveBatteryLevel(profile));
+  }, [profile]);
+
+  const fetchFriends = useCallback(async () => {
+    try {
+      const { friends: data } = await api.get('/battery/friends');
+      const sorted = [...(data || [])].sort((a, b) => (b.battery_level ?? -1) - (a.battery_level ?? -1));
+      setFriends(sorted);
+    } catch (e) { console.error(e); }
+    finally { setLoadingFriends(false); }
+  }, [profile?.battery_level]);
+
+  const fetchPending = useCallback(async () => {
+    try {
+      const { requests } = await api.get('/friends/requests');
+      setPendingCount((requests || []).length);
+    } catch (e) {}
+  }, []);
+
+  const fetchUnread = useCallback(async () => {
+    try {
+      const { conversations } = await api.get('/messages');
+      const unread = (conversations || []).reduce((acc, c) => acc + (c.unread || 0), 0);
+      setUnreadCount(unread);
+    } catch (e) {}
+  }, []);
+
+  const fetchGroups = useCallback(async () => {
+    try {
+      const { groups: data } = await api.get('/groups');
+      setGroups(data || []);
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    fetchFriends();
+    fetchPending();
+    fetchUnread();
+    fetchGroups();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
+
+  // Realtime subscriptions
+  useEffect(() => {
+    if (!profile?.id) return;
+    const ch1 = supabase.channel('home-users')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, () => fetchFriends())
+      .subscribe();
+    const ch2 = supabase.channel('home-friendships')
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'friendships',
+        filter: `addressee_id=eq.${profile.id}`,
+      }, () => fetchPending())
+      .subscribe();
+    return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
+  }, [profile?.id, fetchFriends, fetchPending]);
+
+  async function saveBattery() {
+    setSaving(true);
+    try {
+      const { newBadges: earned } = await api.patch('/battery', { level: battery });
+      await refreshProfile();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      fetchFriends();
+      if (earned?.length > 0) {
+        setNewBadges(earned);
+        addToast(`¡Batería actualizada! +${earned.length} insignia${earned.length > 1 ? 's' : ''} 🏅`, 'success');
+      } else {
+        addToast('¡Batería actualizada!', 'success');
+      }
+    } catch (err) {
+      addToast('Error al actualizar', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createGroup({ name, member_ids }) {
+    const { group } = await api.post('/groups', { name, member_ids });
+    addToast(`Grupo "${group.name}" creado 🎉`, 'success');
+    fetchGroups();
+  }
+
+  const profileBatteryLevel = profile ? getEffectiveBatteryLevel(profile) : battery;
+  const pendingUpdate = profile && isBatteryExpired(profile.battery_updated_at);
+
+  const color = getBatteryColor(profileBatteryLevel);
+
+  return (
+    <div className="min-h-screen bg-surface-bg pb-24">
+      <BadgeUnlockModal badges={newBadges} onClose={() => setNewBadges([])} />
+
+      {/* Modals */}
+      {showSearch && (
+        <SearchModal
+          friends={friends}
+          onClose={() => setShowSearch(false)}
+          onToast={(msg, type) => addToast(msg, type || 'success')}
+        />
+      )}
+      {showRequests && (
+        <RequestsModal
+          onClose={() => setShowRequests(false)}
+          onToast={(msg, type) => addToast(msg, type || 'success')}
+          onAccepted={() => { fetchFriends(); fetchPending(); }}
+        />
+      )}
+      {showCreateGroup && (
+        <CreateGroupModal
+          friends={friends}
+          onClose={() => setShowCreateGroup(false)}
+          onCreate={createGroup}
+        />
+      )}
+
+      {/* Top nav */}
+      <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/90 backdrop-blur-xl z-10">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🔋</span>
+            <span className="font-display font-bold text-surface-text">SocialBattery</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => navigate('/settings')}
+              className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
+              title="Ajustes"
+            >
+              <span className="sb-symbol text-lg" aria-hidden="true">⚙︎</span>
+            </button>
+            <button
+              onClick={() => navigate('/profile')}
+              className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-display font-bold overflow-hidden"
+              style={{ borderColor: color.hex, background: `${color.hex}20`, color: color.hex }}
+            >
+              {profile?.avatar_url
+                ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover rounded-full" />
+                : (profile?.display_name?.[0] || '?').toUpperCase()
+              }
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
+
+        {/* Daily update nudge */}
+        {pendingUpdate && (
+          <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
+            <span className="text-xl">⚡</span>
+            <p className="text-yellow-300/80 text-xs flex-1">
+              No has actualizado tu batería hoy. ¡Cuéntales a tus amigos cómo estás!
+            </p>
+          </div>
+        )}
+
+        {/* Battery card */}
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-5 animate-slide-up">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="text-xs font-mono text-surface-muted uppercase tracking-widest">
+                Tu batería social
+              </div>
+              {profile?.battery_is_estimated && (
+                <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono">
+                  ⚡ Estimada
+                </span>
+              )}
+            </div>
+            <div className="text-right">
+              <span
+                className="font-display text-4xl font-bold"
+                style={{ color: color.hex, textShadow: `0 0 25px ${color.hex}50` }}
+              >
+                {profileBatteryLevel}
+              </span>
+              <span className="text-surface-muted text-lg font-display">%</span>
+            </div>
+          </div>
+
+          <BatterySlider value={battery} onChange={setBattery} />
+
+          <div className="flex items-center justify-between mt-1 mb-4">
+            <span className="text-xs font-mono" style={{ color: color.hex }}>{color.label}</span>
+            <span className="text-xs text-surface-muted/60">
+              Última actualización: {formatRelativeTime(profile?.battery_updated_at)}
+            </span>
+          </div>
+
+          <button
+            onClick={saveBattery}
+            disabled={saving}
+            className={`w-full py-3 rounded-xl font-display font-semibold text-sm transition-all duration-200
+              ${saved
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                : 'bg-accent-primary hover:bg-accent-primary/80 text-white hover:shadow-lg hover:shadow-accent-primary/20'
+              } disabled:opacity-50`}
+          >
+            {saving ? 'Guardando...' : saved ? '✓ ¡Actualizado!' : 'Actualizar batería'}
+          </button>
+        </div>
+
+        {/* Friends feed */}
+        <div className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display font-semibold text-surface-text">
+              Amigos{friends.length > 0 && (
+                <span className="text-surface-muted font-normal"> · {friends.length}</span>
+              )}
+            </h3>
+            <div className="flex items-center gap-1.5">
+              {/* Friend requests badge */}
+              <button
+                onClick={() => setShowRequests(true)}
+                title="Solicitudes de amistad"
+                className={`relative w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all
+                  ${pendingCount > 0
+                    ? 'bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30'
+                    : 'bg-surface-card border border-surface-border text-surface-muted hover:text-surface-text hover:bg-surface-hover'
+                  }`}
+              >
+                🤝
+                {pendingCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[14px] h-3.5 flex items-center justify-center px-1 leading-none">
+                    {pendingCount > 9 ? '9+' : pendingCount}
+                  </span>
+                )}
+              </button>
+              {/* Add friend */}
+              <button
+                onClick={() => setShowSearch(true)}
+                title="Buscar amigos"
+                className="w-8 h-8 rounded-xl bg-surface-card border border-surface-border text-surface-muted hover:text-accent-glow hover:border-accent-primary/40 hover:bg-accent-primary/10 flex items-center justify-center text-base font-bold transition-all"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {loadingFriends ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <div key={i} className="h-20 skeleton" />)}
+            </div>
+          ) : friends.length === 0 ? (
+            <div className="bg-surface-card border border-surface-border rounded-2xl p-8 text-center">
+              <div className="text-4xl mb-3">👥</div>
+              <p className="text-surface-muted text-sm mb-4">Aún no tienes amigos en SocialBattery</p>
+              <button
+                onClick={() => setShowSearch(true)}
+                className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-4 py-2 rounded-xl text-sm font-display"
+              >
+                Buscar amigos
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {friends.slice(0, 8).map(friend => (
+                <FriendCard
+                  key={friend.id}
+                  friend={friend}
+                  online={!!onlineMap[friend.id]}
+                  onClick={() => navigate(`/user/${friend.id}`)}
+                />
+              ))}
+              {friends.length > 8 && (
+                <p className="text-center text-xs text-surface-muted py-1 font-mono">
+                  y {friends.length - 8} más
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Groups panel */}
+        <div className="animate-slide-up" style={{ animationDelay: '0.15s' }}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display font-semibold text-surface-text">
+              Grupos{groups.length > 0 && (
+                <span className="text-surface-muted font-normal"> · {groups.length}</span>
+              )}
+            </h3>
+            <button
+              onClick={() => setShowCreateGroup(true)}
+              title="Crear grupo"
+              className="w-8 h-8 rounded-xl bg-surface-card border border-surface-border text-surface-muted hover:text-accent-glow hover:border-accent-primary/40 hover:bg-accent-primary/10 flex items-center justify-center text-base font-bold transition-all"
+            >
+              +
+            </button>
+          </div>
+          {groups.length === 0 ? (
+            <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
+              <div className="text-3xl mb-2">👥</div>
+              <p className="text-surface-muted text-sm mb-3">Sin grupos aún</p>
+              <button
+                onClick={() => setShowCreateGroup(true)}
+                className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-4 py-2 rounded-xl text-sm font-display"
+              >
+                Crear grupo
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {groups.slice(0, 4).map(group => (
+                <button
+                  key={group.id}
+                  onClick={() => navigate(`/messages/group/${group.id}`)}
+                  className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-accent-primary/15 border-2 border-accent-primary/30 flex items-center justify-center text-lg flex-shrink-0">👥</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{group.name}</div>
+                    <div className="text-xs text-surface-muted font-mono">{group.member_count} miembros</div>
+                  </div>
+                  <span className="text-surface-muted text-sm">💬</span>
+                </button>
+              ))}
+              {groups.length > 4 && (
+                <p className="text-center text-xs text-surface-muted py-1 font-mono">
+                  y {groups.length - 4} grupos más
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+      </main>
+
+      <BottomNav pendingCount={pendingCount} unreadCount={unreadCount} />
+    </div>
+  );
+}
