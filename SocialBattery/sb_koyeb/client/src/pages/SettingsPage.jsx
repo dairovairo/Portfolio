@@ -689,12 +689,13 @@ export default function SettingsPage() {
                       setMuteNewPools(true);
                       setMuteEventReminders(true);
                       setMutePoolReminders(true);
+                      setMuteBatteryChanges(true);
                     }
                   }}
                 />
               </div>
 
-              {/* Sub-toggles — solo visibles si las notifs están activadas */}
+              {/* Sub-toggles — solo visibles si las notifs del sistema están activadas */}
               {!muteAllNotifications && (
                 <div className="pl-4 border-l-2 border-surface-border space-y-4 animate-slide-down">
 
@@ -758,30 +759,27 @@ export default function SettingsPage() {
                     />
                   </div>
 
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar cambios de batería
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No te avisaremos cuando un amigo actualice su energía
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteBatteryChanges}
+                      onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
+                    />
+                  </div>
+
                 </div>
               )}
 
               <div className="border-t border-surface-border" />
 
-              {/* Silenciar cambios de batería — independiente del mute global */}
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-display font-semibold text-surface-text">
-                    Silenciar cambios de batería
-                  </div>
-                  <div className="text-xs text-surface-muted">
-                    No te avisaremos cuando un amigo actualice su energía
-                  </div>
-                </div>
-                <Toggle
-                  enabled={muteBatteryChanges}
-                  onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
-                />
-              </div>
-
-              <div className="border-t border-surface-border" />
-
-              {/* Recordatorios — independientes del mute global de mensajes */}
+              {/* Recordatorios */}
               <div className="text-[11px] font-mono uppercase tracking-widest text-surface-muted pt-1">
                 Recordatorios
               </div>
