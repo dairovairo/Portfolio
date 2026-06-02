@@ -106,27 +106,37 @@ async function notifyPoolsStartingSoon() {
   }
 }
 
-// ── Job 2: eventos de comunidad a 24 horas ────────────────────────────────────
+// ── Job 2: eventos a 24 horas (de comunidad o sin comunidad) ─────────────────
 
 async function notifyEventsStartingSoon() {
-  const now      = new Date();
+  const now         = new Date();
   // Ventana: [now + 23h30m, now + 24h30m] — cubre la ejecución del cron cada hora
   const windowStart = new Date(now.getTime() + 23.5 * 60 * 60 * 1000);
   const windowEnd   = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
 
   try {
-    // Eventos que empiezan en la ventana de 24 horas
+    // Traer todos los eventos en la ventana — con o sin comunidad.
+    // Usamos select simple en community_events + join manual a communities
+    // para evitar que el inner join por FK excluya filas con community_id = null.
     const { data: events, error } = await supabase
       .from('community_events')
-      .select(`
-        id, title, location, event_date,
-        community:communities!community_events_community_id_fkey(id, name)
-      `)
+      .select('id, title, location, event_date, community_id')
       .gte('event_date', windowStart.toISOString())
       .lte('event_date', windowEnd.toISOString());
 
     if (error) { console.error('[REMINDER] event query error:', error); return; }
     if (!events?.length) return;
+
+    // Resolver nombres de comunidades en un solo query
+    const communityIds = [...new Set(events.map(e => e.community_id).filter(Boolean))];
+    const communityMap = {};
+    if (communityIds.length) {
+      const { data: comms } = await supabase
+        .from('communities')
+        .select('id, name')
+        .in('id', communityIds);
+      (comms || []).forEach(c => { communityMap[c.id] = c.name; });
+    }
 
     for (const event of events) {
       if (notifiedEvents.has(event.id)) continue;
@@ -140,29 +150,34 @@ async function notifyEventsStartingSoon() {
 
       if (!attendees?.length) continue;
 
-      const userIds      = attendees.map(a => a.user_id);
-      const communityName = event.community?.name || 'tu comunidad';
-      const locationHint  = event.location ? ` · ${event.location}` : '';
+      const userIds       = attendees.map(a => a.user_id);
+      const communityName = event.community_id ? communityMap[event.community_id] || null : null;
+      const communityUrl  = event.community_id ? `/community/${event.community_id}` : '/community';
+
+      // Título de la notificación diferenciado: con o sin comunidad
+      const pushTitle = communityName
+        ? `📅 Mañana tienes un evento en ${communityName}`
+        : `📅 Mañana tienes un evento en tu agenda`;
 
       const pushPayload = {
-        title: `📅 Mañana tienes un evento en ${communityName}`,
-        body:  `${event.title}${locationHint}`,
-        url:   event.community?.id ? `/community/${event.community.id}` : '/community',
+        title: pushTitle,
+        body:  event.location ? `${event.title} · ${event.location}` : event.title,
+        url:   communityUrl,
         tag:   `event-reminder-${event.id}`,
       };
 
       const broadcastPayload = {
-        type:         'event',
-        event_id:     event.id,
-        title:        event.title,
-        location:     event.location || null,
-        community_name: communityName,
-        community_id: event.community?.id || null,
-        hours_left:   24,
+        type:           'event',
+        event_id:       event.id,
+        title:          event.title,
+        location:       event.location || null,
+        community_name: communityName,   // null si no tiene comunidad
+        community_id:   event.community_id || null,
+        hours_left:     24,
       };
 
       await Promise.all([
-        notifyUsers(supabase, userIds, null /* no excluir a nadie */, pushPayload),
+        notifyUsers(supabase, userIds, null, pushPayload),
         broadcastReminders(userIds, broadcastPayload),
       ]);
 
