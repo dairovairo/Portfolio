@@ -5,6 +5,10 @@ const { requireAuth } = require('../middleware/auth');
 const { checkOrganizerBadgeForUser } = require('../jobs/badges');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
 const { notifyUsers } = require('../lib/webpush');
+const {
+  DEFAULT_POOL_REMINDER_MINUTES,
+  parseReminderMinutes,
+} = require('../lib/reminderLeadTime');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,7 +113,7 @@ router.get('/', requireAuth, async (req, res) => {
         max_people, is_public, group_id, status, created_at, creator_id,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
-          joined_at,
+          joined_at, reminder_minutes_before,
           user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
         )
       `)
@@ -188,7 +192,8 @@ router.get('/', requireAuth, async (req, res) => {
     const enriched = (pools || []).map(pool => {
       const participants = pool.pool_participants || [];
       const participantCount = participants.length;
-      const hasJoined = participants.some(p => p.user?.id === userId);
+      const currentParticipant = participants.find(p => p.user?.id === userId);
+      const hasJoined = Boolean(currentParticipant);
       const isCreator = pool.creator?.id === userId;
       return {
         ...pool,
@@ -199,6 +204,9 @@ router.get('/', requireAuth, async (req, res) => {
         has_joined: hasJoined,
         is_creator: isCreator,
         spots_left: pool.max_people - participantCount,
+        current_user_reminder_minutes_before: hasJoined
+          ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
+          : null,
       };
     });
 
@@ -221,7 +229,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         max_people, is_public, group_id, status, created_at, creator_id,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
-          joined_at,
+          joined_at, reminder_minutes_before,
           user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
         )
       `)
@@ -235,7 +243,8 @@ router.get('/:id', requireAuth, async (req, res) => {
     if (!allowed) return res.status(403).json({ error: 'No tienes acceso a este pool' });
 
     const participants = pool.pool_participants || [];
-    const hasJoined = participants.some(p => p.user?.id === userId);
+    const currentParticipant = participants.find(p => p.user?.id === userId);
+    const hasJoined = Boolean(currentParticipant);
     const isCreator = pool.creator?.id === userId;
 
     // Full participant list for detail view
@@ -261,6 +270,9 @@ router.get('/:id', requireAuth, async (req, res) => {
         has_joined: hasJoined,
         is_creator: isCreator,
         spots_left: pool.max_people - participants.length,
+        current_user_reminder_minutes_before: hasJoined
+          ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
+          : null,
       }
     });
   } catch (err) {
@@ -433,6 +445,7 @@ router.post('/', requireAuth, async (req, res) => {
         has_joined: true,
         is_creator: true,
         spots_left: pool.max_people - 1,
+        current_user_reminder_minutes_before: DEFAULT_POOL_REMINDER_MINUTES,
       },
       newBadges: newBadgeId ? [newBadgeId] : [],
     });
@@ -539,6 +552,55 @@ router.delete('/:id/leave', requireAuth, async (req, res) => {
 });
 
 // ── PATCH /api/pools/:id — update pool (creator only) ────────────────────────
+router.patch('/:id/reminder', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const reminderMinutes = parseReminderMinutes(req.body?.reminder_minutes_before);
+
+  if (reminderMinutes == null) {
+    return res.status(400).json({ error: 'El aviso debe estar entre 10 minutos y 1 semana' });
+  }
+
+  try {
+    const { data: pool, error: poolErr } = await supabase
+      .from('hangout_pools')
+      .select('id, scheduled_at, status')
+      .eq('id', poolId)
+      .single();
+
+    if (poolErr || !pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.status === 'cancelled' || pool.status === 'closed') {
+      return res.status(400).json({ error: 'No se puede cambiar el aviso de un pool cerrado' });
+    }
+    if (new Date(pool.scheduled_at) <= new Date()) {
+      return res.status(400).json({ error: 'El pool ya ha empezado' });
+    }
+
+    const { data: participant } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!participant) return res.status(403).json({ error: 'Tienes que estar apuntado para ajustar el aviso' });
+
+    const { data: updated, error } = await supabase
+      .from('pool_participants')
+      .update({ reminder_minutes_before: reminderMinutes })
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .select('reminder_minutes_before')
+      .single();
+
+    if (error) throw error;
+    res.json({ reminder_minutes_before: updated.reminder_minutes_before });
+  } catch (err) {
+    console.error('[POOLS] PATCH /:id/reminder', err);
+    res.status(500).json({ error: 'Failed to update pool reminder' });
+  }
+});
+
 router.patch('/:id', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const poolId = req.params.id;

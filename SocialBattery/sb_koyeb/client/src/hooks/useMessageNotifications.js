@@ -65,6 +65,19 @@ function shouldNotify(currentPath, chatPath) {
   return !currentPath.startsWith(chatPath);
 }
 
+function formatReminderLead(minutes) {
+  const value = Number.parseInt(minutes, 10);
+  if (value >= 24 * 60 && value % (24 * 60) === 0) {
+    const days = value / (24 * 60);
+    return days === 1 ? '1 dia' : `${days} dias`;
+  }
+  if (value >= 60 && value % 60 === 0) {
+    const hours = value / 60;
+    return hours === 1 ? '1 hora' : `${hours} horas`;
+  }
+  return value === 1 ? '1 minuto' : `${value || 10} minutos`;
+}
+
 // ── main hook ─────────────────────────────────────────────────────────────────
 
 export function useMessageNotifications(profile, settings) {
@@ -301,11 +314,11 @@ export function useMessageNotifications(profile, settings) {
           if (data.type === 'pool') {
             if (s.mutePoolReminders) return;
 
-            // Recordatorio de quedada a 10 minutos
+            const leadLabel = formatReminderLead(data.minutes_left || 10);
             if (!document.hidden && locationRef.current === '/pools') return;
             const poolBody = data.location ? `${data.activity} · ${data.location}` : data.activity;
             fireNotification({
-              title: '⏰ Tu quedada empieza en 10 minutos',
+              title: `⏰ Tu quedada empieza en ${leadLabel}`,
               body:  poolBody,
               tag:   'pool-reminder-' + data.pool_id,
               navigateTo: '/pools',
@@ -313,12 +326,13 @@ export function useMessageNotifications(profile, settings) {
           } else if (data.type === 'event') {
             if (s.muteEventReminders) return;
 
-            // Recordatorio de evento de comunidad a 24 horas
+            const leadMinutes = data.minutes_left || (data.hours_left ? data.hours_left * 60 : 24 * 60);
+            const leadLabel = formatReminderLead(leadMinutes);
             const communityPath = data.community_id ? '/community/' + data.community_id : '/community';
             if (!document.hidden && locationRef.current === communityPath) return;
             const eventBody = data.location ? `${data.title} · ${data.location}` : data.title;
             fireNotification({
-              title: data.community_name ? '📅 Mañana tienes un evento en ' + data.community_name : '📅 Mañana tienes un evento en tu agenda',
+              title: `📅 Tu evento empieza en ${leadLabel}`,
               body:  eventBody,
               tag:   'event-reminder-' + data.event_id,
               navigateTo: communityPath,

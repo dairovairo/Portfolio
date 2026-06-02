@@ -98,8 +98,8 @@ cron.schedule('* * * * *', () => {
   });
 });
 
-// Recordatorio eventos: cada hora, notifica si faltan ~24 h para empezar
-cron.schedule('0 * * * *', () => {
+// Recordatorio eventos: cada minuto, con antelacion personalizada por asistente
+cron.schedule('* * * * *', () => {
   notifyEventsStartingSoon().catch(err => {
     console.error('[CRON] Event reminders failed:', err);
   });

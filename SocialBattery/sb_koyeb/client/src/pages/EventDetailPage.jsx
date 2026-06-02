@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
+import ReminderBellButton, { DEFAULT_EVENT_REMINDER_MINUTES } from '../components/ReminderBellButton';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function ensureAbsoluteUrl(url) {
@@ -139,6 +140,7 @@ export default function EventDetailPage() {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
+  const [reminderSaving, setReminderSaving] = useState(false);
 
   // update thread composer
   const [draft, setDraft] = useState('');
@@ -224,6 +226,24 @@ export default function EventDetailPage() {
     } catch (e) {
       showToast(e.message || 'Error', 'error');
     } finally { setLiking(false); }
+  }
+
+  async function handleReminderChange(minutes) {
+    if (reminderSaving || !isJoined || isPast) return;
+    setReminderSaving(true);
+    try {
+      const data = await api.patch(`/community/events/${eventId}/reminder`, {
+        reminder_minutes_before: minutes,
+      });
+      const nextMinutes = data.reminder_minutes_before || minutes;
+      setEvent(prev => prev ? {
+        ...prev,
+        current_user_reminder_minutes_before: nextMinutes,
+      } : prev);
+      showToast('Aviso actualizado', 'success');
+    } catch (e) {
+      showToast(e.message || 'Error al cambiar el aviso', 'error');
+    } finally { setReminderSaving(false); }
   }
 
   function handleImageSelect(e) {
@@ -399,6 +419,12 @@ export default function EventDetailPage() {
                 <div className="flex-1 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center text-sm font-display font-semibold text-green-400">
                   📅 Apuntado
                 </div>
+                <ReminderBellButton
+                  value={event.current_user_reminder_minutes_before}
+                  defaultMinutes={DEFAULT_EVENT_REMINDER_MINUTES}
+                  saving={reminderSaving}
+                  onChange={handleReminderChange}
+                />
                 <button
                   onClick={handleLeave}
                   disabled={leaving}

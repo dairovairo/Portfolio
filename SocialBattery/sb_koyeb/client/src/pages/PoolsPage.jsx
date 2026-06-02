@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 function getActivityEmoji(activity = '') {
@@ -135,7 +136,7 @@ function AvatarStack({ participants = [], total = 0, size = 'sm' }) {
 }
 
 // ── Participants sheet (bottom drawer) ────────────────────────────────────────
-function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving }) {
+function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, joining, leaving, reminderSaving }) {
   // Fetch full participant list
   const [participants, setParticipants] = useState(pool.participants_preview || []);
   const [loading, setLoading] = useState(false);
@@ -151,6 +152,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
   const isPast = new Date(pool.scheduled_at) <= new Date();
   const canJoin = pool.status === 'open' && !pool.has_joined && !isPast && pool.status !== 'cancelled';
   const canLeave = pool.has_joined && !pool.is_creator && !isPast;
+  const canAdjustReminder = pool.has_joined && !isPast && pool.status !== 'cancelled' && pool.status !== 'closed';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
@@ -263,6 +265,18 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, joining, leaving })
 
         {/* Botones — siempre visibles, pegados al fondo */}
         <div className="flex-shrink-0 border-t border-surface-border px-5 py-3">
+          {canAdjustReminder && (
+            <div className="mb-2">
+              <ReminderBellButton
+                value={pool.current_user_reminder_minutes_before}
+                defaultMinutes={DEFAULT_POOL_REMINDER_MINUTES}
+                saving={reminderSaving === pool.id}
+                onChange={minutes => onReminderChange(pool.id, minutes)}
+                placement="top"
+                wide
+              />
+            </div>
+          )}
           {canJoin && (
             <button
               onClick={() => { onJoin(pool.id); onClose(); }}
@@ -724,6 +738,7 @@ export default function PoolsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [joining, setJoining] = useState(null);
   const [leaving, setLeaving] = useState(null);
+  const [reminderSaving, setReminderSaving] = useState(null);
   const [toast, setToast] = useState(null);
   const [detailPool, setDetailPool] = useState(null); // pool for participants sheet
 
@@ -813,6 +828,34 @@ export default function PoolsPage() {
       fetchPools(tab);
     } catch (e) {
       showToast(e.message || 'Error al cancelar', 'error');
+    }
+  }
+
+  function applyPoolReminder(poolId, minutes) {
+    const updatePool = pool => pool.id === poolId
+      ? { ...pool, current_user_reminder_minutes_before: minutes }
+      : pool;
+
+    setPools(prev => prev.map(updatePool));
+    setMyCreated(prev => prev.map(updatePool));
+    setMyJoined(prev => prev.map(updatePool));
+    setDetailPool(prev => prev?.id === poolId ? updatePool(prev) : prev);
+  }
+
+  async function handlePoolReminderChange(poolId, minutes) {
+    if (reminderSaving) return;
+    setReminderSaving(poolId);
+    try {
+      const data = await api.patch(`/pools/${poolId}/reminder`, {
+        reminder_minutes_before: minutes,
+      });
+      const nextMinutes = data.reminder_minutes_before || minutes;
+      applyPoolReminder(poolId, nextMinutes);
+      showToast('Aviso actualizado');
+    } catch (e) {
+      showToast(e.message || 'Error al cambiar el aviso', 'error');
+    } finally {
+      setReminderSaving(null);
     }
   }
 
@@ -987,8 +1030,10 @@ export default function PoolsPage() {
           onClose={() => setDetailPool(null)}
           onJoin={handleJoin}
           onLeave={handleLeave}
+          onReminderChange={handlePoolReminderChange}
           joining={joining}
           leaving={leaving}
+          reminderSaving={reminderSaving}
         />
       )}
 
