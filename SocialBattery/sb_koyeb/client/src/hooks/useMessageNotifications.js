@@ -14,6 +14,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { ensurePushSubscription } from '../lib/pushSubscription';
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -98,6 +99,7 @@ export function useMessageNotifications(profile, settings) {
       // ── 1. Request permission ───────────────────────────────────────────────
       const permissionGranted = await ensurePermission();
       if (!permissionGranted || cancelled) return;
+      ensurePushSubscription().catch(() => {});
 
       // ── 2. Preload data we'll need for filtering ────────────────────────────
 

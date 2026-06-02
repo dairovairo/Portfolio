@@ -1,10 +1,10 @@
 /**
  * reminders.js - Recordatorios de quedadas y eventos.
  *
- * Cada participante/asistente puede elegir un aviso extra, pero el aviso por
- * defecto siempre se mantiene: quedadas 10 minutos, eventos 24 horas. El rango
- * valido para el extra es de 10 minutos a 1 semana. El job se ejecuta cada
- * minuto y usa una ventana de +/-30 segundos alrededor de cada instante.
+ * Cada participante/asistente recibe avisos por defecto segun cuanto falta
+ * entre su planificacion (joined_at) y el inicio. Tambien puede elegir un aviso
+ * extra entre 10 minutos y 1 semana. El job se ejecuta cada minuto y usa una
+ * ventana de +/-30 segundos alrededor de cada instante.
  */
 
 const supabase = require('../lib/supabase');
@@ -12,8 +12,8 @@ const { notifyUsers } = require('../lib/webpush');
 const {
   MIN_REMINDER_MINUTES,
   MAX_REMINDER_MINUTES,
-  DEFAULT_POOL_REMINDER_MINUTES,
-  DEFAULT_EVENT_REMINDER_MINUTES,
+  MAX_DEFAULT_REMINDER_MINUTES,
+  getDefaultReminderMinutes,
   formatReminderLead,
 } = require('../lib/reminderLeadTime');
 
@@ -32,9 +32,10 @@ async function broadcastReminders(userIds, payload) {
 }
 
 function getSearchWindow(now = new Date()) {
+  const maxReminderMinutes = Math.max(MAX_REMINDER_MINUTES, MAX_DEFAULT_REMINDER_MINUTES);
   return {
     start: new Date(now.getTime() + (MIN_REMINDER_MINUTES * 60 * 1000) - (REMINDER_WINDOW_MS / 2)),
-    end: new Date(now.getTime() + (MAX_REMINDER_MINUTES * 60 * 1000) + (REMINDER_WINDOW_MS / 2)),
+    end: new Date(now.getTime() + (maxReminderMinutes * 60 * 1000) + (REMINDER_WINDOW_MS / 2)),
   };
 }
 
@@ -46,8 +47,8 @@ function normalizeReminderMinutes(value) {
   return null;
 }
 
-function getReminderOffsets(row, defaultMinutes) {
-  const offsets = new Set([defaultMinutes]);
+function getReminderOffsets(row, startDate) {
+  const offsets = new Set(getDefaultReminderMinutes(startDate, row?.joined_at));
   const customMinutes = normalizeReminderMinutes(row?.reminder_minutes_before);
   if (customMinutes != null) offsets.add(customMinutes);
   return offsets;
@@ -61,13 +62,13 @@ function isReminderDue(now, startDate, reminderMinutes) {
   return Math.abs(diff - reminderMs) <= REMINDER_WINDOW_MS / 2;
 }
 
-function groupDueRecipients({ rows, idPrefix, notifiedSet, now, startDate, defaultMinutes }) {
+function groupDueRecipients({ rows, idPrefix, notifiedSet, now, startDate }) {
   const groups = new Map();
 
   for (const row of rows || []) {
     if (!row?.user_id) continue;
 
-    for (const reminderMinutes of getReminderOffsets(row, defaultMinutes)) {
+    for (const reminderMinutes of getReminderOffsets(row, startDate)) {
       if (!isReminderDue(now, startDate, reminderMinutes)) continue;
 
       const key = `${idPrefix}:${row.user_id}:${reminderMinutes}`;
@@ -91,7 +92,7 @@ async function notifyPoolsStartingSoon() {
       .from('hangout_pools')
       .select(`
         id, activity, location_hint, scheduled_at,
-        pool_participants(user_id, reminder_minutes_before)
+        pool_participants(user_id, joined_at, reminder_minutes_before)
       `)
       .in('status', ['open', 'full'])
       .gte('scheduled_at', start.toISOString())
@@ -107,7 +108,6 @@ async function notifyPoolsStartingSoon() {
         notifiedSet: notifiedPools,
         now,
         startDate: pool.scheduled_at,
-        defaultMinutes: DEFAULT_POOL_REMINDER_MINUTES,
       });
       if (groups.size === 0) continue;
 
@@ -153,7 +153,7 @@ async function notifyEventsStartingSoon() {
       .from('community_events')
       .select(`
         id, title, location, event_date, community_id,
-        community_event_attendees(user_id, reminder_minutes_before)
+        community_event_attendees(user_id, joined_at, reminder_minutes_before)
       `)
       .gte('event_date', start.toISOString())
       .lte('event_date', end.toISOString());
@@ -171,7 +171,6 @@ async function notifyEventsStartingSoon() {
         notifiedSet: notifiedEvents,
         now,
         startDate: event.event_date,
-        defaultMinutes: DEFAULT_EVENT_REMINDER_MINUTES,
       });
       if (groups.size === 0) continue;
       dueEvents.push({ event, groups });
