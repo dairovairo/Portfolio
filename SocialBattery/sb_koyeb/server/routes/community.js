@@ -5,6 +5,10 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyCommunityMembers } = require('../lib/webpush');
+const {
+  DEFAULT_EVENT_REMINDER_MINUTES,
+  parseReminderMinutes,
+} = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -131,13 +135,16 @@ async function getCommunityAdminState(communityId, userId) {
   };
 }
 
-async function selectEventRows(db, table, eventIds) {
+async function selectEventRows(db, table, eventIds, columns = 'event_id, user_id') {
   const { data, error } = await db
     .from(table)
-    .select('event_id, user_id')
+    .select(columns)
     .in('event_id', eventIds);
 
   if (!error) return data || [];
+  if ((error.code === '42P01' || error.code === '42703') && columns !== 'event_id, user_id') {
+    return selectEventRows(db, table, eventIds);
+  }
   if (error.code === '42P01' || error.code === '42703') return [];
   throw error;
 }
@@ -155,7 +162,7 @@ async function enrichEvents(db, events = [], currentUserId = null) {
   if (eventIds.length === 0) return eventList;
 
   const [attendees, likes] = await Promise.all([
-    selectEventRows(db, 'community_event_attendees', eventIds),
+    selectEventRows(db, 'community_event_attendees', eventIds, 'event_id, user_id, reminder_minutes_before'),
     selectEventRows(db, 'community_event_likes', eventIds),
   ]);
 
@@ -171,6 +178,14 @@ async function enrichEvents(db, events = [], currentUserId = null) {
       ? likes.filter(row => row.user_id === currentUserId).map(row => row.event_id)
       : []
   );
+  const currentReminderByEvent = currentUserId
+    ? attendees.reduce((acc, row) => {
+        if (row.user_id === currentUserId) {
+          acc[row.event_id] = row.reminder_minutes_before || DEFAULT_EVENT_REMINDER_MINUTES;
+        }
+        return acc;
+      }, {})
+    : {};
 
   return eventList.map(ev => ({
     ...ev,
@@ -181,6 +196,9 @@ async function enrichEvents(db, events = [], currentUserId = null) {
     attendee_ids: attendeeIdsByEvent[ev.id] || [],
     like_count: likeCountByEvent[ev.id] || 0,
     liked_by_current_user: likedEventIds.has(ev.id),
+    current_user_reminder_minutes_before: attendeeIdsByEvent[ev.id]?.includes(currentUserId)
+      ? currentReminderByEvent[ev.id] || DEFAULT_EVENT_REMINDER_MINUTES
+      : null,
   }));
 }
 
@@ -403,6 +421,52 @@ router.post('/events/:id/leave', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /events/:id/leave error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al salir del evento') });
+  }
+});
+
+router.patch('/events/:id/reminder', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const reminderMinutes = parseReminderMinutes(req.body?.reminder_minutes_before);
+
+  if (reminderMinutes == null) {
+    return res.status(400).json({ error: 'El aviso debe estar entre 10 minutos y 1 semana' });
+  }
+
+  try {
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id, event_date, ends_at')
+      .eq('id', id)
+      .single();
+
+    if (eventError || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+    if (new Date(event.ends_at || event.event_date) < new Date()) {
+      return res.status(400).json({ error: 'El evento ya ha pasado' });
+    }
+
+    const { data: attendee } = await supabase
+      .from('community_event_attendees')
+      .select('event_id')
+      .eq('event_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!attendee) return res.status(403).json({ error: 'Tienes que estar apuntado para ajustar el aviso' });
+
+    const { data: updated, error } = await supabase
+      .from('community_event_attendees')
+      .update({ reminder_minutes_before: reminderMinutes })
+      .eq('event_id', id)
+      .eq('user_id', userId)
+      .select('reminder_minutes_before')
+      .single();
+
+    if (error) throw error;
+    res.json({ reminder_minutes_before: updated.reminder_minutes_before });
+  } catch (err) {
+    console.error('[community] PATCH /events/:id/reminder error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al cambiar el aviso') });
   }
 });
 
