@@ -112,9 +112,10 @@ async function notifyEventsStartingSoon() {
   const now         = new Date();
   // Ventana: [now + 23h30m, now + 24h30m] — cubre la ejecución del cron cada hora
   // Ventana de 1 hora centrada en las 24h exactas: [now+23h, now+25h]
-  // El Set notifiedEvents evita duplicados aunque el cron se ejecute varias veces.
-  const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-  const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+  // Ventana ±30 min centrada en 24 h exactas — una sola ejecución del cron
+  // por evento. El Set notifiedEvents evita duplicados en caso de reinicio.
+  const windowStart = new Date(now.getTime() + 23.5 * 60 * 60 * 1000);
+  const windowEnd   = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
 
   console.log(`[REMINDER] Event check — now: ${now.toISOString()}, window: [${windowStart.toISOString()} → ${windowEnd.toISOString()}]`);
 
