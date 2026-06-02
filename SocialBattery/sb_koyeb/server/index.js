@@ -15,6 +15,7 @@ const poolsRoutes     = require('./routes/pools');
 const groupsRoutes    = require('./routes/groups');
 const communityRoutes = require('./routes/community');
 const { expireStaleBatteries } = require('./lib/batteryExpiry');
+const { notifyPoolsStartingSoon, notifyEventsStartingSoon } = require('./jobs/reminders');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -70,6 +71,20 @@ cron.schedule('0 0 * * *', async () => {
   } catch (err) {
     console.error('[CRON] Pool close failed:', err);
   }
+});
+
+// Recordatorio quedadas: cada minuto, notifica si faltan ~10 min para empezar
+cron.schedule('* * * * *', () => {
+  notifyPoolsStartingSoon().catch(err => {
+    console.error('[CRON] Pool reminders failed:', err);
+  });
+});
+
+// Recordatorio eventos: cada hora, notifica si faltan ~24 h para empezar
+cron.schedule('0 * * * *', () => {
+  notifyEventsStartingSoon().catch(err => {
+    console.error('[CRON] Event reminders failed:', err);
+  });
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
