@@ -1,9 +1,10 @@
 /**
  * reminders.js - Recordatorios de quedadas y eventos.
  *
- * Cada participante/asistente puede elegir cuantos minutos antes quiere recibir
- * el aviso. El rango valido es de 10 minutos a 1 semana. El job se ejecuta cada
- * minuto y usa una ventana de +/-30 segundos alrededor del instante elegido.
+ * Cada participante/asistente puede elegir un aviso extra, pero el aviso por
+ * defecto siempre se mantiene: quedadas 10 minutos, eventos 24 horas. El rango
+ * valido para el extra es de 10 minutos a 1 semana. El job se ejecuta cada
+ * minuto y usa una ventana de +/-30 segundos alrededor de cada instante.
  */
 
 const supabase = require('../lib/supabase');
@@ -17,8 +18,8 @@ const {
 } = require('../lib/reminderLeadTime');
 
 const REMINDER_WINDOW_MS = 60 * 1000;
-const notifiedPools = new Set();  // `${poolId}:${userId}`
-const notifiedEvents = new Set(); // `${eventId}:${userId}`
+const notifiedPools = new Set();  // `${poolId}:${userId}:${minutes}`
+const notifiedEvents = new Set(); // `${eventId}:${userId}:${minutes}`
 
 async function broadcastReminders(userIds, payload) {
   await Promise.allSettled(
@@ -37,12 +38,19 @@ function getSearchWindow(now = new Date()) {
   };
 }
 
-function normalizeReminderMinutes(value, fallback) {
+function normalizeReminderMinutes(value) {
   const minutes = Number.parseInt(value, 10);
   if (Number.isFinite(minutes) && minutes >= MIN_REMINDER_MINUTES && minutes <= MAX_REMINDER_MINUTES) {
     return minutes;
   }
-  return fallback;
+  return null;
+}
+
+function getReminderOffsets(row, defaultMinutes) {
+  const offsets = new Set([defaultMinutes]);
+  const customMinutes = normalizeReminderMinutes(row?.reminder_minutes_before);
+  if (customMinutes != null) offsets.add(customMinutes);
+  return offsets;
 }
 
 function isReminderDue(now, startDate, reminderMinutes) {
@@ -58,15 +66,17 @@ function groupDueRecipients({ rows, idPrefix, notifiedSet, now, startDate, defau
 
   for (const row of rows || []) {
     if (!row?.user_id) continue;
-    const reminderMinutes = normalizeReminderMinutes(row.reminder_minutes_before, defaultMinutes);
-    if (!isReminderDue(now, startDate, reminderMinutes)) continue;
 
-    const key = `${idPrefix}:${row.user_id}`;
-    if (notifiedSet.has(key)) continue;
-    notifiedSet.add(key);
+    for (const reminderMinutes of getReminderOffsets(row, defaultMinutes)) {
+      if (!isReminderDue(now, startDate, reminderMinutes)) continue;
 
-    if (!groups.has(reminderMinutes)) groups.set(reminderMinutes, []);
-    groups.get(reminderMinutes).push(row.user_id);
+      const key = `${idPrefix}:${row.user_id}:${reminderMinutes}`;
+      if (notifiedSet.has(key)) continue;
+      notifiedSet.add(key);
+
+      if (!groups.has(reminderMinutes)) groups.set(reminderMinutes, []);
+      groups.get(reminderMinutes).push(row.user_id);
+    }
   }
 
   return groups;
@@ -110,7 +120,7 @@ async function notifyPoolsStartingSoon() {
           title: `⏰ Tu quedada empieza en ${leadLabel}`,
           body: `${activityLabel}${locationHint}`,
           url: '/pools',
-          tag: `pool-reminder-${pool.id}`,
+          tag: `pool-reminder-${pool.id}-${minutes}`,
         };
 
         const broadcastPayload = {
@@ -189,7 +199,7 @@ async function notifyEventsStartingSoon() {
           title: `📅 Tu evento empieza en ${leadLabel}`,
           body: event.location ? `${event.title} · ${event.location}` : event.title,
           url: communityUrl,
-          tag: `event-reminder-${event.id}`,
+          tag: `event-reminder-${event.id}-${minutes}`,
         };
 
         const broadcastPayload = {

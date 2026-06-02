@@ -314,13 +314,14 @@ export function useMessageNotifications(profile, settings) {
           if (data.type === 'pool') {
             if (s.mutePoolReminders) return;
 
-            const leadLabel = formatReminderLead(data.minutes_left || 10);
+            const leadMinutes = data.minutes_left || 10;
+            const leadLabel = formatReminderLead(leadMinutes);
             if (!document.hidden && locationRef.current === '/pools') return;
             const poolBody = data.location ? `${data.activity} · ${data.location}` : data.activity;
             fireNotification({
               title: `⏰ Tu quedada empieza en ${leadLabel}`,
               body:  poolBody,
-              tag:   'pool-reminder-' + data.pool_id,
+              tag:   `pool-reminder-${data.pool_id}-${leadMinutes}`,
               navigateTo: '/pools',
             });
           } else if (data.type === 'event') {
@@ -334,7 +335,7 @@ export function useMessageNotifications(profile, settings) {
             fireNotification({
               title: `📅 Tu evento empieza en ${leadLabel}`,
               body:  eventBody,
-              tag:   'event-reminder-' + data.event_id,
+              tag:   `event-reminder-${data.event_id}-${leadMinutes}`,
               navigateTo: communityPath,
             });
           }
