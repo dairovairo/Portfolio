@@ -111,13 +111,15 @@ async function notifyPoolsStartingSoon() {
 async function notifyEventsStartingSoon() {
   const now         = new Date();
   // Ventana: [now + 23h30m, now + 24h30m] — cubre la ejecución del cron cada hora
-  const windowStart = new Date(now.getTime() + 23.5 * 60 * 60 * 1000);
-  const windowEnd   = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
+  // Ventana de 1 hora centrada en las 24h exactas: [now+23h, now+25h]
+  // El Set notifiedEvents evita duplicados aunque el cron se ejecute varias veces.
+  const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+  const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+  console.log(`[REMINDER] Event check — now: ${now.toISOString()}, window: [${windowStart.toISOString()} → ${windowEnd.toISOString()}]`);
 
   try {
     // Traer todos los eventos en la ventana — con o sin comunidad.
-    // Usamos select simple en community_events + join manual a communities
-    // para evitar que el inner join por FK excluya filas con community_id = null.
     const { data: events, error } = await supabase
       .from('community_events')
       .select('id, title, location, event_date, community_id')
@@ -125,6 +127,7 @@ async function notifyEventsStartingSoon() {
       .lte('event_date', windowEnd.toISOString());
 
     if (error) { console.error('[REMINDER] event query error:', error); return; }
+    console.log(`[REMINDER] Events in window: ${events?.length ?? 0}`);
     if (!events?.length) return;
 
     // Resolver nombres de comunidades en un solo query
@@ -148,6 +151,7 @@ async function notifyEventsStartingSoon() {
         .select('user_id')
         .eq('event_id', event.id);
 
+      console.log(`[REMINDER]   Event ${event.id} "${event.title}" — attendees: ${attendees?.length ?? 0}`);
       if (!attendees?.length) continue;
 
       const userIds       = attendees.map(a => a.user_id);

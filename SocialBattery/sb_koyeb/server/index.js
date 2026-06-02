@@ -47,6 +47,24 @@ app.use('/api/pools',     poolsRoutes);
 app.use('/api/groups',    groupsRoutes);
 app.use('/api/community', communityRoutes);
 
+// ── Debug endpoints (solo en dev o con header secreto) ────────────────────────
+app.get('/api/debug/reminders', async (req, res) => {
+  const secret = req.headers['x-debug-secret'];
+  if (secret !== (process.env.DEBUG_SECRET || 'sb-debug-2025')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    console.log('[DEBUG] Firing reminder jobs manually...');
+    await Promise.all([
+      notifyPoolsStartingSoon(),
+      notifyEventsStartingSoon(),
+    ]);
+    res.json({ ok: true, message: 'Reminder jobs executed — check server logs' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.11.0', phase: 11, timestamp: new Date().toISOString() });
 });
