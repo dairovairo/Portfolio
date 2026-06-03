@@ -36,6 +36,14 @@ async function syncPoolStatus(poolId) {
 
   if (!pool || pool.status === 'cancelled' || pool.status === 'closed') return;
 
+  // No limit → pool can never become 'full' automatically
+  if (pool.max_people === null) {
+    if (pool.status === 'full') {
+      await supabase.from('hangout_pools').update({ status: 'open' }).eq('id', poolId);
+    }
+    return;
+  }
+
   const { count } = await supabase
     .from('pool_participants')
     .select('*', { count: 'exact', head: true })
@@ -203,7 +211,7 @@ router.get('/', requireAuth, async (req, res) => {
         participants_preview: buildParticipantPreview(participants),
         has_joined: hasJoined,
         is_creator: isCreator,
-        spots_left: pool.max_people - participantCount,
+        spots_left: pool.max_people !== null ? pool.max_people - participantCount : null,
         current_user_reminder_minutes_before: hasJoined
           ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
           : null,
@@ -269,7 +277,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         participants_preview: buildParticipantPreview(participants),
         has_joined: hasJoined,
         is_creator: isCreator,
-        spots_left: pool.max_people - participants.length,
+        spots_left: pool.max_people !== null ? pool.max_people - participants.length : null,
         current_user_reminder_minutes_before: hasJoined
           ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
           : null,
@@ -286,7 +294,7 @@ router.post('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const {
     activity, description, location_hint, scheduled_at, ends_at,
-    max_people = 4, is_public = false,
+    max_people = null, is_public = false,
     group_id = null,
     invited_user_ids = [],   // NEW: individual friend invites for private pools
   } = req.body;
@@ -315,9 +323,12 @@ router.post('/', requireAuth, async (req, res) => {
     endDateIso = endDate.toISOString();
   }
 
-  const maxPeople = parseInt(max_people, 10);
-  if (Number.isNaN(maxPeople) || maxPeople < 2 || maxPeople > 50) {
-    return res.status(400).json({ error: 'max_people must be between 2 and 50' });
+  // null = sin límite; otherwise must be between 2 and 50
+  const maxPeople = (max_people === null || max_people === undefined || max_people === '')
+    ? null
+    : parseInt(max_people, 10);
+  if (maxPeople !== null && (Number.isNaN(maxPeople) || maxPeople < 2 || maxPeople > 50)) {
+    return res.status(400).json({ error: 'max_people must be between 2 and 50, or null for no limit' });
   }
   if (!is_public && !group_id && (!invited_user_ids || invited_user_ids.length === 0)) {
     return res.status(400).json({ error: 'Un pool privado necesita al menos un grupo o un amigo invitado' });
@@ -444,7 +455,7 @@ router.post('/', requireAuth, async (req, res) => {
         }],
         has_joined: true,
         is_creator: true,
-        spots_left: pool.max_people - 1,
+        spots_left: pool.max_people !== null ? pool.max_people - 1 : null,
         current_user_reminder_minutes_before: DEFAULT_POOL_REMINDER_MINUTES,
       },
       newBadges: newBadgeId ? [newBadgeId] : [],
@@ -484,7 +495,7 @@ router.post('/:id/join', requireAuth, async (req, res) => {
       .select('*', { count: 'exact', head: true })
       .eq('pool_id', poolId);
 
-    if (count >= pool.max_people) {
+    if (count >= pool.max_people && pool.max_people !== null) {
       return res.status(400).json({ error: 'Pool is full' });
     }
 
@@ -646,7 +657,11 @@ router.patch('/:id', requireAuth, async (req, res) => {
         updates.ends_at = endDate.toISOString();
       }
     }
-    if (max_people !== undefined) updates.max_people = parseInt(max_people);
+    if (max_people !== undefined) {
+      updates.max_people = (max_people === null || max_people === '')
+        ? null
+        : parseInt(max_people);
+    }
     if (is_public !== undefined) updates.is_public = Boolean(is_public);
     if (status !== undefined && ['open', 'closed', 'cancelled'].includes(status)) {
       updates.status = status;

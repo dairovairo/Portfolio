@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS public.hangout_pools (
   description   TEXT,
   location_hint TEXT,
   scheduled_at  TIMESTAMPTZ NOT NULL,
-  max_people    SMALLINT NOT NULL DEFAULT 4 CHECK (max_people >= 2 AND max_people <= 50),
+  max_people    SMALLINT DEFAULT NULL CHECK (max_people IS NULL OR (max_people >= 2 AND max_people <= 50)),
   is_public     BOOLEAN NOT NULL DEFAULT FALSE,
   status        pool_status NOT NULL DEFAULT 'open',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
