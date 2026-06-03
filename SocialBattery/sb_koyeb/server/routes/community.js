@@ -243,7 +243,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url, price, additional_info, promotion_type } = req.body;
+  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url, price, additional_info } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -310,7 +310,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
-        promotion_type: promotion_type || 'basic',
+        promotion_type: ['basic','premium','ultra'].includes(req.body.promotion_type)?req.body.promotion_type:'basic',
       })
       .select()
       .single();
@@ -346,11 +346,6 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           });
         })
         .catch(() => {});
-    }
-
-    // Ultra promotion: intended global notification hook
-    if ((promotion_type || 'basic') === 'ultra') {
-      console.log('[promotion] ultra event created', event.id);
     }
 
     res.status(201).json({ event });

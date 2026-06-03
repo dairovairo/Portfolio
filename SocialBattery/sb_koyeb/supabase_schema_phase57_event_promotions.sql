@@ -1,0 +1,1 @@
+alter table community_events add column if not exists promotion_type text default 'basic';
