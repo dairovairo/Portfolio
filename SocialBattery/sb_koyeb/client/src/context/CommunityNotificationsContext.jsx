@@ -64,17 +64,17 @@ function totalCount(map) {
 
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
-  const { muteAllNotifications, muteNewEvents } = useSettings();
+  const { muteAllNotifications, muteNewEvents, muteEventRecommendations } = useSettings();
 
   // eventsByCommunity: { [communityId: string]: number }
   const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
   const joinedCommunityIdsRef = useRef(new Set());
-  const settingsRef = useRef({ muteAllNotifications, muteNewEvents });
+  const settingsRef = useRef({ muteAllNotifications, muteNewEvents, muteEventRecommendations });
   const channelRef = useRef(null);
 
   useEffect(() => {
-    settingsRef.current = { muteAllNotifications, muteNewEvents };
-  }, [muteAllNotifications, muteNewEvents]);
+    settingsRef.current = { muteAllNotifications, muteNewEvents, muteEventRecommendations };
+  }, [muteAllNotifications, muteNewEvents, muteEventRecommendations]);
 
   // ── Derivados ──────────────────────────────────────────────────────────────
   const eventBadgeCount     = totalCount(eventsByCommunity);
@@ -149,6 +149,8 @@ export function CommunityNotificationsProvider({ children }) {
           if (settings.muteAllNotifications || settings.muteNewEvents) return;
 
           if (plan === 'ultra') {
+            // ultra y premium también respetan muteEventRecommendations
+            if (settings.muteEventRecommendations) return;
             fireLocalNotification({
               title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡No te lo pierdas!`,
@@ -158,6 +160,7 @@ export function CommunityNotificationsProvider({ children }) {
                 : '/community',
             });
           } else if (plan === 'premium') {
+            if (settings.muteEventRecommendations) return;
             fireLocalNotification({
               title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
