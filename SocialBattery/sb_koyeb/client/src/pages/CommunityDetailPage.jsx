@@ -483,7 +483,17 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               onChange={handleCoverChange}
             />
           </div>
-          {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
+          
+          <label className="block">
+            <span className="text-xs text-surface-muted">Promoción</span>
+            <select value={form.promotion_type} onChange={e => set('promotion_type', e.target.value)} className="w-full mt-1">
+              <option value="basic">Basic promotion (gratis)</option>
+              <option value="premium">Premium promotion (10€)</option>
+              <option value="ultra">Ultra promotion (20€)</option>
+            </select>
+          </label>
+
+{error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
           <button
             onClick={handleSubmit}
             disabled={saving || !form.title.trim() || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}

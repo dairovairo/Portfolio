@@ -138,9 +138,11 @@ function sortEventsBy(eventList = [], sortKey = 'app') {
     if (sortKey === 'planificaciones') {
       return (b.attendee_count || 0) - (a.attendee_count || 0);
     }
-    // 'app': suma ponderada — planificaciones tienen algo más de peso
     const scoreA = (a.attendee_count || 0) * 1.5 + (a.like_count || 0);
     const scoreB = (b.attendee_count || 0) * 1.5 + (b.like_count || 0);
+    const premiumA = a.promotion_type === 'premium' ? 1 : 0;
+    const premiumB = b.promotion_type === 'premium' ? 1 : 0;
+    if (premiumA !== premiumB) return premiumB - premiumA;
     return scoreB - scoreA;
   });
 }
@@ -515,6 +517,7 @@ function CreateEventModal({ onClose, onCreate }) {
     url: '',
     price: '',
     additional_info: '',
+    promotion_type: 'basic',
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
