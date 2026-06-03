@@ -606,12 +606,13 @@ export default function GroupChatPage() {
         table: 'group_messages',
         filter: `group_id=eq.${groupId}`,
       }, async (payload) => {
+        if (payload.new?.sender_id === profile.id) return;
         const { data } = await supabase
           .from('group_messages')
-          .select(`id, content, type, created_at, sender:sender_id(id, username, display_name, avatar_url, battery_level)`)
+          .select(`id, group_id, sender_id, content, type, created_at, sender:sender_id(id, username, display_name, avatar_url, battery_level)`)
           .eq('id', payload.new.id)
           .single();
-        if (data && data.sender_id !== profile.id) {
+        if (data) {
           setMessages(m => [...m, data]);
         }
       })

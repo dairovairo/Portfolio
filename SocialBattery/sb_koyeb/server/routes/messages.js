@@ -8,6 +8,12 @@ const { createImageUpload, storeImage } = require('../lib/imageUpload');
 // Multer instance for chat image uploads (8 MB max)
 const _dmImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 
+const MESSAGE_FIELDS = `
+  id, sender_id, receiver_id, content, type, hangout_status, hangout_time,
+  read_at, delivered_at, deleted_for_self, deleted_for_everyone,
+  deleted_for_everyone_at, created_at
+`;
+
 // ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
@@ -82,7 +88,7 @@ router.get('/:friendId', requireAuth, async (req, res) => {
 
   let query = supabase
     .from('messages')
-    .select('*')
+    .select(MESSAGE_FIELDS)
     .or(
       `and(sender_id.eq.${userId},receiver_id.eq.${friendId}),` +
       `and(sender_id.eq.${friendId},receiver_id.eq.${userId})`
@@ -165,7 +171,7 @@ router.post('/', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('messages')
     .insert(insertData)
-    .select()
+    .select(MESSAGE_FIELDS)
     .single();
 
   if (error) return res.status(500).json({ error: 'Failed to send message' });
@@ -230,7 +236,7 @@ router.patch('/:messageId/hangout', requireAuth, async (req, res) => {
     .from('messages')
     .update({ hangout_status: status })
     .eq('id', req.params.messageId)
-    .select()
+    .select(MESSAGE_FIELDS)
     .single();
 
   if (error) return res.status(500).json({ error: 'Failed to update hangout status' });
@@ -267,7 +273,7 @@ router.patch('/message/:messageId', requireAuth, async (req, res) => {
         deleted_for_everyone_at: new Date().toISOString(),
       })
       .eq('id', req.params.messageId)
-      .select()
+      .select(MESSAGE_FIELDS)
       .single();
 
     if (error) return res.status(500).json({ error: 'Failed to delete message' });
@@ -281,7 +287,7 @@ router.patch('/message/:messageId', requireAuth, async (req, res) => {
       .from('messages')
       .update({ deleted_for_self: current })
       .eq('id', req.params.messageId)
-      .select()
+      .select(MESSAGE_FIELDS)
       .single();
 
     if (error) return res.status(500).json({ error: 'Failed to delete message' });
@@ -360,7 +366,7 @@ router.post('/:receiverId/image', requireAuth, (req, res, next) => {
         content: imageUrl,
         type: 'image',
       })
-      .select()
+      .select(MESSAGE_FIELDS)
       .single();
 
     if (error) return res.status(500).json({ error: 'Failed to save image message' });

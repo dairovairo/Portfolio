@@ -279,10 +279,22 @@ export default function FriendsPage() {
 
   useEffect(() => {
     if (!profile?.id) return;
+    const refreshFriendshipState = () => { fetchFriends(); fetchRequests(); };
     const channel = supabase
       .channel(`friendships-${profile.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friendships', filter: `addressee_id=eq.${profile.id}` }, () => fetchRequests())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships' }, () => { fetchFriends(); fetchRequests(); })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'friendships',
+        filter: `requester_id=eq.${profile.id}`,
+      }, refreshFriendshipState)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'friendships',
+        filter: `addressee_id=eq.${profile.id}`,
+      }, refreshFriendshipState)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [profile?.id, fetchFriends, fetchRequests]);

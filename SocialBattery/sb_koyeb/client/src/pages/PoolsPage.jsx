@@ -774,6 +774,8 @@ export default function PoolsPage() {
   const [reminderSaving, setReminderSaving] = useState(null);
   const [toast, setToast] = useState(null);
   const [detailPool, setDetailPool] = useState(null); // pool for participants sheet
+  const visiblePoolIdsRef = useRef(new Set());
+  const poolsRefreshTimerRef = useRef(null);
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -804,21 +806,52 @@ export default function PoolsPage() {
     }
   }, [tab]);
 
+  const scheduleFetchPools = useCallback((currentTab = tab) => {
+    if (poolsRefreshTimerRef.current) {
+      clearTimeout(poolsRefreshTimerRef.current);
+    }
+    poolsRefreshTimerRef.current = setTimeout(() => {
+      poolsRefreshTimerRef.current = null;
+      fetchPools(currentTab);
+    }, 700);
+  }, [fetchPools, tab]);
+
+  useEffect(() => {
+    visiblePoolIdsRef.current = new Set(
+      [...pools, ...myCreated, ...myJoined].map(pool => pool.id)
+    );
+  }, [pools, myCreated, myJoined]);
+
+  useEffect(() => () => {
+    if (poolsRefreshTimerRef.current) clearTimeout(poolsRefreshTimerRef.current);
+  }, []);
+
   useEffect(() => {
     fetchPools(tab);
   }, [tab, fetchPools]);
 
   useEffect(() => {
     if (!profile?.id) return;
+    const shouldRefreshForPool = (payload) => {
+      const row = payload.new || payload.old || {};
+      const poolId = row.id || row.pool_id;
+      if (payload.eventType === 'INSERT' && row.id) return true;
+      if (!poolId) return false;
+      return visiblePoolIdsRef.current.has(poolId) || row.creator_id === profile.id || row.user_id === profile.id;
+    };
     const channel = supabase
       .channel('pools-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hangout_pools' },
-        () => fetchPools(tab))
+        (payload) => {
+          if (shouldRefreshForPool(payload)) scheduleFetchPools(tab);
+        })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pool_participants' },
-        () => fetchPools(tab))
+        (payload) => {
+          if (shouldRefreshForPool(payload)) scheduleFetchPools(tab);
+        })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [profile?.id, tab, fetchPools]);
+  }, [profile?.id, tab, scheduleFetchPools]);
 
   async function handleCreate(formData) {
     await api.post('/pools', formData);

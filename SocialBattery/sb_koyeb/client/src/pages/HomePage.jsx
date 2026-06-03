@@ -320,6 +320,7 @@ export default function HomePage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
+  const friendIdsRef = useRef(new Set());
 
   // Modal state
   const [showSearch, setShowSearch] = useState(false);
@@ -329,6 +330,10 @@ export default function HomePage() {
   useEffect(() => {
     if (profile) setBattery(getEffectiveBatteryLevel(profile));
   }, [profile]);
+
+  useEffect(() => {
+    friendIdsRef.current = new Set(friends.map(f => f.id));
+  }, [friends]);
 
   const fetchFriends = useCallback(async () => {
     try {
@@ -372,7 +377,21 @@ export default function HomePage() {
   useEffect(() => {
     if (!profile?.id) return;
     const ch1 = supabase.channel('home-users')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, () => fetchFriends())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
+        const updated = payload.new;
+        if (!updated?.id || !friendIdsRef.current.has(updated.id)) return;
+        setFriends(prev => {
+          let changed = false;
+          const next = prev.map(friend => {
+            if (friend.id !== updated.id) return friend;
+            changed = true;
+            return { ...friend, ...updated };
+          });
+          return changed
+            ? next.sort((a, b) => (b.battery_level ?? -1) - (a.battery_level ?? -1))
+            : prev;
+        });
+      })
       .subscribe();
     const ch2 = supabase.channel('home-friendships')
       .on('postgres_changes', {
@@ -381,7 +400,7 @@ export default function HomePage() {
       }, () => fetchPending())
       .subscribe();
     return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
-  }, [profile?.id, fetchFriends, fetchPending]);
+  }, [profile?.id, fetchPending]);
 
   async function saveBattery() {
     setSaving(true);

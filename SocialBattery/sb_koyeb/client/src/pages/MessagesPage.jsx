@@ -545,6 +545,21 @@ export default function MessagesPage() {
         event: 'UPDATE',
         schema: 'public',
         table: 'messages',
+        filter: `receiver_id=eq.${profile.id}`,
+      }, (payload) => {
+        const updated = payload.new;
+        const involved =
+          (updated.sender_id === profile.id && updated.receiver_id === friendId) ||
+          (updated.sender_id === friendId && updated.receiver_id === profile.id);
+        if (involved) {
+          setMessages(m => m.map(msg => msg.id === updated.id ? { ...msg, ...updated } : msg));
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: `sender_id=eq.${profile.id}`,
       }, (payload) => {
         const updated = payload.new;
         const involved =

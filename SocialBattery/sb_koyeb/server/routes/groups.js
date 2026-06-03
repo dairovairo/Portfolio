@@ -45,20 +45,24 @@ router.get('/', requireAuth, async (req, res) => {
       .filter(Boolean)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // Fetch last message for each group
+    // Fetch only the last message for each group. Pulling all group messages here
+    // makes the inbox/home endpoints grow with chat history and burns PostgREST egress.
     if (groups.length > 0) {
-      const groupIds = groups.map(g => g.id);
-      const { data: lastMsgs } = await supabase
-        .from('group_messages')
-        .select('group_id, created_at, sender_id, content')
-        .in('group_id', groupIds)
-        .order('created_at', { ascending: false });
+      const lastMessageResults = await Promise.all(
+        groups.map(group =>
+          supabase
+            .from('group_messages')
+            .select('group_id, created_at, sender_id, content, type')
+            .eq('group_id', group.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        )
+      );
 
-      const lastMsgMap = {};
-      (lastMsgs || []).forEach(msg => {
-        if (!lastMsgMap[msg.group_id]) lastMsgMap[msg.group_id] = msg;
+      groups.forEach((group, index) => {
+        groups[index].last_message = lastMessageResults[index].data || null;
       });
-      groups.forEach(g => { g.last_message = lastMsgMap[g.id] || null; });
     }
 
     res.json({ groups });
