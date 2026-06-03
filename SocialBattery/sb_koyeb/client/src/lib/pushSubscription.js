@@ -1,12 +1,17 @@
 import { api } from './api';
 
-const VAPID_PUBLIC_KEY =
-  import.meta.env.VITE_VAPID_PUBLIC_KEY ||
-  'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
 export async function ensurePushSubscription() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
   if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+
+  // Sin VAPID pública configurada no podemos crear suscripciones válidas.
+  // Fallamos en silencio para no registrar suscripciones que el servidor no pueda usar.
+  if (!VAPID_PUBLIC_KEY) {
+    console.warn('[pushSubscription] VITE_VAPID_PUBLIC_KEY no está configurada — push desactivado.');
+    return false;
+  }
 
   const reg = await navigator.serviceWorker.ready;
   let sub = await reg.pushManager.getSubscription();

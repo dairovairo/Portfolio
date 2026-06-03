@@ -122,21 +122,52 @@ export function CommunityNotificationsProvider({ children }) {
         { event: 'INSERT', schema: 'public', table: 'community_events' },
         async (payload) => {
           const newEvent = payload.new;
-          // Sólo notificar si:
-          // 1. El evento pertenece a una comunidad en la que está el usuario
-          // 2. El usuario NO es el creador
-          if (
-            newEvent?.community_id &&
-            joinedCommunityIdsRef.current.has(newEvent.community_id) &&
-            newEvent.creator_id !== profile.id
-          ) {
-            // Incrementar badge por comunidad
+
+          // Ignorar siempre si el usuario es el creador
+          if (!newEvent?.id || newEvent.creator_id === profile.id) return;
+
+          const plan = newEvent.promotion_plan || 'basic';
+          const isUltraOrPremium = plan === 'ultra' || plan === 'premium';
+          const isMember = newEvent.community_id &&
+            joinedCommunityIdsRef.current.has(newEvent.community_id);
+
+          // Notificar si:
+          //   a) El plan es ultra o premium  → todos los usuarios (sin importar membresía)
+          //   b) Plan básico → solo miembros de la comunidad del evento
+          if (!isUltraOrPremium && !isMember) return;
+
+          // Incrementar badge solo si el evento pertenece a una comunidad conocida del usuario
+          // (los ultra/premium sin comunidad no generan badge de comunidad, solo notificación)
+          if (isMember) {
             setEventsByCommunity(prev => ({
               ...prev,
               [newEvent.community_id]: (prev[newEvent.community_id] || 0) + 1,
             }));
+          }
 
-            // Obtener nombre de la comunidad para la notificación
+          const settings = settingsRef.current;
+          if (settings.muteAllNotifications || settings.muteNewEvents) return;
+
+          if (plan === 'ultra') {
+            fireLocalNotification({
+              title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
+              body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡No te lo pierdas!`,
+              tag:   `ultra-event-${newEvent.id}`,
+              url:   newEvent.community_id
+                ? `/community/event/${newEvent.id}`
+                : '/community',
+            });
+          } else if (plan === 'premium') {
+            fireLocalNotification({
+              title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
+              body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
+              tag:   `premium-event-${newEvent.id}`,
+              url:   newEvent.community_id
+                ? `/community/event/${newEvent.id}`
+                : '/community',
+            });
+          } else {
+            // basic — solo miembros de la comunidad (ya filtrado arriba)
             let communityLabel = 'tu comunidad';
             try {
               const { data: comm } = await supabase
@@ -147,16 +178,12 @@ export function CommunityNotificationsProvider({ children }) {
               if (comm?.name) communityLabel = comm.name;
             } catch {}
 
-            const settings = settingsRef.current;
-            if (!settings.muteAllNotifications && !settings.muteNewEvents) {
-              // Disparar notificación local con sonido
-              fireLocalNotification({
-                title: `📅 Nuevo evento en ${communityLabel}`,
-                body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
-                tag:   `community-event-${newEvent.id}`,
-                url:   `/community/${newEvent.community_id}`,
-              });
-            }
+            fireLocalNotification({
+              title: `📅 Nuevo evento en ${communityLabel}`,
+              body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
+              tag:   `community-event-${newEvent.id}`,
+              url:   `/community/${newEvent.community_id}`,
+            });
           }
         }
       )
