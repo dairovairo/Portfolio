@@ -155,12 +155,4 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
   }
 }
 
-
-async function notifyAllUsers(supabase, excludeId, payload) {
-  const { data: users } = await supabase.from('push_subscriptions').select('user_id');
-  const ids=[...new Set((users||[]).map(x=>x.user_id))];
-  return notifyUsers(supabase, ids, excludeId, payload);
-}
-
-module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers };
-
+module.exports = { notifyUsers, notifyCommunityMembers };

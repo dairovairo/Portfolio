@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyCommunityMembers, notifyAllUsers } = require('../lib/webpush');
+const { notifyCommunityMembers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -224,7 +224,7 @@ router.get('/events', requireAuth, async (req, res) => {
       .from('community_events')
       .select(`
         id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
-        url, price, additional_info, max_attendees, creator_id, community_id, created_at,
+        url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
@@ -243,7 +243,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url, price, additional_info } = req.body;
+  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url, price, additional_info, promotion_plan } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -310,6 +310,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
+        promotion_plan: ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic',
       })
       .select()
       .single();
@@ -345,15 +346,6 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           });
         })
         .catch(() => {});
-    }
-
-    if (req.body.promotion_type === 'ultra') {
-      notifyAllUsers(supabase, userId, {
-        title: '🚀 Evento destacado',
-        body: `${event.title}${event.location ? ` · ${event.location}` : ''}`,
-        url: `/community/events/${event.id}`,
-        tag: `ultra-event-${event.id}`,
-      }).catch(() => {});
     }
 
     res.status(201).json({ event });

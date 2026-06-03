@@ -515,6 +515,7 @@ function CreateEventModal({ onClose, onCreate }) {
     url: '',
     price: '',
     additional_info: '',
+    promotion_plan: 'basic',
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -793,6 +794,89 @@ function CreateEventModal({ onClose, onCreate }) {
               className="hidden"
               onChange={handleCoverChange}
             />
+          </div>
+
+          {/* Promotion Plan */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-2">
+              Promoción del evento
+            </label>
+            <div className="grid grid-cols-1 gap-2">
+              {/* Basic */}
+              <button
+                type="button"
+                onClick={() => set('promotion_plan', 'basic')}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                  form.promotion_plan === 'basic'
+                    ? 'border-accent-primary bg-accent-primary/10'
+                    : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">📋</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Basic Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Listado estándar en la sección de eventos de la comunidad.</p>
+                </div>
+                {form.promotion_plan === 'basic' && (
+                  <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
+                )}
+              </button>
+
+              {/* Premium */}
+              <button
+                type="button"
+                onClick={() => set('promotion_plan', 'premium')}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                  form.promotion_plan === 'premium'
+                    ? 'border-purple-400 bg-purple-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-purple-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">⚡</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Destacado en el feed · Etiqueta Premium visible · Mayor alcance.</p>
+                </div>
+                {form.promotion_plan === 'premium' && (
+                  <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
+                )}
+              </button>
+
+              {/* Ultra */}
+              <button
+                type="button"
+                onClick={() => set('promotion_plan', 'ultra')}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                  form.promotion_plan === 'ultra'
+                    ? 'border-yellow-400 bg-yellow-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-yellow-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">🚀</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Posición top garantizada · Notificación push a toda la comunidad · Insignia Ultra.</p>
+                </div>
+                {form.promotion_plan === 'ultra' && (
+                  <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>
+                )}
+              </button>
+            </div>
+
+            {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
+              <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                💳 El pago se gestionará en el siguiente paso tras publicar el evento.
+              </p>
+            )}
           </div>
 
           {error && (
