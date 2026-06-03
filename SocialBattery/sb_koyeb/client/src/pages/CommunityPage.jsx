@@ -138,12 +138,10 @@ function sortEventsBy(eventList = [], sortKey = 'app') {
     if (sortKey === 'planificaciones') {
       return (b.attendee_count || 0) - (a.attendee_count || 0);
     }
+    // 'app': suma ponderada — planificaciones tienen algo más de peso
     const scoreA = (a.attendee_count || 0) * 1.5 + (a.like_count || 0);
     const scoreB = (b.attendee_count || 0) * 1.5 + (b.like_count || 0);
-    const premiumA = a.promotion_type === 'premium' ? 1 : 0;
-    const premiumB = b.promotion_type === 'premium' ? 1 : 0;
-    if (premiumA !== premiumB) return premiumB - premiumA;
-    return scoreB - scoreA;
+    const pa=a.promotion_type==='premium'?1:0; const pb=b.promotion_type==='premium'?1:0; if(pa!==pb) return pb-pa; return scoreB-scoreA;
   });
 }
 
@@ -282,7 +280,16 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             )}
           </p>
 
-          {/* Description */}
+          
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Promoción</label>
+            <select value={form.promotion_type} onChange={e=>set('promotion_type',e.target.value)} className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3">
+              <option value="basic">Basic promotion (Gratis)</option>
+              <option value="premium">Premium promotion (10€)</option>
+              <option value="ultra">Ultra promotion (20€)</option>
+            </select>
+          </div>
+{/* Description */}
           {event.description && (
             <p className="text-xs text-surface-muted mt-1.5 line-clamp-2 leading-relaxed">
               {event.description}
