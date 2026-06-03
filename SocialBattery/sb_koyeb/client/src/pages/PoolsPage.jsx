@@ -84,6 +84,18 @@ function StatusBadge({ status }) {
 
 // ── Pool capacity bar ─────────────────────────────────────────────────────────
 function CapacityBar({ current, max }) {
+  if (max === null || max === undefined) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-surface-bg rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: '0%' }} />
+        </div>
+        <span className="text-xs font-mono text-surface-muted flex-shrink-0">
+          {current} personas
+        </span>
+      </div>
+    );
+  }
   const pct = Math.min(100, (current / max) * 100);
   const color = pct >= 100 ? '#f97316' : pct >= 75 ? '#facc15' : '#4ade80';
   return (
@@ -189,7 +201,9 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-display font-bold text-surface-text">Apuntados</h4>
             <span className="text-xs font-mono text-surface-muted">
-              {pool.participant_count}/{pool.max_people}
+              {pool.max_people !== null && pool.max_people !== undefined
+                ? `${pool.participant_count}/${pool.max_people}`
+                : `${pool.participant_count} apuntados`}
             </span>
           </div>
 
@@ -243,8 +257,8 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
             </div>
           )}
 
-          {/* Plazas vacías */}
-          {pool.spots_left > 0 && pool.status === 'open' && (
+          {/* Plazas vacías — solo si hay límite */}
+          {pool.spots_left !== null && pool.spots_left > 0 && pool.status === 'open' && (
             <div className="mt-3 space-y-1.5">
               {Array.from({ length: Math.min(pool.spots_left, 3) }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-2 rounded-xl border border-dashed border-surface-border/50 opacity-40">
@@ -516,7 +530,7 @@ function CreatePoolModal({ onClose, onCreate }) {
     location_hint: '',
     scheduled_at: minDate,
     ends_at: '',
-    max_people: 4,
+    max_people: null,
     is_public: true,
     group_id: null,
     invited_user_ids: [],
@@ -561,7 +575,7 @@ function CreatePoolModal({ onClose, onCreate }) {
         ...form,
         scheduled_at: new Date(form.scheduled_at).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
-        max_people: parseInt(form.max_people),
+        max_people: form.max_people !== null && form.max_people !== '' ? parseInt(form.max_people) : null,
       });
       onClose();
     } catch (e) {
@@ -615,9 +629,28 @@ function CreatePoolModal({ onClose, onCreate }) {
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Personas máx.</label>
-              <input type="number" value={form.max_people} min={2} max={50} onChange={e => set('max_people', parseInt(e.target.value) || 2)}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Límite de personas</label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.max_people === null}
+                    onChange={e => set('max_people', e.target.checked ? null : 4)}
+                    className="w-4 h-4 rounded border-surface-border accent-accent-primary"
+                  />
+                  <span className="text-sm text-surface-muted">Sin límite</span>
+                </label>
+                {form.max_people !== null && (
+                  <input
+                    type="number"
+                    value={form.max_people}
+                    min={2}
+                    max={50}
+                    onChange={e => set('max_people', parseInt(e.target.value) || 2)}
+                    className="w-24 bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                  />
+                )}
+              </div>
             </div>
           </div>
 
