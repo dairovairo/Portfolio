@@ -1086,6 +1086,7 @@ export default function CommunityPage() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
+  const [eventSortMode, setEventSortMode] = useState('app'); // 'app' | 'likes' | 'planificaciones'
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
@@ -1189,14 +1190,28 @@ export default function CommunityPage() {
   }
 
   const sortedEvents = sortEventsByProximity(events);
-  const sortedEventsByLikes = [...events].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
   const planningEvents = sortEventsByProximity(events.filter(event => (
     isUpcomingEvent(event) && event.attendee_ids?.includes(profile?.id)
   )));
 
+  // ── Event sort by mode ─────────────────────────────────────────────────────
+  function applySortMode(eventList) {
+    if (eventSortMode === 'likes') {
+      return [...eventList].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
+    }
+    if (eventSortMode === 'planificaciones') {
+      return [...eventList].sort((a, b) => (b.attendee_count || 0) - (a.attendee_count || 0));
+    }
+    // 'app': selección de la app = planificaciones + likes combinados
+    return [...eventList].sort((a, b) =>
+      ((b.attendee_count || 0) + (b.like_count || 0)) -
+      ((a.attendee_count || 0) + (a.like_count || 0))
+    );
+  }
+
   // ── Event search + filter ──────────────────────────────────────────────────
   const normalizedEventSearch = normalizeText(eventSearch);
-  const filteredSortedEvents = sortedEventsByLikes.filter(event => {
+  const filteredSortedEvents = applySortMode(events.filter(event => {
     if (!isUpcomingEvent(event)) return false;
     const matchesSearch = !normalizedEventSearch || normalizeText([
       event.title,
@@ -1320,10 +1335,29 @@ export default function CommunityPage() {
           </div>
         ) : tab === 'events' ? (
           <>
-            {/* Events title */}
-            <div className="mb-4">
+            {/* Events title + sort filter */}
+            <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
-              <p className="text-xs text-surface-muted">Los eventos más cercanos aparecen primero</p>
+              <div className="flex gap-1.5">
+                {[
+                  { key: 'app', label: '✦ App' },
+                  { key: 'likes', label: '♥ Likes' },
+                  { key: 'planificaciones', label: '📅 Plans' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setEventSortMode(key)}
+                    className={`text-[11px] font-mono px-2.5 py-1.5 rounded-lg border transition-all whitespace-nowrap ${
+                      eventSortMode === key
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30 hover:text-surface-text'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Search + category filter */}
