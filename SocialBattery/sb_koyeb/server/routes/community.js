@@ -310,7 +310,6 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
-        promotion_type: ['basic','premium','ultra'].includes(req.body.promotion_type)?req.body.promotion_type:'basic',
       })
       .select()
       .single();
