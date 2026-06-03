@@ -5,6 +5,8 @@ const { requireAuth } = require('../middleware/auth');
 const { checkAndAwardBadges } = require('../jobs/badges');
 const { applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 
+const USER_SUMMARY_FIELDS = 'id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at';
+
 // PATCH /api/battery — update battery level
 router.patch('/', requireAuth, async (req, res) => {
   const { level } = req.body;
@@ -27,7 +29,7 @@ router.patch('/', requireAuth, async (req, res) => {
       battery_is_estimated: false,
     })
     .eq('id', userId)
-    .select()
+    .select(USER_SUMMARY_FIELDS)
     .single();
 
   if (updateError) {

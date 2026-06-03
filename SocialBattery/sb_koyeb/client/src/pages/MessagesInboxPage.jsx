@@ -109,6 +109,7 @@ export default function MessagesInboxPage() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('direct');
   const groupsRef = useRef([]);
+  const conversationsRefreshTimerRef = useRef(null);
 
   const fetchUnreadCounts = useCallback(async (groupList) => {
     if (!groupList || groupList.length === 0) return;
@@ -140,6 +141,20 @@ export default function MessagesInboxPage() {
     finally { setLoading(false); }
   }, [fetchUnreadCounts]);
 
+  const scheduleFetchConversations = useCallback(() => {
+    if (conversationsRefreshTimerRef.current) {
+      clearTimeout(conversationsRefreshTimerRef.current);
+    }
+    conversationsRefreshTimerRef.current = setTimeout(() => {
+      conversationsRefreshTimerRef.current = null;
+      fetchConversations();
+    }, 500);
+  }, [fetchConversations]);
+
+  useEffect(() => () => {
+    if (conversationsRefreshTimerRef.current) clearTimeout(conversationsRefreshTimerRef.current);
+  }, []);
+
   useEffect(() => {
     fetchConversations();
     fetchGroups();
@@ -151,27 +166,61 @@ export default function MessagesInboxPage() {
     const channel = supabase
       .channel(`inbox-${profile.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${profile.id}` }, (payload) => {
-        fetchConversations();
+        scheduleFetchConversations();
         // Mark as delivered so sender sees the double tick
         if (payload.new?.sender_id) {
           api.patch(`/messages/${payload.new.sender_id}/deliver`).catch(() => {});
         }
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => fetchConversations())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => fetchConversations())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, () => {
-        fetchGroups();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => scheduleFetchConversations())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${profile.id}` }, () => scheduleFetchConversations())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => scheduleFetchConversations())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, (payload) => {
+        const msg = payload.new;
+        if (!msg?.group_id) return;
+        if (!groupsRef.current.some(g => g.id === msg.group_id)) return;
+
+        const lastMessage = {
+          group_id: msg.group_id,
+          sender_id: msg.sender_id,
+          content: msg.content,
+          type: msg.type,
+          created_at: msg.created_at,
+        };
+        setGroups(prev => {
+          const next = prev.map(group =>
+            group.id === msg.group_id ? { ...group, last_message: lastMessage } : group
+          );
+          groupsRef.current = next;
+          return next;
+        });
+        if (msg.sender_id !== profile.id) {
+          setGroupUnreads(prev => ({ ...prev, [msg.group_id]: (prev[msg.group_id] || 0) + 1 }));
+        }
       })
       // Refresh inbox when a friendship is accepted (UPDATE) or removed (DELETE)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships' }, (payload) => {
-        if (payload.new?.status === 'accepted') fetchConversations();
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'friendships',
+        filter: `requester_id=eq.${profile.id}`,
+      }, (payload) => {
+        if (payload.new?.status === 'accepted') scheduleFetchConversations();
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'friendships',
+        filter: `addressee_id=eq.${profile.id}`,
+      }, (payload) => {
+        if (payload.new?.status === 'accepted') scheduleFetchConversations();
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'friendships' }, () => {
-        fetchConversations();
+        scheduleFetchConversations();
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [profile?.id, fetchConversations, fetchGroups]);
+  }, [profile?.id, scheduleFetchConversations]);
 
   const totalDirectUnread = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
   const totalGroupUnread = Object.values(groupUnreads).reduce((acc, n) => acc + n, 0);
