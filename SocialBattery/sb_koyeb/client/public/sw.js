@@ -1,5 +1,5 @@
-// SocialBattery Service Worker — Phase 8
-const CACHE_NAME = 'socialbattery-v8';
+// SocialBattery Service Worker — Phase 9 (promotion notifications)
+const CACHE_NAME = 'socialbattery-v9';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell
@@ -42,28 +42,36 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Push notifications
+// Push notifications — works in foreground AND background/closed app.
+// Ultra events get vibration + requireInteraction so they're not dismissed silently.
 self.addEventListener('push', (event) => {
   let data = { title: 'SocialBattery', body: 'Tienes una nueva notificación 🔋' };
   try { data = event.data.json(); } catch {}
 
+  const isUltra = (data.tag || '').startsWith('ultra-event-');
+
+  const notifOptions = {
+    body:             data.body,
+    icon:             '/icons/icon-192.png',
+    badge:            '/icons/badge-72.png',
+    tag:              data.tag || 'general',
+    renotify:         true,
+    data:             { url: data.url || '/community' },
+    actions:          data.actions || [],
+    // Ultra-specific: keep visible until user taps + vibrate pattern
+    requireInteraction: isUltra,
+    vibrate:            isUltra ? [200, 100, 200, 100, 400] : [100],
+  };
+
   event.waitUntil(
-    self.registration.showNotification(data.title || 'SocialBattery', {
-      body: data.body,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/badge-72.png',
-      tag: data.tag || 'general',
-      renotify: true,
-      data: { url: data.url || '/' },
-      actions: data.actions || [],
-    })
+    self.registration.showNotification(data.title || 'SocialBattery', notifOptions)
   );
 });
 
-// Notification click → open/focus app
+// Notification click → open/focus app at the event URL
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
+  const targetUrl = event.notification.data?.url || '/community';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {

@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyCommunityMembers } = require('../lib/webpush');
+const { notifyCommunityMembers, notifyAllUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -328,9 +328,20 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
       console.warn('[community] event creator auto-join error:', attendeeError);
     }
 
-    // ── Push notification to community members (fire-and-forget) ─────────────
-    if (communityId) {
-      // Fetch community name and notify all members (fire-and-forget)
+    // ── Push notifications (fire-and-forget) ─────────────────────────────────
+    const resolvedPlan = ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic';
+
+    if (resolvedPlan === 'ultra') {
+      // Ultra: notify ALL users with an active push subscription, regardless of community
+      const notifPayload = {
+        title: '🚀 Evento destacado: ' + event.title,
+        body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
+        url:   `/community/event/${event.id}`,
+        tag:   `ultra-event-${event.id}`,
+      };
+      notifyAllUsers(supabase, userId, notifPayload).catch(() => {});
+    } else if (communityId) {
+      // Basic / Premium: notify community members only (existing behaviour)
       supabase
         .from('communities')
         .select('name')
@@ -341,7 +352,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           notifyCommunityMembers(supabase, communityId, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
-            url:   `/community/${communityId}`,
+            url:   `/community/event/${event.id}`,
             tag:   `community-event-${event.id}`,
           });
         })

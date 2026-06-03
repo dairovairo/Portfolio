@@ -127,9 +127,13 @@ function sortEventsByProximity(eventList = []) {
   });
 }
 
-// 'app'            → planificaciones + likes (puntuación combinada)
+// 'app'            → ultra primero → premium → basic; dentro de cada tier, puntuación ponderada
 // 'planificaciones'→ más apuntados primero
 // 'likes'          → más likes primero
+const PROMOTION_TIER = { ultra: 2, premium: 1, basic: 0 };
+function promotionScore(event) {
+  return (event.attendee_count || 0) * 1.5 + (event.like_count || 0);
+}
 function sortEventsBy(eventList = [], sortKey = 'app') {
   return [...eventList].sort((a, b) => {
     if (sortKey === 'likes') {
@@ -138,10 +142,11 @@ function sortEventsBy(eventList = [], sortKey = 'app') {
     if (sortKey === 'planificaciones') {
       return (b.attendee_count || 0) - (a.attendee_count || 0);
     }
-    // 'app': suma ponderada — planificaciones tienen algo más de peso
-    const scoreA = (a.attendee_count || 0) * 1.5 + (a.like_count || 0);
-    const scoreB = (b.attendee_count || 0) * 1.5 + (b.like_count || 0);
-    return scoreB - scoreA;
+    // 'app': ultra/premium flotan al top; dentro de cada tier, puntuación ponderada como desempate
+    const tierA = PROMOTION_TIER[a.promotion_plan] ?? 0;
+    const tierB = PROMOTION_TIER[b.promotion_plan] ?? 0;
+    if (tierB !== tierA) return tierB - tierA;
+    return promotionScore(b) - promotionScore(a);
   });
 }
 
@@ -189,6 +194,15 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
   };
   const rankStyle = rankColors[rank] || { ring: 'border-surface-border', glow: 'transparent', label: null };
 
+  // Promoted events override border/glow
+  const PROMO_META = {
+    ultra:   { ring: 'border-yellow-400/55', glow: '#facc1522', pill: '🚀 Ultra',   pillClass: 'text-yellow-300 bg-yellow-500/10 border border-yellow-500/25' },
+    premium: { ring: 'border-purple-400/50', glow: '#a855f71a', pill: '⚡ Premium', pillClass: 'text-purple-300 bg-purple-500/10 border border-purple-500/25' },
+  };
+  const promo = PROMO_META[event.promotion_plan];
+  const activeRing = promo?.ring ?? rankStyle.ring;
+  const activeGlow = promo?.glow ?? (rank <= 3 ? rankStyle.glow : null);
+
   async function handleJoin(e) {
     e?.stopPropagation();
     if (isJoined || isPast || joining) return;
@@ -228,14 +242,15 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
       tabIndex={0}
       onClick={() => onOpen?.(event.id)}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpen?.(event.id); }}
-      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30 cursor-pointer`}
-      style={{ boxShadow: rank <= 3 ? `0 0 20px ${rankStyle.glow}` : undefined }}
+      className={`relative bg-surface-card border ${activeRing} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30 cursor-pointer`}
+      style={{ boxShadow: activeGlow ? `0 0 20px ${activeGlow}` : undefined }}
     >
-      {/* Rank badge */}
+      {/* Rank medal for top 3 */}
       {rank <= 3 && (
         <span className="absolute -top-2.5 -right-1 text-xl">{rankStyle.label}</span>
       )}
-      {rank > 3 && (
+      {/* Rank number only for non-promoted events beyond top 3 */}
+      {rank > 3 && !promo && (
         <span className="absolute top-3 right-3 text-xs font-mono text-slate-600">#{rank}</span>
       )}
 
@@ -257,11 +272,16 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* Title + category */}
+          {/* Title + category + promotion badge */}
           <div className="flex items-start gap-2 flex-wrap">
             <h3 className="font-display font-bold text-surface-text text-sm leading-snug line-clamp-1 flex-1">
               {event.title}
             </h3>
+            {promo && (
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full flex-shrink-0 ${promo.pillClass}`}>
+                {promo.pill}
+              </span>
+            )}
             {event.category && (
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20 flex-shrink-0">
                 {event.category}
