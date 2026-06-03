@@ -155,4 +155,46 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
   }
 }
 
-module.exports = { notifyUsers, notifyCommunityMembers };
+/**
+ * Send a push notification to every user that has an active push subscription
+ * (regardless of community membership). Used for Ultra promotion events.
+ *
+ * @param {object} supabase
+ * @param {string} excludeId  — user to exclude (the creator)
+ * @param {{ title: string, body: string, url?: string, tag?: string }} payload
+ */
+async function notifyAllUsers(supabase, excludeId, payload) {
+  init();
+  if (!webpush) return;
+
+  try {
+    // Fetch all push subscriptions except the creator's
+    const { data: subs, error: subsErr } = await supabase
+      .from('push_subscriptions')
+      .select('user_id, endpoint, p256dh, auth')
+      .neq('user_id', excludeId);
+
+    if (subsErr || !subs?.length) return;
+
+    const expiredEndpoints = [];
+    await Promise.allSettled(
+      subs.map(async sub => {
+        const result = await sendPushToSubscription(sub, payload);
+        if (result?.expired) expiredEndpoints.push(sub.endpoint);
+      })
+    );
+
+    if (expiredEndpoints.length) {
+      supabase
+        .from('push_subscriptions')
+        .delete()
+        .in('endpoint', expiredEndpoints)
+        .then(() => {})
+        .catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[webpush] notifyAllUsers error:', err.message);
+  }
+}
+
+module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers };
