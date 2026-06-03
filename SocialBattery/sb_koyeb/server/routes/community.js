@@ -332,16 +332,24 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     const resolvedPlan = ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic';
 
     if (resolvedPlan === 'ultra') {
-      // Ultra: notify ALL users with an active push subscription, regardless of community
-      const notifPayload = {
+      // Ultra: notify ALL users — SW uses requireInteraction + strong vibration for this tag
+      notifyAllUsers(supabase, userId, {
         title: '🚀 Evento destacado: ' + event.title,
         body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
         url:   `/community/event/${event.id}`,
         tag:   `ultra-event-${event.id}`,
-      };
-      notifyAllUsers(supabase, userId, notifPayload).catch(() => {});
+      }).catch(() => {});
+    } else if (resolvedPlan === 'premium') {
+      // Premium: also notify ALL users regardless of community membership.
+      // Uses a premium-event- tag so the SW applies standard (non-intrusive) treatment.
+      notifyAllUsers(supabase, userId, {
+        title: '⚡ Nuevo evento Premium: ' + event.title,
+        body:  `${event.location ? event.location + ' · ' : ''}¡Échale un vistazo!`,
+        url:   `/community/event/${event.id}`,
+        tag:   `premium-event-${event.id}`,
+      }).catch(() => {});
     } else if (communityId) {
-      // Basic / Premium: notify community members only (existing behaviour)
+      // Basic with community: notify community members only
       supabase
         .from('communities')
         .select('name')

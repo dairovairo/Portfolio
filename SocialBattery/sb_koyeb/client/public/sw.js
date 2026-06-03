@@ -1,5 +1,5 @@
-// SocialBattery Service Worker — Phase 9 (promotion notifications)
-const CACHE_NAME = 'socialbattery-v9';
+// SocialBattery Service Worker — Phase 10 (premium + ultra notifications)
+const CACHE_NAME = 'socialbattery-v10';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell
@@ -43,24 +43,35 @@ self.addEventListener('fetch', (event) => {
 });
 
 // Push notifications — works in foreground AND background/closed app.
-// Ultra events get vibration + requireInteraction so they're not dismissed silently.
+//
+//  · ultra-event-*   → requireInteraction + strong vibration (user must tap to dismiss)
+//  · premium-event-* → medium vibration, standard dismissal
+//  · others          → minimal vibration
 self.addEventListener('push', (event) => {
   let data = { title: 'SocialBattery', body: 'Tienes una nueva notificación 🔋' };
   try { data = event.data.json(); } catch {}
 
-  const isUltra = (data.tag || '').startsWith('ultra-event-');
+  const tag = data.tag || '';
+  const isUltra   = tag.startsWith('ultra-event-');
+  const isPremium = tag.startsWith('premium-event-');
 
   const notifOptions = {
-    body:             data.body,
-    icon:             '/icons/icon-192.png',
-    badge:            '/icons/badge-72.png',
-    tag:              data.tag || 'general',
-    renotify:         true,
-    data:             { url: data.url || '/community' },
-    actions:          data.actions || [],
-    // Ultra-specific: keep visible until user taps + vibrate pattern
+    body:    data.body,
+    icon:    '/icons/icon-192.png',
+    badge:   '/icons/badge-72.png',
+    tag:     tag || 'general',
+    renotify: true,
+    data:    { url: data.url || '/community' },
+    actions: data.actions || [],
+    // Ultra: keep on screen until the user taps + strong vibration pattern
+    // Premium: standard dismissal + softer double-pulse
+    // Basic: single short vibration
     requireInteraction: isUltra,
-    vibrate:            isUltra ? [200, 100, 200, 100, 400] : [100],
+    vibrate: isUltra
+      ? [200, 100, 200, 100, 400]
+      : isPremium
+        ? [150, 80, 150]
+        : [100],
   };
 
   event.waitUntil(
