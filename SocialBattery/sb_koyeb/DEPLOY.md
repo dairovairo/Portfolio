@@ -16,7 +16,28 @@ git push -u origin main
 
 ---
 
-## Paso 2 — Backend en Koyeb
+## Paso 2 — Generar las claves VAPID (push notifications)
+
+Las claves VAPID son **obligatorias** para que las notificaciones push funcionen.
+Genera el par de claves una sola vez en tu máquina local (necesitas Node y el paquete `web-push` instalado en `server/`):
+
+```bash
+cd server
+node -e "const wp=require('web-push'); const k=wp.generateVAPIDKeys(); console.log(k);"
+```
+
+Guarda los tres valores que aparecen; los usarás en los pasos siguientes:
+
+```
+publicKey:  BxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxU
+privateKey: Axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+> ⚠️ **Nunca reutilices las claves de ejemplo ni hagas commit de `privateKey` al repositorio.**
+
+---
+
+## Paso 3 — Backend en Koyeb
 
 1. Ve a **koyeb.com** → regístrate (no pide tarjeta)
 2. **Create Service** → **GitHub**
@@ -34,12 +55,15 @@ git push -u origin main
    - `SUPABASE_ANON_KEY` → tu anon key
    - `CLIENT_URL` → (déjalo vacío por ahora)
    - `NODE_ENV` → `production`
+   - `VAPID_PUBLIC_KEY` → el `publicKey` generado en el Paso 2
+   - `VAPID_PRIVATE_KEY` → el `privateKey` generado en el Paso 2
+   - `VAPID_SUBJECT` → `mailto:tu@email.com` (o la URL de tu app)
 6. **Deploy** → espera 2-3 min → cuando esté verde copia la URL:
    `https://TU-APP.koyeb.app`
 
 ---
 
-## Paso 3 — Frontend en Render
+## Paso 4 — Frontend en Render
 
 1. Ve a **render.com** → **New → Static Site**
 2. Conecta el repo de GitHub
@@ -51,6 +75,8 @@ git push -u origin main
    - `VITE_SUPABASE_URL` → `https://pmjaffcrtjrvjzomjdoj.supabase.co`
    - `VITE_SUPABASE_ANON_KEY` → tu anon key
    - `VITE_API_URL` → `https://TU-APP.koyeb.app/api`
+   - `VITE_VAPID_PUBLIC_KEY` → el mismo `publicKey` del Paso 2
+     *(debe coincidir exactamente con `VAPID_PUBLIC_KEY` del servidor)*
 5. En **Redirects/Rewrites** añade una regla:
    - Source: `/*` → Destination: `/index.html` → Action: `Rewrite`
 6. **Create Static Site** → espera 2-3 min → copia la URL:
@@ -58,16 +84,16 @@ git push -u origin main
 
 ---
 
-## Paso 4 — Conectar los dos servicios
+## Paso 5 — Conectar los dos servicios
 
-### 4.1 — Actualiza CLIENT_URL en Koyeb
+### 5.1 — Actualiza CLIENT_URL en Koyeb
 
 Koyeb → tu servicio → **Settings → Environment variables**:
 - `CLIENT_URL` → `https://socialbattery-client.onrender.com`
 
 Guarda → hace redeploy automático.
 
-### 4.2 — Configura Supabase para producción
+### 5.2 — Configura Supabase para producción
 
 Supabase → **Authentication → URL Configuration**:
 
@@ -101,9 +127,13 @@ SUPABASE_SERVICE_KEY=...
 SUPABASE_ANON_KEY=...
 PORT=3001
 CLIENT_URL=http://localhost:5173
+VAPID_PUBLIC_KEY=<publicKey generado en el Paso 2>
+VAPID_PRIVATE_KEY=<privateKey generado en el Paso 2>
+VAPID_SUBJECT=mailto:tu@email.com
 
 # client/.env
 VITE_SUPABASE_URL=https://pmjaffcrtjrvjzomjdoj.supabase.co
 VITE_SUPABASE_ANON_KEY=...
 VITE_API_URL=http://localhost:3001/api
+VITE_VAPID_PUBLIC_KEY=<el mismo publicKey de arriba>
 ```
