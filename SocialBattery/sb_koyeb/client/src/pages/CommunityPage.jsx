@@ -141,7 +141,6 @@ function sortEventsBy(eventList = [], sortKey = 'app') {
     // 'app': suma ponderada — planificaciones tienen algo más de peso
     const scoreA = (a.attendee_count || 0) * 1.5 + (a.like_count || 0);
     const scoreB = (b.attendee_count || 0) * 1.5 + (b.like_count || 0);
-    if (sortKey === 'app') { const pa=a.promotion_type==='premium'; const pb=b.promotion_type==='premium'; if(pa!==pb) return pb-pa; }
     return scoreB - scoreA;
   });
 }
@@ -516,7 +515,6 @@ function CreateEventModal({ onClose, onCreate }) {
     url: '',
     price: '',
     additional_info: '',
-    promotion_type: 'basic',
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -797,9 +795,7 @@ function CreateEventModal({ onClose, onCreate }) {
             />
           </div>
 
-          <div><label className="block text-xs font-mono text-surface-muted mb-1.5">Promoción</label><select value={form.promotion_type} onChange={e => set('promotion_type', e.target.value)} className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-sm"><option value="basic">Basic promotion (Gratis)</option><option value="premium">Premium promotion (10€)</option><option value="ultra">Ultra promotion (20€)</option></select><p className="text-xs text-surface-muted mt-1">Premium: arriba en Selección App. Ultra: notificación global.</p></div>
-
-{error && (
+          {error && (
             <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">
               {error}
             </p>
