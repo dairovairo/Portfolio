@@ -76,8 +76,9 @@ const STORAGE_KEYS = {
   muteGroupChats:        'sb-mute-group-chats',
   muteNewEvents:         'sb-mute-new-events',
   muteNewPools:          'sb-mute-new-pools',
-  muteEventReminders:    'sb-mute-event-reminders',
-  mutePoolReminders:     'sb-mute-pool-reminders',
+  muteEventReminders:        'sb-mute-event-reminders',
+  mutePoolReminders:         'sb-mute-pool-reminders',
+  muteEventRecommendations:  'sb-mute-event-recommendations',
   // privacy
   readReceipts:          'sb-read-receipts',
   showOnline:            'sb-show-online',
@@ -234,6 +235,9 @@ export function SettingsProvider({ children }) {
   const [mutePoolReminders, setMutePoolRemindersState] = useState(
     () => loadStorage(STORAGE_KEYS.mutePoolReminders, 'false') === 'true'
   );
+  const [muteEventRecommendations, setMuteEventRecommendationsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteEventRecommendations, 'false') === 'true'
+  );
 
   // ── Privacy preferences ───────────────────────────────────────────────────
   // readReceipts: when OFF, we don't send read_at to the server so senders
@@ -356,6 +360,11 @@ export function SettingsProvider({ children }) {
     setMutePoolRemindersState(v);
   }, []);
 
+  const setMuteEventRecommendations = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteEventRecommendations, String(v));
+    setMuteEventRecommendationsState(v);
+  }, []);
+
   const setReadReceipts = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.readReceipts, String(v));
     setReadReceiptsState(v);
@@ -472,6 +481,7 @@ export function SettingsProvider({ children }) {
       muteNewPools, setMuteNewPools,
       muteEventReminders, setMuteEventReminders,
       mutePoolReminders, setMutePoolReminders,
+      muteEventRecommendations, setMuteEventRecommendations,
       // privacy
       readReceipts, setReadReceipts,
       showOnline, setShowOnline,

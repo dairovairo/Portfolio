@@ -380,6 +380,7 @@ export default function SettingsPage() {
     muteNewPools, setMuteNewPools,
     muteEventReminders, setMuteEventReminders,
     mutePoolReminders, setMutePoolReminders,
+    muteEventRecommendations, setMuteEventRecommendations,
     readReceipts, setReadReceipts,
     showOnline, setShowOnline,
     showLastSeen, setShowLastSeen,
@@ -729,6 +730,21 @@ export default function SettingsPage() {
                     <Toggle
                       enabled={muteNewEvents}
                       onToggle={() => setMuteNewEvents(!muteNewEvents)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar recomendaciones de eventos
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de eventos premium y destacados
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteEventRecommendations}
+                      onToggle={() => setMuteEventRecommendations(!muteEventRecommendations)}
                     />
                   </div>
 
