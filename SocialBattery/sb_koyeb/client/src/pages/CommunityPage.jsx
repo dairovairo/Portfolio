@@ -127,6 +127,24 @@ function sortEventsByProximity(eventList = []) {
   });
 }
 
+// 'app'            → planificaciones + likes (puntuación combinada)
+// 'planificaciones'→ más apuntados primero
+// 'likes'          → más likes primero
+function sortEventsBy(eventList = [], sortKey = 'app') {
+  return [...eventList].sort((a, b) => {
+    if (sortKey === 'likes') {
+      return (b.like_count || 0) - (a.like_count || 0);
+    }
+    if (sortKey === 'planificaciones') {
+      return (b.attendee_count || 0) - (a.attendee_count || 0);
+    }
+    // 'app': suma ponderada — planificaciones tienen algo más de peso
+    const scoreA = (a.attendee_count || 0) * 1.5 + (a.like_count || 0);
+    const scoreB = (b.attendee_count || 0) * 1.5 + (b.like_count || 0);
+    return scoreB - scoreA;
+  });
+}
+
 // ── Event Card ────────────────────────────────────────────────────────────────
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -1086,6 +1104,7 @@ export default function CommunityPage() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
+  const [eventSort, setEventSort] = useState('app'); // 'app' | 'planificaciones' | 'likes'
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
@@ -1189,14 +1208,13 @@ export default function CommunityPage() {
   }
 
   const sortedEvents = sortEventsByProximity(events);
-  const sortedEventsByLikes = [...events].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
   const planningEvents = sortEventsByProximity(events.filter(event => (
     isUpcomingEvent(event) && event.attendee_ids?.includes(profile?.id)
   )));
 
   // ── Event search + filter ──────────────────────────────────────────────────
   const normalizedEventSearch = normalizeText(eventSearch);
-  const filteredSortedEvents = sortedEventsByLikes.filter(event => {
+  const filteredSortedEvents = sortEventsBy(events, eventSort).filter(event => {
     if (!isUpcomingEvent(event)) return false;
     const matchesSearch = !normalizedEventSearch || normalizeText([
       event.title,
@@ -1320,10 +1338,18 @@ export default function CommunityPage() {
           </div>
         ) : tab === 'events' ? (
           <>
-            {/* Events title */}
-            <div className="mb-4">
+            {/* Events title + sort selector */}
+            <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
-              <p className="text-xs text-surface-muted">Los eventos más cercanos aparecen primero</p>
+              <select
+                value={eventSort}
+                onChange={e => setEventSort(e.target.value)}
+                className="text-xs bg-surface-card border border-surface-border rounded-lg px-2 py-1.5 text-surface-muted focus:outline-none focus:border-accent-primary/50 transition-colors cursor-pointer"
+              >
+                <option value="app">✨ Selección</option>
+                <option value="planificaciones">📅 Planificaciones</option>
+                <option value="likes">♥ Likes</option>
+              </select>
             </div>
 
             {/* Search + category filter */}
@@ -1398,6 +1424,7 @@ export default function CommunityPage() {
                     setEventSearch('');
                     setEventCategoryFilter(ALL_EVENT_CATEGORIES);
                     setEventPriceFilter('all');
+                    setEventSort('app');
                   }}
                   className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                 >
@@ -1410,7 +1437,7 @@ export default function CommunityPage() {
                   <EventCard
                     key={event.id}
                     event={{ ...event, attendees: event.attendee_ids || [] }}
-                    rank={!isEventFiltered ? i + 1 : undefined}
+                    rank={!isEventFiltered && eventSort === 'app' ? i + 1 : undefined}
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
