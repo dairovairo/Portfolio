@@ -327,12 +327,15 @@ export default function EventDetailPage() {
           >
             ←
           </button>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 relative">
             <h1 className="font-display font-bold text-surface-text text-base truncate">{event.title}</h1>
             <p className="text-xs font-mono text-surface-muted truncate">
               {event.category ? `${emoji} ${event.category}` : emoji}
               {daysLabel && <span className="text-amber-300/80"> · {daysLabel}</span>}
             </p>
+            {eventsWithUpdates.has(eventId) && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 shadow-lg" />
+            )}
           </div>
         </div>
       </header>

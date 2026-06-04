@@ -8,6 +8,126 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 
+// ── Create Group Modal ────────────────────────────────────────────────────────
+function CreateGroupModal({ onClose, onCreated }) {
+  const [name, setName] = useState('');
+  const [friends, setFriends] = useState([]);
+  const [selected, setSelected] = useState(new Set());
+  const [loadingFriends, setLoadingFriends] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get('/friends')
+      .then(({ friends: data }) => setFriends(data || []))
+      .catch(() => setFriends([]))
+      .finally(() => setLoadingFriends(false));
+  }, []);
+
+  function toggleFriend(id) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  async function handleCreate() {
+    if (!name.trim()) { setError('El grupo necesita un nombre'); return; }
+    setCreating(true);
+    setError('');
+    try {
+      const { group } = await api.post('/groups', {
+        name: name.trim(),
+        member_ids: [...selected],
+      });
+      onCreated(group);
+    } catch (e) {
+      setError(e.message || 'Error al crear el grupo');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl p-5 space-y-4 pb-safe"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="font-display font-bold text-surface-text text-base">Nuevo grupo</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-surface-text text-lg leading-none transition-colors">✕</button>
+        </div>
+
+        {/* Nombre */}
+        <input
+          autoFocus
+          type="text"
+          placeholder="Nombre del grupo"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          maxLength={60}
+          className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary/50 transition-colors"
+        />
+
+        {/* Amigos */}
+        <div>
+          <p className="text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-2">Añadir amigos</p>
+          {loadingFriends ? (
+            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-surface-bg rounded-xl animate-pulse" />)}</div>
+          ) : friends.length === 0 ? (
+            <p className="text-xs text-slate-500 py-2">Sin amigos aún</p>
+          ) : (
+            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+              {friends.map(f => {
+                const color = getBatteryColor(f.battery_level ?? 50);
+                const checked = selected.has(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => toggleFriend(f.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-all text-left ${
+                      checked
+                        ? 'border-accent-primary/50 bg-accent-primary/10'
+                        : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
+                    }`}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center font-display font-bold border text-sm flex-shrink-0"
+                      style={{ borderColor: color.hex, background: `${color.hex}15` }}
+                    >
+                      {f.avatar_url
+                        ? <img src={f.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                        : f.display_name?.[0]?.toUpperCase()}
+                    </div>
+                    <span className="flex-1 text-sm font-display font-semibold text-surface-text truncate">{f.display_name}</span>
+                    <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[9px] transition-all ${
+                      checked ? 'border-accent-primary bg-accent-primary text-white' : 'border-slate-600'
+                    }`}>
+                      {checked && '✓'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {error && <p className="text-xs text-red-400 font-mono">{error}</p>}
+
+        <button
+          onClick={handleCreate}
+          disabled={creating || !name.trim()}
+          className="w-full py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-bold transition-all disabled:opacity-50 active:scale-[0.98]"
+        >
+          {creating ? 'Creando...' : `Crear grupo${selected.size > 0 ? ` con ${selected.size + 1} miembros` : ''}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── localStorage helpers for group read tracking ─────────────────────────────
 function getGroupLastRead(groupId) {
   return localStorage.getItem(`grp_read_${groupId}`) || null;
@@ -108,6 +228,7 @@ export default function MessagesInboxPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('direct');
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const groupsRef = useRef([]);
   const conversationsRefreshTimerRef = useRef(null);
 
@@ -248,6 +369,15 @@ export default function MessagesInboxPage() {
             Mensajes
             {totalUnread > 0 && <span className="ml-2 bg-accent-primary text-surface-text text-xs px-2 py-0.5 rounded-full font-bold">{totalUnread}</span>}
           </h1>
+          {tab === 'groups' && (
+            <button
+              onClick={() => setShowCreateGroup(true)}
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-accent-primary text-white text-lg font-bold leading-none hover:bg-accent-primary/80 active:scale-95 transition-all"
+              title="Nuevo grupo"
+            >
+              +
+            </button>
+          )}
         </div>
         {/* Tabs — solo Directos y Grupos */}
         <div className="max-w-lg mx-auto px-4 pb-2 flex gap-1">
@@ -360,6 +490,16 @@ export default function MessagesInboxPage() {
         )}
       </main>
       <BottomNav />
+      {showCreateGroup && (
+        <CreateGroupModal
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={(group) => {
+            setShowCreateGroup(false);
+            fetchGroups();
+            navigate(`/messages/group/${group.id}`);
+          }}
+        />
+      )}
     </div>
   );
 }
