@@ -175,7 +175,7 @@ function buildEventFormData(form, extra = {}) {
   return formData;
 }
 
-function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId }) {
+function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId, hasUnreadUpdate }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -252,6 +252,12 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
       {/* Rank number only for non-promoted events beyond top 3 */}
       {rank > 3 && !promo && (
         <span className="absolute top-3 right-3 text-xs font-mono text-slate-600">#{rank}</span>
+      )}
+      {/* Badge de actualización no leída (tab planificación) */}
+      {hasUnreadUpdate && (
+        <span className="absolute -top-1.5 left-3 bg-red-500 text-white text-[9px] font-bold rounded-full px-1.5 h-[15px] flex items-center justify-center leading-none shadow-md">
+          📣 Actualización
+        </span>
       )}
 
       {event.cover_image_url && (
@@ -1195,7 +1201,7 @@ export default function CommunityPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearEventBadge, communitiesWithEvents, refreshJoinedCommunities } = useCommunityNotifications();
+  const { clearEventBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, eventsWithUpdates } = useCommunityNotifications();
 
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -1244,6 +1250,13 @@ export default function CommunityPage() {
       clearEventBadge();
     }
   }, [tab, loading, clearEventBadge]);
+
+  // Clear event-update badges when the planning tab is visible
+  useEffect(() => {
+    if (tab === 'planning' && !loading) {
+      clearAllEventUpdateBadges();
+    }
+  }, [tab, loading, clearAllEventUpdateBadges]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   async function handleCreateEvent(form) {
@@ -1404,13 +1417,18 @@ export default function CommunityPage() {
             </button>
             <button
               onClick={() => setTab('planning')}
-              className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
+              className={`relative flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'planning'
                   ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
               📅 Plan
+              {planningUpdateCount > 0 && tab !== 'planning' && (
+                <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
+                  {planningUpdateCount > 9 ? '9+' : planningUpdateCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setTab('communities')}
@@ -1582,6 +1600,7 @@ export default function CommunityPage() {
                     onLike={handleLikeEvent}
                     onOpen={(id) => navigate(`/community/event/${id}`)}
                     currentUserId={profile?.id}
+                    hasUnreadUpdate={eventsWithUpdates.has(event.id)}
                   />
                 ))}
               </div>

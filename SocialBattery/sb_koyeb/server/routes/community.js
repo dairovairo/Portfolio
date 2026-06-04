@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyCommunityMembers, notifyAllUsers } = require('../lib/webpush');
+const { notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers, notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -331,18 +331,25 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     // ── Push notifications (fire-and-forget) ─────────────────────────────────
     const resolvedPlan = ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic';
 
+    // Recipient caps per plan.
+    // TODO: change TEST values to PRODUCTION values before going live:
+    //   premium → 5_000   ultra → 20_000
+    const PREMIUM_LIMIT = 1;  // TEST: 1 persona  — PRODUCTION: 5_000
+    const ULTRA_LIMIT   = 2;  // TEST: 2 personas — PRODUCTION: 20_000
+
     if (resolvedPlan === 'ultra') {
-      // Ultra: notify ALL users — SW uses requireInteraction + strong vibration for this tag
-      notifyAllUsers(supabase, userId, {
+      // Ultra: notify up to ULTRA_LIMIT randomly-selected users.
+      // SW applies requireInteraction + strong vibration for the ultra-event- tag.
+      notifyUpToNUsers(supabase, userId, ULTRA_LIMIT, {
         title: '🚀 Evento destacado: ' + event.title,
         body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
         url:   `/community/event/${event.id}`,
         tag:   `ultra-event-${event.id}`,
       }).catch(() => {});
     } else if (resolvedPlan === 'premium') {
-      // Premium: also notify ALL users regardless of community membership.
+      // Premium: notify up to PREMIUM_LIMIT randomly-selected users.
       // Uses a premium-event- tag so the SW applies standard (non-intrusive) treatment.
-      notifyAllUsers(supabase, userId, {
+      notifyUpToNUsers(supabase, userId, PREMIUM_LIMIT, {
         title: '⚡ Nuevo evento Premium: ' + event.title,
         body:  `${event.location ? event.location + ' · ' : ''}¡Échale un vistazo!`,
         url:   `/community/event/${event.id}`,
@@ -863,6 +870,13 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
       });
     }
 
+    // Fetch event title for the notification
+    const { data: eventFull } = await supabase
+      .from('community_events')
+      .select('id, title')
+      .eq('id', id)
+      .single();
+
     const { data: update, error } = await supabase
       .from('event_updates')
       .insert({
@@ -878,6 +892,30 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
       .single();
 
     if (error) throw error;
+
+    // ── Push notifications to all attendees (fire-and-forget) ────────────────
+    if (eventFull) {
+      const { data: attendees } = await supabase
+        .from('community_event_attendees')
+        .select('user_id')
+        .eq('event_id', id)
+        .neq('user_id', userId);
+
+      if (attendees?.length) {
+        const attendeeIds = attendees.map(a => a.user_id);
+        const notifBody = hasContent
+          ? hasContent.length > 80 ? hasContent.slice(0, 77) + '…' : hasContent
+          : '📷 Se ha publicado una imagen';
+
+        notifyUsers(supabase, attendeeIds, userId, {
+          title: `📣 ${eventFull.title}`,
+          body:  notifBody,
+          url:   `/community/event/${id}`,
+          tag:   `event-update-${id}`,
+        }).catch(() => {});
+      }
+    }
+
     res.status(201).json({ update });
   } catch (err) {
     console.error('[community] POST /events/:id/updates error:', err);
