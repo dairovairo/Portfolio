@@ -4,9 +4,42 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { notifyUsers } = require('../lib/webpush');
 
 // Multer instance for group chat image uploads (8 MB max)
 const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
+
+// ── Push helper — notifica a los miembros del grupo (excepto el emisor) ──────
+async function sendGroupPush(groupId, senderId, senderName, bodyText) {
+  try {
+    const { data: members } = await supabase
+      .from('friend_group_members')
+      .select('user_id')
+      .eq('group_id', groupId)
+      .neq('user_id', senderId);
+
+    if (!members?.length) return;
+
+    const { data: group } = await supabase
+      .from('friend_groups')
+      .select('name')
+      .eq('id', groupId)
+      .single();
+
+    const groupName = group?.name || 'Grupo';
+    const memberIds = members.map(m => m.user_id);
+
+    await notifyUsers(supabase, memberIds, senderId, {
+      title: groupName,
+      body:  `${senderName}: ${bodyText}`,
+      url:   `/messages/group/${groupId}`,
+      tag:   `group-${groupId}`,
+    });
+  } catch (e) {
+    console.warn('[GROUPS] sendGroupPush error:', e.message);
+  }
+}
+
 
 // ── GET /api/groups — list my groups (owned + member) ───────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -358,12 +391,16 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       .single();
 
     if (error) throw error;
-    res.status(201).json({
-      message: {
-        ...data,
-        sender: applyBatteryExpiry(data.sender),
-      },
-    });
+
+    const sender = applyBatteryExpiry(data.sender);
+    res.status(201).json({ message: { ...data, sender } });
+
+    // ── Push a los demás miembros (fire-and-forget) ──────────────────────────
+    const senderName = sender?.display_name || (sender?.username ? `@${sender.username}` : 'Alguien');
+    const pushBody = type === 'hangout_request'
+      ? `${senderName} propone una quedada 🤝`
+      : content.trim().length > 80 ? content.trim().slice(0, 77) + '…' : content.trim();
+    sendGroupPush(req.params.id, userId, senderName, pushBody).catch(() => {});
   } catch (err) {
     console.error('[GROUPS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });
@@ -417,12 +454,13 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       .single();
 
     if (error) throw error;
-    res.status(201).json({
-      message: {
-        ...data,
-        sender: applyBatteryExpiry(data.sender),
-      },
-    });
+
+    const sender = applyBatteryExpiry(data.sender);
+    res.status(201).json({ message: { ...data, sender } });
+
+    // ── Push a los demás miembros (fire-and-forget) ──────────────────────────
+    const senderName = sender?.display_name || (sender?.username ? `@${sender.username}` : 'Alguien');
+    sendGroupPush(groupId, userId, senderName, '📷 Imagen').catch(() => {});
   } catch (e) {
     console.error('[GROUPS] image upload error:', e);
     return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
