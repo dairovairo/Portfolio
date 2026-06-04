@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
 import ReminderBellButton, { DEFAULT_EVENT_REMINDER_MINUTES } from '../components/ReminderBellButton';
 
@@ -133,6 +134,7 @@ export default function EventDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { eventsWithUpdates, clearEventUpdateBadge } = useCommunityNotifications();
 
   const [event, setEvent] = useState(null);
   const [updates, setUpdates] = useState([]);
@@ -176,9 +178,11 @@ export default function EventDetailPage() {
       setLoading(true);
       await Promise.all([fetchEvent(), fetchUpdates()]);
       setLoading(false);
+      // Al abrir el detalle del evento se marca como leído
+      clearEventUpdateBadge(eventId);
     }
     load();
-  }, [fetchEvent, fetchUpdates]);
+  }, [fetchEvent, fetchUpdates, eventId, clearEventUpdateBadge]);
 
   useEffect(() => {
     updatesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -341,7 +345,13 @@ export default function EventDetailPage() {
         )}
 
         {/* Title + status badges */}
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+        <div className="relative bg-surface-card border border-surface-border rounded-2xl p-4">
+          {/* Badge de actualización no leída */}
+          {eventsWithUpdates.has(eventId) && (
+            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none shadow-lg z-10">
+              📣
+            </span>
+          )}
           <div className="flex items-start gap-3">
             <div className="w-12 h-12 rounded-2xl bg-surface-bg border border-surface-border flex items-center justify-center text-2xl flex-shrink-0">
               {emoji}

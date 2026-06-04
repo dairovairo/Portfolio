@@ -156,6 +156,70 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
 }
 
 /**
+ * Send a push notification to up to `limit` randomly-selected users that have
+ * an active push subscription, excluding `excludeId` (typically the creator).
+ *
+ * Production limits:
+ *   premium → 5 000 unique recipients
+ *   ultra   → 20 000 unique recipients
+ *
+ * During testing these numbers are set to 1 (premium) and 2 (ultra) in
+ * community.js so you can verify the fan-out without spamming real users.
+ *
+ * @param {object} supabase
+ * @param {string} excludeId  — user to skip
+ * @param {number} limit      — max recipients (use 5000 / 20000 in production)
+ * @param {{ title: string, body: string, url?: string, tag?: string }} payload
+ */
+async function notifyUpToNUsers(supabase, excludeId, limit, payload) {
+  init();
+  if (!webpush) return;
+  if (!limit || limit < 1) return;
+
+  try {
+    // Pull at most `limit` subscriptions (server-side cap), excluding creator.
+    // Supabase does not support ORDER BY RANDOM() via the JS client, so we
+    // fetch `limit` rows ordered by insertion time and shuffle client-side.
+    // For very large limits (5 000 / 20 000) this is still a single query.
+    const { data: subs, error: subsErr } = await supabase
+      .from('push_subscriptions')
+      .select('user_id, endpoint, p256dh, auth')
+      .neq('user_id', excludeId)
+      .limit(limit * 2); // overfetch so shuffle gives a better spread
+
+    if (subsErr || !subs?.length) return;
+
+    // Fisher-Yates shuffle then take `limit` items
+    for (let i = subs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [subs[i], subs[j]] = [subs[j], subs[i]];
+    }
+    const recipients = subs.slice(0, limit);
+
+    const expiredEndpoints = [];
+    await Promise.allSettled(
+      recipients.map(async sub => {
+        const result = await sendPushToSubscription(sub, payload);
+        if (result?.expired) expiredEndpoints.push(sub.endpoint);
+      })
+    );
+
+    if (expiredEndpoints.length) {
+      supabase
+        .from('push_subscriptions')
+        .delete()
+        .in('endpoint', expiredEndpoints)
+        .then(() => {})
+        .catch(() => {});
+    }
+
+    console.log(`[webpush] notifyUpToNUsers: sent to ${recipients.length} / ${limit} requested (plan cap)`);
+  } catch (err) {
+    console.warn('[webpush] notifyUpToNUsers error:', err.message);
+  }
+}
+
+/**
  * Send a push notification to every user that has an active push subscription
  * (regardless of community membership). Used for Ultra promotion events.
  *
@@ -197,4 +261,4 @@ async function notifyAllUsers(supabase, excludeId, payload) {
   }
 }
 
-module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers };
+module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers };

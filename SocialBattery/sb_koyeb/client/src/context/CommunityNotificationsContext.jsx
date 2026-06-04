@@ -9,14 +9,20 @@ const CommunityNotificationsContext = createContext({
   clearEventBadge: () => {},
   clearCommunityBadge: () => {},
   refreshJoinedCommunities: () => {},
+  // event-update badges
+  eventsWithUpdates: new Set(),
+  planningUpdateCount: 0,
+  clearEventUpdateBadge: () => {},
+  clearAllEventUpdateBadges: () => {},
 });
 
 export function useCommunityNotifications() {
   return useContext(CommunityNotificationsContext);
 }
 
-const STORAGE_KEY        = 'sb_community_events_badge';
-const STORAGE_KEY_BY_COM = 'sb_community_events_by_community';
+const STORAGE_KEY           = 'sb_community_events_badge';
+const STORAGE_KEY_BY_COM    = 'sb_community_events_by_community';
+const STORAGE_KEY_UPDATES   = 'sb_event_updates_badge'; // Set<eventId> serialized as JSON array
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -62,15 +68,34 @@ function totalCount(map) {
   return Object.values(map).reduce((acc, n) => acc + n, 0);
 }
 
+// ── Serialize / deserialize el Set<eventId> de actualizaciones no leídas ─────
+function loadUpdatesSet() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_UPDATES);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveUpdatesSet(set) {
+  try { localStorage.setItem(STORAGE_KEY_UPDATES, JSON.stringify([...set])); } catch {}
+}
+
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
   const { muteAllNotifications, muteNewEvents, muteEventRecommendations } = useSettings();
 
   // eventsByCommunity: { [communityId: string]: number }
   const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
-  const joinedCommunityIdsRef = useRef(new Set());
-  const settingsRef = useRef({ muteAllNotifications, muteNewEvents, muteEventRecommendations });
-  const channelRef = useRef(null);
+
+  // eventsWithUpdates: Set<eventId> — eventos planificados con actualizaciones no leídas
+  const [eventsWithUpdates, setEventsWithUpdates] = useState(loadUpdatesSet);
+
+  const joinedCommunityIdsRef   = useRef(new Set());
+  // Set<eventId> de eventos en los que el usuario está apuntado
+  const attendingEventIdsRef    = useRef(new Set());
+  const settingsRef             = useRef({ muteAllNotifications, muteNewEvents, muteEventRecommendations });
+  const channelRef              = useRef(null);
+  const updateChannelRef        = useRef(null);
 
   useEffect(() => {
     settingsRef.current = { muteAllNotifications, muteNewEvents, muteEventRecommendations };
@@ -83,6 +108,7 @@ export function CommunityNotificationsProvider({ children }) {
       .filter(([, n]) => n > 0)
       .map(([id]) => id)
   );
+  const planningUpdateCount = eventsWithUpdates.size;
 
   // ── Persistencia ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -90,16 +116,29 @@ export function CommunityNotificationsProvider({ children }) {
     try { localStorage.setItem(STORAGE_KEY, String(totalCount(eventsByCommunity))); } catch {}
   }, [eventsByCommunity]);
 
-  // ── Carga los IDs de comunidades a las que pertenece el usuario ───────────
+  useEffect(() => {
+    saveUpdatesSet(eventsWithUpdates);
+  }, [eventsWithUpdates]);
+
+  // ── Carga los IDs de comunidades + eventos a los que pertenece el usuario ──
   const refreshJoinedCommunities = useCallback(async () => {
     if (!profile?.id) return;
     try {
-      const { data } = await supabase
-        .from('community_members')
-        .select('community_id')
-        .eq('user_id', profile.id);
-      if (data) {
-        joinedCommunityIdsRef.current = new Set(data.map(m => m.community_id));
+      const [{ data: memberships }, { data: attendances }] = await Promise.all([
+        supabase
+          .from('community_members')
+          .select('community_id')
+          .eq('user_id', profile.id),
+        supabase
+          .from('community_event_attendees')
+          .select('event_id')
+          .eq('user_id', profile.id),
+      ]);
+      if (memberships) {
+        joinedCommunityIdsRef.current = new Set(memberships.map(m => m.community_id));
+      }
+      if (attendances) {
+        attendingEventIdsRef.current = new Set(attendances.map(a => a.event_id));
       }
     } catch { /* non-fatal */ }
   }, [profile?.id]);
@@ -200,7 +239,76 @@ export function CommunityNotificationsProvider({ children }) {
     };
   }, [profile?.id]);
 
-  // ── Limpia todos los badges ───────────────────────────────────────────────
+  // ── Supabase Realtime: escucha inserts en event_updates ──────────────────
+  // Solo notifica si el usuario está apuntado al evento y NO es el creador
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    if (updateChannelRef.current) {
+      updateChannelRef.current.unsubscribe();
+      updateChannelRef.current = null;
+    }
+
+    const updateChannel = supabase
+      .channel(`event-updates-badge-${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'event_updates' },
+        async (payload) => {
+          const newUpdate = payload.new;
+
+          // Ignorar si no hay datos o si el propio usuario es quien publica
+          if (!newUpdate?.id || !newUpdate?.event_id) return;
+          if (newUpdate.creator_id === profile.id) return;
+
+          // Solo notificar si el usuario está apuntado al evento
+          if (!attendingEventIdsRef.current.has(newUpdate.event_id)) return;
+
+          // Añadir el evento al set de actualizaciones no leídas (badge)
+          setEventsWithUpdates(prev => {
+            const next = new Set(prev);
+            next.add(newUpdate.event_id);
+            return next;
+          });
+
+          // Notificación local en foreground
+          const settings = settingsRef.current;
+          if (settings.muteAllNotifications) return;
+
+          // Obtener título del evento para la notificación
+          let eventTitle = 'Tu evento';
+          try {
+            const { data: ev } = await supabase
+              .from('community_events')
+              .select('title')
+              .eq('id', newUpdate.event_id)
+              .single();
+            if (ev?.title) eventTitle = ev.title;
+          } catch {}
+
+          const body = newUpdate.content
+            ? (newUpdate.content.length > 80 ? newUpdate.content.slice(0, 77) + '…' : newUpdate.content)
+            : '📷 Se ha publicado una imagen';
+
+          fireLocalNotification({
+            title: `📣 ${eventTitle}`,
+            body,
+            tag:   `event-update-${newUpdate.event_id}`,
+            url:   `/community/event/${newUpdate.event_id}`,
+          });
+        }
+      )
+      .subscribe();
+
+    updateChannelRef.current = updateChannel;
+
+    return () => {
+      updateChannel.unsubscribe();
+      updateChannelRef.current = null;
+    };
+  }, [profile?.id]);
+
+  // ── Limpia todos los badges de eventos nuevos ─────────────────────────────
   const clearEventBadge = useCallback(() => {
     setEventsByCommunity({});
   }, []);
@@ -215,6 +323,21 @@ export function CommunityNotificationsProvider({ children }) {
     });
   }, []);
 
+  // ── Limpia el badge de actualización de un evento concreto ───────────────
+  const clearEventUpdateBadge = useCallback((eventId) => {
+    if (!eventId) return;
+    setEventsWithUpdates(prev => {
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+  }, []);
+
+  // ── Limpia todos los badges de actualizaciones ────────────────────────────
+  const clearAllEventUpdateBadges = useCallback(() => {
+    setEventsWithUpdates(new Set());
+  }, []);
+
   return (
     <CommunityNotificationsContext.Provider
       value={{
@@ -223,6 +346,10 @@ export function CommunityNotificationsProvider({ children }) {
         clearEventBadge,
         clearCommunityBadge,
         refreshJoinedCommunities,
+        eventsWithUpdates,
+        planningUpdateCount,
+        clearEventUpdateBadge,
+        clearAllEventUpdateBadges,
       }}
     >
       {children}

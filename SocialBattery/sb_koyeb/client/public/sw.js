@@ -52,8 +52,9 @@ self.addEventListener('push', (event) => {
   try { data = event.data.json(); } catch {}
 
   const tag = data.tag || '';
-  const isUltra   = tag.startsWith('ultra-event-');
-  const isPremium = tag.startsWith('premium-event-');
+  const isUltra      = tag.startsWith('ultra-event-');
+  const isPremium    = tag.startsWith('premium-event-');
+  const isEventUpdate = tag.startsWith('event-update-');
 
   const notifOptions = {
     body:    data.body,
@@ -65,13 +66,16 @@ self.addEventListener('push', (event) => {
     actions: data.actions || [],
     // Ultra: keep on screen until the user taps + strong vibration pattern
     // Premium: standard dismissal + softer double-pulse
+    // Event update: medium single-pulse, standard dismissal
     // Basic: single short vibration
     requireInteraction: isUltra,
     vibrate: isUltra
       ? [200, 100, 200, 100, 400]
       : isPremium
         ? [150, 80, 150]
-        : [100],
+        : isEventUpdate
+          ? [120, 60, 120]
+          : [100],
   };
 
   event.waitUntil(

@@ -12,7 +12,8 @@ const NAV_ITEMS = [
 export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { eventBadgeCount } = useCommunityNotifications();
+  const { eventBadgeCount, planningUpdateCount } = useCommunityNotifications();
+  const communityBadge = eventBadgeCount + planningUpdateCount;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50
@@ -26,7 +27,7 @@ export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
           const badge =
             item.path === '/' ? pendingCount :
             item.path === '/messages/inbox' ? unreadCount :
-            item.path === '/community' ? eventBadgeCount : 0;
+            item.path === '/community' ? communityBadge : 0;
 
           return (
             <button
