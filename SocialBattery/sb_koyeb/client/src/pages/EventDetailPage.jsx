@@ -327,15 +327,12 @@ export default function EventDetailPage() {
           >
             ←
           </button>
-          <div className="flex-1 min-w-0 relative">
+          <div className="flex-1 min-w-0">
             <h1 className="font-display font-bold text-surface-text text-base truncate">{event.title}</h1>
             <p className="text-xs font-mono text-surface-muted truncate">
               {event.category ? `${emoji} ${event.category}` : emoji}
               {daysLabel && <span className="text-amber-300/80"> · {daysLabel}</span>}
             </p>
-            {eventsWithUpdates.has(eventId) && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 shadow-lg" />
-            )}
           </div>
         </div>
       </header>
@@ -344,8 +341,14 @@ export default function EventDetailPage() {
 
         {/* Cover */}
         {event.cover_image_url && (
-          <div className="aspect-[16/9] overflow-hidden rounded-2xl border border-surface-border bg-surface-bg">
+          <div className="relative aspect-[16/9] overflow-hidden rounded-2xl border border-surface-border bg-surface-bg">
             <img src={event.cover_image_url} alt="" className="h-full w-full object-cover" />
+            {eventsWithUpdates.has(eventId) && (
+              <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm text-white text-xs font-display font-semibold px-2.5 py-1 rounded-full shadow-lg">
+                <span>📣</span>
+                <span>Nuevo aviso</span>
+              </div>
+            )}
           </div>
         )}
 
