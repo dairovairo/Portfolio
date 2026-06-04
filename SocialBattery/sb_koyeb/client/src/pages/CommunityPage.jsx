@@ -1238,9 +1238,9 @@ export default function CommunityPage() {
     load();
   }, [fetchEvents, fetchCommunities]);
 
-  // Clear community event badge when the events tab is visible
+  // Clear community event badge when the events or communities tab is visible
   useEffect(() => {
-    if (tab === 'events' && !loading) {
+    if ((tab === 'events' || tab === 'communities') && !loading) {
       clearEventBadge();
     }
   }, [tab, loading, clearEventBadge]);

@@ -531,7 +531,7 @@ export default function CommunityDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearCommunityBadge } = useCommunityNotifications();
+  const { clearCommunityBadge, communitiesWithEvents } = useCommunityNotifications();
   const [community, setCommunity] = useState(null);
   const [currentEvents, setCurrentEvents] = useState([]);
   const [pastEvents, setPastEvents] = useState([]);
@@ -555,7 +555,7 @@ export default function CommunityDetailPage() {
   useEffect(() => {
     load();
     clearCommunityBadge(communityId);
-  }, [load]);
+  }, [load, clearCommunityBadge, communityId]);
 
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
@@ -647,11 +647,14 @@ export default function CommunityDetailPage() {
           >
             ←
           </button>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 relative">
             <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
             <p className="text-xs text-surface-muted font-mono">
               {community.member_count || 0} miembros{community.is_admin ? ' · admin' : ''}
             </p>
+            {communitiesWithEvents.has(communityId) && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-surface-bg" />
+            )}
           </div>
           {community.is_admin && (
             <button
