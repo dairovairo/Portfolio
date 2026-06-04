@@ -55,7 +55,6 @@ self.addEventListener('push', (event) => {
   const isUltra      = tag.startsWith('ultra-event-');
   const isPremium    = tag.startsWith('premium-event-');
   const isEventUpdate = tag.startsWith('event-update-');
-  const isGroupMsg   = tag.startsWith('group-');
 
   const notifOptions = {
     body:    data.body,
@@ -76,9 +75,7 @@ self.addEventListener('push', (event) => {
         ? [150, 80, 150]
         : isEventUpdate
           ? [120, 60, 120]
-          : isGroupMsg
-            ? [80, 50, 80]
-            : [100],
+          : [100],
   };
 
   event.waitUntil(
