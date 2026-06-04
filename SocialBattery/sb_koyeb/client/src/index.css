@@ -40,6 +40,21 @@
   color-scheme: light;
 }
 
+/* ── Aurora theme ───────────────────────────────────────────── */
+/* Deep purple base · coral/rose accent · warm gold glow        */
+[data-theme="aurora"] {
+  --sb-bg:         #0e0b1a;
+  --sb-card:       #16122a;
+  --sb-border:     #2d2450;
+  --sb-hover:      #1e1836;
+  --sb-text:       #f0e6ff;
+  --sb-muted:      #8b7aad;
+  --sb-subtle:     #4a3d70;
+  --sb-accent:     rgb(220, 80, 120);
+  --sb-accent-glow:rgb(255, 130, 160);
+  color-scheme: dark;
+}
+
 /* ── Base styles ────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
