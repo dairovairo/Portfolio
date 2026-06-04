@@ -55,6 +55,36 @@
   color-scheme: dark;
 }
 
+/* ── Forest theme ───────────────────────────────────────────── */
+/* Soft cream base · deep green accent · earthy natural tones   */
+[data-theme="forest"] {
+  --sb-bg:         #f2f7f2;
+  --sb-card:       #ffffff;
+  --sb-border:     #c8dfc8;
+  --sb-hover:      #e4f0e4;
+  --sb-text:       #1a2e1a;
+  --sb-muted:      #5a7a5a;
+  --sb-subtle:     #8aaa8a;
+  --sb-accent:     rgb(34, 110, 54);
+  --sb-accent-glow:rgb(22, 80, 40);
+  color-scheme: light;
+}
+
+/* ── Sunset theme ───────────────────────────────────────────── */
+/* Deep amber base · orange/gold accent · warm sunset glow      */
+[data-theme="sunset"] {
+  --sb-bg:         #0f0a05;
+  --sb-card:       #1a1008;
+  --sb-border:     #3d2410;
+  --sb-hover:      #251808;
+  --sb-text:       #fff3e0;
+  --sb-muted:      #a07850;
+  --sb-subtle:     #5c3a1a;
+  --sb-accent:     rgb(234, 120, 30);
+  --sb-accent-glow:rgb(255, 180, 80);
+  color-scheme: dark;
+}
+
 /* ── Base styles ────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 

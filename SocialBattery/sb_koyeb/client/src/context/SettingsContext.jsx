@@ -41,6 +41,30 @@ export const SETTINGS_DEFAULTS_AURORA = {
   tickColorRead:       '#ff82a0',
 };
 
+export const SETTINGS_DEFAULTS_SUNSET = {
+  myBubbleColor:       '#ea781e',
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#fff3e0',
+  otherBubbleColor:    '#251808',
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#ffe0b2',
+  tickColorSent:       '#fff3e0',
+  tickColorUnread:     '#d4a870',
+  tickColorRead:       '#ffb450',
+};
+
+export const SETTINGS_DEFAULTS_FOREST = {
+  myBubbleColor:       '#226e36',
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#f0faf2',
+  otherBubbleColor:    '#ffffff',
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#1a2e1a',
+  tickColorSent:       '#5a7a5a',
+  tickColorUnread:     '#5a7a5a',
+  tickColorRead:       '#226e36',
+};
+
 const LEGACY_DEFAULT_PALETTES = [
   {
     myBubbleColor:       '#1a5c3a',
@@ -112,6 +136,8 @@ const MESSAGING_FIELDS = [
 export function getMessagingDefaultsForTheme(theme) {
   if (theme === 'light')  return SETTINGS_DEFAULTS_LIGHT;
   if (theme === 'aurora') return SETTINGS_DEFAULTS_AURORA;
+  if (theme === 'sunset') return SETTINGS_DEFAULTS_SUNSET;
+  if (theme === 'forest') return SETTINGS_DEFAULTS_FOREST;
   return SETTINGS_DEFAULTS_DARK;
 }
 
@@ -163,6 +189,8 @@ function shouldUseThemeMessagingDefaults() {
     SETTINGS_DEFAULTS_DARK,
     SETTINGS_DEFAULTS_LIGHT,
     SETTINGS_DEFAULTS_AURORA,
+    SETTINGS_DEFAULTS_SUNSET,
+    SETTINGS_DEFAULTS_FOREST,
     ...LEGACY_DEFAULT_PALETTES,
   ].some(palette => matchesPalette(snapshot, palette));
 }
