@@ -206,10 +206,11 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount }
       const drawX = 80 + ((W - 160) - drawW) / 2;
       const drawY = imgY + (imgH - drawH) / 2;
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
-      // Overlay gradient on cover
+      // Very subtle vignette only at the bottom for text readability
       const coverOverlay = ctx.createLinearGradient(0, imgY, 0, imgY + imgH);
-      coverOverlay.addColorStop(0, 'rgba(15,23,42,0.1)');
-      coverOverlay.addColorStop(1, 'rgba(15,23,42,0.8)');
+      coverOverlay.addColorStop(0, 'rgba(15,23,42,0)');
+      coverOverlay.addColorStop(0.6, 'rgba(15,23,42,0)');
+      coverOverlay.addColorStop(1, 'rgba(15,23,42,0.35)');
       ctx.fillStyle = coverOverlay;
       ctx.fillRect(80, imgY, W - 160, imgH);
       ctx.restore();

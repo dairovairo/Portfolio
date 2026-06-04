@@ -435,6 +435,22 @@ export default function EventDetailPage() {
               <p className="text-base font-display font-bold text-surface-text">{updates.length}</p>
               <p className="text-[10px] font-mono text-surface-muted">actualizaciones</p>
             </div>
+            <div className="ml-auto">
+              <button
+                onClick={handleShareStory}
+                disabled={sharingStory}
+                title="Compartir evento"
+                className="flex items-center justify-center w-9 h-9 rounded-xl border border-surface-border text-surface-muted hover:border-pink-500/40 hover:text-pink-300 hover:bg-pink-500/5 transition-all disabled:opacity-50"
+              >
+                {sharingStory
+                  ? <span className="animate-spin text-xs">⏳</span>
+                  : <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                }
+              </button>
+            </div>
           </div>
         </div>
 
@@ -486,19 +502,6 @@ export default function EventDetailPage() {
               </button>
             )}
           </div>
-
-          {/* Share story button */}
-          <button
-            onClick={handleShareStory}
-            disabled={sharingStory}
-            title="Compartir evento en historia de Instagram"
-            className="flex items-center justify-center w-11 h-11 rounded-xl border border-surface-border text-surface-muted hover:border-pink-500/40 hover:text-pink-300 hover:bg-pink-500/5 transition-all disabled:opacity-50 flex-shrink-0"
-          >
-            {sharingStory
-              ? <span className="animate-spin text-sm">⏳</span>
-              : <span className="text-base">📲</span>
-            }
-          </button>
         </div>
 
         {/* Event details */}
