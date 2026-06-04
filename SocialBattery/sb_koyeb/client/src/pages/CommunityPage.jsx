@@ -1190,17 +1190,40 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
 // ── Ranking Modal ─────────────────────────────────────────────────────────────
 const RANK_METRICS = [
-  { key: 'combined',       label: '🔥 Likes + Planes' },
-  { key: 'likes',          label: '♥ Likes' },
-  { key: 'planificaciones',label: '📅 Planificaciones' },
+  { key: 'combined',        label: '🔥 Likes + Planes' },
+  { key: 'likes',           label: '♥ Likes' },
+  { key: 'planificaciones', label: '📅 Planificaciones' },
 ];
+
+const RANK_VIEWS = [
+  { key: 'current',  label: '⚡ Ahora',    sub: 'Top 20 eventos activos' },
+  { key: 'alltime',  label: '📜 Histórico', sub: 'Top 100 de todos los tiempos' },
+];
+
+// Colores de fondo por posición (inline styles para evitar purge de Tailwind)
+const PODIUM_STYLES = [
+  // 🥇 oro
+  { bg: 'rgba(234,179,8,0.13)', border: 'rgba(234,179,8,0.35)', numberColor: '#eab308' },
+  // 🥈 plata
+  { bg: 'rgba(148,163,184,0.13)', border: 'rgba(148,163,184,0.35)', numberColor: '#94a3b8' },
+  // 🥉 bronce
+  { bg: 'rgba(180,115,60,0.13)', border: 'rgba(180,115,60,0.35)', numberColor: '#b4733c' },
+  // 4-10: tenue acento
+  { bg: 'rgba(99,102,241,0.07)', border: 'rgba(99,102,241,0.18)', numberColor: '#818cf8' },
+];
+
+function podiumStyle(rank) {
+  if (rank < 3) return PODIUM_STYLES[rank];
+  if (rank < 10) return PODIUM_STYLES[3];
+  return null; // sin fondo especial para el resto
+}
 
 function rankScore(event, metric) {
   const likes = event.like_count || 0;
   const plans = event.attendee_count || 0;
   if (metric === 'likes') return likes;
   if (metric === 'planificaciones') return plans;
-  return likes + plans; // combined
+  return likes + plans;
 }
 
 function medalEmoji(i) {
@@ -1211,48 +1234,75 @@ function medalEmoji(i) {
 }
 
 function RankingModal({ events, onClose, onOpen }) {
-  const [metric, setMetric] = useState('combined');
-
-  const allTimeSorted = [...events]
-    .sort((a, b) => rankScore(b, metric) - rankScore(a, metric))
-    .slice(0, 100);
+  const [metric, setMetric]   = useState('combined');
+  const [view,   setView]     = useState('current');
 
   const nowMs = Date.now();
+
   const currentSorted = [...events]
     .filter(e => {
-      const endMs = e.ends_at ? new Date(e.ends_at).getTime() : new Date(e.event_date).getTime() + 86400000;
+      const endMs = e.ends_at
+        ? new Date(e.ends_at).getTime()
+        : new Date(e.event_date).getTime() + 86400000;
       return endMs >= nowMs;
     })
     .sort((a, b) => rankScore(b, metric) - rankScore(a, metric))
     .slice(0, 20);
 
+  const allTimeSorted = [...events]
+    .sort((a, b) => rankScore(b, metric) - rankScore(a, metric))
+    .slice(0, 100);
+
+  const list        = view === 'current' ? currentSorted : allTimeSorted;
+  const emptyLabel  = view === 'current' ? 'Sin eventos activos aún.' : 'Sin eventos aún.';
+
   function ScoreChip({ event }) {
     const likes = event.like_count || 0;
     const plans = event.attendee_count || 0;
-    if (metric === 'likes') return <span className="text-pink-400 font-mono text-xs">♥ {likes}</span>;
-    if (metric === 'planificaciones') return <span className="text-accent-glow font-mono text-xs">📅 {plans}</span>;
+    if (metric === 'likes')
+      return <span className="font-mono text-xs font-semibold" style={{ color: '#f472b6' }}>♥ {likes}</span>;
+    if (metric === 'planificaciones')
+      return <span className="font-mono text-xs font-semibold text-accent-glow">📅 {plans}</span>;
     return (
-      <span className="font-mono text-xs text-surface-muted">
-        <span className="text-pink-400">♥{likes}</span>
-        <span className="mx-0.5 text-slate-600">+</span>
+      <span className="font-mono text-xs flex items-center gap-0.5">
+        <span style={{ color: '#f472b6' }}>♥{likes}</span>
+        <span className="text-slate-600 mx-0.5">+</span>
         <span className="text-accent-glow">📅{plans}</span>
       </span>
     );
   }
 
   function RankRow({ event, rank }) {
-    const medal = medalEmoji(rank);
+    const medal  = medalEmoji(rank);
+    const pStyle = podiumStyle(rank);
+
     return (
       <button
         onClick={() => onOpen(event.id)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-bg transition-colors text-left group"
+        style={pStyle
+          ? { background: pStyle.bg, borderColor: pStyle.border }
+          : {}
+        }
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left group transition-all
+          ${pStyle
+            ? 'border hover:brightness-125'
+            : 'hover:bg-surface-bg border border-transparent'
+          }`}
       >
-        <div className="w-7 flex-shrink-0 text-center">
+        {/* Rank badge */}
+        <div className="w-8 flex-shrink-0 flex items-center justify-center">
           {medal
-            ? <span className="text-lg leading-none">{medal}</span>
-            : <span className="text-xs font-mono text-slate-500">#{rank + 1}</span>
+            ? <span className="text-xl leading-none">{medal}</span>
+            : <span
+                className="text-xs font-mono font-bold"
+                style={{ color: pStyle?.numberColor ?? '#64748b' }}
+              >
+                #{rank + 1}
+              </span>
           }
         </div>
+
+        {/* Info */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-surface-text truncate group-hover:text-accent-glow transition-colors">
             {getEventEmoji(event.category)} {event.title}
@@ -1261,6 +1311,8 @@ function RankingModal({ events, onClose, onOpen }) {
             <p className="text-xs text-slate-500 font-mono truncate">📍 {event.location}</p>
           )}
         </div>
+
+        {/* Score */}
         <ScoreChip event={event} />
       </button>
     );
@@ -1273,11 +1325,11 @@ function RankingModal({ events, onClose, onOpen }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="text-2xl">🏆</span>
             <div>
               <h2 className="font-display font-bold text-surface-text text-lg leading-tight">Rankings</h2>
-              <p className="text-xs text-surface-muted font-mono">Los eventos más populares</p>
+              <p className="text-xs text-surface-muted font-mono">{RANK_VIEWS.find(v => v.key === view)?.sub}</p>
             </div>
           </div>
           <button
@@ -1286,7 +1338,24 @@ function RankingModal({ events, onClose, onOpen }) {
           >✕</button>
         </div>
 
-        {/* Metric tabs */}
+        {/* View toggle: Ahora / Histórico */}
+        <div className="flex gap-1.5 px-5 pb-2 flex-shrink-0">
+          {RANK_VIEWS.map(v => (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
+              className={`flex-1 py-2 rounded-xl text-sm font-display font-semibold transition-all ${
+                view === v.key
+                  ? 'bg-surface-text text-surface-card'
+                  : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-accent-primary/40 hover:text-surface-text'
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Metric filter */}
         <div className="flex gap-1.5 px-5 pb-3 flex-shrink-0">
           {RANK_METRICS.map(m => (
             <button
@@ -1294,7 +1363,7 @@ function RankingModal({ events, onClose, onOpen }) {
               onClick={() => setMetric(m.key)}
               className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
                 metric === m.key
-                  ? 'bg-accent-primary text-white'
+                  ? 'bg-accent-primary text-white shadow-sm'
                   : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-accent-primary/40'
               }`}
             >
@@ -1303,46 +1372,20 @@ function RankingModal({ events, onClose, onOpen }) {
           ))}
         </div>
 
-        {/* Scrollable body */}
-        <div className="overflow-y-auto flex-1 px-3 pb-4 space-y-5">
-
-          {/* Top 20 actuales */}
-          <div>
-            <div className="flex items-center gap-2 px-2 mb-1">
-              <span className="text-sm font-display font-bold text-surface-text">⚡ Top 20 ahora</span>
-              <span className="text-xs text-slate-500 font-mono">(eventos activos)</span>
+        {/* List */}
+        <div className="overflow-y-auto flex-1 px-3 pb-4">
+          {list.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3">🏆</div>
+              <p className="text-sm text-surface-muted font-mono">{emptyLabel}</p>
             </div>
-            {currentSorted.length === 0 ? (
-              <p className="text-xs text-slate-500 font-mono px-3 py-3">Sin eventos activos aún.</p>
-            ) : (
-              <div>
-                {currentSorted.map((event, i) => (
-                  <RankRow key={event.id} event={event} rank={i} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Divisor */}
-          <div className="border-t border-surface-border mx-2" />
-
-          {/* Top 100 histórico */}
-          <div>
-            <div className="flex items-center gap-2 px-2 mb-1">
-              <span className="text-sm font-display font-bold text-surface-text">📜 Top 100 histórico</span>
-              <span className="text-xs text-slate-500 font-mono">(todos los tiempos)</span>
+          ) : (
+            <div className="space-y-1.5">
+              {list.map((event, i) => (
+                <RankRow key={event.id} event={event} rank={i} />
+              ))}
             </div>
-            {allTimeSorted.length === 0 ? (
-              <p className="text-xs text-slate-500 font-mono px-3 py-3">Sin eventos aún.</p>
-            ) : (
-              <div>
-                {allTimeSorted.map((event, i) => (
-                  <RankRow key={event.id} event={event} rank={i} />
-                ))}
-              </div>
-            )}
-          </div>
-
+          )}
         </div>
       </div>
     </div>
