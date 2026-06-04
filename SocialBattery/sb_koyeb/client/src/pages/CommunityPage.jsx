@@ -1188,6 +1188,167 @@ function CreateCommunityModal({ onClose, onCreate }) {
   );
 }
 
+// ── Ranking Modal ─────────────────────────────────────────────────────────────
+const RANK_METRICS = [
+  { key: 'combined',       label: '🔥 Likes + Planes' },
+  { key: 'likes',          label: '♥ Likes' },
+  { key: 'planificaciones',label: '📅 Planificaciones' },
+];
+
+function rankScore(event, metric) {
+  const likes = event.like_count || 0;
+  const plans = event.attendee_count || 0;
+  if (metric === 'likes') return likes;
+  if (metric === 'planificaciones') return plans;
+  return likes + plans; // combined
+}
+
+function medalEmoji(i) {
+  if (i === 0) return '🥇';
+  if (i === 1) return '🥈';
+  if (i === 2) return '🥉';
+  return null;
+}
+
+function RankingModal({ events, onClose, onOpen }) {
+  const [metric, setMetric] = useState('combined');
+
+  const allTimeSorted = [...events]
+    .sort((a, b) => rankScore(b, metric) - rankScore(a, metric))
+    .slice(0, 100);
+
+  const nowMs = Date.now();
+  const currentSorted = [...events]
+    .filter(e => {
+      const endMs = e.ends_at ? new Date(e.ends_at).getTime() : new Date(e.event_date).getTime() + 86400000;
+      return endMs >= nowMs;
+    })
+    .sort((a, b) => rankScore(b, metric) - rankScore(a, metric))
+    .slice(0, 20);
+
+  function ScoreChip({ event }) {
+    const likes = event.like_count || 0;
+    const plans = event.attendee_count || 0;
+    if (metric === 'likes') return <span className="text-pink-400 font-mono text-xs">♥ {likes}</span>;
+    if (metric === 'planificaciones') return <span className="text-accent-glow font-mono text-xs">📅 {plans}</span>;
+    return (
+      <span className="font-mono text-xs text-surface-muted">
+        <span className="text-pink-400">♥{likes}</span>
+        <span className="mx-0.5 text-slate-600">+</span>
+        <span className="text-accent-glow">📅{plans}</span>
+      </span>
+    );
+  }
+
+  function RankRow({ event, rank }) {
+    const medal = medalEmoji(rank);
+    return (
+      <button
+        onClick={() => onOpen(event.id)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-bg transition-colors text-left group"
+      >
+        <div className="w-7 flex-shrink-0 text-center">
+          {medal
+            ? <span className="text-lg leading-none">{medal}</span>
+            : <span className="text-xs font-mono text-slate-500">#{rank + 1}</span>
+          }
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-surface-text truncate group-hover:text-accent-glow transition-colors">
+            {getEventEmoji(event.category)} {event.title}
+          </p>
+          {event.location && (
+            <p className="text-xs text-slate-500 font-mono truncate">📍 {event.location}</p>
+          )}
+        </div>
+        <ScoreChip event={event} />
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🏆</span>
+            <div>
+              <h2 className="font-display font-bold text-surface-text text-lg leading-tight">Rankings</h2>
+              <p className="text-xs text-surface-muted font-mono">Los eventos más populares</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-bg border border-surface-border text-slate-400 hover:text-surface-text transition-colors text-sm"
+          >✕</button>
+        </div>
+
+        {/* Metric tabs */}
+        <div className="flex gap-1.5 px-5 pb-3 flex-shrink-0">
+          {RANK_METRICS.map(m => (
+            <button
+              key={m.key}
+              onClick={() => setMetric(m.key)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                metric === m.key
+                  ? 'bg-accent-primary text-white'
+                  : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-accent-primary/40'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Scrollable body */}
+        <div className="overflow-y-auto flex-1 px-3 pb-4 space-y-5">
+
+          {/* Top 20 actuales */}
+          <div>
+            <div className="flex items-center gap-2 px-2 mb-1">
+              <span className="text-sm font-display font-bold text-surface-text">⚡ Top 20 ahora</span>
+              <span className="text-xs text-slate-500 font-mono">(eventos activos)</span>
+            </div>
+            {currentSorted.length === 0 ? (
+              <p className="text-xs text-slate-500 font-mono px-3 py-3">Sin eventos activos aún.</p>
+            ) : (
+              <div>
+                {currentSorted.map((event, i) => (
+                  <RankRow key={event.id} event={event} rank={i} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Divisor */}
+          <div className="border-t border-surface-border mx-2" />
+
+          {/* Top 100 histórico */}
+          <div>
+            <div className="flex items-center gap-2 px-2 mb-1">
+              <span className="text-sm font-display font-bold text-surface-text">📜 Top 100 histórico</span>
+              <span className="text-xs text-slate-500 font-mono">(todos los tiempos)</span>
+            </div>
+            {allTimeSorted.length === 0 ? (
+              <p className="text-xs text-slate-500 font-mono px-3 py-3">Sin eventos aún.</p>
+            ) : (
+              <div>
+                {allTimeSorted.map((event, i) => (
+                  <RankRow key={event.id} event={event} rank={i} />
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CommunityPage() {
   const navigate = useNavigate();
@@ -1198,6 +1359,7 @@ export default function CommunityPage() {
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
   const [communities, setCommunities] = useState([]);
+  const [showRanking, setShowRanking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showCreateCommunity, setShowCreateCommunity] = useState(false);
@@ -1446,15 +1608,24 @@ export default function CommunityPage() {
             {/* Events title + sort selector */}
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
-              <select
-                value={eventSort}
-                onChange={e => setEventSort(e.target.value)}
-                className="text-xs bg-surface-card border border-surface-border rounded-lg px-2 py-1.5 text-surface-muted focus:outline-none focus:border-accent-primary/50 transition-colors cursor-pointer"
-              >
-                <option value="app">✨ Selección</option>
-                <option value="planificaciones">📅 Planificaciones</option>
-                <option value="likes">♥ Likes</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowRanking(true)}
+                  title="Rankings históricos"
+                  className="text-lg leading-none px-2 py-1.5 rounded-lg border border-surface-border bg-surface-card hover:border-accent-primary/50 hover:bg-surface-bg transition-colors"
+                >
+                  🏆
+                </button>
+                <select
+                  value={eventSort}
+                  onChange={e => setEventSort(e.target.value)}
+                  className="text-xs bg-surface-card border border-surface-border rounded-lg px-2 py-1.5 text-surface-muted focus:outline-none focus:border-accent-primary/50 transition-colors cursor-pointer"
+                >
+                  <option value="app">✨ Selección</option>
+                  <option value="planificaciones">📅 Planificaciones</option>
+                  <option value="likes">♥ Likes</option>
+                </select>
+              </div>
             </div>
 
             {/* Search + category filter */}
@@ -1675,6 +1846,13 @@ export default function CommunityPage() {
       </main>
 
       {/* Modals */}
+      {showRanking && (
+        <RankingModal
+          events={events}
+          onClose={() => setShowRanking(false)}
+          onOpen={(id) => { setShowRanking(false); navigate(`/community/event/${id}`); }}
+        />
+      )}
       {showCreateEvent && (
         <CreateEventModal
           onClose={() => setShowCreateEvent(false)}
