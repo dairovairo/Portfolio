@@ -187,10 +187,8 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
     ctx.fillText(dateStr, W / 2, labelY2 + labelH + 170);
   }
 
-  // ── Watermark ──────────────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(148,163,184,0.35)';
-  ctx.font = '30px system-ui, sans-serif';
-  ctx.fillText('socialbattery.app', W / 2, H - 100);
+  // ── URL / CTA at bottom ───────────────────────────────────────────────────
+  drawUrlBadge(ctx, W, H);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
@@ -381,12 +379,8 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount }
     bx += boxW + gap;
   }
 
-  // ── Watermark ──────────────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(203,213,225,0.35)';
-  ctx.font = '30px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('socialbattery.app', W / 2, H - 100);
+  // ── URL / CTA at bottom ───────────────────────────────────────────────────
+  drawUrlBadge(ctx, W, H);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
@@ -394,11 +388,17 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount }
 // ── Share / Download ──────────────────────────────────────────────────────────
 
 export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 'SocialBattery') {
+  const APP_URL = 'https://portfolio-nmc3.onrender.com';
   const file = new File([blob], filename, { type: 'image/png' });
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title });
+      await navigator.share({
+        files: [file],
+        title,
+        text: `${title}\n👉 ${APP_URL}`,
+        url: APP_URL,
+      });
       return { method: 'share' };
     } catch (e) {
       if (e.name === 'AbortError') return { method: 'cancelled' };
@@ -416,6 +416,41 @@ export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 
 }
 
 // ── Canvas helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Draws a clean URL badge at the bottom of the story canvas.
+ * Visible enough to read, styled as a pill with the app URL.
+ */
+function drawUrlBadge(ctx, W, H) {
+  const APP_URL = 'portfolio-nmc3.onrender.com';
+  const label = '🔋 ' + APP_URL;
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 32px system-ui, sans-serif';
+
+  const badgeW = ctx.measureText(label).width + 64;
+  const badgeH = 72;
+  const badgeX = (W - badgeW) / 2;
+  const badgeY = H - 140;
+
+  // Pill background
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 36);
+  ctx.fill();
+
+  // Pill border
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 36);
+  ctx.stroke();
+
+  // Text
+  ctx.fillStyle = 'rgba(226,232,240,0.85)';
+  ctx.fillText(label, W / 2, badgeY + badgeH / 2);
+  ctx.restore();
+}
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
