@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import LocationPicker from '../components/LocationPicker';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
@@ -529,6 +530,8 @@ function CreateEventModal({ onClose, onCreate }) {
     event_date: defaultDate,
     ends_at: '',
     location: '',
+    lat: null,
+    lng: null,
     url: '',
     price: '',
     additional_info: '',
@@ -718,13 +721,11 @@ function CreateEventModal({ onClose, onCreate }) {
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
               Ubicación *
             </label>
-            <input
-              type="text"
+            <LocationPicker
               value={form.location}
-              onChange={e => set('location', e.target.value)}
-              placeholder="Ej: Parque del Retiro, Madrid / Online"
-              maxLength={200}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              lat={form.lat}
+              lng={form.lng}
+              onChange={(location, lat, lng) => setForm(f => ({ ...f, location, lat, lng }))}
             />
           </div>
 

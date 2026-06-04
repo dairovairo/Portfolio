@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
 import ReminderBellButton, { DEFAULT_EVENT_REMINDER_MINUTES } from '../components/ReminderBellButton';
+import LocationMapView from '../components/LocationMapView';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function ensureAbsoluteUrl(url) {
@@ -485,6 +486,12 @@ export default function EventDetailPage() {
           <InfoRow icon="📍" label="Ubicación">
             <span>{event.location || '—'}</span>
           </InfoRow>
+
+          {event.lat != null && event.lng != null && (
+            <div className="mt-1 mb-1">
+              <LocationMapView lat={event.lat} lng={event.lng} label={event.location} />
+            </div>
+          )}
 
           {event.organization && (
             <InfoRow icon="🏢" label="Organización">
