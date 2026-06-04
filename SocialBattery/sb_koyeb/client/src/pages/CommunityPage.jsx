@@ -1272,6 +1272,7 @@ export default function CommunityPage() {
       await api.post(`/community/events/${eventId}/join`, {});
       showToast('¡Te has apuntado al evento! ✓', 'success');
       await fetchEvents();
+      refreshJoinedCommunities(); // actualiza attendingEventIdsRef para recibir badges
     } catch (e) {
       showToast(e.message || 'Error al apuntarse', 'error');
     }
@@ -1282,6 +1283,7 @@ export default function CommunityPage() {
       await api.post(`/community/events/${eventId}/leave`, {});
       showToast('Has salido del evento', 'success');
       await fetchEvents();
+      refreshJoinedCommunities(); // actualiza attendingEventIdsRef
     } catch (e) {
       showToast(e.message || 'Error al salir del evento', 'error');
     }

@@ -261,8 +261,29 @@ export function CommunityNotificationsProvider({ children }) {
           if (!newUpdate?.id || !newUpdate?.event_id) return;
           if (newUpdate.creator_id === profile.id) return;
 
-          // Solo notificar si el usuario está apuntado al evento
-          if (!attendingEventIdsRef.current.has(newUpdate.event_id)) return;
+          // Verificar asistencia en tiempo real directamente en Supabase
+          // (evita race condition con attendingEventIdsRef)
+          let isAttending = attendingEventIdsRef.current.has(newUpdate.event_id);
+          if (!isAttending) {
+            try {
+              const { data: att } = await supabase
+                .from('community_event_attendees')
+                .select('event_id')
+                .eq('event_id', newUpdate.event_id)
+                .eq('user_id', profile.id)
+                .maybeSingle();
+              isAttending = !!att;
+              // Actualizar el ref si encontramos asistencia
+              if (isAttending) {
+                attendingEventIdsRef.current = new Set([
+                  ...attendingEventIdsRef.current,
+                  newUpdate.event_id,
+                ]);
+              }
+            } catch { /* non-fatal */ }
+          }
+
+          if (!isAttending) return;
 
           // Añadir el evento al set de actualizaciones no leídas (badge)
           setEventsWithUpdates(prev => {
