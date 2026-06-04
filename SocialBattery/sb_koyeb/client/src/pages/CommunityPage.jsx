@@ -245,160 +245,154 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
       className={`relative bg-surface-card border ${activeRing} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30 cursor-pointer`}
       style={{ boxShadow: activeGlow ? `0 0 20px ${activeGlow}` : undefined }}
     >
-      {/* Rank medal for top 3 */}
+      {/* Rank medal / number */}
       {rank <= 3 && (
         <span className="absolute -top-2.5 -right-1 text-xl">{rankStyle.label}</span>
       )}
-      {/* Rank number only for non-promoted events beyond top 3 */}
       {rank > 3 && !promo && (
         <span className="absolute top-3 right-3 text-xs font-mono text-slate-600">#{rank}</span>
       )}
-      {/* Badge de actualización no leída (tab planificación) */}
+      {/* Badge actualización no leída */}
       {hasUnreadUpdate && (
         <span className="absolute -top-1.5 left-3 bg-red-500 text-white text-[9px] font-bold rounded-full px-1.5 h-[15px] flex items-center justify-center leading-none shadow-md">
           📣 Actualización
         </span>
       )}
 
+      {/* Cover image */}
       {event.cover_image_url && (
         <div className="relative z-10 mb-3 aspect-[16/9] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
-          <img
-            src={event.cover_image_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
+          <img src={event.cover_image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
         </div>
       )}
 
-      <div className="flex gap-3">
-        {/* Emoji */}
-        <div className="w-11 h-11 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
+      {/* ── Header row: emoji + título + pills ── */}
+      <div className="flex items-start gap-3">
+        <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
           {emoji}
         </div>
-
         <div className="flex-1 min-w-0">
-          {/* Title + category + promotion badge */}
-          <div className="flex items-start gap-2 flex-wrap">
-            <h3 className="font-display font-bold text-surface-text text-sm leading-snug line-clamp-1 flex-1">
+          <div className="flex items-start gap-1.5 flex-wrap">
+            <h3 className="font-display font-bold text-surface-text text-base leading-snug line-clamp-2 flex-1">
               {event.title}
             </h3>
             {promo && (
-              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full flex-shrink-0 ${promo.pillClass}`}>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${promo.pillClass}`}>
                 {promo.pill}
               </span>
             )}
-            {event.category && (
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20 flex-shrink-0">
-                {event.category}
-              </span>
-            )}
           </div>
-
-          {/* Creator */}
-          <p className="text-xs text-surface-muted mt-0.5">
-            por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
+          {/* Creator + comunidad */}
+          <p className="text-xs text-surface-muted mt-0.5 leading-snug">
+            <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
             {event.community_name && (
-              <span> · en <span className="text-accent-glow">{event.community_name}</span></span>
+              <span className="text-surface-muted"> · <span className="text-accent-glow">{event.community_name}</span></span>
             )}
             {event.organization && (
-              <span> · org <span className="text-amber-300/90">{event.organization}</span></span>
+              <span className="text-surface-muted"> · <span className="text-amber-300/90">{event.organization}</span></span>
             )}
           </p>
-
-          {/* Description */}
-          {event.description && (
-            <p className="text-xs text-surface-muted mt-1.5 line-clamp-2 leading-relaxed">
-              {event.description}
-            </p>
-          )}
-
-          {/* Days left + location */}
-          <div className="flex items-center gap-3 mt-2 flex-wrap">
-            {daysLabel && (
-              <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
-                ⏳ {daysLabel}
-              </span>
-            )}
-            {isPast && !daysLabel && (
-              <span className="text-xs text-slate-500 font-mono">Ya pasó</span>
-            )}
-            {event.location && (
-              <span className="text-xs text-slate-500 font-mono flex items-center gap-1 truncate">
-                📍 {event.location}
-              </span>
-            )}
-            {event.url && ensureAbsoluteUrl(event.url) && (
-              <a
-                href={ensureAbsoluteUrl(event.url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="text-xs text-accent-glow/80 font-mono flex items-center gap-1 hover:text-accent-glow truncate"
-              >
-                🔗 Ver más
-              </a>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleLike}
-              disabled={liking}
-              aria-pressed={isLiked}
-              className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${
-                isLiked
-                  ? 'border-pink-500/40 bg-pink-500/15 text-pink-300'
-                  : 'border-surface-border bg-surface-bg text-slate-500 hover:border-pink-500/30 hover:text-pink-300'
-              }`}
-            >
-              {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
-            </button>
-            <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-accent-primary/20 bg-accent-primary/10 text-accent-glow flex items-center gap-1">
-              📅 {attendeeCount} planificaciones
-            </span>
-            {event.price != null && parseFloat(event.price) > 0 ? (
-              <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300">
-                💳 {parseFloat(event.price).toFixed(2)}€
-              </span>
-            ) : (
-              <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-green-500/25 bg-green-500/10 text-green-400">
-                ✓ Gratis
-              </span>
-            )}
-          </div>
-
-          {/* Planning button */}
-          <div className="mt-3" onClick={e => e.stopPropagation()}>
-            {isPast && !isJoined ? (
-              <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
-                Evento pasado
-              </span>
-            ) : isJoined ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1 w-fit">
-                  📅 En tu planificación
-                </span>
-                <button
-                  onClick={handleLeave}
-                  disabled={leaving}
-                  className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
-                >
-                  {leaving ? '...' : 'Quitar'}
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleJoin}
-                disabled={joining}
-                className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50 active:scale-95"
-              >
-                {joining ? '...' : '📅 Añadir a planificación'}
-              </button>
-            )}
-          </div>
         </div>
+      </div>
+
+      {/* ── Meta row: fecha · ubicación · categoría · precio ── */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5 items-center">
+        {daysLabel && (
+          <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
+            ⏳ {daysLabel}
+          </span>
+        )}
+        {isPast && !daysLabel && (
+          <span className="text-xs text-slate-500 font-mono">Ya pasó</span>
+        )}
+        {event.location && (
+          <span className="text-xs text-slate-400 font-mono flex items-center gap-1 truncate max-w-[160px]">
+            📍 {event.location}
+          </span>
+        )}
+        {event.category && (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
+            {event.category}
+          </span>
+        )}
+        {event.price != null && parseFloat(event.price) > 0 ? (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300">
+            💳 {parseFloat(event.price).toFixed(2)}€
+          </span>
+        ) : (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-green-500/25 bg-green-500/10 text-green-400">
+            ✓ Gratis
+          </span>
+        )}
+        {event.url && ensureAbsoluteUrl(event.url) && (
+          <a
+            href={ensureAbsoluteUrl(event.url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-accent-primary/20 bg-accent-primary/10 text-accent-glow/80 hover:text-accent-glow"
+          >
+            🔗 Ver más
+          </a>
+        )}
+      </div>
+
+      {/* ── Descripción ── */}
+      {event.description && (
+        <p className="text-xs text-surface-muted mt-2 line-clamp-2 leading-relaxed">
+          {event.description}
+        </p>
+      )}
+
+      {/* ── Footer: like · apuntados · acción ── */}
+      <div className="flex items-center gap-2 mt-3 flex-wrap" onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={handleLike}
+          disabled={liking}
+          aria-pressed={isLiked}
+          className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${
+            isLiked
+              ? 'border-pink-500/40 bg-pink-500/15 text-pink-300'
+              : 'border-surface-border bg-surface-bg text-slate-500 hover:border-pink-500/30 hover:text-pink-300'
+          }`}
+        >
+          {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
+        </button>
+        <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-accent-primary/20 bg-accent-primary/10 text-accent-glow flex items-center gap-1">
+          📅 {attendeeCount}
+        </span>
+
+        {/* Spacer */}
+        <span className="flex-1" />
+
+        {/* Acción principal */}
+        {isPast && !isJoined ? (
+          <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
+            Pasado
+          </span>
+        ) : isJoined ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1">
+              ✓ Planificado
+            </span>
+            <button
+              onClick={handleLeave}
+              disabled={leaving}
+              className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
+            >
+              {leaving ? '...' : 'Quitar'}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleJoin}
+            disabled={joining}
+            className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50 active:scale-95"
+          >
+            {joining ? '...' : '+ Planificar'}
+          </button>
+        )}
       </div>
     </div>
   );
