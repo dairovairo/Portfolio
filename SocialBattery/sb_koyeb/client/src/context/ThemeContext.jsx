@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
-const VALID_THEMES = ['dark', 'light', 'aurora'];
+const VALID_THEMES = ['dark', 'light', 'aurora', 'sunset', 'forest'];
 
 const ThemeContext = createContext(null);
 
@@ -18,7 +18,7 @@ export function ThemeProvider({ children }) {
     // Update PWA theme-color meta
     const meta = document.getElementById('theme-color-meta');
     if (meta) {
-      const colors = { light: '#f4fbfb', dark: '#0a0a0f', aurora: '#0e0b1a' };
+      const colors = { light: '#f4fbfb', dark: '#0a0a0f', aurora: '#0e0b1a', sunset: '#0f0a05', forest: '#f2f7f2' };
       meta.setAttribute('content', colors[theme] ?? '#0a0a0f');
     }
   }, [theme]);
@@ -35,9 +35,11 @@ export function ThemeProvider({ children }) {
       theme,
       setTheme,
       toggle,
-      isDark:   theme === 'dark' || theme === 'aurora',
+      isDark:   theme === 'dark' || theme === 'aurora' || theme === 'sunset',
       isAurora: theme === 'aurora',
-      isLight:  theme === 'light',
+      isSunset: theme === 'sunset',
+      isForest: theme === 'forest',
+      isLight:  theme === 'light' || theme === 'forest',
     }}>
       {children}
     </ThemeContext.Provider>
