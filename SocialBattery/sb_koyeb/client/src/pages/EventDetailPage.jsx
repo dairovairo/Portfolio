@@ -6,6 +6,7 @@ import { useCommunityNotifications } from '../context/CommunityNotificationsCont
 import { api } from '../lib/api';
 import ReminderBellButton, { DEFAULT_EVENT_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import LocationMapView from '../components/LocationMapView';
+import { generateEventStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function ensureAbsoluteUrl(url) {
@@ -144,6 +145,7 @@ export default function EventDetailPage() {
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
   const [reminderSaving, setReminderSaving] = useState(false);
+  const [sharingStory, setSharingStory] = useState(false);
 
   // update thread composer
   const [draft, setDraft] = useState('');
@@ -198,6 +200,28 @@ export default function EventDetailPage() {
   const daysLabel = event ? getDaysLabel(event.event_date) : null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
+  async function handleShareStory() {
+    if (sharingStory || !event) return;
+    setSharingStory(true);
+    try {
+      const blob = await generateEventStoryBlob({
+        event,
+        attendeeCount: event.attendee_count || 0,
+        likeCount: event.like_count || 0,
+      });
+      const result = await shareOrDownloadBlob(blob, 'evento-sb.png', `${event.title} · SocialBattery`);
+      if (result.method === 'download') {
+        showToast('Imagen descargada. ¡Súbela a tu historia! 📸', 'success');
+      } else if (result.method === 'share') {
+        showToast('¡Historia lista para compartir! 🚀', 'success');
+      }
+    } catch (e) {
+      showToast('Error al generar la historia', 'error');
+    } finally {
+      setSharingStory(false);
+    }
+  }
+
   async function handleJoin() {
     if (joining || isJoined || isPast) return;
     setJoining(true);
@@ -462,6 +486,19 @@ export default function EventDetailPage() {
               </button>
             )}
           </div>
+
+          {/* Share story button */}
+          <button
+            onClick={handleShareStory}
+            disabled={sharingStory}
+            title="Compartir evento en historia de Instagram"
+            className="flex items-center justify-center w-11 h-11 rounded-xl border border-surface-border text-surface-muted hover:border-pink-500/40 hover:text-pink-300 hover:bg-pink-500/5 transition-all disabled:opacity-50 flex-shrink-0"
+          >
+            {sharingStory
+              ? <span className="animate-spin text-sm">⏳</span>
+              : <span className="text-base">📲</span>
+            }
+          </button>
         </div>
 
         {/* Event details */}
