@@ -55,6 +55,21 @@
   color-scheme: dark;
 }
 
+/* ── Pastel theme ───────────────────────────────────────────── */
+/* Soft white base · sky blue & butter yellow accents · airy    */
+[data-theme="pastel"] {
+  --sb-bg:         #f7f9ff;
+  --sb-card:       #ffffff;
+  --sb-border:     #cde0f8;
+  --sb-hover:      #e8f2ff;
+  --sb-text:       #1e2a4a;
+  --sb-muted:      #7a90b8;
+  --sb-subtle:     #b0c8e8;
+  --sb-accent:     rgb(80, 150, 230);
+  --sb-accent-glow:rgb(50, 120, 210);
+  color-scheme: light;
+}
+
 /* ── Forest theme ───────────────────────────────────────────── */
 /* Soft cream base · deep green accent · earthy natural tones   */
 [data-theme="forest"] {
