@@ -39,32 +39,24 @@ function fireNotification({ title, body, tag, navigateTo }) {
     badge: BADGE,
     tag,
     renotify: true,
-    silent: false,
     data: { url: navigateTo || '/' },
   };
   try {
-    // Cuando la app está en foreground (documento visible), new Notification()
-    // funciona de forma fiable en todos los navegadores modernos. El SW solo
-    // se usa en background/cerrada para no duplicar con las push del servidor.
-    if (!document.hidden) {
-      // Foreground: notificación directa del hilo principal
-      const n = new Notification(title, opts);
-      if (navigateTo) n.onclick = () => { window.focus(); window.location.href = navigateTo; };
-    } else if ('serviceWorker' in navigator) {
-      // Background con SW activo: usar el SW para que persista
+    if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready
         .then(reg => reg.showNotification(title, opts))
-        .catch(() => {
-          try {
-            const n = new Notification(title, opts);
-            if (navigateTo) n.onclick = () => { window.focus(); window.location.href = navigateTo; };
-          } catch {}
-        });
+        .catch(() => fallbackNotif(title, opts, navigateTo));
     } else {
-      const n = new Notification(title, opts);
-      if (navigateTo) n.onclick = () => { window.focus(); window.location.href = navigateTo; };
+      fallbackNotif(title, opts, navigateTo);
     }
   } catch { /* progressive enhancement */ }
+}
+
+function fallbackNotif(title, opts, navigateTo) {
+  try {
+    const n = new Notification(title, opts);
+    if (navigateTo) n.onclick = () => { window.focus(); window.location.href = navigateTo; };
+  } catch {}
 }
 
 // ── should notify ─────────────────────────────────────────────────────────────
