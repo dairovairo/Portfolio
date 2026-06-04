@@ -1195,7 +1195,7 @@ export default function CommunityPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearEventBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, eventsWithUpdates } = useCommunityNotifications();
+  const { clearEventBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
 
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -1245,12 +1245,7 @@ export default function CommunityPage() {
     }
   }, [tab, loading, clearEventBadge]);
 
-  // Clear event-update badges when the planning tab is visible
-  useEffect(() => {
-    if (tab === 'planning' && !loading) {
-      clearAllEventUpdateBadges();
-    }
-  }, [tab, loading, clearAllEventUpdateBadges]);
+  // Event-update badges are cleared individually when the user opens each event
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   async function handleCreateEvent(form) {
@@ -1594,7 +1589,7 @@ export default function CommunityPage() {
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
-                    onOpen={(id) => navigate(`/community/event/${id}`)}
+                    onOpen={(id) => { clearEventUpdateBadge(id); navigate(`/community/event/${id}`); }}
                     currentUserId={profile?.id}
                     hasUnreadUpdate={eventsWithUpdates.has(event.id)}
                   />
