@@ -484,9 +484,6 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
       <div className="flex-shrink-0 flex items-center gap-2">
         {isMember ? (
           <>
-            <span className="text-xs font-mono text-green-400 px-2.5 py-1 rounded-xl bg-green-500/10 border border-green-500/20">
-              ✓
-            </span>
             <button
               onClick={handleLeave}
               disabled={leaving}
@@ -1238,9 +1235,9 @@ export default function CommunityPage() {
     load();
   }, [fetchEvents, fetchCommunities]);
 
-  // Clear community event badge when the events or communities tab is visible
+  // Clear community event badge when the events tab is visible
   useEffect(() => {
-    if ((tab === 'events' || tab === 'communities') && !loading) {
+    if (tab === 'events' && !loading) {
       clearEventBadge();
     }
   }, [tab, loading, clearEventBadge]);
@@ -1422,7 +1419,7 @@ export default function CommunityPage() {
               )}
             </button>
             <button
-              onClick={() => setTab('communities')}
+              onClick={() => { setTab('communities'); clearEventBadge(); }}
               className={`relative flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'communities'
                   ? 'bg-accent-primary text-white shadow-sm'

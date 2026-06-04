@@ -554,8 +554,14 @@ export default function CommunityDetailPage() {
 
   useEffect(() => {
     load();
-    clearCommunityBadge(communityId);
-  }, [load, clearCommunityBadge, communityId]);
+  }, [load]);
+
+  // Limpiar el badge SOLO después de que la página haya cargado y se muestre al usuario
+  useEffect(() => {
+    if (!loading && community) {
+      clearCommunityBadge(communityId);
+    }
+  }, [loading, community, communityId, clearCommunityBadge]);
 
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
@@ -647,14 +653,16 @@ export default function CommunityDetailPage() {
           >
             ←
           </button>
-          <div className="flex-1 min-w-0 relative">
-            <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
+              {communitiesWithEvents.has(communityId) && (
+                <span className="flex-shrink-0 w-2.5 h-2.5 bg-red-500 rounded-full" />
+              )}
+            </div>
             <p className="text-xs text-surface-muted font-mono">
               {community.member_count || 0} miembros{community.is_admin ? ' · admin' : ''}
             </p>
-            {communitiesWithEvents.has(communityId) && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-surface-bg" />
-            )}
           </div>
           {community.is_admin && (
             <button
