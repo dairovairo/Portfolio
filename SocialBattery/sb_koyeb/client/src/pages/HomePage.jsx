@@ -578,12 +578,18 @@ export default function HomePage() {
           <button
             onClick={shareBatteryStory}
             disabled={sharingStory}
-            title="Compartir mi batería en historia de Instagram"
+            title="Compartir mi batería"
             className="mt-2 w-full py-2.5 rounded-xl font-display font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 border border-surface-border text-surface-muted hover:border-pink-500/40 hover:text-pink-300 hover:bg-pink-500/5 disabled:opacity-50"
           >
             {sharingStory
-              ? <><span className="animate-spin text-base">⏳</span> Generando historia...</>
-              : <><span className="text-base">📲</span> Compartir como historia</>
+              ? <><span className="animate-spin text-base">⏳</span> Generando...</>
+              : <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                  Compartir
+                </>
             }
           </button>
         </div>
