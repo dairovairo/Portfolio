@@ -1192,7 +1192,7 @@ export default function CommunityPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearEventBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
+  const { clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
 
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -1235,14 +1235,8 @@ export default function CommunityPage() {
     load();
   }, [fetchEvents, fetchCommunities]);
 
-  // Clear community event badge when the events tab is visible
-  useEffect(() => {
-    if (tab === 'events' && !loading) {
-      clearEventBadge();
-    }
-  }, [tab, loading, clearEventBadge]);
-
   // Event-update badges are cleared individually when the user opens each event
+  // Community event badges are cleared per-community when the user opens a specific community
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   async function handleCreateEvent(form) {
@@ -1419,7 +1413,7 @@ export default function CommunityPage() {
               )}
             </button>
             <button
-              onClick={() => { setTab('communities'); clearEventBadge(); }}
+              onClick={() => setTab('communities')}
               className={`relative flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'communities'
                   ? 'bg-accent-primary text-white shadow-sm'
@@ -1666,7 +1660,7 @@ export default function CommunityPage() {
                       community={{ ...community, members: community.member_ids || [] }}
                       onJoin={handleJoinCommunity}
                       onLeave={handleLeaveCommunity}
-                      onOpen={(id) => navigate(`/community/${id}`)}
+                      onOpen={(id) => { clearCommunityBadge(id); navigate(`/community/${id}`); }}
                       currentUserId={profile?.id}
                       hasNewEvents={communitiesWithEvents.has(community.id)}
                     />
