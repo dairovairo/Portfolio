@@ -11,6 +11,7 @@ import BottomNav from '../components/BottomNav';
 import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
+import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
 function Avatar({ user, size = 'sm', online = false }) {
@@ -320,6 +321,7 @@ export default function HomePage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
+  const [sharingStory, setSharingStory] = useState(false);
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -401,6 +403,31 @@ export default function HomePage() {
       .subscribe();
     return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
   }, [profile?.id, fetchPending]);
+
+  async function shareBatteryStory() {
+    if (sharingStory) return;
+    setSharingStory(true);
+    try {
+      const color = getBatteryColor(profileBatteryLevel);
+      const blob = await generateBatteryStoryBlob({
+        level: profileBatteryLevel,
+        label: color.label,
+        hex: color.hex,
+        username: profile?.display_name || profile?.username || '',
+        updatedAt: profile?.battery_updated_at,
+      });
+      const result = await shareOrDownloadBlob(blob, 'mi-bateria-social.png', 'Mi batería social · SocialBattery');
+      if (result.method === 'download') {
+        addToast('Imagen descargada. ¡Súbela a tu historia! 📸', 'success');
+      } else if (result.method === 'share') {
+        addToast('¡Historia lista para compartir! 🚀', 'success');
+      }
+    } catch (e) {
+      addToast('Error al generar la historia', 'error');
+    } finally {
+      setSharingStory(false);
+    }
+  }
 
   async function saveBattery() {
     setSaving(true);
@@ -545,6 +572,19 @@ export default function HomePage() {
               } disabled:opacity-50`}
           >
             {saving ? 'Guardando...' : saved ? '✓ ¡Actualizado!' : 'Actualizar batería'}
+          </button>
+
+          {/* Share story button */}
+          <button
+            onClick={shareBatteryStory}
+            disabled={sharingStory}
+            title="Compartir mi batería en historia de Instagram"
+            className="mt-2 w-full py-2.5 rounded-xl font-display font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 border border-surface-border text-surface-muted hover:border-pink-500/40 hover:text-pink-300 hover:bg-pink-500/5 disabled:opacity-50"
+          >
+            {sharingStory
+              ? <><span className="animate-spin text-base">⏳</span> Generando historia...</>
+              : <><span className="text-base">📲</span> Compartir como historia</>
+            }
           </button>
         </div>
 
