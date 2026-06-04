@@ -134,7 +134,7 @@ export default function EventDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { eventsWithUpdates, clearEventUpdateBadge } = useCommunityNotifications();
+  const { eventsWithUpdates, clearEventUpdateBadge, refreshJoinedCommunities } = useCommunityNotifications();
 
   const [event, setEvent] = useState(null);
   const [updates, setUpdates] = useState([]);
@@ -204,6 +204,7 @@ export default function EventDetailPage() {
       await api.post(`/community/events/${eventId}/join`, {});
       showToast('¡Apuntado al evento! 📅', 'success');
       await fetchEvent();
+      refreshJoinedCommunities(); // actualiza attendingEventIdsRef para recibir badges
     } catch (e) {
       showToast(e.message || 'Error al apuntarse', 'error');
     } finally { setJoining(false); }
@@ -216,6 +217,7 @@ export default function EventDetailPage() {
       await api.post(`/community/events/${eventId}/leave`, {});
       showToast('Has salido del evento', 'success');
       await fetchEvent();
+      refreshJoinedCommunities(); // actualiza attendingEventIdsRef
     } catch (e) {
       showToast(e.message || 'Error al salir', 'error');
     } finally { setLeaving(false); }
