@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
+import LocationPicker from '../components/LocationPicker';
 
 function normalizeText(value = '') {
   return String(value ?? '')
@@ -268,6 +269,8 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     event_date: defaultDate,
     ends_at: '',
     location: '',
+    lat: null,
+    lng: null,
     url: '',
   });
   const [coverFile, setCoverFile] = useState(null);
@@ -326,6 +329,8 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
+        lat: form.lat ?? null,
+        lng: form.lng ?? null,
       });
       onClose();
     } catch (e) {
@@ -425,12 +430,11 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
-            <input
+            <LocationPicker
               value={form.location}
-              onChange={e => set('location', e.target.value)}
-              placeholder="Ubicación"
-              maxLength={200}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              lat={form.lat}
+              lng={form.lng}
+              onChange={(location, lat, lng) => setForm(f => ({ ...f, location, lat, lng }))}
             />
           </div>
           <div>
