@@ -561,11 +561,7 @@ export default function HomePage() {
               <button
                 onClick={() => setShowRequests(true)}
                 title="Solicitudes de amistad"
-                className={`relative w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all
-                  ${pendingCount > 0
-                    ? 'bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30'
-                    : 'bg-surface-card border border-surface-border text-surface-muted hover:text-surface-text hover:bg-surface-hover'
-                  }`}
+                className="relative w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30"
               >
                 🤝
                 {pendingCount > 0 && (
@@ -578,7 +574,7 @@ export default function HomePage() {
               <button
                 onClick={() => setShowSearch(true)}
                 title="Buscar amigos"
-                className="w-8 h-8 rounded-xl bg-surface-card border border-surface-border text-surface-muted hover:text-accent-glow hover:border-accent-primary/40 hover:bg-accent-primary/10 flex items-center justify-center text-base font-bold transition-all"
+                className="w-8 h-8 rounded-xl bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30 flex items-center justify-center text-base font-bold transition-all"
               >
                 +
               </button>
@@ -630,7 +626,7 @@ export default function HomePage() {
             <button
               onClick={() => setShowCreateGroup(true)}
               title="Crear grupo"
-              className="w-8 h-8 rounded-xl bg-surface-card border border-surface-border text-surface-muted hover:text-accent-glow hover:border-accent-primary/40 hover:bg-accent-primary/10 flex items-center justify-center text-base font-bold transition-all"
+              className="w-8 h-8 rounded-xl bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30 flex items-center justify-center text-base font-bold transition-all"
             >
               +
             </button>
