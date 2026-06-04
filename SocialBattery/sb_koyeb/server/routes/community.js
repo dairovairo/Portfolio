@@ -223,7 +223,7 @@ router.get('/events', requireAuth, async (req, res) => {
     const { data: events, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
+        id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
         url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
@@ -243,7 +243,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization, url, price, additional_info, promotion_plan } = req.body;
+  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -302,6 +302,8 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         event_date: eventDate.toISOString(),
         ends_at: endDateIso,
         location: eventLocation,
+        lat: lat != null && lat !== '' ? parseFloat(lat) : null,
+        lng: lng != null && lng !== '' ? parseFloat(lng) : null,
         organization: organization?.trim() || null,
         cover_image_url: coverImageUrl,
         url: url?.trim() || null,
@@ -611,7 +613,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: events, error: eventsError } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
+        id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
@@ -790,7 +792,7 @@ router.get('/events/:id', requireAuth, async (req, res) => {
     const { data: event, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, organization,
+        id, title, description, category, event_date, ends_at, location, lat, lng, organization,
         cover_image_url, url, price, additional_info, max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)

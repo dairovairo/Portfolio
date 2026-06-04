@@ -1,39 +1,50 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-// Fix Leaflet's default marker icon paths broken by bundlers
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-});
 
 /**
  * LocationPicker — selección de ubicación con mapa interactivo.
  *
  * Props:
- *   value    {string}       — texto de dirección actual (form.location)
- *   lat      {number|null}
- *   lng      {number|null}
- *   onChange (location, lat, lng) => void
+ *   value        {string}   — texto de dirección actual (form.location)
+ *   lat          {number|null}
+ *   lng          {number|null}
+ *   onChange     (location, lat, lng) => void
  *
- * Usa Leaflet (npm) + OpenStreetMap + Nominatim.
+ * Usa Leaflet (cargado dinámicamente desde CDN) + OpenStreetMap + Nominatim.
  * No requiere API key.
  */
 
-const NOMINATIM = 'https://nominatim.openstreetmap.org';
+const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+const LEAFLET_JS  = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.js';
+const NOMINATIM   = 'https://nominatim.openstreetmap.org';
+
+let leafletLoadPromise = null;
+
+function loadLeaflet() {
+  if (leafletLoadPromise) return leafletLoadPromise;
+  leafletLoadPromise = new Promise((resolve, reject) => {
+    // CSS
+    if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = LEAFLET_CSS;
+      document.head.appendChild(link);
+    }
+    // JS
+    if (window.L) { resolve(window.L); return; }
+    const script = document.createElement('script');
+    script.src = LEAFLET_JS;
+    script.onload = () => resolve(window.L);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return leafletLoadPromise;
+}
 
 export default function LocationPicker({ value, lat, lng, onChange }) {
-  const mapContainerRef = useRef(null);
-  const mapInstanceRef  = useRef(null);
-  const markerRef       = useRef(null);
-  const ignoreNextRef   = useRef(false);
+  const mapContainerRef  = useRef(null);
+  const mapInstanceRef   = useRef(null);
+  const markerRef        = useRef(null);
+  const ignoreNextRef    = useRef(false); // evita bucle geocode→reverseGeocode
 
   const [query,       setQuery]       = useState(value || '');
   const [searching,   setSearching]   = useState(false);
@@ -44,89 +55,101 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
 
   // ── 1. Inicializar mapa ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapContainerRef.current || mapInstanceRef.current) return;
+    let cancelled = false;
+    loadLeaflet().then(L => {
+      if (cancelled || !mapContainerRef.current || mapInstanceRef.current) return;
 
-    const initialLat  = lat  ?? 40.4168;
-    const initialLng  = lng  ?? -3.7038;
-    const initialZoom = (lat && lng) ? 15 : 5;
+      const initialLat = lat ?? 40.4168;
+      const initialLng = lng ?? -3.7038;
+      const initialZoom = (lat && lng) ? 15 : 5;
 
-    const map = L.map(mapContainerRef.current, {
-      center: [initialLat, initialLng],
-      zoom: initialZoom,
-      zoomControl: true,
-      attributionControl: false,
-    });
+      const map = L.map(mapContainerRef.current, {
+        center: [initialLat, initialLng],
+        zoom: initialZoom,
+        zoomControl: true,
+        attributionControl: false,
+      });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+      }).addTo(map);
 
-    // Icono personalizado acorde al tema oscuro
-    const customIcon = L.divIcon({
-      html: '<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.8))">📍</div>',
-      className: '',
-      iconSize: [28, 28],
-      iconAnchor: [14, 28],
-      popupAnchor: [0, -30],
-    });
+      // Icono personalizado acorde al tema oscuro
+      const icon = L.divIcon({
+        html: '<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.8))">📍</div>',
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 28],
+        popupAnchor: [0, -30],
+      });
 
-    // Si ya hay coordenadas, poner marcador
-    if (lat && lng) {
-      markerRef.current = L.marker([lat, lng], { icon: customIcon }).addTo(map);
-    }
-
-    // Clic en el mapa → reverse geocode
-    map.on('click', async (e) => {
-      const { lat: clickLat, lng: clickLng } = e.latlng;
-
-      if (markerRef.current) {
-        markerRef.current.setLatLng([clickLat, clickLng]);
-      } else {
-        markerRef.current = L.marker([clickLat, clickLng], { icon: customIcon }).addTo(map);
+      // Si ya hay coordenadas, poner marcador
+      if (lat && lng) {
+        markerRef.current = L.marker([lat, lng], { icon }).addTo(map);
       }
 
-      try {
-        ignoreNextRef.current = true;
-        setSearching(true);
-        setError('');
-        const res = await fetch(
-          `${NOMINATIM}/reverse?lat=${clickLat}&lon=${clickLng}&format=json&accept-language=es`,
-          { headers: { 'Accept-Language': 'es' } }
-        );
-        const data = await res.json();
-        const address = data.display_name || `${clickLat.toFixed(5)}, ${clickLng.toFixed(5)}`;
-        setQuery(address);
-        setSuggestions([]);
-        onChange(address, clickLat, clickLng);
-      } catch {
-        const fallback = `${clickLat.toFixed(5)}, ${clickLng.toFixed(5)}`;
-        setQuery(fallback);
-        onChange(fallback, clickLat, clickLng);
-      } finally {
-        setSearching(false);
-        ignoreNextRef.current = false;
-      }
-    });
+      // Clic en el mapa → reverse geocode
+      map.on('click', async (e) => {
+        const { lat: clickLat, lng: clickLng } = e.latlng;
 
-    mapInstanceRef.current = map;
-    setMapReady(true);
+        // Mover / crear marcador
+        if (markerRef.current) {
+          markerRef.current.setLatLng([clickLat, clickLng]);
+        } else {
+          markerRef.current = L.marker([clickLat, clickLng], { icon }).addTo(map);
+        }
+
+        // Reverse geocode
+        try {
+          ignoreNextRef.current = true;
+          setSearching(true);
+          setError('');
+          const res = await fetch(
+            `${NOMINATIM}/reverse?lat=${clickLat}&lon=${clickLng}&format=json&accept-language=es`,
+            { headers: { 'Accept-Language': 'es' } }
+          );
+          const data = await res.json();
+          const address = data.display_name || `${clickLat.toFixed(5)}, ${clickLng.toFixed(5)}`;
+          setQuery(address);
+          setSuggestions([]);
+          onChange(address, clickLat, clickLng);
+        } catch {
+          const fallback = `${clickLat.toFixed(5)}, ${clickLng.toFixed(5)}`;
+          setQuery(fallback);
+          onChange(fallback, clickLat, clickLng);
+        } finally {
+          setSearching(false);
+          ignoreNextRef.current = false;
+        }
+      });
+
+      mapInstanceRef.current = map;
+      setMapReady(true);
+    }).catch(() => {
+      setError('No se pudo cargar el mapa. Verifica tu conexión.');
+    });
 
     return () => {
-      map.remove();
-      mapInstanceRef.current = null;
-      markerRef.current = null;
+      cancelled = true;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 2. Cuando llegan lat/lng desde fuera → mover mapa y marcador ──────────
+  // ── 2. Cuando llegan lat/lng desde fuera (selección de sugerencia) → mover mapa ──
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
     if (lat == null || lng == null) return;
+    const L = window.L;
+    if (!L) return;
 
     mapInstanceRef.current.setView([lat, lng], 15, { animate: true });
 
-    const customIcon = L.divIcon({
+    const icon = L.divIcon({
       html: '<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.8))">📍</div>',
       className: '',
       iconSize: [28, 28],
@@ -136,7 +159,7 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
     if (markerRef.current) {
       markerRef.current.setLatLng([lat, lng]);
     } else {
-      markerRef.current = L.marker([lat, lng], { icon: customIcon }).addTo(mapInstanceRef.current);
+      markerRef.current = L.marker([lat, lng], { icon }).addTo(mapInstanceRef.current);
     }
   }, [lat, lng, mapReady]);
 
@@ -144,7 +167,7 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
   const handleQueryChange = useCallback((e) => {
     const v = e.target.value;
     setQuery(v);
-    onChange(v, null, null);
+    onChange(v, null, null); // actualizar texto en el padre aunque no haya coords aún
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (ignoreNextRef.current) return;
@@ -175,6 +198,7 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
     setQuery(s.display_name);
     setSuggestions([]);
     onChange(s.display_name, selectedLat, selectedLng);
+    // El useEffect de lat/lng moverá el mapa
   }
 
   // ── 5. Borrar ubicación ────────────────────────────────────────────────────
@@ -203,11 +227,6 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
             autoComplete="off"
             className="w-full bg-surface-bg border border-surface-border rounded-xl pl-9 pr-8 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
           />
-          {searching && (
-            <div className="absolute right-9 top-1/2 -translate-y-1/2">
-              <div className="w-3.5 h-3.5 border-2 border-accent-primary/40 border-t-accent-primary rounded-full animate-spin" />
-            </div>
-          )}
           {query && (
             <button
               type="button"
@@ -219,6 +238,13 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
             </button>
           )}
         </div>
+
+        {/* Spinner */}
+        {searching && (
+          <div className="absolute right-9 top-1/2 -translate-y-1/2">
+            <div className="w-3.5 h-3.5 border-2 border-accent-primary/40 border-t-accent-primary rounded-full animate-spin" />
+          </div>
+        )}
 
         {/* Sugerencias */}
         {suggestions.length > 0 && (
@@ -269,7 +295,7 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
         )}
       </div>
 
-      {/* Coordenadas (confirmación visual) */}
+      {/* Coordenadas visibles (debug / confirmación) */}
       {lat != null && lng != null && (
         <p className="text-xs text-slate-600 font-mono text-right">
           {lat.toFixed(5)}, {lng.toFixed(5)}
