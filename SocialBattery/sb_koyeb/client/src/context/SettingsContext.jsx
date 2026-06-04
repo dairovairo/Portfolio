@@ -29,6 +29,18 @@ export const SETTINGS_DEFAULTS_LIGHT = {
   tickColorRead:       '#00949e',
 };
 
+export const SETTINGS_DEFAULTS_AURORA = {
+  myBubbleColor:       '#dc5078',
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#fff0f5',
+  otherBubbleColor:    '#1e1836',
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#f0e6ff',
+  tickColorSent:       '#fff0f5',
+  tickColorUnread:     '#c9a8d4',
+  tickColorRead:       '#ff82a0',
+};
+
 const LEGACY_DEFAULT_PALETTES = [
   {
     myBubbleColor:       '#1a5c3a',
@@ -98,7 +110,9 @@ const MESSAGING_FIELDS = [
 ];
 
 export function getMessagingDefaultsForTheme(theme) {
-  return theme === 'light' ? SETTINGS_DEFAULTS_LIGHT : SETTINGS_DEFAULTS_DARK;
+  if (theme === 'light')  return SETTINGS_DEFAULTS_LIGHT;
+  if (theme === 'aurora') return SETTINGS_DEFAULTS_AURORA;
+  return SETTINGS_DEFAULTS_DARK;
 }
 
 function loadStorage(key, fallback) {
@@ -148,6 +162,7 @@ function shouldUseThemeMessagingDefaults() {
   return [
     SETTINGS_DEFAULTS_DARK,
     SETTINGS_DEFAULTS_LIGHT,
+    SETTINGS_DEFAULTS_AURORA,
     ...LEGACY_DEFAULT_PALETTES,
   ].some(palette => matchesPalette(snapshot, palette));
 }

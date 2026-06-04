@@ -356,7 +356,7 @@ function Toggle({ enabled, onToggle }) {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { theme, isDark, setTheme } = useTheme();
+  const { theme, isDark, isAurora, isLight, setTheme } = useTheme();
   const { signOut, updatePassword } = useAuth();
   const { showToast } = useToast();
   const {
@@ -482,29 +482,84 @@ export default function SettingsPage() {
         >
           {/* Temas */}
           <SubSection title="Temas">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
+
+              {/* ── Claro ── */}
               <button
                 onClick={() => selectTheme('light')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
-                  !isDark
-                    ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
-                    : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                  isLight
+                    ? 'border-accent-primary shadow-lg shadow-accent-primary/20'
+                    : 'border-surface-border hover:border-surface-muted'
                 }`}
               >
-                <span className={`sb-symbol ${isDark ? 'text-surface-text' : ''}`} aria-hidden="true">☼</span>
-                Claro
+                {/* Mini preview */}
+                <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#f4fbfb' }}>
+                  <div className="flex gap-1 items-center">
+                    <div className="w-3 h-3 rounded-full" style={{ background: '#d8eeee' }} />
+                    <div className="flex-1 h-1.5 rounded-full" style={{ background: '#d8eeee' }} />
+                  </div>
+                  <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#c9f3f3' }} />
+                  <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#d8eeee' }} />
+                  <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#c9f3f3' }} />
+                </div>
+                <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#ffffff', borderTop: '1px solid #d8eeee' }}>
+                  <span className="sb-symbol text-xs" style={{ color: '#00949e' }}>☼</span>
+                  <span className="text-xs font-display font-bold" style={{ color: '#1a1a2e' }}>Claro</span>
+                  {isLight && <span className="ml-auto text-[10px]" style={{ color: '#00949e' }}>✓</span>}
+                </div>
               </button>
+
+              {/* ── Oscuro ── */}
               <button
                 onClick={() => selectTheme('dark')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
-                  isDark
-                    ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
-                    : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                  theme === 'dark'
+                    ? 'border-accent-primary shadow-lg shadow-accent-primary/20'
+                    : 'border-surface-border hover:border-surface-muted'
                 }`}
               >
-                <span className={`sb-symbol ${!isDark ? 'text-slate-950' : ''}`} aria-hidden="true">☾</span>
-                Oscuro
+                <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#0a0a0f' }}>
+                  <div className="flex gap-1 items-center">
+                    <div className="w-3 h-3 rounded-full" style={{ background: '#1e1e2e' }} />
+                    <div className="flex-1 h-1.5 rounded-full" style={{ background: '#1e1e2e' }} />
+                  </div>
+                  <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#00949e' }} />
+                  <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#1e1e2e' }} />
+                  <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#00949e' }} />
+                </div>
+                <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#13131a', borderTop: '1px solid #1e1e2e' }}>
+                  <span className="sb-symbol text-xs" style={{ color: '#2dd4dc' }}>☾</span>
+                  <span className="text-xs font-display font-bold" style={{ color: '#e2e8f0' }}>Oscuro</span>
+                  {theme === 'dark' && <span className="ml-auto text-[10px]" style={{ color: '#2dd4dc' }}>✓</span>}
+                </div>
               </button>
+
+              {/* ── Aurora ── */}
+              <button
+                onClick={() => selectTheme('aurora')}
+                className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                  isAurora
+                    ? 'border-[#dc5078] shadow-lg shadow-[#dc5078]/25'
+                    : 'border-surface-border hover:border-surface-muted'
+                }`}
+              >
+                <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#0e0b1a' }}>
+                  <div className="flex gap-1 items-center">
+                    <div className="w-3 h-3 rounded-full" style={{ background: '#2d2450' }} />
+                    <div className="flex-1 h-1.5 rounded-full" style={{ background: '#2d2450' }} />
+                  </div>
+                  <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#dc5078' }} />
+                  <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#2d2450' }} />
+                  <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#dc5078' }} />
+                </div>
+                <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#16122a', borderTop: '1px solid #2d2450' }}>
+                  <span className="text-xs">✦</span>
+                  <span className="text-xs font-display font-bold" style={{ color: '#f0e6ff' }}>Aurora</span>
+                  {isAurora && <span className="ml-auto text-[10px]" style={{ color: '#ff82a0' }}>✓</span>}
+                </div>
+              </button>
+
             </div>
           </SubSection>
 
