@@ -6,16 +6,8 @@
 
 import { getBatteryColor } from './battery';
 
-/**
- * Draws the battery story canvas and returns a Blob
- * @param {object} opts
- * @param {number} opts.level - Battery level 0-100
- * @param {string} opts.label - Battery label (e.g. "Cargado")
- * @param {string} opts.hex - Color hex for the battery level
- * @param {string} opts.username - User's display name or username
- * @param {string} opts.updatedAt - ISO date string of last update
- * @returns {Promise<Blob>}
- */
+// ── Battery Story ──────────────────────────────────────────────────────────────
+
 export async function generateBatteryStoryBlob({ level, label, hex, username, updatedAt }) {
   const W = 1080;
   const H = 1920;
@@ -27,130 +19,184 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
 
   // Background gradient
   const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#0f172a');
-  bg.addColorStop(0.5, '#1e293b');
-  bg.addColorStop(1, '#0f172a');
+  bg.addColorStop(0, '#080f1f');
+  bg.addColorStop(0.5, '#0f1e35');
+  bg.addColorStop(1, '#080f1f');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // Subtle grid pattern
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-  ctx.lineWidth = 1;
-  const gridSize = 80;
-  for (let x = 0; x <= W; x += gridSize) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-  for (let y = 0; y <= H; y += gridSize) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  // Subtle dot grid
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  for (let x = 60; x < W; x += 72) {
+    for (let y = 60; y < H; y += 72) {
+      ctx.beginPath();
+      ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
-  // Glow radial behind number
+  // Ambient glow behind battery
   const cx = W / 2;
-  const cy = H / 2;
-  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500);
-  glow.addColorStop(0, `${hex}30`);
+  const batteryY = 580; // center Y of the battery body
+  const glow = ctx.createRadialGradient(cx, batteryY, 0, cx, batteryY, 520);
+  glow.addColorStop(0, `${hex}28`);
   glow.addColorStop(1, 'transparent');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // App name pill at top
-  const pillW = 260, pillH = 60, pillX = (W - pillW) / 2, pillY = 180;
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  roundRect(ctx, pillX, pillY, pillW, pillH, 30);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, pillX, pillY, pillW, pillH, 30);
-  ctx.stroke();
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 26px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('🔋 SocialBattery', W / 2, pillY + 40);
-
-  // Circle background ring
-  const radius = 280;
-  ctx.beginPath();
-  ctx.arc(cx, cy - 60, radius, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 24;
-  ctx.stroke();
-
-  // Arc progress (battery level)
-  const startAngle = -Math.PI / 2;
-  const endAngle = startAngle + (level / 100) * Math.PI * 2;
-  const arcGrad = ctx.createLinearGradient(cx - radius, cy, cx + radius, cy);
-  arcGrad.addColorStop(0, `${hex}cc`);
-  arcGrad.addColorStop(1, hex);
-  ctx.beginPath();
-  ctx.arc(cx, cy - 60, radius, startAngle, endAngle);
-  ctx.strokeStyle = arcGrad;
-  ctx.lineWidth = 24;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // Big percentage number
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `bold 240px system-ui, sans-serif`;
+  // ── App branding (bigger) ──────────────────────────────────────────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+
+  // Battery emoji + name, bigger pill
+  const pillW = 380, pillH = 80, pillX = (W - pillW) / 2, pillY = 130;
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
+  ctx.stroke();
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = 'bold 36px system-ui, sans-serif';
+  ctx.fillText('🔋 SocialBattery', W / 2, pillY + pillH / 2);
+
+  // ── Battery shape ──────────────────────────────────────────────────────────
+  const bW = 520;   // body width
+  const bH = 280;   // body height
+  const bR = 40;    // body corner radius
+  const bX = (W - bW) / 2;
+  const bY = batteryY - bH / 2;
+
+  // Nub (positive terminal) on the right
+  const nubW = 32, nubH = 90;
+  const nubX = bX + bW;
+  const nubY = batteryY - nubH / 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  roundRect(ctx, nubX, nubY, nubW, nubH, 10);
+  ctx.fill();
+
+  // Battery body outline (glass-like)
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  roundRect(ctx, bX, bY, bW, bH, bR);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 4;
+  roundRect(ctx, bX, bY, bW, bH, bR);
+  ctx.stroke();
+
+  // Fill level inside battery
+  const padding = 14;
+  const fillMaxW = bW - padding * 2;
+  const fillW = Math.max(0, fillMaxW * (level / 100));
+  const fillX = bX + padding;
+  const fillY = bY + padding;
+  const fillH = bH - padding * 2;
+  const fillR = bR - 6;
+
+  if (fillW > 0) {
+    // Gradient fill
+    const fillGrad = ctx.createLinearGradient(fillX, 0, fillX + fillMaxW, 0);
+    fillGrad.addColorStop(0, `${hex}cc`);
+    fillGrad.addColorStop(1, hex);
+    ctx.fillStyle = fillGrad;
+    // Clip fill to battery body inner area
+    ctx.save();
+    roundRect(ctx, fillX, fillY, fillMaxW, fillH, fillR);
+    ctx.clip();
+    // Draw fill rect (possibly partial)
+    const clippedFillR = fillW >= fillMaxW ? fillR : Math.min(fillR, fillW / 2);
+    roundRect(ctx, fillX, fillY, fillW, fillH, clippedFillR);
+    ctx.fill();
+
+    // Shine highlight on top of fill
+    const shine = ctx.createLinearGradient(0, fillY, 0, fillY + fillH * 0.5);
+    shine.addColorStop(0, 'rgba(255,255,255,0.22)');
+    shine.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = shine;
+    roundRect(ctx, fillX, fillY, fillW, fillH * 0.5, clippedFillR);
+    ctx.fill();
+    ctx.restore();
+
+    // Inner glow on fill edges
+    ctx.shadowColor = hex;
+    ctx.shadowBlur = 28;
+    ctx.strokeStyle = `${hex}80`;
+    ctx.lineWidth = 2;
+    ctx.save();
+    roundRect(ctx, fillX, fillY, fillMaxW, fillH, fillR);
+    ctx.clip();
+    roundRect(ctx, fillX, fillY, fillW, fillH, clippedFillR);
+    ctx.stroke();
+    ctx.restore();
+    ctx.shadowBlur = 0;
+  }
+
+  // Segment dividers inside battery (subtle)
+  const segments = 4;
+  for (let i = 1; i < segments; i++) {
+    const sx = bX + padding + (fillMaxW / segments) * i;
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(sx, bY + padding + 4);
+    ctx.lineTo(sx, bY + bH - padding - 4);
+    ctx.stroke();
+  }
+
+  // ── Percentage number ──────────────────────────────────────────────────────
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 220px system-ui, sans-serif';
   ctx.shadowColor = hex;
-  ctx.shadowBlur = 60;
-  ctx.fillText(`${level}`, cx, cy - 60);
+  ctx.shadowBlur = 50;
+  ctx.fillText(`${level}%`, cx, batteryY + bH / 2 + 200);
   ctx.shadowBlur = 0;
 
-  // Percent sign
-  ctx.font = 'bold 80px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.textBaseline = 'bottom';
-  const numW = ctx.measureText(`${level}`).width * 1.25; // rough scale from 240
-  // Properly measure the large number
-  ctx.font = `bold 240px system-ui, sans-serif`;
-  const bigMetrics = ctx.measureText(`${level}`);
-  ctx.font = 'bold 80px system-ui, sans-serif';
-  ctx.fillText('%', cx + bigMetrics.width / 2 + 20, cy - 60 + 120);
-
-  // Label pill
-  ctx.textBaseline = 'middle';
-  const labelText = label;
-  ctx.font = 'bold 44px system-ui, sans-serif';
-  const labelW = ctx.measureText(labelText).width + 64;
-  const labelH = 70;
+  // ── Status label pill ──────────────────────────────────────────────────────
+  const labelY2 = batteryY + bH / 2 + 380;
+  ctx.font = 'bold 48px system-ui, sans-serif';
+  const labelW = ctx.measureText(label).width + 72;
+  const labelH = 80;
   const labelX = (W - labelW) / 2;
-  const labelY = cy + 270;
   ctx.fillStyle = `${hex}22`;
-  roundRect(ctx, labelX, labelY, labelW, labelH, 35);
+  roundRect(ctx, labelX, labelY2, labelW, labelH, 40);
   ctx.fill();
-  ctx.strokeStyle = `${hex}55`;
-  ctx.lineWidth = 2;
-  roundRect(ctx, labelX, labelY, labelW, labelH, 35);
+  ctx.strokeStyle = `${hex}66`;
+  ctx.lineWidth = 2.5;
+  roundRect(ctx, labelX, labelY2, labelW, labelH, 40);
   ctx.stroke();
   ctx.fillStyle = hex;
-  ctx.textAlign = 'center';
-  ctx.fillText(labelText, W / 2, labelY + labelH / 2);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, W / 2, labelY2 + labelH / 2);
 
-  // Username
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.font = 'bold 48px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(username || 'Mi batería social', W / 2, labelY + labelH + 80);
+  // ── Username ───────────────────────────────────────────────────────────────
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.font = 'bold 52px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(username || 'Mi batería social', W / 2, labelY2 + labelH + 90);
 
-  // Date
+  // ── Date ──────────────────────────────────────────────────────────────────
   if (updatedAt) {
     const dateStr = new Date(updatedAt).toLocaleDateString('es-ES', {
       weekday: 'long', day: 'numeric', month: 'long',
     });
-    ctx.fillStyle = 'rgba(148,163,184,0.7)';
-    ctx.font = '34px system-ui, sans-serif';
-    ctx.fillText(dateStr, W / 2, labelY + labelH + 150);
+    ctx.fillStyle = 'rgba(148,163,184,0.65)';
+    ctx.font = '36px system-ui, sans-serif';
+    ctx.fillText(dateStr, W / 2, labelY2 + labelH + 170);
   }
 
-  // Bottom watermark
-  ctx.fillStyle = 'rgba(148,163,184,0.4)';
-  ctx.font = '28px system-ui, sans-serif';
-  ctx.fillText('socialbattery.app', W / 2, H - 120);
+  // ── Watermark ──────────────────────────────────────────────────────────────
+  ctx.fillStyle = 'rgba(148,163,184,0.35)';
+  ctx.font = '30px system-ui, sans-serif';
+  ctx.fillText('socialbattery.app', W / 2, H - 100);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
-/**
- * Draws an event story canvas and returns a Blob
- */
+// ── Event Story ────────────────────────────────────────────────────────────────
+
 export async function generateEventStoryBlob({ event, attendeeCount, likeCount }) {
   const W = 1080;
   const H = 1920;
@@ -160,188 +206,206 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount }
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  // Dark background
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#0f172a');
-  bg.addColorStop(0.6, '#1e293b');
-  bg.addColorStop(1, '#0c1220');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // Subtle texture
-  ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= W; x += 90) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-  for (let y = 0; y <= H; y += 90) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-  // App name at top
-  const pillW = 260, pillH = 60, pillX = (W - pillW) / 2, pillY = 120;
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  roundRect(ctx, pillX, pillY, pillW, pillH, 30);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, pillX, pillY, pillW, pillH, 30);
-  ctx.stroke();
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 26px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('🔋 SocialBattery', W / 2, pillY + 40);
-
-  // Cover image if available
-  let coverLoaded = false;
+  // ── Background: blurred cover photo or dark fallback ──────────────────────
+  let coverImg = null;
   if (event.cover_image_url) {
-    try {
-      const img = await loadImage(event.cover_image_url);
-      const imgH = 560;
-      const imgY = 240;
-      // Draw rounded rect clipping
-      ctx.save();
-      roundRect(ctx, 80, imgY, W - 160, imgH, 36);
-      ctx.clip();
-      // Cover fit
-      const scale = Math.max((W - 160) / img.width, imgH / img.height);
-      const drawW = img.width * scale;
-      const drawH = img.height * scale;
-      const drawX = 80 + ((W - 160) - drawW) / 2;
-      const drawY = imgY + (imgH - drawH) / 2;
-      ctx.drawImage(img, drawX, drawY, drawW, drawH);
-      // Very subtle vignette only at the bottom for text readability
-      const coverOverlay = ctx.createLinearGradient(0, imgY, 0, imgY + imgH);
-      coverOverlay.addColorStop(0, 'rgba(15,23,42,0)');
-      coverOverlay.addColorStop(0.6, 'rgba(15,23,42,0)');
-      coverOverlay.addColorStop(1, 'rgba(15,23,42,0.35)');
-      ctx.fillStyle = coverOverlay;
-      ctx.fillRect(80, imgY, W - 160, imgH);
-      ctx.restore();
-      coverLoaded = true;
-    } catch (e) {
-      // skip image if it fails to load
-    }
+    try { coverImg = await loadImage(event.cover_image_url); } catch (_) {}
   }
 
-  const contentY = coverLoaded ? 860 : 320;
+  if (coverImg) {
+    // Draw image scaled to cover entire canvas
+    const scale = Math.max(W / coverImg.width, H / coverImg.height);
+    const drawW = coverImg.width * scale;
+    const drawH = coverImg.height * scale;
+    const drawX = (W - drawW) / 2;
+    const drawY = (H - drawH) / 2;
 
-  // Title
+    // We simulate heavy blur by drawing the image multiple times at different
+    // offsets and scales (true CSS blur isn't available in canvas without a
+    // library, but we can stack semi-transparent scaled copies for a soft effect)
+    ctx.save();
+    const blurPasses = [
+      { alpha: 0.18, extra: 0 },
+      { alpha: 0.18, extra: 12 },
+      { alpha: 0.18, extra: -12 },
+      { alpha: 0.18, extra: 24 },
+      { alpha: 0.18, extra: -24 },
+      { alpha: 0.12, extra: 36 },
+      { alpha: 0.12, extra: -36 },
+      { alpha: 0.12, extra: 48 },
+    ];
+    for (const pass of blurPasses) {
+      ctx.globalAlpha = pass.alpha;
+      ctx.drawImage(coverImg, drawX + pass.extra, drawY + pass.extra * 0.5, drawW, drawH);
+      ctx.drawImage(coverImg, drawX - pass.extra, drawY - pass.extra * 0.5, drawW, drawH);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Dark overlay so text reads well
+    const overlay = ctx.createLinearGradient(0, 0, 0, H);
+    overlay.addColorStop(0,   'rgba(8,15,31,0.65)');
+    overlay.addColorStop(0.4, 'rgba(8,15,31,0.55)');
+    overlay.addColorStop(0.7, 'rgba(8,15,31,0.70)');
+    overlay.addColorStop(1,   'rgba(8,15,31,0.85)');
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    // No image — solid dark gradient
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#080f1f');
+    bg.addColorStop(0.6, '#0f1e35');
+    bg.addColorStop(1, '#080f1f');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // ── App branding (bigger pill at top) ──────────────────────────────────────
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const pillW = 380, pillH = 80, pillX = (W - pillW) / 2, pillY = 130;
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
+  ctx.stroke();
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = 'bold 36px system-ui, sans-serif';
+  ctx.fillText('🔋 SocialBattery', W / 2, pillY + pillH / 2);
+
+  // ── Cover image card (non-blurred, sharp) ─────────────────────────────────
+  let contentY = 320;
+  if (coverImg) {
+    const cardH = 500;
+    const cardY = 270;
+    ctx.save();
+    roundRect(ctx, 80, cardY, W - 160, cardH, 36);
+    ctx.clip();
+    const scaleCard = Math.max((W - 160) / coverImg.width, cardH / coverImg.height);
+    const cW = coverImg.width * scaleCard;
+    const cH = coverImg.height * scaleCard;
+    const cX = 80 + ((W - 160) - cW) / 2;
+    const cY = cardY + (cardH - cH) / 2;
+    ctx.drawImage(coverImg, cX, cY, cW, cH);
+    // Very subtle bottom gradient on the card for separation
+    const cardFade = ctx.createLinearGradient(0, cardY + cardH * 0.6, 0, cardY + cardH);
+    cardFade.addColorStop(0, 'rgba(8,15,31,0)');
+    cardFade.addColorStop(1, 'rgba(8,15,31,0.4)');
+    ctx.fillStyle = cardFade;
+    ctx.fillRect(80, cardY, W - 160, cardH);
+    ctx.restore();
+    contentY = cardY + cardH + 56;
+  }
+
+  // ── Title ──────────────────────────────────────────────────────────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#ffffff';
-  ctx.font = `bold ${event.title.length > 30 ? 52 : 64}px system-ui, sans-serif`;
-  ctx.shadowColor = 'rgba(0,0,0,0.5)';
-  ctx.shadowBlur = 20;
-  wrapText(ctx, event.title, W / 2, contentY, W - 160, event.title.length > 30 ? 70 : 80);
+  const titleFontSize = event.title.length > 30 ? 56 : 68;
+  const titleLineH = titleFontSize + 16;
+  ctx.font = `bold ${titleFontSize}px system-ui, sans-serif`;
+  ctx.shadowColor = 'rgba(0,0,0,0.7)';
+  ctx.shadowBlur = 24;
+  wrapText(ctx, event.title, W / 2, contentY, W - 160, titleLineH);
   ctx.shadowBlur = 0;
 
-  // Title line count to offset subsequent items
-  const titleLines = Math.ceil(event.title.length / 28);
-  const titleBlockH = titleLines * (event.title.length > 30 ? 70 : 80);
+  const titleLines = Math.ceil(event.title.length / 26);
+  let y = contentY + titleLines * titleLineH + 36;
 
-  let y = contentY + titleBlockH + 32;
-
-  // Organization pill
+  // ── Organization pill ─────────────────────────────────────────────────────
   if (event.organization || event.community_name) {
     const orgText = event.organization || event.community_name;
-    ctx.font = '34px system-ui, sans-serif';
-    const orgW = ctx.measureText(orgText).width + 48;
-    const orgH = 56;
-    const orgX = (W - orgW) / 2;
-    ctx.fillStyle = 'rgba(251,191,36,0.15)';
-    roundRect(ctx, orgX, y, orgW, orgH, 28);
+    ctx.font = '36px system-ui, sans-serif';
+    const orgPillW = ctx.measureText(orgText).width + 52;
+    const orgPillH = 60;
+    const orgPillX = (W - orgPillW) / 2;
+    ctx.fillStyle = 'rgba(251,191,36,0.18)';
+    roundRect(ctx, orgPillX, y, orgPillW, orgPillH, 30);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(251,191,36,0.4)';
-    ctx.lineWidth = 1.5;
-    roundRect(ctx, orgX, y, orgW, orgH, 28);
+    ctx.strokeStyle = 'rgba(251,191,36,0.45)';
+    ctx.lineWidth = 2;
+    roundRect(ctx, orgPillX, y, orgPillW, orgPillH, 30);
     ctx.stroke();
     ctx.fillStyle = '#fbbf24';
     ctx.textBaseline = 'middle';
-    ctx.fillText(orgText, W / 2, y + orgH / 2);
-    y += orgH + 32;
+    ctx.fillText(orgText, W / 2, y + orgPillH / 2);
+    y += orgPillH + 36;
   }
 
-  // Date range
-  const startDate = event.event_date ? new Date(event.event_date).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
-  const endDate = event.ends_at ? new Date(event.ends_at).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+  // ── Dates ──────────────────────────────────────────────────────────────────
+  const startDate = event.event_date
+    ? new Date(event.event_date).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null;
+  const endDate = event.ends_at
+    ? new Date(event.ends_at).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null;
 
   if (startDate) {
-    ctx.font = '36px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(148,163,184,0.9)';
+    ctx.fillStyle = 'rgba(203,213,225,0.90)';
     ctx.textBaseline = 'middle';
-    const dateStr = endDate ? `📅 ${startDate}  →  ${endDate}` : `📅 ${startDate}`;
-    ctx.font = endDate ? '30px system-ui, sans-serif' : '36px system-ui, sans-serif';
-    ctx.fillText(dateStr, W / 2, y + 28);
+    const dFont = endDate ? '30px' : '36px';
+    ctx.font = `${dFont} system-ui, sans-serif`;
+    const dStr = endDate ? `📅 ${startDate}   →   ${endDate}` : `📅 ${startDate}`;
+    ctx.fillText(dStr, W / 2, y + 28);
     y += 80;
   }
 
-  // Stats row
-  const statsY = y + 20;
+  // ── Stats boxes ───────────────────────────────────────────────────────────
+  const statsY = y + 24;
   const statsData = [
     { value: attendeeCount || event.attendee_count || 0, label: 'planificaciones', icon: '📅' },
     { value: likeCount || event.like_count || 0, label: 'likes', icon: '♥' },
   ];
-
-  const boxW = 300;
-  const boxH = 130;
-  const gap = 40;
-  const totalW = statsData.length * boxW + (statsData.length - 1) * gap;
-  let bx = (W - totalW) / 2;
+  const boxW = 310, boxH = 140, gap = 36;
+  const totalBoxW = statsData.length * boxW + (statsData.length - 1) * gap;
+  let bx = (W - totalBoxW) / 2;
 
   for (const stat of statsData) {
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    roundRect(ctx, bx, statsY, boxW, boxH, 24);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    roundRect(ctx, bx, statsY, boxW, boxH, 26);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.lineWidth = 1.5;
-    roundRect(ctx, bx, statsY, boxW, boxH, 24);
+    roundRect(ctx, bx, statsY, boxW, boxH, 26);
     ctx.stroke();
-
-    ctx.font = 'bold 52px system-ui, sans-serif';
+    ctx.font = 'bold 54px system-ui, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(`${stat.icon} ${stat.value}`, bx + boxW / 2, statsY + 18);
-    ctx.font = '26px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(148,163,184,0.7)';
-    ctx.fillText(stat.label, bx + boxW / 2, statsY + 82);
+    ctx.fillText(`${stat.icon} ${stat.value}`, bx + boxW / 2, statsY + 20);
+    ctx.font = '27px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(148,163,184,0.80)';
+    ctx.fillText(stat.label, bx + boxW / 2, statsY + 90);
     bx += boxW + gap;
   }
 
-  // "Me apunté" / "Me gusta" badge
-  y = statsY + boxH + 48;
-  ctx.font = 'bold 38px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  // ── Watermark ──────────────────────────────────────────────────────────────
+  ctx.fillStyle = 'rgba(203,213,225,0.35)';
+  ctx.font = '30px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('¡Me apunto a esto!', W / 2, y);
-
-  // Bottom watermark
-  ctx.fillStyle = 'rgba(148,163,184,0.35)';
-  ctx.font = '28px system-ui, sans-serif';
-  ctx.fillText('socialbattery.app', W / 2, H - 120);
+  ctx.fillText('socialbattery.app', W / 2, H - 100);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
-/**
- * Share or download a blob as an image
- */
+// ── Share / Download ──────────────────────────────────────────────────────────
+
 export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 'SocialBattery') {
   const file = new File([blob], filename, { type: 'image/png' });
 
-  // Try native share (mobile)
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title });
       return { method: 'share' };
     } catch (e) {
-      if (e.name !== 'AbortError') {
-        // fall through to download
-      } else {
-        return { method: 'cancelled' };
-      }
+      if (e.name === 'AbortError') return { method: 'cancelled' };
+      // fall through to download
     }
   }
 
-  // Fallback: download
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -351,7 +415,7 @@ export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 
   return { method: 'download' };
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Canvas helpers ────────────────────────────────────────────────────────────
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -372,13 +436,13 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   let line = '';
   let lineY = y;
   for (const word of words) {
-    const testLine = line ? `${line} ${word}` : word;
-    if (ctx.measureText(testLine).width > maxWidth && line) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
       ctx.fillText(line, x, lineY);
       line = word;
       lineY += lineHeight;
     } else {
-      line = testLine;
+      line = test;
     }
   }
   if (line) ctx.fillText(line, x, lineY);
