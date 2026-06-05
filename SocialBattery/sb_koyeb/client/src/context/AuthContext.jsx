@@ -41,39 +41,8 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-  const [emailJustConfirmed, setEmailJustConfirmed] = useState(false);
 
   useEffect(() => {
-    // Process email confirmation / magic-link tokens that land in the URL.
-    // Supabase uses two formats depending on the project config:
-    //   - PKCE:    /?token_hash=...&type=email       (query param)
-    //   - Legacy:  /#access_token=...&type=signup    (hash fragment)
-    // BrowserRouter strips/ignores these before React routing runs, so we must
-    // consume the token HERE on mount before any redirect discards it.
-    const hash = window.location.hash;
-    const search = window.location.search;
-    const params = new URLSearchParams(search);
-    const hashParams = new URLSearchParams(hash.replace('#', ''));
-
-    const tokenHash = params.get('token_hash') || hashParams.get('token_hash');
-    const type = params.get('type') || hashParams.get('type');
-    const accessToken = hashParams.get('access_token');
-    const refreshToken = hashParams.get('refresh_token');
-
-    if (tokenHash && type) {
-      // PKCE flow
-      supabase.auth.verifyOtp({ token_hash: tokenHash, type }).then(({ error }) => {
-        if (!error) setEmailJustConfirmed(true);
-        window.history.replaceState({}, '', window.location.pathname);
-      });
-    } else if (accessToken && refreshToken) {
-      // Legacy implicit flow
-      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(({ error }) => {
-        if (!error) setEmailJustConfirmed(true);
-        window.history.replaceState({}, '', window.location.pathname);
-      });
-    }
-
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
@@ -158,7 +127,6 @@ export function AuthProvider({ children }) {
       isAuthenticated: !!session,
       hasProfile: !!profile,
       isPasswordRecovery,
-      emailJustConfirmed,
       signUp,
       signIn,
       signOut,

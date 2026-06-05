@@ -528,26 +528,38 @@ export default function HomePage() {
         )}
 
         {/* Battery card */}
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-5 animate-slide-up">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="text-xs font-mono text-surface-muted uppercase tracking-widest">
-                Tu batería social
-              </div>
-              {profile?.battery_is_estimated && (
-                <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono">
-                  ⚡ Estimada
-                </span>
-              )}
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-5 pb-6 animate-slide-up">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs font-mono text-surface-muted uppercase tracking-widest">
+              Tu batería social
             </div>
-            <div className="text-right">
+            {profile?.battery_is_estimated && (
+              <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono">
+                ⚡ Estimada
+              </span>
+            )}
+          </div>
+
+          {/* Mascot + battery level */}
+          <div className="flex items-end justify-between mb-4">
+            <div className="flex flex-col items-center gap-1">
+              <img
+                src="/volty.jpg"
+                alt="Volty"
+                className="w-24 h-24 object-contain drop-shadow-lg"
+                style={{ imageRendering: 'auto' }}
+              />
+              <span className="text-[10px] font-mono text-surface-muted/50">Volty</span>
+            </div>
+            <div className="text-right flex flex-col items-end justify-end pb-1">
               <span
-                className="font-display text-4xl font-bold"
-                style={{ color: color.hex, textShadow: `0 0 25px ${color.hex}50` }}
+                className="font-display text-6xl font-bold leading-none"
+                style={{ color: color.hex, textShadow: `0 0 30px ${color.hex}60` }}
               >
                 {profileBatteryLevel}
               </span>
-              <span className="text-surface-muted text-lg font-display">%</span>
+              <span className="text-surface-muted text-xl font-display leading-none mt-1">%</span>
             </div>
           </div>
 
