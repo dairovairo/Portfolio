@@ -542,7 +542,7 @@ export default function HomePage() {
               <div className="flex items-end gap-1 mt-1">
                 <span
                   className="font-display text-5xl font-bold leading-none"
-                  style={{ color: color.hex, textShadow: `0 0 28px ${color.hex}55` }}
+                  style={{ color: color.hex, textShadow: `0 0 28px ${color.hex}40` }}
                 >
                   {profileBatteryLevel}
                 </span>
@@ -558,7 +558,7 @@ export default function HomePage() {
               alt="Mascota SocialBattery"
               className="w-32 h-32 object-contain select-none pointer-events-none flex-shrink-0"
               draggable={false}
-              style={{ filter: `drop-shadow(0 0 20px ${color.hex}88)` }}
+              style={{ filter: `drop-shadow(0 0 20px ${color.hex}66)` }}
             />
           </div>
 
