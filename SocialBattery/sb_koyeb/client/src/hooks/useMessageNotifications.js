@@ -116,16 +116,6 @@ export function useMessageNotifications(profile, settings) {
         });
       } catch (e) { console.warn('[notif] could not load friends:', e); }
 
-      // Group IDs the user belongs to
-      const groupIds = [];
-      try {
-        const { data } = await supabase
-          .from('friend_group_members')
-          .select('group_id')
-          .eq('user_id', profile.id);
-        (data || []).forEach(r => groupIds.push(r.group_id));
-      } catch (e) { console.warn('[notif] could not load groups:', e); }
-
       if (cancelled) return;
 
       // ── 3. Personal messages ────────────────────────────────────────────────
@@ -165,46 +155,39 @@ export function useMessageNotifications(profile, settings) {
         .subscribe();
       channels.push(personalCh);
 
-      // ── 4. Group messages — one channel per group (required for RLS) ────────
-      for (const groupId of groupIds) {
-        const ch = supabase
-          .channel(`notif-group-${profile.id}-${groupId}`)
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'group_messages',
-            filter: `group_id=eq.${groupId}`,
-          }, async (payload) => {
-            const s = settingsRef.current;
-            if (s.muteAllNotifications || s.muteGroupChats) return;
+      // ── 4. Group messages — broadcast per-user channel ──────────────────────
+      // The server broadcasts to `group-msg-notif-{userId}` for every group
+      // member using the service key (no RLS), exactly like the pools pattern.
+      // This replaces the previous per-group postgres_changes approach, which
+      // silently dropped events whenever RLS policies blocked the realtime rows.
+      const groupMsgBroadcastCh = supabase
+        .channel(`group-msg-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_group_message' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications || s.muteGroupChats) return;
 
-            const msg = payload.new;
-            if (msg.sender_id === profile.id) return;
+          const data = msg.payload;
+          if (!data?.group_id) return;
+          if (data.sender_id === profile.id) return;
 
-            const chatPath = `/messages/group/${groupId}`;
-            if (!shouldNotify(locationRef.current, chatPath)) return;
+          const chatPath = `/messages/group/${data.group_id}`;
+          if (!shouldNotify(locationRef.current, chatPath)) return;
 
-            let groupName  = 'Grupo';
-            let senderName = 'Alguien';
-            try {
-              const [groupRes, senderRes] = await Promise.all([
-                supabase.from('friend_groups').select('name').eq('id', groupId).single(),
-                supabase.from('users').select('display_name, username').eq('id', msg.sender_id).single(),
-              ]);
-              if (groupRes.data)  groupName  = groupRes.data.name;
-              if (senderRes.data) senderName = senderRes.data.display_name || `@${senderRes.data.username}`;
-            } catch {}
+          const groupName  = data.group_name  || 'Grupo';
+          const senderName = data.sender_name || 'Alguien';
+          const body = data.type === 'image'
+            ? `${senderName}: 📷 Imagen`
+            : `${senderName}: ${data.content?.slice(0, 80) || '📩 Nuevo mensaje'}`;
 
-            fireNotification({
-              title: groupName,
-              body:  `${senderName}: ${msg.content?.slice(0, 80) || '📩 Nuevo mensaje'}`,
-              tag:   `group-${groupId}`,
-              navigateTo: chatPath,
-            });
-          })
-          .subscribe();
-        channels.push(ch);
-      }
+          fireNotification({
+            title:      groupName,
+            body,
+            tag:        `group-${data.group_id}`,
+            navigateTo: chatPath,
+          });
+        })
+        .subscribe();
+      channels.push(groupMsgBroadcastCh);
 
       // ── 5. Battery changes ──────────────────────────────────────────────────
       // Listen to updates on the users table and filter by preloaded friend IDs.
