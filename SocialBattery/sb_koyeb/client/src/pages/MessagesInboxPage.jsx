@@ -219,6 +219,7 @@ export default function MessagesInboxPage() {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupIds, setGroupIds] = useState([]);
   const [groupUnreads, setGroupUnreads] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -252,6 +253,7 @@ export default function MessagesInboxPage() {
       const list = data || [];
       setGroups(list);
       groupsRef.current = list;
+      setGroupIds(list.map(g => g.id));
       await fetchUnreadCounts(list);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -291,29 +293,6 @@ export default function MessagesInboxPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => scheduleFetchConversations())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${profile.id}` }, () => scheduleFetchConversations())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${profile.id}` }, () => scheduleFetchConversations())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, (payload) => {
-        const msg = payload.new;
-        if (!msg?.group_id) return;
-        if (!groupsRef.current.some(g => g.id === msg.group_id)) return;
-
-        const lastMessage = {
-          group_id: msg.group_id,
-          sender_id: msg.sender_id,
-          content: msg.content,
-          type: msg.type,
-          created_at: msg.created_at,
-        };
-        setGroups(prev => {
-          const next = prev.map(group =>
-            group.id === msg.group_id ? { ...group, last_message: lastMessage } : group
-          );
-          groupsRef.current = next;
-          return next;
-        });
-        if (msg.sender_id !== profile.id) {
-          setGroupUnreads(prev => ({ ...prev, [msg.group_id]: (prev[msg.group_id] || 0) + 1 }));
-        }
-      })
       // Refresh inbox when a friendship is accepted (UPDATE) or removed (DELETE)
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -337,6 +316,53 @@ export default function MessagesInboxPage() {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [profile?.id, scheduleFetchConversations]);
+
+  // Realtime: group messages — one filtered channel per group (required for RLS).
+  // Without a filter, Supabase postgres_changes does not deliver events on
+  // RLS-protected tables, so the inbox badge and last-message preview never updated.
+  useEffect(() => {
+    if (!profile?.id || groupIds.length === 0) return;
+
+    const channels = groupIds.map(groupId =>
+      supabase
+        .channel(`inbox-grp-${profile.id}-${groupId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'group_messages',
+          filter: `group_id=eq.${groupId}`,
+        }, (payload) => {
+          const msg = payload.new;
+          if (!msg?.group_id) return;
+
+          const lastMessage = {
+            group_id: msg.group_id,
+            sender_id: msg.sender_id,
+            content: msg.content,
+            type: msg.type,
+            created_at: msg.created_at,
+          };
+
+          setGroups(prev => {
+            const next = prev.map(g =>
+              g.id === msg.group_id ? { ...g, last_message: lastMessage } : g
+            );
+            groupsRef.current = next;
+            return next;
+          });
+
+          if (msg.sender_id !== profile.id) {
+            setGroupUnreads(prev => ({
+              ...prev,
+              [msg.group_id]: (prev[msg.group_id] || 0) + 1,
+            }));
+          }
+        })
+        .subscribe()
+    );
+
+    return () => channels.forEach(ch => supabase.removeChannel(ch));
+  }, [profile?.id, groupIds]);
 
   const totalDirectUnread = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
   const totalGroupUnread = Object.values(groupUnreads).reduce((acc, n) => acc + n, 0);

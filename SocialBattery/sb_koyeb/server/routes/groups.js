@@ -4,7 +4,6 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyUsers } = require('../lib/webpush');
 
 // Multer instance for group chat image uploads (8 MB max)
 const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
@@ -334,27 +333,25 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
 // ── POST /api/groups/:id/messages ────────────────────────────────────────────
 router.post('/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
-  const groupId = req.params.id;
   const { content, type = 'text' } = req.body;
 
   if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
   if (!['text', 'hangout_request'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
   try {
-    // Check membership + fetch all members in one query for push fan-out
-    const { data: members, error: membersErr } = await supabase
+    // Check membership
+    const { data: membership } = await supabase
       .from('friend_group_members')
-      .select('user_id')
-      .eq('group_id', groupId);
+      .select('group_id')
+      .eq('group_id', req.params.id)
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (membersErr || !members?.length) return res.status(403).json({ error: 'Not a member' });
-
-    const isMember = members.some(m => m.user_id === userId);
-    if (!isMember) return res.status(403).json({ error: 'Not a member' });
+    if (!membership) return res.status(403).json({ error: 'Not a member' });
 
     const { data, error } = await supabase
       .from('group_messages')
-      .insert({ group_id: groupId, sender_id: userId, content: content.trim(), type })
+      .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
       .select(`
         id, content, type, created_at,
         sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
@@ -362,31 +359,6 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       .single();
 
     if (error) throw error;
-
-    // ── Push notifications: fan-out to all other group members ───────────────
-    // Fire-and-forget so it never delays the HTTP response.
-    const senderName = data.sender?.display_name || `@${data.sender?.username}` || 'Alguien';
-    const memberIds = members.map(m => m.user_id);
-
-    supabase
-      .from('friend_groups')
-      .select('name')
-      .eq('id', groupId)
-      .single()
-      .then(({ data: grp }) => {
-        const groupName = grp?.name || 'Grupo';
-        const body = type === 'hangout_request'
-          ? `${senderName} propone una quedada 🤝`
-          : `${senderName}: ${content.trim().slice(0, 80)}`;
-        notifyUsers(supabase, memberIds, userId, {
-          title: groupName,
-          body,
-          tag: `group-msg-${groupId}`,
-          url: `/messages/group/${groupId}`,
-        });
-      })
-      .catch(() => {});
-    // ── End push fan-out ─────────────────────────────────────────────────────
 
     res.status(201).json({
       message: {
@@ -447,32 +419,6 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       .single();
 
     if (error) throw error;
-
-    // ── Push notifications: fan-out to all other group members ───────────────
-    const senderName = data.sender?.display_name || `@${data.sender?.username}` || 'Alguien';
-    supabase
-      .from('friend_group_members')
-      .select('user_id')
-      .eq('group_id', groupId)
-      .then(({ data: members }) => {
-        if (!members?.length) return;
-        const memberIds = members.map(m => m.user_id);
-        return supabase
-          .from('friend_groups')
-          .select('name')
-          .eq('id', groupId)
-          .single()
-          .then(({ data: grp }) => {
-            notifyUsers(supabase, memberIds, userId, {
-              title: grp?.name || 'Grupo',
-              body: `${senderName}: 📷 Imagen`,
-              tag: `group-msg-${groupId}`,
-              url: `/messages/group/${groupId}`,
-            });
-          });
-      })
-      .catch(() => {});
-    // ── End push fan-out ─────────────────────────────────────────────────────
 
     res.status(201).json({
       message: {
