@@ -542,24 +542,18 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Mascot + battery level */}
-          <div className="flex flex-col items-center mb-4">
+          {/* Mascot standing on top of the battery bar */}
+          <div className="relative flex justify-center" style={{ marginBottom: '-18px', zIndex: 1 }}>
             <img
               src="/mascot.png"
               alt="Mascota SocialBattery"
-              className="w-28 h-28 object-contain drop-shadow-lg select-none"
+              className="w-24 h-24 object-contain select-none pointer-events-none"
               draggable={false}
-              style={{ filter: `drop-shadow(0 0 18px ${color.hex}55)` }}
+              style={{
+                filter: `drop-shadow(0 0 14px ${color.hex}66)`,
+                objectPosition: 'bottom',
+              }}
             />
-            <div className="flex items-end gap-1 mt-1">
-              <span
-                className="font-display text-5xl font-bold leading-none"
-                style={{ color: color.hex, textShadow: `0 0 30px ${color.hex}60` }}
-              >
-                {profileBatteryLevel}
-              </span>
-              <span className="text-surface-muted text-2xl font-display mb-1">%</span>
-            </div>
           </div>
 
           <BatterySlider value={battery} onChange={setBattery} />
