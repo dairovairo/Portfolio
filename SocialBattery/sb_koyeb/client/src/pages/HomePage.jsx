@@ -543,20 +543,22 @@ export default function HomePage() {
           </div>
 
           {/* Mascot standing on top of the battery bar */}
-          <div className="relative flex justify-center" style={{ marginBottom: '-18px', zIndex: 1 }}>
+          <div className="relative flex justify-center" style={{ marginBottom: '-28px', zIndex: 1 }}>
             <img
               src="/mascot.png"
               alt="Mascota SocialBattery"
-              className="w-24 h-24 object-contain select-none pointer-events-none"
+              className="w-36 h-36 object-contain select-none pointer-events-none"
               draggable={false}
               style={{
-                filter: `drop-shadow(0 0 14px ${color.hex}66)`,
+                filter: `drop-shadow(0 0 18px ${color.hex}66)`,
                 objectPosition: 'bottom',
               }}
             />
           </div>
 
-          <BatterySlider value={battery} onChange={setBattery} />
+          <div className="pt-6">
+            <BatterySlider value={battery} onChange={setBattery} />
+          </div>
 
           <div className="flex items-center justify-between mt-1 mb-4">
             <span className="text-xs font-mono" style={{ color: color.hex }}>{color.label}</span>
