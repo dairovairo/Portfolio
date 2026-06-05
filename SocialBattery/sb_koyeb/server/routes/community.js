@@ -220,6 +220,9 @@ router.get('/events', requireAuth, async (req, res) => {
   const db = getUserSupabase(req);
 
   try {
+    // Only fetch events that haven't ended yet (or have no end date but start in the future/today).
+    // Limit to 100 to prevent unbounded scans; enrichEvents batches attendees+likes over the full set.
+    const now = new Date().toISOString();
     const { data: events, error } = await db
       .from('community_events')
       .select(`
@@ -228,7 +231,9 @@ router.get('/events', requireAuth, async (req, res) => {
         creator:users!community_events_creator_id_fkey(display_name, username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
-      .order('event_date', { ascending: true });
+      .or(`ends_at.gte.${now},and(ends_at.is.null,event_date.gte.${now})`)
+      .order('event_date', { ascending: true })
+      .limit(100);
 
     if (error) throw error;
 
@@ -561,23 +566,40 @@ router.get('/communities', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
-    const enriched = await Promise.all((communities || []).map(async (comm) => {
-      const { data: members, count } = await db
+    const communityIds = (communities || []).map(c => c.id);
+
+    // Single query for all members across all communities — eliminates N+1
+    let allMembers = [];
+    if (communityIds.length > 0) {
+      const { data: membersData, error: mErr } = await db
         .from('community_members')
-        .select('user_id, role', { count: 'exact' })
-        .eq('community_id', comm.id);
-      const currentMembership = (members || []).find(m => m.user_id === userId);
+        .select('community_id, user_id, role')
+        .in('community_id', communityIds);
+      if (mErr) throw mErr;
+      allMembers = membersData || [];
+    }
+
+    // Group members by community_id in JS
+    const membersByCommunity = allMembers.reduce((acc, m) => {
+      if (!acc[m.community_id]) acc[m.community_id] = [];
+      acc[m.community_id].push(m);
+      return acc;
+    }, {});
+
+    const enriched = (communities || []).map((comm) => {
+      const members = membersByCommunity[comm.id] || [];
+      const currentMembership = members.find(m => m.user_id === userId);
 
       return {
         ...comm,
         creator_name: comm.creator?.display_name || comm.creator?.username || 'Alguien',
-        member_count: count || 0,
-        member_ids: (members || []).map(m => m.user_id),
-        admin_ids: (members || []).filter(m => m.role === 'admin').map(m => m.user_id),
+        member_count: members.length,
+        member_ids: members.map(m => m.user_id),
+        admin_ids: members.filter(m => m.role === 'admin').map(m => m.user_id),
         current_user_role: comm.creator_id === userId ? 'admin' : currentMembership?.role || null,
         is_admin: comm.creator_id === userId || currentMembership?.role === 'admin',
       };
-    }));
+    });
 
     res.json({ communities: enriched });
   } catch (err) {

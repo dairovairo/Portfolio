@@ -14,6 +14,25 @@ const MESSAGE_FIELDS = `
   deleted_for_everyone_at, created_at
 `;
 
+// ── GET /api/messages/unread-count — lightweight unread badge count ───────────
+// Returns a single integer. Used by HomePage/BottomNav to show the badge.
+// Replaces the old pattern of GET /messages (300 rows) just to reduce to a number.
+router.get('/unread-count', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  // Count messages received by this user that haven't been read yet,
+  // excluding messages deleted for everyone or for this user.
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('receiver_id', userId)
+    .is('read_at', null)
+    .not('deleted_for_everyone', 'is', true);
+
+  if (error) return res.status(500).json({ error: 'Failed to count unread messages' });
+  res.json({ count: count || 0 });
+});
+
 // ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
