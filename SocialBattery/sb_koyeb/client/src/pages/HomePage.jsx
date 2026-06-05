@@ -529,41 +529,45 @@ export default function HomePage() {
 
         {/* Battery card */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 animate-slide-up">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="text-xs font-mono text-surface-muted uppercase tracking-widest">
-                Tu batería social
-              </div>
+
+          {/* Header: label + level left · mascot right */}
+          <div className="flex items-end justify-between mb-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-mono text-surface-muted uppercase tracking-widest">Tu batería social</span>
               {profile?.battery_is_estimated && (
-                <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono">
+                <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono self-start">
                   ⚡ Estimada
                 </span>
               )}
+              <div className="flex items-end gap-1 mt-1">
+                <span
+                  className="font-display text-5xl font-bold leading-none"
+                  style={{ color: color.hex, textShadow: `0 0 28px ${color.hex}55` }}
+                >
+                  {profileBatteryLevel}
+                </span>
+                <span className="text-surface-muted text-xl font-display mb-0.5">%</span>
+              </div>
+              <span className="text-xs font-mono uppercase tracking-widest" style={{ color: color.hex }}>
+                {color.label}
+              </span>
             </div>
-          </div>
 
-          {/* Mascot standing on top of the battery bar */}
-          <div className="relative flex justify-center" style={{ marginBottom: '-28px', zIndex: 1 }}>
             <img
               src="/mascot.png"
               alt="Mascota SocialBattery"
-              className="w-36 h-36 object-contain select-none pointer-events-none"
+              className="w-32 h-32 object-contain select-none pointer-events-none flex-shrink-0"
               draggable={false}
-              style={{
-                filter: `drop-shadow(0 0 18px ${color.hex}66)`,
-                objectPosition: 'bottom',
-              }}
+              style={{ filter: `drop-shadow(0 0 16px ${color.hex}55)` }}
             />
           </div>
 
-          <div className="pt-6">
-            <BatterySlider value={battery} onChange={setBattery} />
-          </div>
+          {/* Battery bar */}
+          <BatterySlider value={battery} onChange={setBattery} hideDisplay />
 
-          <div className="flex items-center justify-between mt-1 mb-4">
-            <span className="text-xs font-mono" style={{ color: color.hex }}>{color.label}</span>
+          <div className="flex items-center justify-end -mt-3 mb-4">
             <span className="text-xs text-surface-muted/60">
-              Última actualización: {formatRelativeTime(profile?.battery_updated_at)}
+              Actualizado {formatRelativeTime(profile?.battery_updated_at)}
             </span>
           </div>
 
