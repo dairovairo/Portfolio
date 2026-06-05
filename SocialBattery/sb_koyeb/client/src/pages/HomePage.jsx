@@ -533,7 +533,7 @@ export default function HomePage() {
           {/* Header: label + level left · mascot right */}
           <div className="flex items-end justify-between mb-4">
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-mono text-surface-muted uppercase tracking-widest">Tu batería social</span>
+              <span className="text-xs font-semibold text-white/70 uppercase tracking-widest">Tu batería social</span>
               {profile?.battery_is_estimated && (
                 <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono self-start">
                   ⚡ Estimada
@@ -558,7 +558,7 @@ export default function HomePage() {
               alt="Mascota SocialBattery"
               className="w-32 h-32 object-contain select-none pointer-events-none flex-shrink-0"
               draggable={false}
-              style={{ filter: `drop-shadow(0 0 16px ${color.hex}55)` }}
+              style={{ filter: `drop-shadow(0 0 20px ${color.hex}88)` }}
             />
           </div>
 
