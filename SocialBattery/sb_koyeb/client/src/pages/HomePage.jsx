@@ -529,7 +529,7 @@ export default function HomePage() {
 
         {/* Battery card */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 animate-slide-up">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
             <div>
               <div className="text-xs font-mono text-surface-muted uppercase tracking-widest">
                 Tu batería social
@@ -540,14 +540,25 @@ export default function HomePage() {
                 </span>
               )}
             </div>
-            <div className="text-right">
+          </div>
+
+          {/* Mascot + battery level */}
+          <div className="flex flex-col items-center mb-4">
+            <img
+              src="/mascot.png"
+              alt="Mascota SocialBattery"
+              className="w-28 h-28 object-contain drop-shadow-lg select-none"
+              draggable={false}
+              style={{ filter: `drop-shadow(0 0 18px ${color.hex}55)` }}
+            />
+            <div className="flex items-end gap-1 mt-1">
               <span
-                className="font-display text-4xl font-bold"
-                style={{ color: color.hex, textShadow: `0 0 25px ${color.hex}50` }}
+                className="font-display text-5xl font-bold leading-none"
+                style={{ color: color.hex, textShadow: `0 0 30px ${color.hex}60` }}
               >
                 {profileBatteryLevel}
               </span>
-              <span className="text-surface-muted text-lg font-display">%</span>
+              <span className="text-surface-muted text-2xl font-display mb-1">%</span>
             </div>
           </div>
 
