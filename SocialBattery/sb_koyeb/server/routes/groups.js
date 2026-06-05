@@ -4,6 +4,27 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { notifyUsers } = require('../lib/webpush');
+
+// ── Helper: push notification to all group members except the sender ──────────
+async function notifyGroupMembers(groupId, senderId, senderData, body) {
+  try {
+    const [membersRes, groupRes] = await Promise.all([
+      supabase.from('friend_group_members').select('user_id').eq('group_id', groupId),
+      supabase.from('friend_groups').select('name').eq('id', groupId).single(),
+    ]);
+    const memberIds = (membersRes.data || []).map(m => m.user_id);
+    const groupName = groupRes.data?.name || 'Grupo';
+    await notifyUsers(supabase, memberIds, senderId, {
+      title: groupName,
+      body,
+      url: `/messages/group/${groupId}`,
+      tag: `group-${groupId}`,
+    });
+  } catch (e) {
+    console.warn('[GROUPS] push notification error:', e.message);
+  }
+}
 
 // Multer instance for group chat image uploads (8 MB max)
 const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
@@ -333,6 +354,7 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
 // ── POST /api/groups/:id/messages ────────────────────────────────────────────
 router.post('/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
+  const groupId = req.params.id;
   const { content, type = 'text' } = req.body;
 
   if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
@@ -343,7 +365,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
     const { data: membership } = await supabase
       .from('friend_group_members')
       .select('group_id')
-      .eq('group_id', req.params.id)
+      .eq('group_id', groupId)
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -351,7 +373,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 
     const { data, error } = await supabase
       .from('group_messages')
-      .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
+      .insert({ group_id: groupId, sender_id: userId, content: content.trim(), type })
       .select(`
         id, content, type, created_at,
         sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
@@ -366,6 +388,14 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
         sender: applyBatteryExpiry(data.sender),
       },
     });
+
+    // ── Fire-and-forget push to other group members ─────────────────────────
+    const senderName = data.sender?.display_name || `@${data.sender?.username}` || 'Alguien';
+    const notifBody = type === 'hangout_request'
+      ? `${senderName} propone una quedada 🤝`
+      : `${senderName}: ${content.trim().slice(0, 80)}`;
+    notifyGroupMembers(groupId, userId, data.sender, notifBody);
+
   } catch (err) {
     console.error('[GROUPS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });
@@ -426,6 +456,11 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
         sender: applyBatteryExpiry(data.sender),
       },
     });
+
+    // ── Fire-and-forget push to other group members ─────────────────────────
+    const senderName = data.sender?.display_name || `@${data.sender?.username}` || 'Alguien';
+    notifyGroupMembers(groupId, userId, data.sender, `${senderName}: 📸 Foto`);
+
   } catch (e) {
     console.error('[GROUPS] image upload error:', e);
     return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
