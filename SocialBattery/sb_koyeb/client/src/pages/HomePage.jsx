@@ -344,7 +344,7 @@ export default function HomePage() {
       setFriends(sorted);
     } catch (e) { console.error(e); }
     finally { setLoadingFriends(false); }
-  }, [profile?.battery_level]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — no deps: profile.battery_level was causing a cascade refetch on every save
 
   const fetchPending = useCallback(async () => {
     try {
@@ -355,9 +355,8 @@ export default function HomePage() {
 
   const fetchUnread = useCallback(async () => {
     try {
-      const { conversations } = await api.get('/messages');
-      const unread = (conversations || []).reduce((acc, c) => acc + (c.unread || 0), 0);
-      setUnreadCount(unread);
+      const { count } = await api.get('/messages/unread-count');
+      setUnreadCount(count || 0);
     } catch (e) {}
   }, []);
 
@@ -436,7 +435,6 @@ export default function HomePage() {
       await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-      fetchFriends();
       if (earned?.length > 0) {
         setNewBadges(earned);
         addToast(`¡Batería actualizada! +${earned.length} insignia${earned.length > 1 ? 's' : ''} 🏅`, 'success');
