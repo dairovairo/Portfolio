@@ -1397,7 +1397,7 @@ export default function CommunityPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
+  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
 
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -1441,8 +1441,12 @@ export default function CommunityPage() {
     load();
   }, [fetchEvents, fetchCommunities]);
 
-  // Event-update badges are cleared individually when the user opens each event
-  // Community event badges are cleared per-community when the user opens a specific community
+  // Al entrar a la sección de comunidad se marcan como vistos los badges de
+  // nuevos eventos (BottomNav + por-comunidad). El badge de "Plan" se limpia
+  // al hacer click en ese tab, y el de evento individual en EventDetailPage.
+  useEffect(() => {
+    clearEventBadge();
+  }, [clearEventBadge]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   async function handleCreateEvent(form) {
@@ -1604,7 +1608,7 @@ export default function CommunityPage() {
               🌐 Eventos
             </button>
             <button
-              onClick={() => setTab('planning')}
+              onClick={() => { setTab('planning'); clearAllEventUpdateBadges(); }}
               className={`relative flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'planning'
                   ? 'bg-accent-primary text-white shadow-sm'
