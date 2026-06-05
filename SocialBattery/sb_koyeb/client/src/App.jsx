@@ -22,14 +22,22 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 
 function AppRoutes() {
-  const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
+  const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery, emailJustConfirmed } = useAuth();
 
+  // While a token_hash from an email confirmation link is being exchanged,
+  // show a specific loading screen so the user doesn't see a flash of /auth or /setup.
   if (isLoading) {
+    const hasToken = typeof window !== 'undefined' && (
+      window.location.search.includes('token_hash') ||
+      window.location.hash.includes('access_token')
+    );
     return (
       <div className="min-h-screen bg-surface-bg flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4 animate-pulse-slow">🔋</div>
-          <div className="text-surface-muted font-mono text-sm">Cargando...</div>
+          <div className="text-surface-muted font-mono text-sm">
+            {hasToken ? 'Verificando email...' : 'Cargando...'}
+          </div>
         </div>
       </div>
     );
