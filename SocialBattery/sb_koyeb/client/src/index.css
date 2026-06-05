@@ -166,6 +166,10 @@ select {
 @keyframes slideDown { from { transform: translateY(-8px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
 @keyframes scaleIn   { from { transform: scale(0.92); opacity: 0 } to { transform: scale(1); opacity: 1 } }
 @keyframes shimmer   { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+@keyframes mascotFadeIn {
+  from { opacity: 0; transform: scale(0.88) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
 
 .animate-fade-in    { animation: fadeIn 0.4s ease-out both; }
 .animate-slide-up   { animation: slideUp 0.3s ease-out both; }

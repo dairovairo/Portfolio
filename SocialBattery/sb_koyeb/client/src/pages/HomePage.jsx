@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+import { useTheme } from '../context/ThemeContext';
 import { api } from '../lib/api';
 import BatterySlider from '../components/BatterySlider';
 import FriendCard from '../components/FriendCard';
@@ -12,6 +13,18 @@ import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatter
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
 import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+
+// ── Mascota: selección por nivel de batería ────────────────────────────────────
+function getMascotSrc(level) {
+  if (level <= 33) return '/mascot-low.png';
+  if (level <= 66) return '/mascot-mid.png';
+  return '/mascot-high.png';
+}
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
 function Avatar({ user, size = 'sm', online = false }) {
@@ -309,6 +322,7 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
 export default function HomePage() {
   const { profile, refreshProfile } = useAuth();
   const { addToast } = useToast();
+  const { isLight } = useTheme();
   const navigate = useNavigate();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
@@ -554,11 +568,17 @@ export default function HomePage() {
             </div>
 
             <img
-              src="/mascot.png"
+              key={getMascotTier(battery)}
+              src={getMascotSrc(battery)}
               alt="Mascota SocialBattery"
               className="w-32 h-32 object-contain select-none pointer-events-none flex-shrink-0"
               draggable={false}
-              style={{ filter: `drop-shadow(0 0 20px ${color.hex}66)` }}
+              style={{
+                filter: isLight
+                  ? `contrast(1.12) drop-shadow(0 0 18px ${color.hex}50)`
+                  : `drop-shadow(0 0 20px ${color.hex}66)`,
+                animation: 'mascotFadeIn 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+              }}
             />
           </div>
 
