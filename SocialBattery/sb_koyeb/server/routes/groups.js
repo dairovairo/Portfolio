@@ -6,28 +6,61 @@ const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batter
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyUsers } = require('../lib/webpush');
 
-// ── Helper: push notification to all group members except the sender ──────────
-async function notifyGroupMembers(groupId, senderId, senderData, body) {
-  try {
-    const [membersRes, groupRes] = await Promise.all([
-      supabase.from('friend_group_members').select('user_id').eq('group_id', groupId),
-      supabase.from('friend_groups').select('name').eq('id', groupId).single(),
-    ]);
-    const memberIds = (membersRes.data || []).map(m => m.user_id);
-    const groupName = groupRes.data?.name || 'Grupo';
-    await notifyUsers(supabase, memberIds, senderId, {
-      title: groupName,
-      body,
-      url: `/messages/group/${groupId}`,
-      tag: `group-${groupId}`,
-    });
-  } catch (e) {
-    console.warn('[GROUPS] push notification error:', e.message);
-  }
-}
-
 // Multer instance for group chat image uploads (8 MB max)
 const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
+
+// ── Broadcast helper — same pattern as pools ─────────────────────────────────
+// The service-key supabase client bypasses RLS entirely, so every group member
+// receives an instant in-app notification regardless of their RLS policies.
+async function broadcastGroupMessage({ groupId, senderId, senderName, content, type }) {
+  try {
+    const [{ data: group }, { data: members }] = await Promise.all([
+      supabase.from('friend_groups').select('name').eq('id', groupId).single(),
+      supabase
+        .from('friend_group_members')
+        .select('user_id')
+        .eq('group_id', groupId)
+        .neq('user_id', senderId),
+    ]);
+
+    const groupName    = group?.name || 'Grupo';
+    const recipientIds = (members || []).map(m => m.user_id);
+    if (!recipientIds.length) return;
+
+    const broadcastPayload = {
+      group_id:    groupId,
+      group_name:  groupName,
+      sender_id:   senderId,
+      sender_name: senderName,
+      content,
+      type,
+    };
+
+    // Realtime broadcast — one personal channel per recipient, no RLS involved
+    await Promise.allSettled(
+      recipientIds.map(recipientId =>
+        supabase
+          .channel(`group-msg-notif-${recipientId}`)
+          .send({
+            type:    'broadcast',
+            event:   'new_group_message',
+            payload: broadcastPayload,
+          })
+      )
+    );
+
+    // Web-push for recipients who have a push subscription (background / closed app)
+    const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
+    await notifyUsers(supabase, recipientIds, senderId, {
+      title: groupName,
+      body:  `${senderName}: ${previewText}`,
+      url:   `/messages/group/${groupId}`,
+      tag:   `group-${groupId}`,
+    });
+  } catch (err) {
+    console.error('[GROUPS] broadcastGroupMessage error:', err);
+  }
+}
 
 
 // ── GET /api/groups — list my groups (owned + member) ───────────────────────
@@ -354,7 +387,6 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
 // ── POST /api/groups/:id/messages ────────────────────────────────────────────
 router.post('/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
-  const groupId = req.params.id;
   const { content, type = 'text' } = req.body;
 
   if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
@@ -365,7 +397,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
     const { data: membership } = await supabase
       .from('friend_group_members')
       .select('group_id')
-      .eq('group_id', groupId)
+      .eq('group_id', req.params.id)
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -373,7 +405,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 
     const { data, error } = await supabase
       .from('group_messages')
-      .insert({ group_id: groupId, sender_id: userId, content: content.trim(), type })
+      .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
       .select(`
         id, content, type, created_at,
         sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
@@ -382,6 +414,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
+    // Respond immediately, then broadcast in the background (fire-and-forget)
     res.status(201).json({
       message: {
         ...data,
@@ -389,13 +422,14 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       },
     });
 
-    // ── Fire-and-forget push to other group members ─────────────────────────
-    const senderName = data.sender?.display_name || `@${data.sender?.username}` || 'Alguien';
-    const notifBody = type === 'hangout_request'
-      ? `${senderName} propone una quedada 🤝`
-      : `${senderName}: ${content.trim().slice(0, 80)}`;
-    notifyGroupMembers(groupId, userId, data.sender, notifBody);
-
+    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    broadcastGroupMessage({
+      groupId:    req.params.id,
+      senderId:   userId,
+      senderName,
+      content:    data.content,
+      type:       data.type,
+    }).catch(() => {});
   } catch (err) {
     console.error('[GROUPS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });
@@ -450,6 +484,7 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
 
     if (error) throw error;
 
+    // Respond immediately, then broadcast in the background (fire-and-forget)
     res.status(201).json({
       message: {
         ...data,
@@ -457,10 +492,14 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       },
     });
 
-    // ── Fire-and-forget push to other group members ─────────────────────────
-    const senderName = data.sender?.display_name || `@${data.sender?.username}` || 'Alguien';
-    notifyGroupMembers(groupId, userId, data.sender, `${senderName}: 📸 Foto`);
-
+    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    broadcastGroupMessage({
+      groupId:    groupId,
+      senderId:   userId,
+      senderName,
+      content:    data.content,
+      type:       'image',
+    }).catch(() => {});
   } catch (e) {
     console.error('[GROUPS] image upload error:', e);
     return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
