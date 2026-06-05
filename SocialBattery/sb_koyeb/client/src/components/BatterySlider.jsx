@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { getBatteryColor } from '../lib/battery';
 
-export default function BatterySlider({ value, onChange, readonly = false, isEstimated = false }) {
+export default function BatterySlider({ value, onChange, readonly = false, isEstimated = false, hideDisplay = false }) {
   const color = getBatteryColor(value);
   const barRef = useRef(null);
   const isDragging = useRef(false);
@@ -125,7 +125,7 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
         )}
       </div>
 
-      {/* Level display */}
+      {!hideDisplay && (
       <div className="text-center mb-6">
         <span
           className="font-display text-7xl font-800 tabular-nums transition-colors duration-200"
@@ -147,6 +147,7 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
