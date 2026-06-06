@@ -2,13 +2,11 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { getBatteryColor } from '../lib/battery';
 
 const STEPS = [
   { id: 'welcome',  label: '¡Hola!' },
   { id: 'username', label: 'Tu nombre' },
   { id: 'avatar',   label: 'Tu foto' },
-  { id: 'battery',  label: 'Tu energía' },
   { id: 'done',     label: '¡Listo!' },
 ];
 
@@ -39,12 +37,9 @@ export default function OnboardingPage() {
   const [bio, setBio] = useState('');
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
-  const [battery, setBattery] = useState(50);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
-
-  const batteryColor = getBatteryColor(battery);
 
   function handleAvatarChange(e) {
     const file = e.target.files[0];
@@ -94,7 +89,7 @@ export default function OnboardingPage() {
           display_name: displayName.trim() || username.trim(),
           bio: bio.trim() || null,
           avatar_url: avatarUrl || (avatarPreview ? null : null),
-          initial_battery: battery,
+          initial_battery: 50,
         };
 
         try {
@@ -282,59 +277,6 @@ export default function OnboardingPage() {
               </div>
 
               <p className="text-xs text-surface-muted/60">JPG, PNG · Máx. 2MB</p>
-            </div>
-          </div>
-        );
-
-      case 'battery':
-        return (
-          <div className="animate-slide-up">
-            <div className="text-center mb-6">
-              <div className="text-5xl mb-3" style={{ filter: `drop-shadow(0 0 12px ${batteryColor.hex})` }}>⚡</div>
-              <h2 className="font-display text-2xl font-bold text-surface-text">¿Cuánta energía tienes hoy?</h2>
-              <p className="text-surface-muted text-sm mt-1">Tu batería social refleja tus ganas de socializar</p>
-            </div>
-
-            {/* Big battery display */}
-            <div className="text-center mb-6">
-              <div
-                className="font-display text-7xl font-bold transition-all duration-200"
-                style={{ color: batteryColor.hex, textShadow: `0 0 40px ${batteryColor.hex}50` }}
-              >
-                {battery}
-              </div>
-              <div className="font-display text-xl text-surface-muted">%</div>
-              <div className="font-mono text-sm mt-1" style={{ color: batteryColor.hex }}>
-                {batteryColor.label}
-              </div>
-            </div>
-
-            {/* Slider */}
-            <div className="px-2">
-              <input
-                type="range"
-                min={0} max={100}
-                value={battery}
-                onChange={e => setBattery(Number(e.target.value))}
-                className="w-full h-3 rounded-full appearance-none cursor-pointer"
-                style={{
-                  background: `linear-gradient(to right, ${batteryColor.hex} ${battery}%, var(--sb-border) ${battery}%)`,
-                  accentColor: batteryColor.hex,
-                }}
-              />
-              <div className="flex justify-between mt-1">
-                <span className="text-xs font-mono" style={{ color: 'var(--battery-dead)' }}>😴 0</span>
-                <span className="text-xs font-mono text-surface-muted">50</span>
-                <span className="text-xs font-mono" style={{ color: 'var(--battery-full)' }}>100 🤩</span>
-              </div>
-            </div>
-
-            {/* Descriptive tips */}
-            <div className="mt-6 bg-surface-card border border-surface-border rounded-2xl p-4">
-              <p className="text-xs text-surface-muted leading-relaxed">
-                💡 Tus amigos verán este número. Actualízalo cada día para que sepan
-                si tienes ganas de quedar o prefieres estar tranquilo.
-              </p>
             </div>
           </div>
         );

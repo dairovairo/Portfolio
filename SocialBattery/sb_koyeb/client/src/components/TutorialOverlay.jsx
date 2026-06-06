@@ -87,7 +87,7 @@ const STEPS = [
     body:       '\u00a1Adem\u00e1s puedes unirte a comunidades seg\u00fan tus gustos! \ud83d\udc65\u2728',
     cta:        '\u00a1Empezar!',
     page:       '/community',
-    highlight:  'tutorial-communities-section',
+    highlight:  null,
     navigateTo: '/',
     switchTab:  'communities',
   },
