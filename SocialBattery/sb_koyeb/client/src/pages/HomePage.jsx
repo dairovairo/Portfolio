@@ -469,12 +469,16 @@ export default function HomePage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
 
-      // Avanzar al siguiente avatar del tier actual
+      // Cambiar a un avatar aleatorio del tier actual (sin repetir el mismo)
       const tier = getMascotTier(battery);
-      setMascotIndexes(prev => ({
-        ...prev,
-        [tier]: (prev[tier] + 1) % MASCOT_POOLS[tier].length,
-      }));
+      setMascotIndexes(prev => {
+        const pool = MASCOT_POOLS[tier];
+        let next;
+        do {
+          next = Math.floor(Math.random() * pool.length);
+        } while (next === prev[tier] && pool.length > 1);
+        return { ...prev, [tier]: next };
+      });
 
       if (earned?.length > 0) {
         setNewBadges(earned);
