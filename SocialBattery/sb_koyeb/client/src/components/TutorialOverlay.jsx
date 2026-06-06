@@ -45,7 +45,10 @@ const STEPS = [
     navigateTo: '/pools',
     switchTab:  null,
     panelTop:   true,
-    mascotRight: true,   // mascota a la derecha del título, panel anclado arriba
+    compactTop:  true,       // panel pequeño anclado arriba
+    mascotRight: true,       // mascota a la derecha dentro del panel
+    noHighlight: true,       // sin cuadrado azul de realce
+    scrollBlock: 'start',    // scroll mínimo: lleva el top del elemento al top visible
   },
   {
     mascot:     '/mascot-high.png',
@@ -147,11 +150,11 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
             el.style.position = 'relative';
             el.style.zIndex = '45';
             updateSpotlightRect();
-          } else {
+          } else if (!current.noHighlight) {
             el.classList.add('tutorial-highlight');
           }
           prevHighlightRef.current = current.highlight;
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.scrollIntoView({ behavior: 'smooth', block: current.scrollBlock || 'center' });
         }
       }, 120);
       return () => clearTimeout(t);
@@ -277,7 +280,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
         />
       )}
 
-      {/* ── PASO 3: panel compacto anclado arriba-derecha, sin mascota ───────── */}
+      {/* ── PASO compacto: panel pequeño anclado arriba, con mascota opcional ─── */}
       {compactTop && (
         <div className="fixed top-0 inset-x-0 z-50 flex justify-center px-4 pt-4 pointer-events-none">
           <div
@@ -303,16 +306,34 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
                 </div>
                 <span className="text-xs text-surface-muted/50 font-mono">{step + 1}/{TOTAL}</span>
               </div>
-              {/* Contenido */}
-              <div key={`content-${step}`} className="mb-3" style={{ animation: 'slideUp 0.28s ease-out both' }}>
-                <h2 className="font-display text-base font-bold text-surface-text mb-1 leading-snug">
-                  {current.title}
-                </h2>
-                <p className="text-surface-muted text-xs leading-relaxed">
-                  {current.body}
-                </p>
+              {/* Contenido + mascota opcional a la derecha */}
+              <div className="flex items-start gap-2 mb-3">
+                <div
+                  key={`content-${step}`}
+                  className="flex-1 min-w-0"
+                  style={{ animation: 'slideUp 0.28s ease-out both' }}
+                >
+                  <h2 className="font-display text-base font-bold text-surface-text mb-1 leading-snug">
+                    {current.title}
+                  </h2>
+                  <p className="text-surface-muted text-xs leading-relaxed">
+                    {current.body}
+                  </p>
+                </div>
+                {mascotRight && (
+                  <div className="pointer-events-none select-none flex-shrink-0 mt-[-10px] mr-[-6px]">
+                    <img
+                      key={`mascot-${step}`}
+                      src={current.mascot}
+                      alt="Mascota SocialBattery"
+                      className="w-20 h-20 object-contain"
+                      draggable={false}
+                      style={mascotStyle}
+                    />
+                  </div>
+                )}
               </div>
-              {/* Botones */}
+              {/* Botón */}
               <div className="flex gap-2">
                 <button
                   onClick={handleAdvance}
