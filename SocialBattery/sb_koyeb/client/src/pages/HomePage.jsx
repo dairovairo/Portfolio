@@ -14,12 +14,30 @@ import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
 import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
 
-// ── Mascota: selección por nivel de batería ────────────────────────────────────
-function getMascotSrc(level) {
-  if (level <= 33) return '/mascot-low.png';
-  if (level <= 66) return '/mascot-mid.png';
-  return '/mascot-high.png';
-}
+// ── Mascota: pools de avatares por tier de batería ────────────────────────────
+const MASCOT_POOLS = {
+  high: [
+    '/mascot-high.png',
+    '/mascot-high-2.png',
+    '/mascot-high-3.png',
+    '/mascot-high-4.png',
+    '/mascot-high-5.png',
+  ],
+  mid: [
+    '/mascot-mid.png',
+    '/mascot-mid-2.png',
+    '/mascot-mid-3.png',
+    '/mascot-mid-4.png',
+    '/mascot-mid-5.png',
+  ],
+  low: [
+    '/mascot-low.png',
+    '/mascot-low-2.png',
+    '/mascot-low-3.png',
+    '/mascot-low-4.png',
+  ],
+};
+
 function getMascotTier(level) {
   if (level <= 33) return 'low';
   if (level <= 66) return 'mid';
@@ -326,6 +344,7 @@ export default function HomePage() {
   const navigate = useNavigate();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
+  const [mascotIndexes, setMascotIndexes] = useState({ high: 0, mid: 0, low: 0 });
   const [friends, setFriends] = useState([]);
   const onlineMap = useFriendsOnline(friends);
   const [groups, setGroups] = useState([]);
@@ -449,6 +468,14 @@ export default function HomePage() {
       await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+
+      // Avanzar al siguiente avatar del tier actual
+      const tier = getMascotTier(battery);
+      setMascotIndexes(prev => ({
+        ...prev,
+        [tier]: (prev[tier] + 1) % MASCOT_POOLS[tier].length,
+      }));
+
       if (earned?.length > 0) {
         setNewBadges(earned);
         addToast(`¡Batería actualizada! +${earned.length} insignia${earned.length > 1 ? 's' : ''} 🏅`, 'success');
@@ -568,8 +595,8 @@ export default function HomePage() {
             </div>
 
             <img
-              key={getMascotTier(battery)}
-              src={getMascotSrc(battery)}
+              key={`${getMascotTier(battery)}-${mascotIndexes[getMascotTier(battery)]}`}
+              src={MASCOT_POOLS[getMascotTier(battery)][mascotIndexes[getMascotTier(battery)]]}
               alt="Mascota SocialBattery"
               className="w-32 h-32 object-contain select-none pointer-events-none flex-shrink-0"
               draggable={false}
