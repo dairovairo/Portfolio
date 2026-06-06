@@ -25,7 +25,6 @@ const MASCOT_POOLS = {
   ],
   mid: [
     '/mascot-mid.png',
-    '/mascot-mid-3.png',
     '/mascot-mid-4.png',
     '/mascot-mid-5.png',
   ],
@@ -605,7 +604,7 @@ export default function HomePage() {
               draggable={false}
               style={{
                 filter: isLight
-                  ? `contrast(1.12) drop-shadow(0 0 18px ${color.hex}50)`
+                  ? `drop-shadow(0 0 18px ${color.hex}50)`
                   : `drop-shadow(0 0 20px ${color.hex}66)`,
                 animation: 'mascotFadeIn 0.35s cubic-bezier(0.34,1.56,0.64,1)',
               }}
