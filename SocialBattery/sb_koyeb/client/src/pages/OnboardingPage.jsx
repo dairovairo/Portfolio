@@ -372,15 +372,6 @@ export default function OnboardingPage() {
             )}
           </div>
 
-          {/* Skip avatar */}
-          {STEPS[step].id === 'avatar' && (
-            <button
-              onClick={goNext}
-              className="mt-2 text-center text-xs text-surface-muted hover:text-surface-text transition-colors py-1"
-            >
-              Saltar por ahora →
-            </button>
-          )}
         </div>
 
         {/* Escape hatch — session may have expired or the user is stuck */}

@@ -315,13 +315,6 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
               {/* Botones */}
               <div className="flex gap-2">
                 <button
-                  onClick={dismiss}
-                  className="py-2 px-3 rounded-xl border border-surface-border text-surface-muted text-xs font-display font-semibold
-                    hover:text-surface-text hover:border-surface-muted transition-all"
-                >
-                  Saltar
-                </button>
-                <button
                   onClick={handleAdvance}
                   className="flex-1 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display
                     font-semibold transition-all hover:shadow-lg hover:shadow-accent-primary/20"
@@ -416,13 +409,6 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
 
               {/* Botones */}
               <div className="flex gap-2">
-                <button
-                  onClick={dismiss}
-                  className="py-3 px-4 rounded-xl border border-surface-border text-surface-muted text-sm font-display font-semibold
-                    hover:text-surface-text hover:border-surface-muted transition-all"
-                >
-                  Saltar
-                </button>
                 <button
                   onClick={handleAdvance}
                   className="flex-1 py-3 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display
