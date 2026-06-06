@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import BatterySlider from '../components/BatterySlider';
 import FriendCard from '../components/FriendCard';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
+import TutorialOverlay from '../components/TutorialOverlay';
 import BottomNav from '../components/BottomNav';
 import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
@@ -504,6 +505,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
+      <TutorialOverlay />
       <BadgeUnlockModal badges={newBadges} onClose={() => setNewBadges([])} />
 
       {/* Modals */}
