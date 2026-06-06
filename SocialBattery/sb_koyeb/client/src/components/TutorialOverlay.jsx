@@ -33,6 +33,7 @@ const STEPS = [
     navigateTo: null,
     switchTab:  null,
     spotlight:  true,
+    mascotRight: true,   // mascota flotante a la derecha del título
   },
   {
     mascot:     '/mascot-high.png',
@@ -44,6 +45,7 @@ const STEPS = [
     navigateTo: '/pools',
     switchTab:  null,
     panelTop:   true,
+    compactTop: true,    // panel compacto sin mascota para liberar espacio
   },
   {
     mascot:     '/mascot-high.png',
@@ -207,192 +209,247 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
   }
 
   // ── Overlay: en spotlight usamos SVG clip-path para "recortar" la zona ───
-  const PAD = 12; // padding alrededor del elemento resaltado
+  const PAD = 12;    // padding alrededor del elemento resaltado
   const RADIUS = 16; // border-radius del recorte
-  const panelTop = !!current.panelTop;
+  const panelTop    = !!current.panelTop;
+  const compactTop  = !!current.compactTop;   // paso 3: panel pequeño arriba, sin mascota
+  const mascotRight = !!current.mascotRight;  // paso 2: mascota flotante fuera de la tarjeta
+
+  const mascotStyle = {
+    animation: 'mascotFadeIn 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+    filter: isLight
+      ? 'drop-shadow(0 0 22px rgba(0,148,158,0.45))'
+      : 'drop-shadow(0 0 26px rgba(45,212,220,0.55))',
+  };
 
   return (
     <>
       {/* Fondo oscuro / spotlight */}
       {isSpotlight && spotlightRect ? (
-        // SVG con agujero: todo oscuro/blur excepto la zona de la batería
         <svg
           className="fixed inset-0 z-40 pointer-events-none"
           style={{ width: '100vw', height: '100vh' }}
           xmlns="http://www.w3.org/2000/svg"
-          onClick={dismiss}
         >
           <defs>
             <filter id="sb-blur">
               <feGaussianBlur stdDeviation="2" />
             </filter>
             <mask id="sb-spotlight-mask">
-              {/* Blanco = visible (la zona del agujero) */}
               <rect width="100%" height="100%" fill="white" />
-              {/* Negro = oculto bajo la capa oscura (el agujero en el overlay) */}
               <rect
                 x={spotlightRect.left - PAD}
                 y={spotlightRect.top - PAD}
                 width={spotlightRect.width + PAD * 2}
                 height={spotlightRect.height + PAD * 2}
-                rx={RADIUS}
-                ry={RADIUS}
+                rx={RADIUS} ry={RADIUS}
                 fill="black"
               />
             </mask>
-            <clipPath id="sb-spotlight-clip">
-              {/* Zona fuera del agujero = recibe blur */}
-              <rect width="100%" height="100%" />
-            </clipPath>
           </defs>
-
-          {/* Capa blur: cubre todo */}
+          <rect width="100%" height="100%" fill="transparent" filter="url(#sb-blur)" />
           <rect
-            width="100%"
-            height="100%"
-            fill="transparent"
-            filter="url(#sb-blur)"
-          />
-
-          {/* Capa oscura con agujero */}
-          <rect
-            width="100%"
-            height="100%"
+            width="100%" height="100%"
             fill="rgba(0,0,0,0.60)"
             mask="url(#sb-spotlight-mask)"
             style={{ pointerEvents: 'auto', cursor: 'pointer' }}
             onClick={dismiss}
           />
-
-          {/* Borde luminoso alrededor del recorte */}
           <rect
             x={spotlightRect.left - PAD}
             y={spotlightRect.top - PAD}
             width={spotlightRect.width + PAD * 2}
             height={spotlightRect.height + PAD * 2}
-            rx={RADIUS}
-            ry={RADIUS}
+            rx={RADIUS} ry={RADIUS}
             fill="none"
             stroke="rgba(45,212,220,0.70)"
             strokeWidth="2"
           />
         </svg>
       ) : (
-        // Fondo genérico para pasos sin spotlight
         <div
           className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
           onClick={dismiss}
         />
       )}
 
-      {/* Panel — anclado arriba o abajo según panelTop */}
-      <div
-        className={`fixed inset-x-0 z-50 flex flex-col items-center px-4 pointer-events-none ${
-          panelTop
-            ? 'top-0 pt-4 sm:pt-6'
-            : 'bottom-0 pb-28 sm:pb-8'
-        }`}
-      >
+      {/* ── PASO 3: panel compacto anclado arriba-derecha, sin mascota ───────── */}
+      {compactTop && (
+        <div className="fixed top-0 inset-x-0 z-50 flex justify-center px-4 pt-4 pointer-events-none">
+          <div
+            className="w-full max-w-sm pointer-events-auto animate-slide-up"
+            style={{ animationDuration: '0.35s' }}
+          >
+            <div className="bg-surface-card border border-surface-border rounded-2xl px-4 py-3 shadow-2xl">
+              {/* Progreso */}
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-1">
+                  {STEPS.map((_, i) => (
+                    <div
+                      key={i}
+                      className="rounded-full transition-all duration-300"
+                      style={{
+                        width: i === step ? 16 : 5,
+                        height: 5,
+                        background: i <= step ? 'var(--sb-accent)' : 'var(--sb-border)',
+                        opacity: i < step ? 0.55 : 1,
+                      }}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs text-surface-muted/50 font-mono">{step + 1}/{TOTAL}</span>
+              </div>
+              {/* Contenido */}
+              <div key={`content-${step}`} className="mb-3" style={{ animation: 'slideUp 0.28s ease-out both' }}>
+                <h2 className="font-display text-base font-bold text-surface-text mb-1 leading-snug">
+                  {current.title}
+                </h2>
+                <p className="text-surface-muted text-xs leading-relaxed">
+                  {current.body}
+                </p>
+              </div>
+              {/* Botones */}
+              <div className="flex gap-2">
+                <button
+                  onClick={dismiss}
+                  className="py-2 px-3 rounded-xl border border-surface-border text-surface-muted text-xs font-display font-semibold
+                    hover:text-surface-text hover:border-surface-muted transition-all"
+                >
+                  Saltar
+                </button>
+                <button
+                  onClick={handleAdvance}
+                  className="flex-1 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display
+                    font-semibold transition-all hover:shadow-lg hover:shadow-accent-primary/20"
+                >
+                  {current.cta}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PASOS NORMALES: panel abajo (o arriba con mascota) ───────────────── */}
+      {!compactTop && (
         <div
-          className="relative w-full max-w-sm animate-slide-up pointer-events-auto"
-          style={{ animationDuration: '0.35s' }}
+          className={`fixed inset-x-0 z-50 flex flex-col items-center px-4 pointer-events-none ${
+            panelTop ? 'top-0 pt-4 sm:pt-6' : 'bottom-0 pb-28 sm:pb-8'
+          }`}
         >
-          {/* Mascota — encima de la tarjeta si panel abajo, debajo si panel arriba */}
-          {!panelTop && (
-            <div className="flex justify-center mb-[-20px] relative z-10 pointer-events-none select-none">
-              <img
-                key={`mascot-${step}`}
-                src={current.mascot}
-                alt="Mascota SocialBattery"
-                className="w-36 h-36 object-contain"
-                draggable={false}
-                style={{
-                  animation: 'mascotFadeIn 0.4s cubic-bezier(0.34,1.56,0.64,1)',
-                  filter: isLight
-                    ? 'drop-shadow(0 0 22px rgba(0,148,158,0.45))'
-                    : 'drop-shadow(0 0 26px rgba(45,212,220,0.55))',
-                }}
-              />
-            </div>
-          )}
-
-          {/* Tarjeta */}
-          <div className="bg-surface-card border border-surface-border rounded-3xl px-6 pt-8 pb-6 shadow-2xl">
-
-            {/* Puntos de progreso */}
-            <div className="flex justify-center items-center gap-1.5 mb-5">
-              {STEPS.map((_, i) => (
-                <div
-                  key={i}
-                  className="rounded-full transition-all duration-300"
-                  style={{
-                    width: i === step ? 20 : 7,
-                    height: 7,
-                    background: i <= step ? 'var(--sb-accent)' : 'var(--sb-border)',
-                    opacity: i < step ? 0.55 : 1,
-                  }}
+          <div
+            className="relative w-full max-w-sm animate-slide-up pointer-events-auto"
+            style={{ animationDuration: '0.35s' }}
+          >
+            {/* Mascota encima (panel abajo, no mascotRight) */}
+            {!panelTop && !mascotRight && (
+              <div className="flex justify-center mb-[-20px] relative z-10 pointer-events-none select-none">
+                <img
+                  key={`mascot-${step}`}
+                  src={current.mascot}
+                  alt="Mascota SocialBattery"
+                  className="w-36 h-36 object-contain"
+                  draggable={false}
+                  style={mascotStyle}
                 />
-              ))}
-            </div>
+              </div>
+            )}
 
-            {/* Texto */}
-            <div
-              key={`content-${step}`}
-              className="text-center mb-6"
-              style={{ animation: 'slideUp 0.28s ease-out both' }}
-            >
-              <h2 className="font-display text-xl font-bold text-surface-text mb-2 leading-snug">
-                {current.title}
-              </h2>
-              <p className="text-surface-muted text-sm leading-relaxed">
-                {current.body}
+            {/* Tarjeta */}
+            <div className={`bg-surface-card border border-surface-border rounded-3xl shadow-2xl ${
+              mascotRight ? 'px-5 pt-5 pb-5' : 'px-6 pt-8 pb-6'
+            }`}>
+
+              {/* Fila superior: progreso + mascota a la derecha (mascotRight) */}
+              <div className={`flex items-start ${mascotRight ? 'gap-3 mb-4' : 'flex-col'}`}>
+                {/* Columna texto */}
+                <div className="flex-1 min-w-0">
+                  {/* Puntos de progreso */}
+                  <div className="flex items-center gap-1.5 mb-4">
+                    {STEPS.map((_, i) => (
+                      <div
+                        key={i}
+                        className="rounded-full transition-all duration-300"
+                        style={{
+                          width: i === step ? 20 : 7,
+                          height: 7,
+                          background: i <= step ? 'var(--sb-accent)' : 'var(--sb-border)',
+                          opacity: i < step ? 0.55 : 1,
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Texto */}
+                  <div
+                    key={`content-${step}`}
+                    className={`mb-5 ${mascotRight ? 'text-left' : 'text-center'}`}
+                    style={{ animation: 'slideUp 0.28s ease-out both' }}
+                  >
+                    <h2 className="font-display text-xl font-bold text-surface-text mb-2 leading-snug">
+                      {current.title}
+                    </h2>
+                    <p className="text-surface-muted text-sm leading-relaxed">
+                      {current.body}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Mascota a la derecha del título (mascotRight) */}
+                {mascotRight && (
+                  <div className="pointer-events-none select-none flex-shrink-0 mt-[-8px] mr-[-8px]">
+                    <img
+                      key={`mascot-${step}`}
+                      src={current.mascot}
+                      alt="Mascota SocialBattery"
+                      className="w-24 h-24 object-contain"
+                      draggable={false}
+                      style={mascotStyle}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-2">
+                <button
+                  onClick={dismiss}
+                  className="py-3 px-4 rounded-xl border border-surface-border text-surface-muted text-sm font-display font-semibold
+                    hover:text-surface-text hover:border-surface-muted transition-all"
+                >
+                  Saltar
+                </button>
+                <button
+                  onClick={handleAdvance}
+                  className="flex-1 py-3 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display
+                    font-semibold transition-all hover:shadow-lg hover:shadow-accent-primary/20"
+                >
+                  {current.cta}
+                </button>
+              </div>
+
+              {/* Contador */}
+              <p className="text-center text-xs text-surface-muted/50 mt-3 font-mono">
+                {step + 1} / {TOTAL}
               </p>
             </div>
 
-            {/* Botones */}
-            <div className="flex gap-2">
-              <button
-                onClick={dismiss}
-                className="py-3 px-4 rounded-xl border border-surface-border text-surface-muted text-sm font-display font-semibold
-                  hover:text-surface-text hover:border-surface-muted transition-all"
-              >
-                Saltar
-              </button>
-              <button
-                onClick={handleAdvance}
-                className="flex-1 py-3 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display
-                  font-semibold transition-all hover:shadow-lg hover:shadow-accent-primary/20"
-              >
-                {current.cta}
-              </button>
-            </div>
-
-            {/* Contador */}
-            <p className="text-center text-xs text-surface-muted/50 mt-3 font-mono">
-              {step + 1} / {TOTAL}
-            </p>
+            {/* Mascota debajo cuando panel arriba (sin mascotRight) */}
+            {panelTop && !mascotRight && (
+              <div className="flex justify-center mt-[-20px] relative z-10 pointer-events-none select-none">
+                <img
+                  key={`mascot-${step}`}
+                  src={current.mascot}
+                  alt="Mascota SocialBattery"
+                  className="w-36 h-36 object-contain"
+                  draggable={false}
+                  style={mascotStyle}
+                />
+              </div>
+            )}
           </div>
-
-          {/* Mascota debajo de la tarjeta cuando el panel está arriba */}
-          {panelTop && (
-            <div className="flex justify-center mt-[-20px] relative z-10 pointer-events-none select-none">
-              <img
-                key={`mascot-${step}`}
-                src={current.mascot}
-                alt="Mascota SocialBattery"
-                className="w-36 h-36 object-contain"
-                draggable={false}
-                style={{
-                  animation: 'mascotFadeIn 0.4s cubic-bezier(0.34,1.56,0.64,1)',
-                  filter: isLight
-                    ? 'drop-shadow(0 0 22px rgba(0,148,158,0.45))'
-                    : 'drop-shadow(0 0 26px rgba(45,212,220,0.55))',
-                }}
-              />
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </>
   );
 }
