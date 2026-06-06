@@ -45,7 +45,7 @@ const STEPS = [
     navigateTo: '/pools',
     switchTab:  null,
     panelTop:   true,
-    compactTop: true,    // panel compacto sin mascota para liberar espacio
+    mascotRight: true,   // mascota a la derecha del título, panel anclado arriba
   },
   {
     mascot:     '/mascot-high.png',
@@ -218,8 +218,8 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
   const PAD = 12;    // padding alrededor del elemento resaltado
   const RADIUS = 16; // border-radius del recorte
   const panelTop    = !!current.panelTop;
-  const compactTop  = !!current.compactTop;   // paso 3: panel pequeño arriba, sin mascota
-  const mascotRight = !!current.mascotRight;  // paso 2: mascota flotante fuera de la tarjeta
+  const compactTop  = !!current.compactTop;   // reservado para futuros pasos compactos sin mascota
+  const mascotRight = !!current.mascotRight;  // mascota flotante dentro de la tarjeta a la derecha
 
   const mascotStyle = {
     animation: 'mascotFadeIn 0.4s cubic-bezier(0.34,1.56,0.64,1)',
@@ -258,8 +258,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
             width="100%" height="100%"
             fill="rgba(0,0,0,0.60)"
             mask="url(#sb-spotlight-mask)"
-            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-            onClick={dismiss}
+            style={{ pointerEvents: 'auto' }}
           />
           <rect
             x={spotlightRect.left - PAD}
@@ -275,7 +274,6 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
       ) : (
         <div
           className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
-          onClick={dismiss}
         />
       )}
 
