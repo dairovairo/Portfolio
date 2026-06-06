@@ -1773,7 +1773,7 @@ export default function CommunityPage() {
                 ))}
               </div>
             )}
-          </div>{/* end tutorial-events-section */}
+          </div>
         ) : tab === 'planning' ? (
           <>
             <div className="mb-4">
@@ -1891,7 +1891,7 @@ export default function CommunityPage() {
                 )}
               </>
             )}
-          </div>{/* end tutorial-communities-section */}
+          </div>
         )}
       </main>
 
