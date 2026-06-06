@@ -505,7 +505,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
-      <TutorialOverlay />
+      <TutorialOverlay currentPage="/" />
       <BadgeUnlockModal badges={newBadges} onClose={() => setNewBadges([])} />
 
       {/* Modals */}

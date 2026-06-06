@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import TutorialOverlay from '../components/TutorialOverlay';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
@@ -357,6 +358,7 @@ export default function MessagesInboxPage() {
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
+      <TutorialOverlay currentPage="/messages/inbox" />
       {showCreateGroup && (
         <CreateGroupModal
           onClose={() => setShowCreateGroup(false)}
