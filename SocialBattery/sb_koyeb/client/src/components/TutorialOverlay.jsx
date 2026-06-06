@@ -1,91 +1,102 @@
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useTutorial } from '../context/TutorialContext';
 
-// ── Clave de localStorage: incrementar versión si se resetea el tutorial ──────
-const TUTORIAL_KEY = 'sb_tutorial_done_v1';
-
-// ── Configuración de pasos ────────────────────────────────────────────────────
+// ── Definición de los 5 pasos ─────────────────────────────────────────────────
+//
+//  page:       ruta en la que este paso debe mostrarse (null = cualquiera / HomePage)
+//  highlight:  id del elemento DOM a resaltar (null = sin resaltado)
+//  navigateTo: ruta a la que navegar al pulsar el CTA de ESTE paso
+//              (null = avanzar sin navegar)
+//
 const STEPS = [
   {
-    mascot: '/mascot-high.png',
-    title: 'Bienvenido a SocialBattery',
-    body: '¡Hola! Soy tu compañera de energía. Aquí podrás compartir cómo te sientes socialmente cada día y conectar con quienes tienen la misma actitud que tú. 🔋',
-    cta: '¡Vamos! ⚡',
-    highlight: null,           // sin resaltado en el paso 1
-    scrollTo: null,
+    mascot:     '/mascot-high.png',
+    title:      'Bienvenido a SocialBattery',
+    body:       '¡Hola! Soy tu compañera de energía. Aquí podrás compartir cómo te sientes socialmente cada día y conectar con quienes tienen la misma actitud que tú. 🔋',
+    cta:        '¡Vamos! ⚡',
+    page:       '/',
+    highlight:  null,
+    navigateTo: null,
   },
   {
-    mascot: '/mascot-high.png',
-    title: 'Tu batería social',
-    body: '¡Actualiza tu batería social para que la vean todos tus amigos! 🔋✨',
-    cta: 'Entendido',
-    highlight: 'tutorial-battery-bar',   // ID del BatterySlider en HomePage
-    scrollTo: 'tutorial-battery-bar',
+    mascot:     '/mascot-high.png',
+    title:      'Tu batería social',
+    body:       '¡Actualiza tu batería social para que la vean todos tus amigos! 🔋✨',
+    cta:        'Entendido',
+    page:       '/',
+    highlight:  'tutorial-battery-bar',
+    navigateTo: null,
   },
   {
-    mascot: '/mascot-high.png',
-    title: 'Tu círculo social',
-    body: '¡Invita a tus amigos para crear tu círculo social! 👥🌟',
-    cta: '¡Empezar!',
-    highlight: 'tutorial-social-panels',  // wraper que cubre amigos + grupos
-    scrollTo: 'tutorial-social-panels',
+    mascot:     '/mascot-high.png',
+    title:      'Tu círculo social',
+    body:       '¡Invita a tus amigos para crear tu círculo social! 👥🌟',
+    cta:        'Siguiente',
+    page:       '/',
+    highlight:  'tutorial-social-panels',
+    navigateTo: '/pools',
+  },
+  {
+    mascot:     '/mascot-high.png',
+    title:      'Quedadas',
+    body:       '¡Puedes organizar quedadas con tus amigos! 🤝📅',
+    cta:        'Siguiente',
+    page:       '/pools',
+    highlight:  null,
+    navigateTo: '/messages/inbox',
+  },
+  {
+    mascot:     '/mascot-high.png',
+    title:      'Mensajes',
+    body:       '¡Comunícate con tus amigos cuando quieras! 💬⚡',
+    cta:        '¡Empezar!',
+    page:       '/messages/inbox',
+    highlight:  null,
+    navigateTo: '/',
   },
 ];
 
-export default function TutorialOverlay() {
-  const { profile } = useAuth();
+const TOTAL = STEPS.length;
+
+// ── Componente ────────────────────────────────────────────────────────────────
+// Recibe `currentPage` (la ruta actual) para saber si tiene que mostrarse.
+export default function TutorialOverlay({ currentPage }) {
   const { isLight } = useTheme();
-  const [visible, setVisible] = useState(false);
-  const [step, setStep] = useState(0);
-  const [animKey, setAnimKey] = useState(0);
+  const { active, step, advance, dismiss } = useTutorial();
+  const navigate   = useNavigate();
+  const animKeyRef = useRef(0);
   const prevHighlightRef = useRef(null);
 
-  // Muestra el tutorial solo si el usuario no lo ha visto antes
+  const current = STEPS[step] ?? STEPS[TOTAL - 1];
+
+  // ── Gestión del resaltado DOM ────────────────────────────────────────────
   useEffect(() => {
-    if (!profile?.id) return;
-    const key = `${TUTORIAL_KEY}_${profile.id}`;
-    if (!localStorage.getItem(key)) {
-      const t = setTimeout(() => setVisible(true), 600);
-      return () => clearTimeout(t);
-    }
-  }, [profile?.id]);
+    if (!active) return;
 
-  // Gestión del resaltado y scroll al cambiar de paso
-  useEffect(() => {
-    if (!visible) return;
-
-    const current = STEPS[step];
-
-    // Eliminar clase de resaltado del paso anterior
+    // Quitar resaltado anterior
     if (prevHighlightRef.current) {
-      const prevEl = document.getElementById(prevHighlightRef.current);
-      if (prevEl) {
-        prevEl.classList.remove('tutorial-highlight');
-      }
+      const el = document.getElementById(prevHighlightRef.current);
+      if (el) el.classList.remove('tutorial-highlight');
     }
 
-    // Aplicar resaltado al elemento objetivo del paso actual
-    if (current.highlight) {
+    // Añadir resaltado si el paso actual lo pide Y estamos en la página correcta
+    if (current.highlight && current.page === currentPage) {
       const el = document.getElementById(current.highlight);
       if (el) {
         el.classList.add('tutorial-highlight');
         prevHighlightRef.current = current.highlight;
-        // Scroll suave hacia el elemento
-        setTimeout(() => {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 80);
+        setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
       }
     } else {
       prevHighlightRef.current = null;
-      // Volver al top en el paso 1
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [step, visible]);
+  }, [active, step, currentPage, current.highlight, current.page]);
 
-  // Limpiar resaltados al cerrar
+  // ── Limpieza al cerrar ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!visible) {
+    if (!active) {
       STEPS.forEach(s => {
         if (s.highlight) {
           const el = document.getElementById(s.highlight);
@@ -94,51 +105,41 @@ export default function TutorialOverlay() {
       });
       prevHighlightRef.current = null;
     }
-  }, [visible]);
+  }, [active]);
 
-  function advance() {
-    if (step < STEPS.length - 1) {
-      setAnimKey(k => k + 1);
-      setStep(s => s + 1);
+  // No mostrar si el tutorial no está activo o si este paso no corresponde a la página actual
+  if (!active || current.page !== currentPage) return null;
+
+  function handleAdvance() {
+    if (current.navigateTo) {
+      // Primero avanzamos el step, luego navegamos
+      advance();
+      navigate(current.navigateTo);
+    } else if (step < TOTAL - 1) {
+      advance();
     } else {
       dismiss();
     }
   }
 
-  function dismiss() {
-    if (!profile?.id) return;
-    localStorage.setItem(`${TUTORIAL_KEY}_${profile.id}`, '1');
-    setVisible(false);
-    setStep(0);
-  }
-
-  if (!visible) return null;
-
-  const current = STEPS[step];
-  const isLastStep = step === STEPS.length - 1;
-
   return (
     <>
-      {/* Fondo oscuro con blur — en pasos 2 y 3 es más transparente para ver el elemento */}
+      {/* Fondo oscuro */}
       <div
         className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
         onClick={dismiss}
-        style={{
-          // En pasos con resaltado el overlay tiene un "hueco" visual gracias al ring del elemento
-          pointerEvents: 'auto',
-        }}
       />
 
-      {/* Panel del tutorial — anclado abajo en móvil */}
+      {/* Panel anclado abajo */}
       <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col items-center pb-28 sm:pb-8 px-4 pointer-events-none">
         <div
           className="relative w-full max-w-sm animate-slide-up pointer-events-auto"
           style={{ animationDuration: '0.35s' }}
         >
-          {/* Mascota flotando sobre la tarjeta */}
+          {/* Mascota */}
           <div className="flex justify-center mb-[-20px] relative z-10 pointer-events-none select-none">
             <img
-              key={`mascot-tutorial-${step}`}
+              key={`mascot-${step}`}
               src={current.mascot}
               alt="Mascota SocialBattery"
               className="w-36 h-36 object-contain"
@@ -164,18 +165,16 @@ export default function TutorialOverlay() {
                   style={{
                     width: i === step ? 20 : 7,
                     height: 7,
-                    background: i <= step
-                      ? 'var(--sb-accent)'
-                      : 'var(--sb-border)',
+                    background: i <= step ? 'var(--sb-accent)' : 'var(--sb-border)',
                     opacity: i < step ? 0.55 : 1,
                   }}
                 />
               ))}
             </div>
 
-            {/* Contenido de texto */}
+            {/* Texto */}
             <div
-              key={`content-${animKey}`}
+              key={`content-${step}`}
               className="text-center mb-6"
               style={{ animation: 'slideUp 0.28s ease-out both' }}
             >
@@ -187,7 +186,7 @@ export default function TutorialOverlay() {
               </p>
             </div>
 
-            {/* Botones de acción */}
+            {/* Botones */}
             <div className="flex gap-2">
               <button
                 onClick={dismiss}
@@ -197,7 +196,7 @@ export default function TutorialOverlay() {
                 Saltar
               </button>
               <button
-                onClick={advance}
+                onClick={handleAdvance}
                 className="flex-1 py-3 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display
                   font-semibold transition-all hover:shadow-lg hover:shadow-accent-primary/20"
               >
@@ -205,9 +204,9 @@ export default function TutorialOverlay() {
               </button>
             </div>
 
-            {/* Contador de paso */}
+            {/* Contador */}
             <p className="text-center text-xs text-surface-muted/50 mt-3 font-mono">
-              {step + 1} / {STEPS.length}
+              {step + 1} / {TOTAL}
             </p>
           </div>
         </div>

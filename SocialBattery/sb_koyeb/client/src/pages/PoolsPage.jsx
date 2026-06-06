@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import TutorialOverlay from '../components/TutorialOverlay';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
@@ -940,6 +941,7 @@ export default function PoolsPage() {
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
+      <TutorialOverlay currentPage="/pools" />
       {/* Nav */}
       <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/80 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">

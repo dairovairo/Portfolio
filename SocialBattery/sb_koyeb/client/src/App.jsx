@@ -20,6 +20,7 @@ import CommunityDetailPage from './pages/CommunityDetailPage';
 import EventDetailPage from './pages/EventDetailPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
+import { TutorialProvider } from './context/TutorialContext';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
@@ -90,9 +91,11 @@ export default function App() {
         <SettingsProvider>
           <ToastProvider>
             <AuthProvider>
-              <CommunityNotificationsProvider>
-                <AppRoutes />
-              </CommunityNotificationsProvider>
+              <TutorialProvider>
+                <CommunityNotificationsProvider>
+                  <AppRoutes />
+                </CommunityNotificationsProvider>
+              </TutorialProvider>
             </AuthProvider>
           </ToastProvider>
         </SettingsProvider>
