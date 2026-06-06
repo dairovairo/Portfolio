@@ -943,6 +943,7 @@ export default function PoolsPage() {
     <div className="min-h-screen bg-surface-bg pb-24">
       <TutorialOverlay currentPage="/pools" />
       {/* Nav */}
+      <div id="tutorial-pools-header">
       <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/80 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate('/')} className="text-surface-muted hover:text-surface-text transition-colors p-1 text-lg">
@@ -979,6 +980,7 @@ export default function PoolsPage() {
           ))}
         </div>
       </div>
+      </div>{/* end tutorial-pools-header */}
 
       {/* Content */}
       <main className="max-w-lg mx-auto px-4 pb-10">
