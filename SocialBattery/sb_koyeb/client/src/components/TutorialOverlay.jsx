@@ -202,13 +202,15 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
       const el = document.getElementById(current.highlight);
       if (el) { el.style.position = ''; el.style.zIndex = ''; }
     }
-    if (current.navigateTo) {
+    if (step >= TOTAL - 1) {
+      // Último paso: cerrar siempre el tutorial, luego navegar si procede
+      dismiss();
+      if (current.navigateTo) navigate(current.navigateTo);
+    } else if (current.navigateTo) {
       advance();
       navigate(current.navigateTo);
-    } else if (step < TOTAL - 1) {
-      advance();
     } else {
-      dismiss();
+      advance();
     }
   }
 
