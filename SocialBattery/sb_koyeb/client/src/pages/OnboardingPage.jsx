@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
 
 const STEPS = [
@@ -29,6 +30,7 @@ function ProgressDots({ step }) {
 
 export default function OnboardingPage() {
   const { completeOnboarding, refreshProfile, signOut } = useAuth();
+  const { startTutorial } = useTutorial();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
@@ -104,6 +106,7 @@ export default function OnboardingPage() {
           }
         }
 
+        startTutorial();
         setStep(s => s + 1);
       } catch (err) {
         setError(err.message || 'Algo salió mal');
