@@ -613,8 +613,10 @@ export default function HomePage() {
             />
           </div>
 
-          {/* Battery bar */}
-          <BatterySlider value={battery} onChange={setBattery} hideDisplay />
+          {/* Battery bar — ID para el tutorial paso 2 */}
+          <div id="tutorial-battery-bar" className="rounded-xl transition-all duration-300">
+            <BatterySlider value={battery} onChange={setBattery} hideDisplay />
+          </div>
 
           <div className="flex items-center justify-end -mt-3 mb-4">
             <span className="text-xs text-surface-muted/60">
@@ -653,6 +655,9 @@ export default function HomePage() {
             }
           </button>
         </div>
+
+        {/* Panel social — ID para el tutorial paso 3 (cubre amigos + grupos) */}
+        <div id="tutorial-social-panels" className="space-y-4 rounded-2xl transition-all duration-300">
 
         {/* Friends feed */}
         <div className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
@@ -771,7 +776,9 @@ export default function HomePage() {
               )}
             </div>
           )}
-        </div>
+        </div>{/* end Groups panel */}
+
+        </div>{/* end tutorial-social-panels */}
 
       </main>
 
