@@ -24,9 +24,9 @@ const MASCOT_POOLS = {
     '/mascot-high-5.png',
   ],
   mid: [
-    '/mascot-mid.png',
     '/mascot-mid-2.png',
     '/mascot-mid-3.png',
+    '/mascot-mid-4.png',
     '/mascot-mid-5.png',
   ],
   low: [
