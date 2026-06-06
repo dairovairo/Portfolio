@@ -368,6 +368,7 @@ export default function MessagesInboxPage() {
           }}
         />
       )}
+      <div id="tutorial-messages-header">
       <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/80 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate('/')} className="text-surface-muted hover:text-surface-text p-1 text-lg transition-colors">←</button>
@@ -434,6 +435,7 @@ export default function MessagesInboxPage() {
           </div>
         </div>
       </nav>
+      </div>{/* end tutorial-messages-header */}
 
       <main className="max-w-lg mx-auto px-4 py-4 space-y-2">
         {loading ? (
