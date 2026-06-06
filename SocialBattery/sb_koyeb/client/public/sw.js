@@ -1,5 +1,5 @@
-// SocialBattery Service Worker — Phase 10 (premium + ultra notifications)
-const CACHE_NAME = 'socialbattery-v10';
+// SocialBattery Service Worker — Phase 11 (mascot avatar pools)
+const CACHE_NAME = 'socialbattery-v11';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell
