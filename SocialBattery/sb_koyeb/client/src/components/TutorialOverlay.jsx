@@ -3,73 +3,109 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useTutorial } from '../context/TutorialContext';
 
-// ── Definición de los 5 pasos ─────────────────────────────────────────────────
+// ── Definición de los 7 pasos ─────────────────────────────────────────────────
 //
-//  page:       ruta en la que este paso debe mostrarse (null = cualquiera / HomePage)
+//  page:       ruta en la que este paso debe mostrarse
 //  highlight:  id del elemento DOM a resaltar (null = sin resaltado)
 //  navigateTo: ruta a la que navegar al pulsar el CTA de ESTE paso
 //              (null = avanzar sin navegar)
+//  switchTab:  nombre del tab a activar al llegar a este paso dentro de /community
 //
 const STEPS = [
   {
     mascot:     '/mascot-high.png',
     title:      'Bienvenido a SocialBattery',
-    body:       '¡Hola! Soy tu compañera de energía. Aquí podrás compartir cómo te sientes socialmente cada día y conectar con quienes tienen la misma actitud que tú. 🔋',
-    cta:        '¡Vamos! ⚡',
+    body:       '\u00a1Hola! Soy tu compa\u00f1era de energ\u00eda. Aqu\u00ed podr\u00e1s compartir c\u00f3mo te sientes socialmente cada d\u00eda y conectar con quienes tienen la misma actitud que t\u00fa. \ud83d\udd0b',
+    cta:        '\u00a1Vamos! \u26a1',
     page:       '/',
     highlight:  null,
     navigateTo: null,
+    switchTab:  null,
   },
   {
     mascot:     '/mascot-high.png',
-    title:      'Tu batería social',
-    body:       '¡Actualiza tu batería social para que la vean todos tus amigos! 🔋✨',
+    title:      'Tu bater\u00eda social',
+    body:       '\u00a1Actualiza tu bater\u00eda social para que la vean todos tus amigos! \ud83d\udd0b\u2728',
     cta:        'Entendido',
     page:       '/',
     highlight:  'tutorial-battery-bar',
     navigateTo: null,
+    switchTab:  null,
   },
   {
     mascot:     '/mascot-high.png',
-    title:      'Tu círculo social',
-    body:       '¡Invita a tus amigos para crear tu círculo social! 👥🌟',
+    title:      'Tu c\u00edrculo social',
+    body:       '\u00a1Invita a tus amigos para crear tu c\u00edrculo social! \ud83d\udc65\ud83c\udf1f',
     cta:        'Siguiente',
     page:       '/',
     highlight:  'tutorial-social-panels',
     navigateTo: '/pools',
+    switchTab:  null,
   },
   {
     mascot:     '/mascot-high.png',
     title:      'Quedadas',
-    body:       '¡Puedes organizar quedadas con tus amigos! 🤝📅',
+    body:       '\u00a1Puedes organizar quedadas con tus amigos! \ud83e\udd1d\ud83d\udcc5',
     cta:        'Siguiente',
     page:       '/pools',
     highlight:  null,
     navigateTo: '/messages/inbox',
+    switchTab:  null,
   },
   {
     mascot:     '/mascot-high.png',
     title:      'Mensajes',
-    body:       '¡Comunícate con tus amigos cuando quieras! 💬⚡',
-    cta:        '¡Empezar!',
+    body:       '\u00a1Comun\u00edcate con tus amigos cuando quieras! \ud83d\udcac\u26a1',
+    cta:        'Siguiente',
     page:       '/messages/inbox',
     highlight:  null,
+    navigateTo: '/community',
+    switchTab:  null,
+  },
+  {
+    mascot:     '/mascot-high.png',
+    title:      'Eventos',
+    body:       '\u00a1En el men\u00fa comunidad puedes ver los eventos disponibles y a\u00f1adirlos a tu planificaci\u00f3n! \ud83c\udf10\ud83d\udcc5',
+    cta:        'Siguiente',
+    page:       '/community',
+    highlight:  'tutorial-events-section',
+    navigateTo: null,
+    switchTab:  'events',
+  },
+  {
+    mascot:     '/mascot-high.png',
+    title:      'Comunidades',
+    body:       '\u00a1Adem\u00e1s puedes unirte a comunidades seg\u00fan tus gustos! \ud83d\udc65\u2728',
+    cta:        '\u00a1Empezar!',
+    page:       '/community',
+    highlight:  'tutorial-communities-section',
     navigateTo: '/',
+    switchTab:  'communities',
   },
 ];
 
 const TOTAL = STEPS.length;
 
 // ── Componente ────────────────────────────────────────────────────────────────
-// Recibe `currentPage` (la ruta actual) para saber si tiene que mostrarse.
-export default function TutorialOverlay({ currentPage }) {
+// Props:
+//   currentPage  — ruta actual (p.ej. "/community")
+//   onSwitchTab  — callback(tabName) para que CommunityPage cambie su tab activo
+export default function TutorialOverlay({ currentPage, onSwitchTab }) {
   const { isLight } = useTheme();
   const { active, step, advance, dismiss } = useTutorial();
-  const navigate   = useNavigate();
-  const animKeyRef = useRef(0);
+  const navigate = useNavigate();
   const prevHighlightRef = useRef(null);
 
   const current = STEPS[step] ?? STEPS[TOTAL - 1];
+
+  // ── Activar tab cuando el paso lo requiere ───────────────────────────────
+  useEffect(() => {
+    if (!active) return;
+    if (current.page !== currentPage) return;
+    if (current.switchTab && onSwitchTab) {
+      onSwitchTab(current.switchTab);
+    }
+  }, [active, step, currentPage, current.page, current.switchTab, onSwitchTab]);
 
   // ── Gestión del resaltado DOM ────────────────────────────────────────────
   useEffect(() => {
@@ -81,20 +117,23 @@ export default function TutorialOverlay({ currentPage }) {
       if (el) el.classList.remove('tutorial-highlight');
     }
 
-    // Añadir resaltado si el paso actual lo pide Y estamos en la página correcta
     if (current.highlight && current.page === currentPage) {
-      const el = document.getElementById(current.highlight);
-      if (el) {
-        el.classList.add('tutorial-highlight');
-        prevHighlightRef.current = current.highlight;
-        setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
-      }
+      // Pequeño delay para que el tab haya renderizado el contenido
+      const t = setTimeout(() => {
+        const el = document.getElementById(current.highlight);
+        if (el) {
+          el.classList.add('tutorial-highlight');
+          prevHighlightRef.current = current.highlight;
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 120);
+      return () => clearTimeout(t);
     } else {
       prevHighlightRef.current = null;
     }
   }, [active, step, currentPage, current.highlight, current.page]);
 
-  // ── Limpieza al cerrar ───────────────────────────────────────────────────
+  // ── Limpiar resaltados al cerrar ─────────────────────────────────────────
   useEffect(() => {
     if (!active) {
       STEPS.forEach(s => {
@@ -107,12 +146,11 @@ export default function TutorialOverlay({ currentPage }) {
     }
   }, [active]);
 
-  // No mostrar si el tutorial no está activo o si este paso no corresponde a la página actual
+  // Solo renderizar si el tutorial está activo y estamos en la página correcta
   if (!active || current.page !== currentPage) return null;
 
   function handleAdvance() {
     if (current.navigateTo) {
-      // Primero avanzamos el step, luego navegamos
       advance();
       navigate(current.navigateTo);
     } else if (step < TOTAL - 1) {

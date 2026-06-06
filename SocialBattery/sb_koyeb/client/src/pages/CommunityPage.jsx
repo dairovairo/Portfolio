@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
+import TutorialOverlay from '../components/TutorialOverlay';
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function normalizeText(value = '') {
@@ -1572,6 +1574,7 @@ export default function CommunityPage() {
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
+      <TutorialOverlay currentPage="/community" onSwitchTab={setTab} />
       {/* Header */}
       <header className="sticky top-0 z-40 bg-surface-bg/90 backdrop-blur-xl border-b border-surface-border pt-safe">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
@@ -1651,7 +1654,7 @@ export default function CommunityPage() {
             <p className="text-surface-muted font-mono text-sm">Cargando...</p>
           </div>
         ) : tab === 'events' ? (
-          <>
+          <div id="tutorial-events-section" className="rounded-2xl transition-all duration-300">
             {/* Events title + sort selector */}
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
@@ -1770,7 +1773,7 @@ export default function CommunityPage() {
                 ))}
               </div>
             )}
-          </>
+          </div>{/* end tutorial-events-section */}
         ) : tab === 'planning' ? (
           <>
             <div className="mb-4">
@@ -1808,7 +1811,7 @@ export default function CommunityPage() {
             )}
           </>
         ) : (
-          <>
+          <div id="tutorial-communities-section" className="rounded-2xl transition-all duration-300">
             {/* Communities title */}
             <div className="mb-4">
               <h2 className="font-display font-bold text-surface-text text-lg">Comunidades</h2>
@@ -1888,7 +1891,7 @@ export default function CommunityPage() {
                 )}
               </>
             )}
-          </>
+          </div>{/* end tutorial-communities-section */}
         )}
       </main>
 
