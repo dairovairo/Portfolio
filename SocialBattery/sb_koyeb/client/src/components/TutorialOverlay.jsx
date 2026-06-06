@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useTutorial } from '../context/TutorialContext';
@@ -10,12 +10,13 @@ import { useTutorial } from '../context/TutorialContext';
 //  navigateTo: ruta a la que navegar al pulsar el CTA de ESTE paso
 //              (null = avanzar sin navegar)
 //  switchTab:  nombre del tab a activar al llegar a este paso dentro de /community
+//  spotlight:  true = usar efecto recorte (todo borroso menos el elemento)
 //
 const STEPS = [
   {
     mascot:     '/mascot-high.png',
     title:      'Bienvenido a SocialBattery',
-    body:       '\u00a1Hola! Soy tu compa\u00f1era de energ\u00eda. Aqu\u00ed podr\u00e1s compartir c\u00f3mo te sientes socialmente cada d\u00eda y conectar con quienes tienen la misma actitud que t\u00fa. \ud83d\udd0b',
+    body:       '\u00a1Hola! soy Volty. Aqu\u00ed podr\u00e1s compartir c\u00f3mo te sientes socialmente cada d\u00eda y conectar con quienes tienen la misma actitud que t\u00fa. \ud83d\udd0b',
     cta:        '\u00a1Vamos! \u26a1',
     page:       '/',
     highlight:  null,
@@ -31,6 +32,7 @@ const STEPS = [
     highlight:  'tutorial-battery-bar',
     navigateTo: null,
     switchTab:  null,
+    spotlight:  true,
   },
   {
     mascot:     '/mascot-high.png',
@@ -95,8 +97,20 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
   const { active, step, advance, dismiss } = useTutorial();
   const navigate = useNavigate();
   const prevHighlightRef = useRef(null);
+  const [spotlightRect, setSpotlightRect] = useState(null);
 
   const current = STEPS[step] ?? STEPS[TOTAL - 1];
+  const isSpotlight = !!(current.spotlight && current.highlight && current.page === currentPage);
+
+  // ── Calcular rect del elemento spotlight ─────────────────────────────────
+  const updateSpotlightRect = useCallback(() => {
+    if (!isSpotlight) { setSpotlightRect(null); return; }
+    const el = document.getElementById(current.highlight);
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setSpotlightRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    }
+  }, [isSpotlight, current.highlight]);
 
   // ── Activar tab cuando el paso lo requiere ───────────────────────────────
   useEffect(() => {
@@ -111,18 +125,24 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
   useEffect(() => {
     if (!active) return;
 
-    // Quitar resaltado anterior
+    // Quitar resaltado anterior (sólo si no es spotlight, que no usa clase CSS)
     if (prevHighlightRef.current) {
       const el = document.getElementById(prevHighlightRef.current);
       if (el) el.classList.remove('tutorial-highlight');
     }
 
     if (current.highlight && current.page === currentPage) {
-      // Pequeño delay para que el tab haya renderizado el contenido
       const t = setTimeout(() => {
         const el = document.getElementById(current.highlight);
         if (el) {
-          el.classList.add('tutorial-highlight');
+          // En modo spotlight elevamos z-index pero sin outline
+          if (current.spotlight) {
+            el.style.position = 'relative';
+            el.style.zIndex = '45';
+            updateSpotlightRect();
+          } else {
+            el.classList.add('tutorial-highlight');
+          }
           prevHighlightRef.current = current.highlight;
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -130,8 +150,21 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
       return () => clearTimeout(t);
     } else {
       prevHighlightRef.current = null;
+      setSpotlightRect(null);
     }
-  }, [active, step, currentPage, current.highlight, current.page]);
+  }, [active, step, currentPage, current.highlight, current.page, current.spotlight, updateSpotlightRect]);
+
+  // Recalcular rect en resize/scroll
+  useEffect(() => {
+    if (!isSpotlight) return;
+    const recalc = () => updateSpotlightRect();
+    window.addEventListener('resize', recalc);
+    window.addEventListener('scroll', recalc, true);
+    return () => {
+      window.removeEventListener('resize', recalc);
+      window.removeEventListener('scroll', recalc, true);
+    };
+  }, [isSpotlight, updateSpotlightRect]);
 
   // ── Limpiar resaltados al cerrar ─────────────────────────────────────────
   useEffect(() => {
@@ -139,10 +172,17 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
       STEPS.forEach(s => {
         if (s.highlight) {
           const el = document.getElementById(s.highlight);
-          if (el) el.classList.remove('tutorial-highlight');
+          if (el) {
+            el.classList.remove('tutorial-highlight');
+            if (s.spotlight) {
+              el.style.position = '';
+              el.style.zIndex = '';
+            }
+          }
         }
       });
       prevHighlightRef.current = null;
+      setSpotlightRect(null);
     }
   }, [active]);
 
@@ -150,6 +190,11 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
   if (!active || current.page !== currentPage) return null;
 
   function handleAdvance() {
+    // Limpiar spotlight inline styles del paso actual antes de avanzar
+    if (current.spotlight && current.highlight) {
+      const el = document.getElementById(current.highlight);
+      if (el) { el.style.position = ''; el.style.zIndex = ''; }
+    }
     if (current.navigateTo) {
       advance();
       navigate(current.navigateTo);
@@ -160,13 +205,83 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
     }
   }
 
+  // ── Overlay: en spotlight usamos SVG clip-path para "recortar" la zona ───
+  const PAD = 12; // padding alrededor del elemento resaltado
+  const RADIUS = 16; // border-radius del recorte
+
   return (
     <>
-      {/* Fondo oscuro */}
-      <div
-        className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
-        onClick={dismiss}
-      />
+      {/* Fondo oscuro / spotlight */}
+      {isSpotlight && spotlightRect ? (
+        // SVG con agujero: todo oscuro/blur excepto la zona de la batería
+        <svg
+          className="fixed inset-0 z-40 pointer-events-none"
+          style={{ width: '100vw', height: '100vh' }}
+          xmlns="http://www.w3.org/2000/svg"
+          onClick={dismiss}
+        >
+          <defs>
+            <filter id="sb-blur">
+              <feGaussianBlur stdDeviation="2" />
+            </filter>
+            <mask id="sb-spotlight-mask">
+              {/* Blanco = visible (la zona del agujero) */}
+              <rect width="100%" height="100%" fill="white" />
+              {/* Negro = oculto bajo la capa oscura (el agujero en el overlay) */}
+              <rect
+                x={spotlightRect.left - PAD}
+                y={spotlightRect.top - PAD}
+                width={spotlightRect.width + PAD * 2}
+                height={spotlightRect.height + PAD * 2}
+                rx={RADIUS}
+                ry={RADIUS}
+                fill="black"
+              />
+            </mask>
+            <clipPath id="sb-spotlight-clip">
+              {/* Zona fuera del agujero = recibe blur */}
+              <rect width="100%" height="100%" />
+            </clipPath>
+          </defs>
+
+          {/* Capa blur: cubre todo */}
+          <rect
+            width="100%"
+            height="100%"
+            fill="transparent"
+            filter="url(#sb-blur)"
+          />
+
+          {/* Capa oscura con agujero */}
+          <rect
+            width="100%"
+            height="100%"
+            fill="rgba(0,0,0,0.60)"
+            mask="url(#sb-spotlight-mask)"
+            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+            onClick={dismiss}
+          />
+
+          {/* Borde luminoso alrededor del recorte */}
+          <rect
+            x={spotlightRect.left - PAD}
+            y={spotlightRect.top - PAD}
+            width={spotlightRect.width + PAD * 2}
+            height={spotlightRect.height + PAD * 2}
+            rx={RADIUS}
+            ry={RADIUS}
+            fill="none"
+            stroke="rgba(45,212,220,0.70)"
+            strokeWidth="2"
+          />
+        </svg>
+      ) : (
+        // Fondo genérico para pasos sin spotlight
+        <div
+          className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+          onClick={dismiss}
+        />
+      )}
 
       {/* Panel anclado abajo */}
       <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col items-center pb-28 sm:pb-8 px-4 pointer-events-none">
