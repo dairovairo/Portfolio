@@ -2,67 +2,86 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
-import { MASCOT_ACTIVITIES, useMascot } from '../context/MascotContext';
+import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, useMascot } from '../context/MascotContext';
 
-// ── Moneda ficticia (placeholder) ─────────────────────────────────────────────
 const COINS = 340;
 
-// ── Accesorios (sección futura, estructura lista) ─────────────────────────────
-const ACCESSORIES = [
-  { id: 'acc_hat',     name: 'Gorra chula',        emoji: '🧢', price: 45,  desc: 'Un look urbano para salir con estilo.' },
-  { id: 'acc_glasses', name: 'Gafas de sol',       emoji: '😎', price: 60,  desc: 'Protección solar y estilo en uno.' },
-  { id: 'acc_scarf',   name: 'Bufanda de colores', emoji: '🧣', price: 35,  desc: 'Colorida y cálida para los días fríos.' },
-  { id: 'acc_bag',     name: 'Mochila viajera',    emoji: '🎒', price: 90,  desc: 'Para llevar todo lo necesario.' },
-  { id: 'acc_headph',  name: 'Auriculares',        emoji: '🎧', price: 110, desc: 'Música en cualquier momento.' },
-  { id: 'acc_star',    name: 'Pin de estrella',    emoji: '⭐', price: 20,  desc: 'Un pequeño detalle que lo dice todo.' },
-  { id: 'acc_heart',   name: 'Pin de corazón',     emoji: '❤️', price: 20,  desc: 'Lleva el amor a todas partes.' },
-  { id: 'acc_crown',   name: 'Corona dorada',      emoji: '👑', price: 200, desc: 'Para quienes reinan en lo social.' },
-  { id: 'acc_balloon', name: 'Globos de fiesta',   emoji: '🎈', price: 25,  desc: 'Siempre es momento de celebrar.' },
-  { id: 'acc_camera',  name: 'Cámara instax',      emoji: '📸', price: 130, desc: 'Captura los mejores momentos.' },
-];
+// ── Tarjeta genérica de item con preview de mascota ───────────────────────────
+function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEquip, children }) {
+  return (
+    <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
+      ${isActive
+        ? 'border-accent-primary shadow-md shadow-accent-primary/20'
+        : isUnlocked
+          ? 'border-surface-border hover:border-accent-primary/40'
+          : 'border-surface-border hover:border-surface-muted/40'
+      }`}
+    >
+      {children}
 
-// ── Tarjeta de actividad ───────────────────────────────────────────────────────
+      {/* Acción */}
+      <div className="px-3 pb-3 pt-1">
+        {isBase || isUnlocked ? (
+          isActive ? (
+            <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
+              ✓ Equipado
+            </div>
+          ) : (
+            <button
+              onClick={onEquip}
+              className="w-full py-2 rounded-xl text-xs font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
+            >
+              Equipar
+            </button>
+          )
+        ) : (
+          <button
+            onClick={onBuy}
+            disabled={!canAfford}
+            className={`w-full py-2 rounded-xl text-xs font-display font-semibold transition-all duration-200
+              ${canAfford
+                ? 'bg-accent-primary hover:bg-accent-primary/80 text-white hover:shadow-md hover:shadow-accent-primary/20'
+                : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
+              }`}
+          >
+            🪙 {price}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Tarjeta de ACTIVIDAD ──────────────────────────────────────────────────────
 function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
-    <div
-      className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
-        ${isActive
-          ? 'border-accent-primary shadow-md shadow-accent-primary/20'
-          : isUnlocked
-            ? 'border-surface-border hover:border-accent-primary/40'
-            : 'border-surface-border hover:border-surface-muted/40'
-        }`}
+    <ItemCard
+      isUnlocked={isUnlocked} isActive={isActive}
+      canAfford={canAfford} price={activity.price}
+      isBase={activity.isBase} onBuy={onBuy} onEquip={onEquip}
     >
-      {/* Preview con sistema de capas */}
+      {/* Preview con capas: mascota base + actividad encima */}
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
-
-        {/* Badge "Equipada" */}
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
             ✓ Activa
           </span>
         )}
-
-        {/* Lock overlay */}
         {!isUnlocked && (
-          <div
-            className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
-            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}
-          >
+          <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
             <span className="text-3xl">🔒</span>
           </div>
         )}
-
-        {/* Mascota con capas de actividad */}
         <MascotDisplay
           tier="mid"
           size={112}
           activityLayers={activity.layers}
+          accessorySrc={null}
           style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
         />
       </div>
 
-      {/* Info */}
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{activity.emoji}</span>
@@ -70,97 +89,64 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
         </div>
         <div className="text-surface-muted text-[11px] leading-snug flex-1">{activity.desc}</div>
       </div>
-
-      {/* Acción */}
-      <div className="px-3 pb-3 pt-1">
-        {activity.isBase ? (
-          isActive ? (
-            <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
-              ✓ Equipada
-            </div>
-          ) : (
-            <button
-              onClick={() => onEquip(activity)}
-              className="w-full py-2 rounded-xl text-xs font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
-            >
-              Equipar
-            </button>
-          )
-        ) : isUnlocked ? (
-          isActive ? (
-            <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
-              ✓ Equipada
-            </div>
-          ) : (
-            <button
-              onClick={() => onEquip(activity)}
-              className="w-full py-2 rounded-xl text-xs font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
-            >
-              Equipar
-            </button>
-          )
-        ) : (
-          <button
-            onClick={() => onBuy(activity)}
-            disabled={!canAfford}
-            className={`w-full py-2 rounded-xl text-xs font-display font-semibold transition-all duration-200
-              ${canAfford
-                ? 'bg-accent-primary hover:bg-accent-primary/80 text-white hover:shadow-md hover:shadow-accent-primary/20'
-                : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
-              }`}
-          >
-            🪙 {activity.price}
-          </button>
-        )}
-      </div>
-    </div>
+    </ItemCard>
   );
 }
 
-// ── Tarjeta de accesorio ──────────────────────────────────────────────────────
-function AccessoryCard({ item, isOwned, canAfford, onBuy }) {
+// ── Tarjeta de ACCESORIO ──────────────────────────────────────────────────────
+function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
-    <div
-      className={`bg-surface-card border rounded-2xl p-4 flex flex-col gap-2 transition-all duration-200
-        ${isOwned ? 'border-accent-primary/40' : 'border-surface-border hover:border-accent-primary/30'}`}
+    <ItemCard
+      isUnlocked={isUnlocked} isActive={isActive}
+      canAfford={canAfford} price={accessory.price}
+      isBase={accessory.isBase} onBuy={onBuy} onEquip={onEquip}
     >
-      <div className="text-4xl text-center" style={{ fontVariantEmoji: 'emoji' }}>{item.emoji}</div>
-      <div className="text-center flex-1">
-        <div className="font-display font-bold text-surface-text text-sm leading-tight">{item.name}</div>
-        <div className="text-surface-muted text-[11px] mt-1 leading-snug">{item.desc}</div>
-      </div>
-      <div className="mt-auto">
-        {isOwned ? (
-          <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
-            ✓ En tu colección
-          </div>
-        ) : (
-          <button
-            onClick={() => onBuy(item)}
-            disabled={!canAfford}
-            className={`w-full py-2 rounded-xl text-xs font-display font-semibold transition-all duration-200
-              ${canAfford
-                ? 'bg-accent-primary hover:bg-accent-primary/80 text-white hover:shadow-md hover:shadow-accent-primary/20'
-                : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
-              }`}
-          >
-            🪙 {item.price}
-          </button>
+      {/* Preview: mascota base + accesorio en capa intermedia */}
+      <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
+        {isActive && (
+          <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
+            ✓ Activo
+          </span>
         )}
+        {!isUnlocked && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
+            <span className="text-3xl">🔒</span>
+          </div>
+        )}
+        <MascotDisplay
+          tier="mid"
+          size={112}
+          accessorySrc={accessory.src}
+          activityLayers={[]}
+          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
+        />
       </div>
-    </div>
+
+      <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
+        <div className="flex items-center gap-1.5">
+          <span style={{ fontVariantEmoji: 'emoji' }}>{accessory.emoji}</span>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{accessory.name}</div>
+        </div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{accessory.desc}</div>
+      </div>
+    </ItemCard>
   );
 }
 
 // ── ShopPage ──────────────────────────────────────────────────────────────────
 export default function ShopPage() {
   const navigate = useNavigate();
-  const { unlocked, activeActivity, unlockActivity, equipActivity } = useMascot();
+  const {
+    unlockedActivities, unlockedAccessories,
+    activeActivity, activeAccessory,
+    unlockActivity, unlockAccessory,
+    equipActivity, equipAccessory,
+  } = useMascot();
 
-  const [tab, setTab]           = useState('activities');
-  const [coins, setCoins]       = useState(COINS);
-  const [ownedAcc, setOwnedAcc] = useState(new Set());
-  const [toast, setToast]       = useState(null);
+  const [tab, setTab]     = useState('activities');
+  const [coins, setCoins] = useState(COINS);
+  const [toast, setToast] = useState(null);
 
   function showToast(msg) {
     setToast(msg);
@@ -174,26 +160,29 @@ export default function ShopPage() {
     equipActivity(activity.id);
     showToast(`¡${activity.name} desbloqueada y equipada! 🎉`);
   }
-
   function handleEquipActivity(activity) {
     equipActivity(activity.id);
     showToast(`¡${activity.name} equipada! ✨`);
   }
 
-  function handleBuyAccessory(item) {
-    if (coins < item.price) return;
-    setCoins(c => c - item.price);
-    setOwnedAcc(prev => new Set([...prev, item.id]));
-    showToast(`¡${item.name} añadida a tu colección! 🎉`);
+  function handleBuyAccessory(accessory) {
+    if (coins < accessory.price) return;
+    setCoins(c => c - accessory.price);
+    unlockAccessory(accessory.id);
+    equipAccessory(accessory.id);
+    showToast(`¡${accessory.name} desbloqueado y equipado! 🎉`);
+  }
+  function handleEquipAccessory(accessory) {
+    equipAccessory(accessory.id);
+    showToast(`¡${accessory.name} equipado! ✨`);
   }
 
-  // Actividad actualmente equipada
   const activeAct = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
+  const activeAcc = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
 
   return (
     <div className="min-h-screen bg-surface-bg flex flex-col">
 
-      {/* Toast */}
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-accent-primary text-white px-5 py-3
           rounded-2xl text-sm font-display font-semibold shadow-lg shadow-accent-primary/30 animate-slide-down whitespace-nowrap">
@@ -214,7 +203,6 @@ export default function ShopPage() {
             <span className="text-xl" style={{ fontVariantEmoji: 'emoji' }}>🛒</span>
             <span className="font-display font-bold text-surface-text">Tienda de la mascota</span>
           </div>
-          {/* Saldo */}
           <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border rounded-xl px-3 py-1.5">
             <span className="text-sm">🪙</span>
             <span className="font-mono font-bold text-accent-glow text-sm">{coins}</span>
@@ -222,22 +210,20 @@ export default function ShopPage() {
         </div>
       </nav>
 
-      {/* Preview mascota activa con capas */}
+      {/* Preview mascota activa con las 3 capas */}
       <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-2">
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-4">
-          {/* Miniatura con la actividad equipada */}
-          <MascotDisplay
-            tier="mid"
-            size={72}
-            activityLayers={activeAct?.layers ?? []}
-          />
-          <div className="flex-1">
-            <div className="font-display font-bold text-surface-text text-sm">Personaliza tu mascota</div>
-            <div className="text-surface-muted text-xs mt-0.5 leading-snug">
-              Actividad equipada: <span className="text-accent-glow font-semibold">{activeAct?.name ?? 'Ninguna'}</span>
+          <MascotDisplay tier="mid" size={72} />
+          <div className="flex-1 flex flex-col gap-0.5">
+            <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
+            <div className="text-[11px] text-surface-muted">
+              Accesorio: <span className="text-accent-glow font-semibold">{activeAcc?.name ?? 'Ninguno'}</span>
             </div>
-            <div className="text-surface-muted text-[10px] mt-1 leading-snug">
-              Las actividades se superponen sobre la mascota. Ganas 🪙 actualizando tu batería cada día.
+            <div className="text-[11px] text-surface-muted">
+              Actividad: <span className="text-accent-glow font-semibold">{activeAct?.name ?? 'Ninguna'}</span>
+            </div>
+            <div className="text-[10px] text-surface-muted/60 mt-0.5">
+              Ganas 🪙 actualizando tu batería cada día.
             </div>
           </div>
         </div>
@@ -248,7 +234,7 @@ export default function ShopPage() {
         <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-1">
           {[
             { key: 'activities',  label: 'Actividades', emoji: '⚡' },
-            { key: 'accessories', label: 'Accesorios',  emoji: '✨' },
+            { key: 'accessories', label: 'Accesorios',  emoji: '👟' },
           ].map(t => (
             <button
               key={t.key}
@@ -275,11 +261,11 @@ export default function ShopPage() {
               <ActivityCard
                 key={activity.id}
                 activity={activity}
-                isUnlocked={unlocked.has(activity.id)}
+                isUnlocked={unlockedActivities.has(activity.id)}
                 isActive={activeActivity === activity.id}
                 canAfford={coins >= activity.price}
-                onBuy={handleBuyActivity}
-                onEquip={handleEquipActivity}
+                onBuy={() => handleBuyActivity(activity)}
+                onEquip={() => handleEquipActivity(activity)}
               />
             ))}
           </div>
@@ -287,13 +273,15 @@ export default function ShopPage() {
 
         {tab === 'accessories' && (
           <div className="grid grid-cols-2 gap-3">
-            {ACCESSORIES.map(item => (
+            {MASCOT_ACCESSORIES.map(accessory => (
               <AccessoryCard
-                key={item.id}
-                item={item}
-                isOwned={ownedAcc.has(item.id)}
-                canAfford={coins >= item.price}
-                onBuy={handleBuyAccessory}
+                key={accessory.id}
+                accessory={accessory}
+                isUnlocked={unlockedAccessories.has(accessory.id)}
+                isActive={activeAccessory === accessory.id}
+                canAfford={coins >= accessory.price}
+                onBuy={() => handleBuyAccessory(accessory)}
+                onEquip={() => handleEquipAccessory(accessory)}
               />
             ))}
           </div>
