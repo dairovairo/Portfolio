@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
 import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
 import { useMascot } from '../context/MascotContext';
+import MascotDisplay from '../components/MascotDisplay';
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
 function getMascotTier(level) {
@@ -320,7 +321,7 @@ export default function HomePage() {
   const { addToast } = useToast();
   const { isLight } = useTheme();
   const navigate = useNavigate();
-  const { getActiveSrc, getActiveActivityData } = useMascot();
+  const { getMascotLayers } = useMascot();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
   const [friends, setFriends] = useState([]);
@@ -575,66 +576,12 @@ export default function HomePage() {
               </span>
             </div>
 
-            {/* ── Mascota por capas ─────────────────────────────────────── */}
-            {(() => {
-              const tier = getMascotTier(battery);
-              const baseSrc = getActiveSrc(tier);
-              const actData = getActiveActivityData();
-              const shadow = isLight
-                ? `drop-shadow(0 0 18px ${batteryColor.hex}50)`
-                : `drop-shadow(0 0 20px ${batteryColor.hex}66)`;
-              return (
-                <div
-                  className="relative w-32 h-32 flex-shrink-0 select-none pointer-events-none"
-                  key={baseSrc}
-                  style={{ animation: 'mascotFadeIn 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}
-                >
-                  {/* Capa 1: mascota base */}
-                  <img
-                    src={baseSrc}
-                    alt="Mascota SocialBattery"
-                    draggable={false}
-                    className="absolute inset-0 w-full h-full object-contain"
-                    style={{ filter: shadow, zIndex: 1 }}
-                  />
-                  {/* Capa 3: actividad (frontal) — solo si hay actividad activa */}
-                  {actData?.activitySrc && (
-                    <img
-                      src={actData.activitySrc}
-                      alt=""
-                      draggable={false}
-                      className="absolute object-contain"
-                      style={{
-                        zIndex: 3,
-                        bottom: '0%',
-                        right: '-18%',
-                        width: '70%',
-                        height: '70%',
-                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.35))',
-                      }}
-                    />
-                  )}
-                  {/* Capa 3b: segundo elemento de actividad (ej: auriculares del gaming) */}
-                  {actData?.activitySrc2 && (
-                    <img
-                      src={actData.activitySrc2}
-                      alt=""
-                      draggable={false}
-                      className="absolute object-contain"
-                      style={{
-                        zIndex: 4,
-                        top: '-18%',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        width: '90%',
-                        height: '55%',
-                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.35))',
-                      }}
-                    />
-                  )}
-                </div>
-              );
-            })()}
+            <MascotDisplay
+              tier={getMascotTier(battery)}
+              size={128}
+              glowColor={batteryColor.hex}
+              animate
+            />
           </div>
 
           {/* Battery bar — ID para el tutorial paso 2 */}
