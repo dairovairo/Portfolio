@@ -361,6 +361,11 @@ export default function HomePage() {
   const [showRequests, setShowRequests] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
 
+  // Contactos del dispositivo que usan SocialBattery
+  const [contactUsers, setContactUsers] = useState(null); // null = sin cargar, [] = vacío, [...] = resultados
+  const [contactsOpen, setContactsOpen] = useState(false);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+
   useEffect(() => {
     if (profile) setBattery(getEffectiveBatteryLevel(profile));
   }, [profile]);
@@ -405,6 +410,46 @@ export default function HomePage() {
     fetchUnread();
     fetchGroups();
   }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
+
+  // ── Permisos de ubicación (solicitar al montar, silenciosamente) ───────────
+  useEffect(() => {
+    if ('geolocation' in navigator) {
+      navigator.permissions?.query({ name: 'geolocation' }).then(result => {
+        if (result.state === 'prompt') {
+          navigator.geolocation.getCurrentPosition(
+            () => {}, // éxito — permisos concedidos
+            () => {}, // error — el usuario denegó, no hacer nada
+            { timeout: 10000, maximumAge: 60000 }
+          );
+        }
+      }).catch(() => {
+        // API permissions no disponible — intentar directamente
+        navigator.geolocation.getCurrentPosition(() => {}, () => {}, { timeout: 5000 });
+      });
+    }
+  }, []);
+
+  // ── Cargar contactos del dispositivo que usan SocialBattery ───────────────
+  const fetchContactUsers = useCallback(async () => {
+    if (!('contacts' in navigator) || !('ContactsManager' in window)) {
+      // Navegador no soporta la Contacts API (p.ej. iOS Safari, desktop)
+      setContactUsers([]);
+      return;
+    }
+    setLoadingContacts(true);
+    try {
+      const contacts = await navigator.contacts.select(['tel'], { multiple: true });
+      const phones = contacts.flatMap(c => c.tel || []).map(p => String(p).replace(/\s/g, ''));
+      if (phones.length === 0) { setContactUsers([]); return; }
+      const { users } = await api.post('/users/by-phones', { phones });
+      setContactUsers(users || []);
+    } catch (e) {
+      // Usuario canceló el picker o API no disponible
+      setContactUsers([]);
+    } finally {
+      setLoadingContacts(false);
+    }
+  }, []);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -723,6 +768,53 @@ export default function HomePage() {
                 </p>
               )}
             </div>
+          )}
+        </div>
+
+        {/* De tus contactos panel */}
+        <div className="animate-slide-up" style={{ animationDelay: '0.13s' }}>
+          <button
+            onClick={async () => {
+              const next = !contactsOpen;
+              setContactsOpen(next);
+              if (next && contactUsers === null) await fetchContactUsers();
+            }}
+            className="w-full flex items-center justify-between mb-3 group"
+          >
+            <span className="font-display font-semibold text-surface-text">
+              De tus contactos:
+            </span>
+            <span className={`text-surface-muted text-xs transition-transform duration-200 ${contactsOpen ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+
+          {contactsOpen && (
+            loadingContacts ? (
+              <div className="space-y-2">
+                {[1, 2].map(i => <div key={i} className="h-16 skeleton rounded-2xl" />)}
+              </div>
+            ) : !contactUsers || contactUsers.length === 0 ? (
+              <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center">
+                <div className="text-3xl mb-2">🙈</div>
+                <p className="text-surface-muted text-sm">Vaya, parece que no hay nada por aquí</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {contactUsers.map(user => (
+                  <button
+                    key={user.id}
+                    onClick={() => navigate(`/user/${user.id}`)}
+                    className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left"
+                  >
+                    <Avatar user={user} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display font-semibold text-surface-text text-sm truncate">{user.display_name || user.username}</div>
+                      <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
+                    </div>
+                    <BatteryBadge level={user.battery_level} isEstimated={user.battery_is_estimated} />
+                  </button>
+                ))}
+              </div>
+            )
           )}
         </div>
 

@@ -192,7 +192,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { display_name, avatar_url, bio, interests, show_interests, show_public_stats, show_badges } = req.body;
+  const { display_name, avatar_url, bio, interests, show_interests, show_public_stats, show_badges, phone } = req.body;
   const updates = {};
   if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 20);
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
@@ -201,6 +201,7 @@ router.patch('/me', requireAuth, async (req, res) => {
   if (show_interests !== undefined) updates.show_interests = Boolean(show_interests);
   if (show_public_stats !== undefined) updates.show_public_stats = Boolean(show_public_stats);
   if (show_badges !== undefined) updates.show_badges = Boolean(show_badges);
+  if (phone !== undefined) updates.phone = phone ? String(phone).replace(/[^\d+]/g, '').replace(/^\+?/, '+').slice(0, 20) : null;
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });
@@ -218,3 +219,32 @@ router.patch('/me', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+
+// POST /api/users/by-phones — find registered users matching a list of phone numbers
+// Body: { phones: ["+34612345678", ...] }
+router.post('/by-phones', requireAuth, async (req, res) => {
+  const { phones } = req.body;
+  if (!Array.isArray(phones) || phones.length === 0) {
+    return res.status(400).json({ error: 'phones array is required' });
+  }
+
+  // Normalize: keep only digits and leading +, limit to 500 numbers per request
+  const normalized = [...new Set(
+    phones
+      .map(p => String(p).replace(/[^\d+]/g, '').replace(/^\+?/, '+'))
+      .filter(p => p.length >= 7)
+  )].slice(0, 500);
+
+  if (normalized.length === 0) {
+    return res.json({ users: [] });
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at')
+    .in('phone', normalized)
+    .neq('id', req.user.id);
+
+  if (error) return res.status(500).json({ error: 'Lookup failed' });
+  res.json({ users: applyBatteryExpiryToUsers(data || []) });
+});
