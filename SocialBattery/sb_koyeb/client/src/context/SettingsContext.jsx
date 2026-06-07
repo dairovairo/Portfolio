@@ -133,6 +133,7 @@ const STORAGE_KEYS = {
   showLastSeen:          'sb-show-last-seen',
   showInterests:         'sb-show-interests',
   showPublicStats:       'sb-show-public-stats',
+  showBadges:            'sb-show-badges',
 };
 
 const MESSAGING_FIELDS = [
@@ -321,6 +322,10 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.showPublicStats, 'true') === 'true'
   );
 
+  const [showBadges, setShowBadgesState] = useState(
+    () => loadStorage(STORAGE_KEYS.showBadges, 'true') === 'true'
+  );
+
   // ── setters ──────────────────────────────────────────────────────────────
 
   const setChatWallpaper = useCallback((dataUrl) => {
@@ -469,6 +474,11 @@ export function SettingsProvider({ children }) {
     });
   }, []);
 
+  const setShowBadges = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showBadges, String(v));
+    setShowBadgesState(v);
+  }, []);
+
   // Sync privacy toggles from server profile (called on login / profile load)
   const syncPrivacyFromProfile = useCallback((profile) => {
     if (!profile) return;
@@ -584,6 +594,7 @@ export function SettingsProvider({ children }) {
       showLastSeen, setShowLastSeen,
       showInterests, setShowInterests,
       showPublicStats, setShowPublicStats,
+      showBadges, setShowBadges,
       syncPrivacyFromProfile,
     }}>
       {children}
