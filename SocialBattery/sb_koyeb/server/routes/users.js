@@ -168,7 +168,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select(`
-      id, username, display_name, bio, avatar_url, interests, show_interests, show_public_stats,
+      id, username, display_name, bio, avatar_url, interests, show_interests, show_public_stats, show_badges,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)
@@ -177,9 +177,13 @@ router.get('/:id', requireAuth, async (req, res) => {
 
   if (error || !data) return res.status(404).json({ error: 'User not found' });
 
-  // Strip interests if the user has hidden them (only for other users, not for yourself)
+  // Strip interests if hidden (only for other users, not for yourself)
   if (req.user.id !== req.params.id && data.show_interests === false) {
     data.interests = [];
+  }
+  // Strip badges if hidden (only for other users, not for yourself)
+  if (req.user.id !== req.params.id && data.show_badges === false) {
+    data.user_badges = [];
   }
 
   res.json({ user: applyBatteryExpiry(data) });
@@ -187,7 +191,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { display_name, avatar_url, bio, interests, show_interests, show_public_stats } = req.body;
+  const { display_name, avatar_url, bio, interests, show_interests, show_public_stats, show_badges } = req.body;
   const updates = {};
   if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 20);
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
@@ -195,6 +199,7 @@ router.patch('/me', requireAuth, async (req, res) => {
   if (interests !== undefined) updates.interests = Array.isArray(interests) ? interests : [];
   if (show_interests !== undefined) updates.show_interests = Boolean(show_interests);
   if (show_public_stats !== undefined) updates.show_public_stats = Boolean(show_public_stats);
+  if (show_badges !== undefined) updates.show_badges = Boolean(show_badges);
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });

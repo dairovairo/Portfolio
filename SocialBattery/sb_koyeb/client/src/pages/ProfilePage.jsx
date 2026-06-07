@@ -95,7 +95,7 @@ export default function ProfilePage() {
   const { profile, refreshProfile, signOut } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const { addToast } = useToast();
-  const { showInterests, showPublicStats } = useSettings();
+  const { showInterests, showPublicStats, showBadges } = useSettings();
   const { permission, subscribed, requestPermission } = usePush();
   const navigate = useNavigate();
   const fileRef = useRef(null);
@@ -419,54 +419,71 @@ export default function ProfilePage() {
         </div>
 
         {/* ── Badges ── */}
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-semibold text-surface-text">Insignias</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-surface-muted font-mono">
-                {Object.keys(earnedBadgesMap).length}/{allBadges.length}
-              </span>
+        {showBadges ? (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display font-semibold text-surface-text">Insignias</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-surface-muted font-mono">
+                  {Object.keys(earnedBadgesMap).length}/{allBadges.length}
+                </span>
+                <button
+                  onClick={() => navigate('/badges')}
+                  className="text-xs text-accent-glow hover:text-accent-primary transition-colors font-mono"
+                >
+                  Ver todas →
+                </button>
+              </div>
+            </div>
+
+            {allBadges.length > 0 && (
+              <div className="h-1 bg-surface-bg rounded-full mb-3 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-accent-primary to-accent-glow transition-all duration-500"
+                  style={{ width: `${Math.round((Object.keys(earnedBadgesMap).length / allBadges.length) * 100)}%` }}
+                />
+              </div>
+            )}
+
+            {allBadges.length === 0 ? (
+              <div className="text-center text-surface-muted text-sm py-4">Cargando insignias...</div>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  ...allBadges.filter(b => earnedBadgesMap[b.id]),
+                  ...allBadges.filter(b => !earnedBadgesMap[b.id]),
+                ].slice(0, 8).map(badge => (
+                  <BadgeCard key={badge.id} badge={badge} earned={earnedBadgesMap[badge.id]} />
+                ))}
+              </div>
+            )}
+
+            {allBadges.length > 8 && (
+              <button
+                onClick={() => navigate('/badges')}
+                className="mt-3 w-full text-xs text-surface-muted hover:text-surface-text text-center py-2
+                  rounded-xl hover:bg-surface-border transition-all"
+              >
+                +{allBadges.length - 8} insignias más →
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-surface-muted/60">
+                <span className="text-sm">🏅</span>
+                <span className="text-xs font-mono italic">Insignias ocultas para otros</span>
+              </div>
               <button
                 onClick={() => navigate('/badges')}
                 className="text-xs text-accent-glow hover:text-accent-primary transition-colors font-mono"
               >
-                Ver todas →
+                Ver mis insignias →
               </button>
             </div>
           </div>
-
-          {allBadges.length > 0 && (
-            <div className="h-1 bg-surface-bg rounded-full mb-3 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-accent-primary to-accent-glow transition-all duration-500"
-                style={{ width: `${Math.round((Object.keys(earnedBadgesMap).length / allBadges.length) * 100)}%` }}
-              />
-            </div>
-          )}
-
-          {allBadges.length === 0 ? (
-            <div className="text-center text-surface-muted text-sm py-4">Cargando insignias...</div>
-          ) : (
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                ...allBadges.filter(b => earnedBadgesMap[b.id]),
-                ...allBadges.filter(b => !earnedBadgesMap[b.id]),
-              ].slice(0, 8).map(badge => (
-                <BadgeCard key={badge.id} badge={badge} earned={earnedBadgesMap[badge.id]} />
-              ))}
-            </div>
-          )}
-
-          {allBadges.length > 8 && (
-            <button
-              onClick={() => navigate('/badges')}
-              className="mt-3 w-full text-xs text-surface-muted hover:text-surface-text text-center py-2
-                rounded-xl hover:bg-surface-border transition-all"
-            >
-              +{allBadges.length - 8} insignias más →
-            </button>
-          )}
-        </div>
+        )}
 
         {/* ── Public Stats ── */}
         {showPublicStats ? (
