@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { ALL_INTERESTS } from './OnboardingPage';
@@ -72,7 +71,6 @@ export default function UserProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile: myProfile } = useAuth();
-  const { showInterests } = useSettings();
 
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
@@ -199,7 +197,7 @@ export default function UserProfilePage() {
               <h2 className="font-display font-bold text-white text-xl truncate">{user.display_name}</h2>
               <div className="text-sm text-slate-500 font-mono">@{user.username}</div>
               {user.bio && <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{user.bio}</p>}
-              {showInterests && user.interests && user.interests.length > 0 && (
+              {user.interests && user.interests.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {user.interests.map(interest => {
                     const found = ALL_INTERESTS.find(i => i.id === interest);

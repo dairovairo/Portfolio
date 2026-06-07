@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
-import { useSettings } from '../context/SettingsContext';
 import { usePush } from '../hooks/usePush';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
@@ -95,7 +94,6 @@ export default function ProfilePage() {
   const { profile, refreshProfile, signOut } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const { addToast } = useToast();
-  const { showInterests } = useSettings();
   const { permission, subscribed, requestPermission } = usePush();
   const navigate = useNavigate();
   const fileRef = useRef(null);
@@ -215,14 +213,6 @@ export default function ProfilePage() {
             ←
           </button>
           <h1 className="font-display font-bold text-surface-text flex-1">Mi Perfil</h1>
-          <button
-            onClick={() => navigate('/shop')}
-            className="text-surface-muted hover:text-surface-text transition-colors p-1.5 rounded-xl hover:bg-surface-hover"
-            title="Tienda"
-            aria-label="Tienda"
-          >
-            <span className="text-xl leading-none">🛒</span>
-          </button>
           <button
             onClick={() => navigate('/settings')}
             className="text-surface-muted hover:text-surface-text transition-colors p-1.5 rounded-xl hover:bg-surface-hover"
@@ -366,7 +356,7 @@ export default function ProfilePage() {
                 {profile?.bio && (
                   <p className="text-sm text-surface-muted mt-2 leading-relaxed">{profile.bio}</p>
                 )}
-                {showInterests && profile?.interests && profile.interests.length > 0 && (
+                {profile?.interests && profile.interests.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-3">
                     {profile.interests.map(interest => {
                       const found = ALL_INTERESTS.find(i => i.id === interest);
