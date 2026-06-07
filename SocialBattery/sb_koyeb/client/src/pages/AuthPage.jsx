@@ -51,12 +51,6 @@ export default function AuthPage() {
             Te hemos enviado un enlace de confirmación a <strong className="text-surface-text">{email}</strong>.
             Confírmalo y vuelve aquí para iniciar sesión.
           </p>
-          <button
-            onClick={() => { setMode('login'); setRegistered(false); }}
-            className="text-accent-glow text-sm underline underline-offset-4"
-          >
-            Ir al login
-          </button>
         </div>
       </div>
     );

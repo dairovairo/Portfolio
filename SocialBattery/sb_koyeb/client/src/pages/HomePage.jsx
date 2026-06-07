@@ -502,6 +502,8 @@ export default function HomePage() {
   const pendingUpdate = profile && isBatteryExpired(profile.battery_updated_at);
 
   const color = getBatteryColor(profileBatteryLevel);
+  // batteryColor: live slider value — updates immediately while dragging
+  const batteryColor = getBatteryColor(battery);
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
@@ -587,14 +589,14 @@ export default function HomePage() {
               <div className="flex items-end gap-1 mt-1">
                 <span
                   className="font-display text-5xl font-bold leading-none"
-                  style={{ color: color.hex, textShadow: `0 0 28px ${color.hex}40` }}
+                  style={{ color: batteryColor.hex, textShadow: `0 0 28px ${batteryColor.hex}40` }}
                 >
-                  {profileBatteryLevel}
+                  {battery}
                 </span>
                 <span className="text-surface-muted text-xl font-display mb-0.5">%</span>
               </div>
-              <span className="text-xs font-mono uppercase tracking-widest" style={{ color: color.hex }}>
-                {color.label}
+              <span className="text-xs font-mono uppercase tracking-widest" style={{ color: batteryColor.hex }}>
+                {batteryColor.label}
               </span>
             </div>
 
@@ -606,8 +608,8 @@ export default function HomePage() {
               draggable={false}
               style={{
                 filter: isLight
-                  ? `drop-shadow(0 0 18px ${color.hex}50)`
-                  : `drop-shadow(0 0 20px ${color.hex}66)`,
+                  ? `drop-shadow(0 0 18px ${batteryColor.hex}50)`
+                  : `drop-shadow(0 0 20px ${batteryColor.hex}66)`,
                 animation: 'mascotFadeIn 0.35s cubic-bezier(0.34,1.56,0.64,1)',
               }}
             />

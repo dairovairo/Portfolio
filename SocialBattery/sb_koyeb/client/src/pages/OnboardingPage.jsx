@@ -269,19 +269,23 @@ export default function OnboardingPage() {
                 return (
                   <button
                     key={id}
+                    type="button"
                     onClick={() => toggleInterest(id)}
-                    className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-3 border transition-all duration-200
+                    style={{ touchAction: 'manipulation' }}
+                    className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-3 border transition-all duration-200 overflow-hidden select-none
                       ${selected
                         ? 'bg-accent-primary/20 border-accent-primary text-accent-glow shadow-sm shadow-accent-primary/20'
                         : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
                       }`}
                   >
-                    <span className="text-2xl">{emoji}</span>
-                    <span className={`text-[11px] font-display font-semibold leading-tight text-center ${selected ? 'text-accent-glow' : 'text-surface-muted'}`}>
+                    <div className="h-8 w-full flex items-center justify-center overflow-hidden pointer-events-none">
+                      <span className="text-2xl leading-none">{emoji}</span>
+                    </div>
+                    <span className={`text-[11px] font-display font-semibold leading-tight text-center truncate w-full pointer-events-none ${selected ? 'text-accent-glow' : 'text-surface-muted'}`}>
                       {id}
                     </span>
                     {selected && (
-                      <span className="text-[9px] text-accent-primary font-mono">✓</span>
+                      <span className="text-[9px] text-accent-primary font-mono pointer-events-none">✓</span>
                     )}
                   </button>
                 );
