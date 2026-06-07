@@ -542,6 +542,13 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-1">
             <button
+              onClick={() => navigate('/shop')}
+              className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
+              title="Tienda"
+            >
+              <span className="sb-symbol text-lg" aria-hidden="true">🛒</span>
+            </button>
+            <button
               onClick={() => navigate('/settings')}
               className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
               title="Ajustes"
