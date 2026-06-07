@@ -384,6 +384,7 @@ export default function SettingsPage() {
     readReceipts, setReadReceipts,
     showOnline, setShowOnline,
     showLastSeen, setShowLastSeen,
+    showInterests, setShowInterests,
   } = useSettings();
 
   // Only one section open at a time
@@ -770,6 +771,17 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <Toggle enabled={showLastSeen} onToggle={() => setShowLastSeen(!showLastSeen)} />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">Mostrar intereses</div>
+                  <div className="text-xs text-surface-muted">
+                    {showInterests
+                      ? 'Tus categorías favoritas son visibles en tu perfil'
+                      : 'Tus intereses están ocultos — no aparecen en tu perfil'}
+                  </div>
+                </div>
+                <Toggle enabled={showInterests} onToggle={() => setShowInterests(!showInterests)} />
               </div>
 
               <div className="border-t border-surface-border" />
