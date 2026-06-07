@@ -19,6 +19,7 @@ import CommunityPage from './pages/CommunityPage';
 import CommunityDetailPage from './pages/CommunityDetailPage';
 import EventDetailPage from './pages/EventDetailPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ShopPage from './pages/ShopPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 import { TutorialProvider } from './context/TutorialContext';
 
@@ -76,6 +77,7 @@ function AppRoutes() {
       <Route path="/pools"                    element={<PoolsPage />} />
       <Route path="/badges"                   element={<BadgesPage />} />
       <Route path="/settings"                 element={<SettingsPage />} />
+      <Route path="/shop"                      element={<ShopPage />} />
       <Route path="/community"               element={<CommunityPage />} />
       <Route path="/community/event/:eventId"  element={<EventDetailPage />} />
       <Route path="/community/:communityId"   element={<CommunityDetailPage />} />

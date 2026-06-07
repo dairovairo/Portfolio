@@ -131,6 +131,7 @@ const STORAGE_KEYS = {
   readReceipts:          'sb-read-receipts',
   showOnline:            'sb-show-online',
   showLastSeen:          'sb-show-last-seen',
+  showInterests:         'sb-show-interests',
 };
 
 const MESSAGING_FIELDS = [
@@ -311,6 +312,10 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.showLastSeen, 'true') === 'true'
   );
 
+  const [showInterests, setShowInterestsState] = useState(
+    () => loadStorage(STORAGE_KEYS.showInterests, 'true') === 'true'
+  );
+
   // ── setters ──────────────────────────────────────────────────────────────
 
   const setChatWallpaper = useCallback((dataUrl) => {
@@ -443,6 +448,11 @@ export function SettingsProvider({ children }) {
     setShowLastSeenState(v);
   }, []);
 
+  const setShowInterests = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showInterests, String(v));
+    setShowInterestsState(v);
+  }, []);
+
   // ── reset to defaults ─────────────────────────────────────────────────────
 
   const applyMessagingThemeDefaults = useCallback((themeName = theme) => {
@@ -543,6 +553,7 @@ export function SettingsProvider({ children }) {
       readReceipts, setReadReceipts,
       showOnline, setShowOnline,
       showLastSeen, setShowLastSeen,
+      showInterests, setShowInterests,
     }}>
       {children}
     </SettingsContext.Provider>
