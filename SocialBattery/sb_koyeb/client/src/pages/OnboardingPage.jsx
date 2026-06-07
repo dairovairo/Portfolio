@@ -4,11 +4,31 @@ import { useAuth } from '../context/AuthContext';
 import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
 
+// ── Categorías compartidas con Comunidades y Eventos ─────────────────────────
+export const ALL_INTERESTS = [
+  { id: 'Música',       emoji: '🎵' },
+  { id: 'Deporte',      emoji: '⚽' },
+  { id: 'Arte',         emoji: '🎨' },
+  { id: 'Tecnología',   emoji: '💻' },
+  { id: 'Comida',       emoji: '🍽️' },
+  { id: 'Viajes',       emoji: '✈️' },
+  { id: 'Cine',         emoji: '🎬' },
+  { id: 'Juego',        emoji: '🎮' },
+  { id: 'Yoga',         emoji: '🧘' },
+  { id: 'Fotografía',   emoji: '📷' },
+  { id: 'Lectura',      emoji: '📚' },
+  { id: 'Naturaleza',   emoji: '🌿' },
+  { id: 'Fiesta',       emoji: '🎉' },
+  { id: 'Bienestar',    emoji: '💆' },
+  { id: 'Cocina',       emoji: '👨‍🍳' },
+];
+
 const STEPS = [
-  { id: 'welcome',  label: '¡Hola!' },
-  { id: 'username', label: 'Tu nombre' },
-  { id: 'avatar',   label: 'Tu foto' },
-  { id: 'done',     label: '¡Listo!' },
+  { id: 'welcome',   label: '¡Hola!' },
+  { id: 'username',  label: 'Tu nombre' },
+  { id: 'interests', label: 'Intereses' },
+  { id: 'avatar',    label: 'Tu foto' },
+  { id: 'done',      label: '¡Listo!' },
 ];
 
 function ProgressDots({ step }) {
@@ -37,6 +57,7 @@ export default function OnboardingPage() {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
+  const [interests, setInterests] = useState([]);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
   const [error, setError] = useState('');
@@ -54,6 +75,12 @@ export default function OnboardingPage() {
     setError('');
   }
 
+  function toggleInterest(id) {
+    setInterests(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }
+
   function validateUsername() {
     const u = username.trim();
     if (u.length < 3) return 'Mínimo 3 caracteres';
@@ -62,21 +89,24 @@ export default function OnboardingPage() {
     return null;
   }
 
+  // Index of the avatar step (submit happens there)
+  const avatarStepIdx = STEPS.findIndex(s => s.id === 'avatar');
+  const doneStepIdx   = STEPS.findIndex(s => s.id === 'done');
+
   async function goNext() {
     setError('');
 
-    if (step === 1) {
+    if (STEPS[step].id === 'username') {
       const err = validateUsername();
       if (err) { setError(err); return; }
     }
 
-    if (step === STEPS.length - 2) {
+    if (step === avatarStepIdx) {
       // Final submit
       setLoading(true);
       try {
         let avatarUrl = null;
 
-        // Upload avatar if provided
         if (avatarFile) {
           const formData = new FormData();
           formData.append('avatar', avatarFile);
@@ -90,15 +120,14 @@ export default function OnboardingPage() {
           username: username.trim().toLowerCase(),
           display_name: displayName.trim() || username.trim(),
           bio: bio.trim() || null,
-          avatar_url: avatarUrl || (avatarPreview ? null : null),
+          avatar_url: avatarUrl || null,
           initial_battery: 50,
+          interests: interests,
         };
 
         try {
           await completeOnboarding(profilePayload);
         } catch (submitError) {
-          // The profile can be created even if the browser loses the response.
-          // In that case, recover it instead of leaving setup stuck on an error.
           try {
             await refreshProfile();
           } catch {
@@ -124,7 +153,7 @@ export default function OnboardingPage() {
     setStep(s => Math.max(0, s - 1));
   }
 
-  // ── Step renderers ───────────────────────────────────────────
+  // ── Step renderers ───────────────────────────────────────
   const renderStep = () => {
     switch (STEPS[step].id) {
 
@@ -223,6 +252,55 @@ export default function OnboardingPage() {
           </div>
         );
 
+      case 'interests':
+        return (
+          <div className="animate-slide-up">
+            <div className="text-center mb-6">
+              <div className="text-5xl mb-3">✨</div>
+              <h2 className="font-display text-2xl font-bold text-surface-text">¿Qué te gusta?</h2>
+              <p className="text-surface-muted text-sm mt-1">
+                Elige tus categorías favoritas — aparecerán en tu perfil
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {ALL_INTERESTS.map(({ id, emoji }) => {
+                const selected = interests.includes(id);
+                return (
+                  <button
+                    key={id}
+                    onClick={() => toggleInterest(id)}
+                    className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-3 border transition-all duration-200
+                      ${selected
+                        ? 'bg-accent-primary/20 border-accent-primary text-accent-glow shadow-sm shadow-accent-primary/20'
+                        : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                      }`}
+                  >
+                    <span className="text-2xl">{emoji}</span>
+                    <span className={`text-[11px] font-display font-semibold leading-tight text-center ${selected ? 'text-accent-glow' : 'text-surface-muted'}`}>
+                      {id}
+                    </span>
+                    {selected && (
+                      <span className="text-[9px] text-accent-primary font-mono">✓</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {interests.length > 0 && (
+              <p className="text-center text-xs text-accent-glow mt-3 font-mono">
+                {interests.length} seleccionado{interests.length !== 1 ? 's' : ''}
+              </p>
+            )}
+            {interests.length === 0 && (
+              <p className="text-center text-xs text-surface-muted/60 mt-3">
+                Puedes saltarte este paso y añadirlos después
+              </p>
+            )}
+          </div>
+        );
+
       case 'avatar':
         return (
           <div className="animate-slide-up text-center">
@@ -315,8 +393,8 @@ export default function OnboardingPage() {
     }
   };
 
-  const isLastStep = step === STEPS.length - 1;
-  const isSubmitStep = step === STEPS.length - 2;
+  const isLastStep   = step === STEPS.length - 1;
+  const isSubmitStep = step === avatarStepIdx;
 
   return (
     <div className="min-h-screen bg-surface-bg flex items-start justify-center p-4 noise">
@@ -374,7 +452,7 @@ export default function OnboardingPage() {
 
         </div>
 
-        {/* Escape hatch — session may have expired or the user is stuck */}
+        {/* Escape hatch */}
         <div className="text-center mt-4">
           <button
             onClick={async () => { await signOut(); navigate('/auth', { replace: true }); }}

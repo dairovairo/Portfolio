@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { ALL_INTERESTS } from './OnboardingPage';
 
 function BadgePill({ badge }) {
   return (
@@ -196,6 +197,22 @@ export default function UserProfilePage() {
               <h2 className="font-display font-bold text-white text-xl truncate">{user.display_name}</h2>
               <div className="text-sm text-slate-500 font-mono">@{user.username}</div>
               {user.bio && <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{user.bio}</p>}
+              {user.interests && user.interests.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {user.interests.map(interest => {
+                    const found = ALL_INTERESTS.find(i => i.id === interest);
+                    return (
+                      <span
+                        key={interest}
+                        className="inline-flex items-center gap-1 bg-accent-primary/10 border border-accent-primary/20
+                          text-accent-glow rounded-full px-2 py-0.5 text-[11px] font-display font-semibold"
+                      >
+                        {found?.emoji} {interest}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Battery compatibility */}
               {!isMe && diff !== null && (
