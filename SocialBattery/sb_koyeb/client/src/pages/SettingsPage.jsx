@@ -837,7 +837,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="text-xs text-surface-muted">
                     {showBadges
-                      ? 'Tus insignias desbloqueadas son visibles en tu perfil público'
+                      ? 'Tus insignias son visibles en tu perfil público'
                       : 'Tus insignias quedan ocultas para otros usuarios'}
                   </div>
                 </div>

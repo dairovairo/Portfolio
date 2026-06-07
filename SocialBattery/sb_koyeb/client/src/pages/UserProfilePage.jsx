@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { ALL_INTERESTS } from './OnboardingPage';
@@ -72,7 +71,6 @@ export default function UserProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile: myProfile } = useAuth();
-  const { showBadges } = useSettings();
 
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
@@ -315,7 +313,7 @@ export default function UserProfilePage() {
         </div>
 
         {/* Badges */}
-        {earnedBadges.length > 0 && (!isMe || showBadges) && (
+        {earnedBadges.length > 0 && user.show_badges !== false && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
             <h3 className="font-display font-semibold text-white mb-3">
               Insignias · {earnedBadges.length}

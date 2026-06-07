@@ -4,5 +4,4 @@
 
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS show_interests    boolean NOT NULL DEFAULT true,
-  ADD COLUMN IF NOT EXISTS show_public_stats boolean NOT NULL DEFAULT true,
-  ADD COLUMN IF NOT EXISTS show_badges       boolean NOT NULL DEFAULT true;
+  ADD COLUMN IF NOT EXISTS show_public_stats boolean NOT NULL DEFAULT true;
