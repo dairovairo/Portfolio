@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
+import { useSettings } from '../context/SettingsContext';
 import { usePush } from '../hooks/usePush';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
@@ -94,6 +95,7 @@ export default function ProfilePage() {
   const { profile, refreshProfile, signOut } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const { addToast } = useToast();
+  const { showInterests, showPublicStats } = useSettings();
   const { permission, subscribed, requestPermission } = usePush();
   const navigate = useNavigate();
   const fileRef = useRef(null);
@@ -356,7 +358,7 @@ export default function ProfilePage() {
                 {profile?.bio && (
                   <p className="text-sm text-surface-muted mt-2 leading-relaxed">{profile.bio}</p>
                 )}
-                {profile?.interests && profile.interests.length > 0 && (
+                {profile?.interests && profile.interests.length > 0 && showInterests && (
                   <div className="flex flex-wrap gap-1.5 mt-3">
                     {profile.interests.map(interest => {
                       const found = ALL_INTERESTS.find(i => i.id === interest);
@@ -370,6 +372,13 @@ export default function ProfilePage() {
                         </span>
                       );
                     })}
+                  </div>
+                )}
+                {profile?.interests && profile.interests.length > 0 && !showInterests && (
+                  <div className="flex items-center gap-1.5 mt-3">
+                    <span className="text-xs text-surface-muted/60 font-mono italic">
+                      🔒 Intereses ocultos para otros
+                    </span>
                   </div>
                 )}
                 <div className="text-xs text-surface-muted/60 mt-2">
@@ -460,7 +469,16 @@ export default function ProfilePage() {
         </div>
 
         {/* ── Public Stats ── */}
-        <StatsGrid stats={stats} />
+        {showPublicStats ? (
+          <StatsGrid stats={stats} />
+        ) : (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+            <div className="flex items-center gap-2 text-surface-muted/60">
+              <span className="text-sm">📊</span>
+              <span className="text-xs font-mono italic">Estadísticas ocultas para otros</span>
+            </div>
+          </div>
+        )}
 
         {/* ── Battery history ── */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4">

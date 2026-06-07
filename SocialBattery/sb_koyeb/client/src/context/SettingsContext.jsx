@@ -131,6 +131,8 @@ const STORAGE_KEYS = {
   readReceipts:          'sb-read-receipts',
   showOnline:            'sb-show-online',
   showLastSeen:          'sb-show-last-seen',
+  showInterests:         'sb-show-interests',
+  showPublicStats:       'sb-show-public-stats',
 };
 
 const MESSAGING_FIELDS = [
@@ -311,6 +313,14 @@ export function SettingsProvider({ children }) {
     () => loadStorage(STORAGE_KEYS.showLastSeen, 'true') === 'true'
   );
 
+  const [showInterests, setShowInterestsState] = useState(
+    () => loadStorage(STORAGE_KEYS.showInterests, 'true') === 'true'
+  );
+
+  const [showPublicStats, setShowPublicStatsState] = useState(
+    () => loadStorage(STORAGE_KEYS.showPublicStats, 'true') === 'true'
+  );
+
   // ── setters ──────────────────────────────────────────────────────────────
 
   const setChatWallpaper = useCallback((dataUrl) => {
@@ -443,6 +453,35 @@ export function SettingsProvider({ children }) {
     setShowLastSeenState(v);
   }, []);
 
+  const setShowInterests = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showInterests, String(v));
+    setShowInterestsState(v);
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { show_interests: v }).catch(() => {});
+    });
+  }, []);
+
+  const setShowPublicStats = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showPublicStats, String(v));
+    setShowPublicStatsState(v);
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { show_public_stats: v }).catch(() => {});
+    });
+  }, []);
+
+  // Sync privacy toggles from server profile (called on login / profile load)
+  const syncPrivacyFromProfile = useCallback((profile) => {
+    if (!profile) return;
+    if (typeof profile.show_interests === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.showInterests, String(profile.show_interests));
+      setShowInterestsState(profile.show_interests);
+    }
+    if (typeof profile.show_public_stats === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.showPublicStats, String(profile.show_public_stats));
+      setShowPublicStatsState(profile.show_public_stats);
+    }
+  }, []);
+
   // ── reset to defaults ─────────────────────────────────────────────────────
 
   const applyMessagingThemeDefaults = useCallback((themeName = theme) => {
@@ -543,6 +582,9 @@ export function SettingsProvider({ children }) {
       readReceipts, setReadReceipts,
       showOnline, setShowOnline,
       showLastSeen, setShowLastSeen,
+      showInterests, setShowInterests,
+      showPublicStats, setShowPublicStats,
+      syncPrivacyFromProfile,
     }}>
       {children}
     </SettingsContext.Provider>

@@ -384,6 +384,8 @@ export default function SettingsPage() {
     readReceipts, setReadReceipts,
     showOnline, setShowOnline,
     showLastSeen, setShowLastSeen,
+    showInterests, setShowInterests,
+    showPublicStats, setShowPublicStats,
   } = useSettings();
 
   // Only one section open at a time
@@ -788,6 +790,42 @@ export default function SettingsPage() {
                 <Toggle
                   enabled={readReceipts}
                   onToggle={() => setReadReceipts(!readReceipts)}
+                />
+              </div>
+
+              <div className="border-t border-surface-border" />
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Mostrar intereses
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    {showInterests
+                      ? 'Tus categorías de interés son visibles en tu perfil público'
+                      : 'Tus intereses quedan ocultos para otros usuarios'}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={showInterests}
+                  onToggle={() => setShowInterests(!showInterests)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Mostrar estadísticas públicas
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    {showPublicStats
+                      ? 'Tus estadísticas (amigos, planes, actividad) son visibles en tu perfil'
+                      : 'Tus estadísticas públicas quedan ocultas para otros usuarios'}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={showPublicStats}
+                  onToggle={() => setShowPublicStats(!showPublicStats)}
                 />
               </div>
             </div>

@@ -97,6 +97,18 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
   const targetId = req.params.id;
 
   try {
+    // Check show_public_stats privacy setting (skip check when viewing own profile)
+    if (req.user.id !== targetId) {
+      const { data: privacyRow } = await supabase
+        .from('users')
+        .select('show_public_stats')
+        .eq('id', targetId)
+        .single();
+      if (privacyRow && privacyRow.show_public_stats === false) {
+        return res.json({ stats: null });
+      }
+    }
+
     const [friendsRes, createdRes, participationsRes, batteryRes, userRes] = await Promise.all([
       // Accepted friendships (both directions)
       supabase
@@ -156,7 +168,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select(`
-      id, username, display_name, bio, avatar_url, interests,
+      id, username, display_name, bio, avatar_url, interests, show_interests, show_public_stats,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)
@@ -164,17 +176,25 @@ router.get('/:id', requireAuth, async (req, res) => {
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'User not found' });
+
+  // Strip interests if the user has hidden them (only for other users, not for yourself)
+  if (req.user.id !== req.params.id && data.show_interests === false) {
+    data.interests = [];
+  }
+
   res.json({ user: applyBatteryExpiry(data) });
 });
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { display_name, avatar_url, bio, interests } = req.body;
+  const { display_name, avatar_url, bio, interests, show_interests, show_public_stats } = req.body;
   const updates = {};
   if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 20);
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
   if (interests !== undefined) updates.interests = Array.isArray(interests) ? interests : [];
+  if (show_interests !== undefined) updates.show_interests = Boolean(show_interests);
+  if (show_public_stats !== undefined) updates.show_public_stats = Boolean(show_public_stats);
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });
