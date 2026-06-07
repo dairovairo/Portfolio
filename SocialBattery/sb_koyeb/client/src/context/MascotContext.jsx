@@ -16,15 +16,6 @@ export const MASCOT_ACTIVITIES = [
     isBase: true,
   },
   {
-    id: 'high_2',
-    tier: 'high',
-    name: 'Modo fiesta',
-    desc: 'Tu mascota en su mejor noche de celebración.',
-    src: '/mascot-high-2.png',
-    price: 80,
-    isBase: false,
-  },
-  {
     id: 'high_3',
     tier: 'high',
     name: 'Aventura total',
