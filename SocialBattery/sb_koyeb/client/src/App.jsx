@@ -22,6 +22,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import ShopPage from './pages/ShopPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 import { TutorialProvider } from './context/TutorialContext';
+import { MascotProvider } from './context/MascotContext';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
@@ -94,9 +95,11 @@ export default function App() {
           <ToastProvider>
             <AuthProvider>
               <TutorialProvider>
+                <MascotProvider>
                 <CommunityNotificationsProvider>
                   <AppRoutes />
                 </CommunityNotificationsProvider>
+                </MascotProvider>
               </TutorialProvider>
             </AuthProvider>
           </ToastProvider>

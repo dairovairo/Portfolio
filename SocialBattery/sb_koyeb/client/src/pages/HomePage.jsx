@@ -14,36 +14,15 @@ import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatter
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
 import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+import { useMascot } from '../context/MascotContext';
 
-// ── Mascota: pools de avatares por tier de batería ────────────────────────────
-const MASCOT_POOLS = {
-  high: [
-    '/mascot-high.png',
-    '/mascot-high-2.png',
-    '/mascot-high-3.png',
-    '/mascot-high-4.png',
-    '/mascot-high-5.png',
-  ],
-  mid: [
-    '/mascot-mid.png',
-    '/mascot-mid-4.png',
-    '/mascot-mid-5.png',
-  ],
-  low: [
-    '/mascot-low.png',
-    '/mascot-low-2.png',
-    '/mascot-low-3.png',
-    '/mascot-low-4.png',
-  ],
-};
-
+// ── Avatar helper ─────────────────────────────────────────────────────────────
 function getMascotTier(level) {
   if (level <= 33) return 'low';
   if (level <= 66) return 'mid';
   return 'high';
 }
 
-// ── Avatar helper ─────────────────────────────────────────────────────────────
 function Avatar({ user, size = 'sm', online = false }) {
   const color = getBatteryColor(user.battery_level ?? 50);
   const sz = size === 'sm' ? 'w-9 h-9 text-sm' : 'w-12 h-12 text-base';
@@ -341,9 +320,9 @@ export default function HomePage() {
   const { addToast } = useToast();
   const { isLight } = useTheme();
   const navigate = useNavigate();
+  const { getActiveSrc } = useMascot();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
-  const [mascotIndexes, setMascotIndexes] = useState({ high: 0, mid: 0, low: 0 });
   const [friends, setFriends] = useState([]);
   const onlineMap = useFriendsOnline(friends);
   const [groups, setGroups] = useState([]);
@@ -467,17 +446,6 @@ export default function HomePage() {
       await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-
-      // Cambiar a un avatar aleatorio del tier actual (sin repetir el mismo)
-      const tier = getMascotTier(battery);
-      setMascotIndexes(prev => {
-        const pool = MASCOT_POOLS[tier];
-        let next;
-        do {
-          next = Math.floor(Math.random() * pool.length);
-        } while (next === prev[tier] && pool.length > 1);
-        return { ...prev, [tier]: next };
-      });
 
       if (earned?.length > 0) {
         setNewBadges(earned);
@@ -608,8 +576,8 @@ export default function HomePage() {
             </div>
 
             <img
-              key={`${getMascotTier(battery)}-${mascotIndexes[getMascotTier(battery)]}`}
-              src={MASCOT_POOLS[getMascotTier(battery)][mascotIndexes[getMascotTier(battery)]]}
+              key={getActiveSrc(getMascotTier(battery))}
+              src={getActiveSrc(getMascotTier(battery))}
               alt="Mascota SocialBattery"
               className="w-32 h-32 object-contain select-none pointer-events-none flex-shrink-0"
               draggable={false}
