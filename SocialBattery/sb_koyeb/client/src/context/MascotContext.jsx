@@ -83,15 +83,6 @@ export const MASCOT_ACTIVITIES = [
     isBase: true,
   },
   {
-    id: 'low_2',
-    tier: 'low',
-    name: 'Modo sofá',
-    desc: 'Manta, peli y nada más. Sin excusas.',
-    src: '/mascot-low-2.png',
-    price: 40,
-    isBase: false,
-  },
-  {
     id: 'low_3',
     tier: 'low',
     name: 'Siesta sagrada',
