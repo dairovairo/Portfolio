@@ -112,7 +112,6 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [bio, setBio] = useState(profile?.bio || '');
   const [editInterests, setEditInterests] = useState(profile?.interests || []);
-  const [editPhone, setEditPhone] = useState(profile?.phone || '');
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Avatar upload
@@ -148,8 +147,7 @@ export default function ProfilePage() {
     if (
       displayName.trim() === profile?.display_name &&
       bio.trim() === (profile?.bio || '') &&
-      JSON.stringify(editInterests) === JSON.stringify(profile?.interests || []) &&
-      editPhone.trim() === (profile?.phone || '')
+      JSON.stringify(editInterests) === JSON.stringify(profile?.interests || [])
     ) { setEditing(false); return; }
 
     setSavingProfile(true);
@@ -158,7 +156,6 @@ export default function ProfilePage() {
         display_name: displayName.trim(),
         bio: bio.trim() || null,
         interests: editInterests,
-        phone: editPhone.trim() || null,
       });
       await refreshProfile();
       setEditing(false);
@@ -275,7 +272,7 @@ export default function ProfilePage() {
               {/* Edit button */}
               {!editing && (
                 <button
-                  onClick={() => { setDisplayName(profile?.display_name || ''); setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setEditPhone(profile?.phone || ''); setEditing(true); }}
+                  onClick={() => { setDisplayName(profile?.display_name || ''); setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setEditing(true); }}
                   className="bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5
                     text-xs font-display font-semibold text-surface-text hover:text-accent-glow transition-all flex items-center gap-1.5"
                 >
@@ -313,20 +310,6 @@ export default function ProfilePage() {
                       transition-colors resize-none"
                   />
                   <p className="text-right text-xs text-surface-muted/60">{bio.length}/160</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-mono text-surface-muted mb-1 uppercase tracking-widest">Teléfono (para aparecer en contactos)</label>
-                  <input
-                    type="tel"
-                    value={editPhone}
-                    onChange={e => setEditPhone(e.target.value)}
-                    maxLength={20}
-                    placeholder="+34 612 345 678"
-                    className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2
-                      text-surface-text text-sm focus:outline-none focus:border-accent-primary
-                      transition-colors"
-                  />
-                  <p className="text-xs text-surface-muted/60 mt-1">Opcional. Permite que tus contactos te encuentren en la app.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">Intereses</label>
