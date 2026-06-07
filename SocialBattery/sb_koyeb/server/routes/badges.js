@@ -78,24 +78,10 @@ router.get('/my', requireAuth, async (req, res) => {
 // GET /api/badges/user/:userId — insignias permanentes de otro usuario
 router.get('/user/:userId', requireAuth, async (req, res) => {
   try {
-    const targetId = req.params.userId;
-
-    // Check show_badges privacy setting (skip when viewing own badges)
-    if (req.user.id !== targetId) {
-      const { data: privacyRow } = await supabase
-        .from('users')
-        .select('show_badges')
-        .eq('id', targetId)
-        .single();
-      if (privacyRow && privacyRow.show_badges === false) {
-        return res.json({ badges: [] });
-      }
-    }
-
     const { data, error } = await supabase
       .from('user_badges')
       .select('earned_at, badge:badge_id(id, name, emoji, description, category)')
-      .eq('user_id', targetId)
+      .eq('user_id', req.params.userId)
       .order('earned_at', { ascending: false });
 
     if (error) throw error;

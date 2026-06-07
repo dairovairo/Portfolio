@@ -386,7 +386,6 @@ export default function SettingsPage() {
     showLastSeen, setShowLastSeen,
     showInterests, setShowInterests,
     showPublicStats, setShowPublicStats,
-    showBadges, setShowBadges,
   } = useSettings();
 
   // Only one section open at a time
@@ -827,23 +826,6 @@ export default function SettingsPage() {
                 <Toggle
                   enabled={showPublicStats}
                   onToggle={() => setShowPublicStats(!showPublicStats)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-display font-semibold text-surface-text">
-                    Mostrar insignias
-                  </div>
-                  <div className="text-xs text-surface-muted">
-                    {showBadges
-                      ? 'Tus insignias desbloqueadas son visibles en tu perfil público'
-                      : 'Tus insignias quedan ocultas para otros usuarios'}
-                  </div>
-                </div>
-                <Toggle
-                  enabled={showBadges}
-                  onToggle={() => setShowBadges(!showBadges)}
                 />
               </div>
             </div>
