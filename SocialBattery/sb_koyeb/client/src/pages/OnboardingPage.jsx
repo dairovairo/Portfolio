@@ -5,22 +5,23 @@ import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
 
 // ── Categorías compartidas con Comunidades y Eventos ─────────────────────────
+// U+FE0F (️) after each emoji forces full-color emoji presentation on all platforms
 export const ALL_INTERESTS = [
-  { id: 'Música',       emoji: '🎵' },
-  { id: 'Deporte',      emoji: '⚽' },
-  { id: 'Arte',         emoji: '🎨' },
-  { id: 'Tecnología',   emoji: '💻' },
+  { id: 'Música',       emoji: '🎵️' },
+  { id: 'Deporte',      emoji: '⚽️' },
+  { id: 'Arte',         emoji: '🎨️' },
+  { id: 'Tecnología',   emoji: '💻️' },
   { id: 'Comida',       emoji: '🍽️' },
   { id: 'Viajes',       emoji: '✈️' },
-  { id: 'Cine',         emoji: '🎬' },
-  { id: 'Juego',        emoji: '🎮' },
-  { id: 'Yoga',         emoji: '🧘' },
-  { id: 'Fotografía',   emoji: '📷' },
-  { id: 'Lectura',      emoji: '📚' },
-  { id: 'Naturaleza',   emoji: '🌿' },
-  { id: 'Fiesta',       emoji: '🎉' },
-  { id: 'Bienestar',    emoji: '💆' },
-  { id: 'Cocina',       emoji: '👨‍🍳' },
+  { id: 'Cine',         emoji: '🎬️' },
+  { id: 'Juego',        emoji: '🎮️' },
+  { id: 'Yoga',         emoji: '🧘️' },
+  { id: 'Fotografía',   emoji: '📷️' },
+  { id: 'Lectura',      emoji: '📚️' },
+  { id: 'Naturaleza',   emoji: '🌿️' },
+  { id: 'Fiesta',       emoji: '🎉️' },
+  { id: 'Bienestar',    emoji: '💆️' },
+  { id: 'Cocina',       emoji: '👨‍🍳️' },
 ];
 
 const STEPS = [
@@ -99,6 +100,13 @@ export default function OnboardingPage() {
     if (STEPS[step].id === 'username') {
       const err = validateUsername();
       if (err) { setError(err); return; }
+    }
+
+    if (STEPS[step].id === 'interests') {
+      if (interests.length === 0) {
+        setError('Elige al menos un interés para continuar');
+        return;
+      }
     }
 
     if (step === avatarStepIdx) {
@@ -259,7 +267,7 @@ export default function OnboardingPage() {
               <div className="text-5xl mb-3">✨</div>
               <h2 className="font-display text-2xl font-bold text-surface-text">¿Qué te gusta?</h2>
               <p className="text-surface-muted text-sm mt-1">
-                Elige tus categorías favoritas — aparecerán en tu perfil
+                Elige tus categorías favoritas — mínimo una
               </p>
             </div>
 
@@ -279,7 +287,7 @@ export default function OnboardingPage() {
                       }`}
                   >
                     <div className="h-8 w-full flex items-center justify-center overflow-hidden pointer-events-none">
-                      <span className="text-2xl leading-none">{emoji}</span>
+                      <span className="text-2xl leading-none" style={{ fontVariantEmoji: 'emoji' }}>{emoji}</span>
                     </div>
                     <span className={`text-[11px] font-display font-semibold leading-tight text-center truncate w-full pointer-events-none ${selected ? 'text-accent-glow' : 'text-surface-muted'}`}>
                       {id}
@@ -298,8 +306,8 @@ export default function OnboardingPage() {
               </p>
             )}
             {interests.length === 0 && (
-              <p className="text-center text-xs text-surface-muted/60 mt-3">
-                Puedes saltarte este paso y añadirlos después
+              <p className="text-center text-xs text-red-400/70 mt-3">
+                * Selecciona al menos uno para continuar
               </p>
             )}
           </div>
