@@ -13,6 +13,15 @@ function PresenceBroadcaster({ userId }) {
   return null;
 }
 
+function PrivacySettingsSyncer({ profile }) {
+  const { syncPrivacyFromProfile } = useSettings();
+  useEffect(() => {
+    if (profile) syncPrivacyFromProfile(profile);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+  return null;
+}
+
 function MessageNotificationsBroadcaster({ profile }) {
   const {
     muteAllNotifications,
@@ -137,6 +146,8 @@ export function AuthProvider({ children }) {
     }}>
       {/* Heartbeat broadcaster — active when logged in with a profile */}
       {profile?.id && <PresenceBroadcaster userId={profile.id} />}
+      {/* Sync privacy toggles from server profile on login / profile load */}
+      {profile?.id && <PrivacySettingsSyncer profile={profile} />}
       {/* Native notification listener — active when logged in with a profile */}
       {profile?.id && <MessageNotificationsBroadcaster profile={profile} />}
       {children}
