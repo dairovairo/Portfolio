@@ -164,14 +164,12 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
 });
 
 // GET /api/users/:id
+// SELECT * is intentional: avoids crashing when privacy columns (show_interests,
+// show_public_stats) don't exist yet because the migration hasn't been run.
 router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
-    .select(`
-      id, username, display_name, bio, avatar_url, interests, show_interests, show_public_stats, show_badges,
-      battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
-      user_badges(badge_id, earned_at, badges(name, emoji, description, category))
-    `)
+    .select('*, user_badges(badge_id, earned_at, badges(name, emoji, description, category))')
     .eq('id', req.params.id)
     .single();
 
