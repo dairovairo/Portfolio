@@ -10,6 +10,7 @@ import { BatteryLineChart, BatteryHeatmap } from '../components/BatteryChart';
 import BatterySlider from '../components/BatterySlider';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import BottomNav from '../components/BottomNav';
+import { ALL_INTERESTS } from './OnboardingPage';
 
 // ── Public Stats ──────────────────────────────────────────────────────────────
 function formatMemberSince(isoDate) {
@@ -108,6 +109,7 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [bio, setBio] = useState(profile?.bio || '');
+  const [editInterests, setEditInterests] = useState(profile?.interests || []);
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Avatar upload
@@ -142,7 +144,8 @@ export default function ProfilePage() {
   async function saveProfile() {
     if (
       displayName.trim() === profile?.display_name &&
-      bio.trim() === (profile?.bio || '')
+      bio.trim() === (profile?.bio || '') &&
+      JSON.stringify(editInterests) === JSON.stringify(profile?.interests || [])
     ) { setEditing(false); return; }
 
     setSavingProfile(true);
@@ -150,6 +153,7 @@ export default function ProfilePage() {
       await api.patch('/users/me', {
         display_name: displayName.trim(),
         bio: bio.trim() || null,
+        interests: editInterests,
       });
       await refreshProfile();
       setEditing(false);
@@ -266,7 +270,7 @@ export default function ProfilePage() {
               {/* Edit button */}
               {!editing && (
                 <button
-                  onClick={() => { setDisplayName(profile?.display_name || ''); setBio(profile?.bio || ''); setEditing(true); }}
+                  onClick={() => { setDisplayName(profile?.display_name || ''); setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setEditing(true); }}
                   className="bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5
                     text-xs font-display font-semibold text-surface-text hover:text-accent-glow transition-all flex items-center gap-1.5"
                 >
@@ -305,6 +309,28 @@ export default function ProfilePage() {
                   />
                   <p className="text-right text-xs text-surface-muted/60">{bio.length}/160</p>
                 </div>
+                <div>
+                  <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">Intereses</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {ALL_INTERESTS.map(({ id, emoji }) => {
+                      const selected = editInterests.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setEditInterests(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                          className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 border transition-all text-left
+                            ${selected
+                              ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
+                              : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                            }`}
+                        >
+                          <span className="text-base flex-shrink-0">{emoji}</span>
+                          <span className="text-[10px] font-display font-semibold leading-tight truncate">{id}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={saveProfile}
@@ -329,6 +355,22 @@ export default function ProfilePage() {
                 <div className="text-sm text-surface-muted font-mono">@{profile?.username}</div>
                 {profile?.bio && (
                   <p className="text-sm text-surface-muted mt-2 leading-relaxed">{profile.bio}</p>
+                )}
+                {profile?.interests && profile.interests.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {profile.interests.map(interest => {
+                      const found = ALL_INTERESTS.find(i => i.id === interest);
+                      return (
+                        <span
+                          key={interest}
+                          className="inline-flex items-center gap-1 bg-accent-primary/10 border border-accent-primary/20
+                            text-accent-glow rounded-full px-2.5 py-1 text-xs font-display font-semibold"
+                        >
+                          {found?.emoji} {interest}
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
                 <div className="text-xs text-surface-muted/60 mt-2">
                   Miembro desde {profile?.created_at

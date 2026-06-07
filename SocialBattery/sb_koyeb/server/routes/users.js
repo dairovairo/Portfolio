@@ -156,7 +156,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select(`
-      id, username, display_name, bio, avatar_url,
+      id, username, display_name, bio, avatar_url, interests,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)
@@ -169,11 +169,12 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { display_name, avatar_url, bio } = req.body;
+  const { display_name, avatar_url, bio, interests } = req.body;
   const updates = {};
   if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 20);
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
+  if (interests !== undefined) updates.interests = Array.isArray(interests) ? interests : [];
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });

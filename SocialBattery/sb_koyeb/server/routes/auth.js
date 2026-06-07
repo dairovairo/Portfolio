@@ -6,7 +6,7 @@ const { expireUserBatteryIfNeeded } = require('../lib/batteryExpiry');
 
 // POST /api/auth/profile — called after Supabase signup to create public profile
 router.post('/profile', requireAuth, async (req, res) => {
-  const { username, display_name, bio, avatar_url, initial_battery } = req.body;
+  const { username, display_name, bio, avatar_url, initial_battery, interests } = req.body;
   const userId = req.user.id;
 
   if (!username || username.trim().length < 3) {
@@ -39,6 +39,7 @@ router.post('/profile', requireAuth, async (req, res) => {
       battery_level: batteryLevel,
       battery_updated_at: new Date().toISOString(),
       onboarding_done: true,
+      interests: Array.isArray(interests) ? interests : [],
     })
     .select()
     .single();
