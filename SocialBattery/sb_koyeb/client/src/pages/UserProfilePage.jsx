@@ -157,7 +157,6 @@ export default function UserProfilePage() {
   const isMe = user.id === myProfile?.id;
   const color = getBatteryColor(user.battery_level ?? 50);
   const earnedBadges = (user._earnedBadges || user.user_badges?.map(ub => ub.badges) || []).filter(Boolean);
-  const diff = myProfile ? Math.abs((user.battery_level ?? 50) - (myProfile.battery_level ?? 50)) : null;
 
   return (
     <div className="min-h-screen bg-surface-bg">
@@ -214,19 +213,7 @@ export default function UserProfilePage() {
                 </div>
               )}
 
-              {/* Battery compatibility */}
-              {!isMe && diff !== null && (
-                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-display font-semibold ${
-                  diff <= 15 ? 'bg-green-500/15 text-green-400 border border-green-500/20' :
-                  diff <= 35 ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20' :
-                  'bg-slate-500/15 text-slate-400 border border-slate-500/20'
-                }`}>
-                  {diff <= 15 ? '⚡ Compatibilidad alta' :
-                   diff <= 35 ? '🔋 Compatibilidad media' :
-                   '🪫 Compatibilidad baja'}
-                  <span className="font-mono">({diff}% dif.)</span>
-                </div>
-              )}
+
             </div>
           </div>
 
