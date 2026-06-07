@@ -477,6 +477,9 @@ export function SettingsProvider({ children }) {
   const setShowBadges = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.showBadges, String(v));
     setShowBadgesState(v);
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { show_badges: v }).catch(() => {});
+    });
   }, []);
 
   // Sync privacy toggles from server profile (called on login / profile load)
@@ -489,6 +492,10 @@ export function SettingsProvider({ children }) {
     if (typeof profile.show_public_stats === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.showPublicStats, String(profile.show_public_stats));
       setShowPublicStatsState(profile.show_public_stats);
+    }
+    if (typeof profile.show_badges === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.showBadges, String(profile.show_badges));
+      setShowBadgesState(profile.show_badges);
     }
   }, []);
 
