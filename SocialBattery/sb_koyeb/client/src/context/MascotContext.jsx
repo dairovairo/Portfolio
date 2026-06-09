@@ -40,7 +40,7 @@ export const MASCOT_ACCESSORIES = [
   },
   {
     id: 'acc_sneakers_converse',
-    name: 'Converse gradient',
+    name: 'Zapatillas retro gradient',
     desc: 'Zapatillas retro con degradado energético.',
     emoji: '👟',
     src: '/accessory-sneakers-converse.png',
@@ -49,7 +49,7 @@ export const MASCOT_ACCESSORIES = [
   },
   {
     id: 'acc_sneakers_jordan',
-    name: 'Jordan SB Energy',
+    name: 'Zapatillas SB Energy',
     desc: 'Las zapatillas de edición especial SocialBattery.',
     emoji: '🔥',
     src: '/accessory-sneakers-jordan.png',
@@ -116,8 +116,8 @@ export const MASCOT_ACTIVITIES = [
   },
   {
     id: 'act_reading',
-    name: 'Manual de energía',
-    desc: 'Aprendiendo a gestionar la batería social.',
+    name: 'Leyendo',
+    desc: 'Un buen libro para recargar la mente.',
     emoji: '📖',
     layers: ['/activity-book.png'],
     price: 70,
@@ -125,9 +125,9 @@ export const MASCOT_ACTIVITIES = [
   },
   {
     id: 'act_cocktail',
-    name: 'Cóctel',
-    desc: 'Relax total con una bebida tropical.',
-    emoji: '🍹',
+    name: 'De fiesta',
+    desc: 'Modo fiesta activado, a disfrutar.',
+    emoji: '🎉',
     layers: ['/activity-cocktail.png'],
     price: 50,
     isBase: false,
