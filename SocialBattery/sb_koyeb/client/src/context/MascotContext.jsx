@@ -28,6 +28,27 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-chain.png',
     price: 90,
     isBase: false,
+    isChain: true,
+  },
+  {
+    id: 'acc_chain_silver',
+    name: 'Cadena de plata',
+    desc: 'Estilo elegante con plata maciza.',
+    emoji: '🔗',
+    src: '/accessory-chain-silver.png',
+    price: 75,
+    isBase: false,
+    isChain: true,
+  },
+  {
+    id: 'acc_chain_black',
+    name: 'Cadena negra',
+    desc: 'Oscura y misteriosa, para el lado rebelde.',
+    emoji: '🖤',
+    src: '/accessory-chain-black.png',
+    price: 80,
+    isBase: false,
+    isChain: true,
   },
   {
     id: 'acc_grillz',
@@ -36,6 +57,15 @@ export const MASCOT_ACCESSORIES = [
     emoji: '💎',
     src: '/accessory-grillz.png',
     price: 150,
+    isBase: false,
+  },
+  {
+    id: 'acc_grillz_gold',
+    name: 'Grillz de oro',
+    desc: 'Dientes de oro para la sonrisa más flexera.',
+    emoji: '🥇',
+    src: '/accessory-grillz-gold.png',
+    price: 120,
     isBase: false,
   },
   {
@@ -210,6 +240,7 @@ export function MascotProvider({ children }) {
     return {
       base,
       accessory: acc?.src ?? null,
+      accessoryIsChain: acc?.isChain ?? false,
       layers: act?.layers ?? [],
     };
   }

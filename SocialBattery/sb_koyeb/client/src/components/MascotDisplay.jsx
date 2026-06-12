@@ -27,14 +27,16 @@ export default function MascotDisplay({
   animate = false,
   baseSrc,
   accessorySrc,
+  accessoryIsChain,
   activityLayers,
 }) {
   const { getMascotLayers } = useMascot();
 
   const resolved = getMascotLayers(tier);
-  const base      = baseSrc        !== undefined ? baseSrc        : resolved.base;
-  const accessory = accessorySrc   !== undefined ? accessorySrc   : resolved.accessory;
-  const layers    = activityLayers !== undefined ? activityLayers : resolved.layers;
+  const base      = baseSrc          !== undefined ? baseSrc          : resolved.base;
+  const accessory = accessorySrc     !== undefined ? accessorySrc     : resolved.accessory;
+  const isChain   = accessoryIsChain !== undefined ? accessoryIsChain : resolved.accessoryIsChain;
+  const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
 
   const sizeStyle  = typeof size === 'number' ? { width: size, height: size } : {};
   const shadowStyle = glowColor ? { filter: `drop-shadow(0 0 18px ${glowColor}55)` } : {};
@@ -57,12 +59,30 @@ export default function MascotDisplay({
       />
 
       {/* Capa 2: accesorio (intermedia) */}
-      {accessory && (
+      {accessory && !isChain && (
         <img
           src={accessory}
           alt=""
           draggable={false}
           className={imgClass}
+        />
+      )}
+      {/* Capa 2b: cadena — posicionada en cuello/pecho */}
+      {accessory && isChain && (
+        <img
+          src={accessory}
+          alt=""
+          draggable={false}
+          className="absolute select-none pointer-events-none"
+          style={{
+            left: '5%',
+            right: '5%',
+            top: '48%',
+            width: '90%',
+            height: '52%',
+            objectFit: 'contain',
+            objectPosition: 'top center',
+          }}
         />
       )}
 

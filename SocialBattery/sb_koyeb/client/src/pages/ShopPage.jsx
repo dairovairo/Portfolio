@@ -118,6 +118,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
           tier="mid"
           size={112}
           accessorySrc={accessory.src}
+          accessoryIsChain={accessory.isChain ?? false}
           activityLayers={[]}
           style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
         />
