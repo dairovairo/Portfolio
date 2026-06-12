@@ -75,11 +75,10 @@ export default function MascotDisplay({
           draggable={false}
           className="absolute select-none pointer-events-none"
           style={{
-            left: '5%',
-            right: '5%',
-            top: '48%',
-            width: '90%',
-            height: '52%',
+            left: '-10%',
+            width: '120%',
+            top: '10%',
+            height: '85%',
             objectFit: 'contain',
             objectPosition: 'top center',
           }}
