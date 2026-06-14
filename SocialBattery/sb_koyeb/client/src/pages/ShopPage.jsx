@@ -2,11 +2,18 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
-import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, useMascot } from '../context/MascotContext';
+import {
+  MASCOT_ACTIVITIES,
+  MASCOT_ACCESSORIES,
+  MASCOT_OUTFIT_HEAD,
+  MASCOT_OUTFIT_ACCESSORIES,
+  MASCOT_OUTFIT_SHIRTS,
+  useMascot,
+} from '../context/MascotContext';
 
 const COINS = 340;
 
-// ── Tarjeta genérica de item con preview de mascota ───────────────────────────
+// ── Tarjeta genérica ──────────────────────────────────────────────────────────
 function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEquip, children }) {
   return (
     <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
@@ -18,8 +25,6 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
       }`}
     >
       {children}
-
-      {/* Acción */}
       <div className="px-3 pb-3 pt-1">
         {isBase || isUnlocked ? (
           isActive ? (
@@ -55,12 +60,7 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
 // ── Tarjeta de ACTIVIDAD ──────────────────────────────────────────────────────
 function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
-    <ItemCard
-      isUnlocked={isUnlocked} isActive={isActive}
-      canAfford={canAfford} price={activity.price}
-      isBase={activity.isBase} onBuy={onBuy} onEquip={onEquip}
-    >
-      {/* Preview con capas: mascota base + actividad encima */}
+    <ItemCard isUnlocked={isUnlocked} isActive={isActive} canAfford={canAfford} price={activity.price} isBase={activity.isBase} onBuy={onBuy} onEquip={onEquip}>
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
@@ -73,15 +73,9 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
             <span className="text-3xl">🔒</span>
           </div>
         )}
-        <MascotDisplay
-          tier="mid"
-          size={112}
-          activityLayers={activity.layers}
-          accessorySrc={null}
-          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
-        />
+        <MascotDisplay tier="mid" size={112} activityLayers={activity.layers} accessorySrc={null}
+          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}} />
       </div>
-
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{activity.emoji}</span>
@@ -93,15 +87,10 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
   );
 }
 
-// ── Tarjeta de ACCESORIO/OUTFIT ───────────────────────────────────────────────
+// ── Tarjeta de ACCESORIO ──────────────────────────────────────────────────────
 function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
-    <ItemCard
-      isUnlocked={isUnlocked} isActive={isActive}
-      canAfford={canAfford} price={accessory.price}
-      isBase={accessory.isBase} onBuy={onBuy} onEquip={onEquip}
-    >
-      {/* Preview: mascota base + accesorio en capa intermedia */}
+    <ItemCard isUnlocked={isUnlocked} isActive={isActive} canAfford={canAfford} price={accessory.price} isBase={accessory.isBase} onBuy={onBuy} onEquip={onEquip}>
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
@@ -114,16 +103,10 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
             <span className="text-3xl">🔒</span>
           </div>
         )}
-        <MascotDisplay
-          tier="mid"
-          size={112}
-          accessorySrc={accessory.src}
-          accessoryIsChain={accessory.isChain ?? false}
-          activityLayers={[]}
-          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
-        />
+        <MascotDisplay tier="mid" size={112} accessorySrc={accessory.src}
+          accessoryIsChain={accessory.isChain ?? false} activityLayers={[]}
+          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}} />
       </div>
-
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{accessory.emoji}</span>
@@ -135,47 +118,62 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
   );
 }
 
-// ── Placeholder vacío para sub-secciones sin items aún ───────────────────────
-function EmptySlot({ label }) {
+// ── Tarjeta de OUTFIT genérica (cabeza / accesorios outfit / camisas) ─────────
+function OutfitCard({ item, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
-    <div className="col-span-2 flex flex-col items-center justify-center py-10 text-center gap-2">
-      <span className="text-3xl opacity-30">🧥</span>
-      <p className="text-surface-muted text-sm font-display">
-        No hay {label} disponibles todavía
-      </p>
-    </div>
+    <ItemCard isUnlocked={isUnlocked} isActive={isActive} canAfford={canAfford} price={item.price} isBase={item.isBase} onBuy={onBuy} onEquip={onEquip}>
+      <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30 min-h-[120px]">
+        {isActive && (
+          <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
+            ✓ Equipado
+          </span>
+        )}
+        {!isUnlocked && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
+            <span className="text-3xl">🔒</span>
+          </div>
+        )}
+        {item.src ? (
+          <img
+            src={item.src}
+            alt={item.name}
+            className="w-24 h-24 object-contain"
+            style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
+          />
+        ) : (
+          <span className="text-4xl" style={{ fontVariantEmoji: 'emoji' }}>{item.emoji}</span>
+        )}
+      </div>
+      <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
+        <div className="flex items-center gap-1.5">
+          <span style={{ fontVariantEmoji: 'emoji' }}>{item.emoji}</span>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{item.name}</div>
+        </div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{item.desc}</div>
+      </div>
+    </ItemCard>
   );
 }
-
-// ── Sub-tabs de Torso ─────────────────────────────────────────────────────────
-const TORSO_SUBTABS = [
-  { key: 'camisetas', label: 'Camisetas', emoji: '👕' },
-  { key: 'camisas',   label: 'Camisas',   emoji: '👔' },
-];
-
-// ── Secciones dentro de Outfit ────────────────────────────────────────────────
-const OUTFIT_SECTIONS = [
-  { key: 'pies',       label: 'Pies',       emoji: '👟' },
-  { key: 'torso',      label: 'Torso',      emoji: '👕' },
-  { key: 'cabeza',     label: 'Cabeza',     emoji: '🧢' },
-  { key: 'accesorios', label: 'Accesorios', emoji: '⛓️' },
-];
 
 // ── ShopPage ──────────────────────────────────────────────────────────────────
 export default function ShopPage() {
   const navigate = useNavigate();
   const {
     unlockedActivities, unlockedAccessories,
+    unlockedHead, unlockedOutfitAccs, unlockedShirts,
     activeActivity, activeAccessory,
+    activeHead, activeOutfitAcc, activeShirt,
     unlockActivity, unlockAccessory,
+    unlockHead, unlockOutfitAcc, unlockShirt,
     equipActivity, equipAccessory,
+    equipHead, equipOutfitAcc, equipShirt,
   } = useMascot();
 
-  const [tab, setTab]               = useState('activities');
-  const [outfitSection, setOutfitSection] = useState('pies');
-  const [torsoSubtab, setTorsoSubtab]     = useState('camisetas');
-  const [coins, setCoins]           = useState(COINS);
-  const [toast, setToast]           = useState(null);
+  const [tab, setTab]         = useState('activities');
+  const [outfitSub, setOutfitSub] = useState('head');
+  const [coins, setCoins]     = useState(COINS);
+  const [toast, setToast]     = useState(null);
 
   function showToast(msg) {
     setToast(msg);
@@ -189,11 +187,6 @@ export default function ShopPage() {
     equipActivity(activity.id);
     showToast(`¡${activity.name} desbloqueada y equipada! 🎉`);
   }
-  function handleEquipActivity(activity) {
-    equipActivity(activity.id);
-    showToast(`¡${activity.name} equipada! ✨`);
-  }
-
   function handleBuyAccessory(accessory) {
     if (coins < accessory.price) return;
     setCoins(c => c - accessory.price);
@@ -201,25 +194,22 @@ export default function ShopPage() {
     equipAccessory(accessory.id);
     showToast(`¡${accessory.name} desbloqueado y equipado! 🎉`);
   }
-  function handleEquipAccessory(accessory) {
-    equipAccessory(accessory.id);
-    showToast(`¡${accessory.name} equipado! ✨`);
+  function handleBuyOutfit(item, unlockFn, equipFn) {
+    if (coins < item.price) return;
+    setCoins(c => c - item.price);
+    unlockFn(item.id);
+    equipFn(item.id);
+    showToast(`¡${item.name} desbloqueado y equipado! 🎉`);
   }
 
-  const activeAct = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
   const activeAcc = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
+  const activeAct = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
 
-  // Items filtrados por sección de outfit
-  const itemsBySection = (section) =>
-    MASCOT_ACCESSORIES.filter(a => a.outfitCategory === section && !a.isBase);
-
-  // Para torso, sub-filtramos por subcategoría (cuando haya items con outfitSubcategory)
-  const torsoItems = (sub) =>
-    MASCOT_ACCESSORIES.filter(a =>
-      a.outfitCategory === 'torso' &&
-      (a.outfitSubcategory === sub) &&
-      !a.isBase
-    );
+  const OUTFIT_SUBS = [
+    { key: 'head',       label: 'Cabeza',     emoji: '🕶️' },
+    { key: 'outfitacc', label: 'Accesorios', emoji: '💫' },
+    { key: 'shirts',    label: 'Camisas',    emoji: '👕' },
+  ];
 
   return (
     <div className="min-h-screen bg-surface-bg flex flex-col">
@@ -258,7 +248,7 @@ export default function ShopPage() {
           <div className="flex-1 flex flex-col gap-0.5">
             <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
             <div className="text-[11px] text-surface-muted">
-              Outfit: <span className="text-accent-glow font-semibold">{activeAcc?.name ?? 'Ninguno'}</span>
+              Accesorio: <span className="text-accent-glow font-semibold">{activeAcc?.name ?? 'Ninguno'}</span>
             </div>
             <div className="text-[11px] text-surface-muted">
               Actividad: <span className="text-accent-glow font-semibold">{activeAct?.name ?? 'Ninguna'}</span>
@@ -270,17 +260,18 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {/* Tab bar principal: Actividades | Outfit */}
+      {/* Tab bar principal */}
       <div className="max-w-lg mx-auto w-full px-4 py-3">
         <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-1">
           {[
-            { key: 'activities', label: 'Actividades', emoji: '⚡' },
-            { key: 'outfit',     label: 'Outfit',       emoji: '👗' },
+            { key: 'activities',  label: 'Actividades', emoji: '⚡' },
+            { key: 'accessories', label: 'Accesorios',  emoji: '👟' },
+            { key: 'outfit',      label: 'Outfit',       emoji: '👕' },
           ].map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-display font-semibold transition-all duration-200
+              className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-display font-semibold transition-all duration-200
                 ${tab === t.key
                   ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
@@ -293,10 +284,9 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {/* ── Contenido ── */}
-      <div className="max-w-lg mx-auto w-full px-4 pb-32 flex-1 flex flex-col gap-3">
+      {/* Contenido */}
+      <div className="max-w-lg mx-auto w-full px-4 pb-32 flex-1">
 
-        {/* ── ACTIVIDADES ── */}
         {tab === 'activities' && (
           <div className="grid grid-cols-2 gap-3">
             {MASCOT_ACTIVITIES.map(activity => (
@@ -307,134 +297,96 @@ export default function ShopPage() {
                 isActive={activeActivity === activity.id}
                 canAfford={coins >= activity.price}
                 onBuy={() => handleBuyActivity(activity)}
-                onEquip={() => handleEquipActivity(activity)}
+                onEquip={() => { equipActivity(activity.id); showToast(`¡${activity.name} equipada! ✨`); }}
               />
             ))}
           </div>
         )}
 
-        {/* ── OUTFIT ── */}
+        {tab === 'accessories' && (
+          <div className="grid grid-cols-2 gap-3">
+            {MASCOT_ACCESSORIES.map(accessory => (
+              <AccessoryCard
+                key={accessory.id}
+                accessory={accessory}
+                isUnlocked={unlockedAccessories.has(accessory.id)}
+                isActive={activeAccessory === accessory.id}
+                canAfford={coins >= accessory.price}
+                onBuy={() => handleBuyAccessory(accessory)}
+                onEquip={() => { equipAccessory(accessory.id); showToast(`¡${accessory.name} equipado! ✨`); }}
+              />
+            ))}
+          </div>
+        )}
+
         {tab === 'outfit' && (
           <>
-            {/* Sub-navegación: Pies | Torso | Cabeza | Accesorios */}
-            <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-0.5">
-              {OUTFIT_SECTIONS.map(s => (
+            {/* Subtabs de outfit */}
+            <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-1 mb-4">
+              {OUTFIT_SUBS.map(s => (
                 <button
                   key={s.key}
-                  onClick={() => setOutfitSection(s.key)}
-                  className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl text-[11px] font-display font-semibold transition-all duration-200
-                    ${outfitSection === s.key
-                      ? 'bg-accent-primary text-white shadow-sm'
+                  onClick={() => setOutfitSub(s.key)}
+                  className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-display font-semibold transition-all duration-200
+                    ${outfitSub === s.key
+                      ? 'bg-surface-hover text-surface-text border border-surface-border'
                       : 'text-surface-muted hover:text-surface-text'
                     }`}
                 >
-                  <span style={{ fontVariantEmoji: 'emoji' }} className="text-base leading-tight">{s.emoji}</span>
-                  <span className="leading-tight mt-0.5">{s.label}</span>
+                  <span style={{ fontVariantEmoji: 'emoji' }}>{s.emoji}</span>
+                  {s.label}
                 </button>
               ))}
             </div>
 
-            {/* ── PIES ── */}
-            {outfitSection === 'pies' && (
+            {/* Cabeza */}
+            {outfitSub === 'head' && (
               <div className="grid grid-cols-2 gap-3">
-                {itemsBySection('pies').length > 0 ? (
-                  itemsBySection('pies').map(accessory => (
-                    <AccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessory === accessory.id}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onEquip={() => handleEquipAccessory(accessory)}
-                    />
-                  ))
-                ) : (
-                  <EmptySlot label="zapatillas" />
-                )}
+                {MASCOT_OUTFIT_HEAD.map(item => (
+                  <OutfitCard
+                    key={item.id}
+                    item={item}
+                    isUnlocked={unlockedHead.has(item.id)}
+                    isActive={activeHead === item.id}
+                    canAfford={coins >= item.price}
+                    onBuy={() => handleBuyOutfit(item, unlockHead, equipHead)}
+                    onEquip={() => { equipHead(item.id); showToast(`¡${item.name} equipado! ✨`); }}
+                  />
+                ))}
               </div>
             )}
 
-            {/* ── TORSO ── */}
-            {outfitSection === 'torso' && (
-              <>
-                {/* Sub-tabs: Camisetas | Camisas */}
-                <div className="flex bg-surface-hover border border-surface-border rounded-xl p-1 gap-1">
-                  {TORSO_SUBTABS.map(st => (
-                    <button
-                      key={st.key}
-                      onClick={() => setTorsoSubtab(st.key)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-display font-semibold transition-all duration-200
-                        ${torsoSubtab === st.key
-                          ? 'bg-surface-card text-surface-text shadow-sm border border-surface-border'
-                          : 'text-surface-muted hover:text-surface-text'
-                        }`}
-                    >
-                      <span style={{ fontVariantEmoji: 'emoji' }}>{st.emoji}</span>
-                      {st.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {torsoItems(torsoSubtab).length > 0 ? (
-                    torsoItems(torsoSubtab).map(accessory => (
-                      <AccessoryCard
-                        key={accessory.id}
-                        accessory={accessory}
-                        isUnlocked={unlockedAccessories.has(accessory.id)}
-                        isActive={activeAccessory === accessory.id}
-                        canAfford={coins >= accessory.price}
-                        onBuy={() => handleBuyAccessory(accessory)}
-                        onEquip={() => handleEquipAccessory(accessory)}
-                      />
-                    ))
-                  ) : (
-                    <EmptySlot label={torsoSubtab} />
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* ── CABEZA ── */}
-            {outfitSection === 'cabeza' && (
+            {/* Accesorios outfit */}
+            {outfitSub === 'outfitacc' && (
               <div className="grid grid-cols-2 gap-3">
-                {itemsBySection('cabeza').length > 0 ? (
-                  itemsBySection('cabeza').map(accessory => (
-                    <AccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessory === accessory.id}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onEquip={() => handleEquipAccessory(accessory)}
-                    />
-                  ))
-                ) : (
-                  <EmptySlot label="items de cabeza" />
-                )}
+                {MASCOT_OUTFIT_ACCESSORIES.map(item => (
+                  <OutfitCard
+                    key={item.id}
+                    item={item}
+                    isUnlocked={unlockedOutfitAccs.has(item.id)}
+                    isActive={activeOutfitAcc === item.id}
+                    canAfford={coins >= item.price}
+                    onBuy={() => handleBuyOutfit(item, unlockOutfitAcc, equipOutfitAcc)}
+                    onEquip={() => { equipOutfitAcc(item.id); showToast(`¡${item.name} equipado! ✨`); }}
+                  />
+                ))}
               </div>
             )}
 
-            {/* ── ACCESORIOS ── */}
-            {outfitSection === 'accesorios' && (
+            {/* Camisas */}
+            {outfitSub === 'shirts' && (
               <div className="grid grid-cols-2 gap-3">
-                {itemsBySection('accesorios').length > 0 ? (
-                  itemsBySection('accesorios').map(accessory => (
-                    <AccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessory === accessory.id}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onEquip={() => handleEquipAccessory(accessory)}
-                    />
-                  ))
-                ) : (
-                  <EmptySlot label="accesorios" />
-                )}
+                {MASCOT_OUTFIT_SHIRTS.map(item => (
+                  <OutfitCard
+                    key={item.id}
+                    item={item}
+                    isUnlocked={unlockedShirts.has(item.id)}
+                    isActive={activeShirt === item.id}
+                    canAfford={coins >= item.price}
+                    onBuy={() => handleBuyOutfit(item, unlockShirt, equipShirt)}
+                    onEquip={() => { equipShirt(item.id); showToast(`¡${item.name} equipada! ✨`); }}
+                  />
+                ))}
               </div>
             )}
           </>
