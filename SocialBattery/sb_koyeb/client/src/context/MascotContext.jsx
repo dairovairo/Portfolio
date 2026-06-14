@@ -1,6 +1,8 @@
 import { createContext, useContext, useState } from 'react';
 
 // ── Catálogo de ACCESORIOS (capa intermedia) ──────────────────────────────────
+// outfitCategory: 'pies' | 'torso' | 'cabeza' | 'accesorios'
+// outfitSubcategory (solo torso): 'camiseta' | 'camisa'
 export const MASCOT_ACCESSORIES = [
   {
     id: 'acc_none',
@@ -10,6 +12,7 @@ export const MASCOT_ACCESSORIES = [
     src: null,
     price: 0,
     isBase: true,
+    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_glasses',
@@ -19,6 +22,17 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-glasses.png',
     price: 60,
     isBase: false,
+    outfitCategory: 'cabeza',
+  },
+  {
+    id: 'acc_cap',
+    name: 'Gorra negra',
+    desc: 'Estilo urbano para cualquier plan.',
+    emoji: '🧢',
+    src: '/accessory-cap.png',
+    price: 45,
+    isBase: false,
+    outfitCategory: 'cabeza',
   },
   {
     id: 'acc_chain',
@@ -29,6 +43,7 @@ export const MASCOT_ACCESSORIES = [
     price: 90,
     isBase: false,
     isChain: true,
+    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_chain_silver',
@@ -39,6 +54,7 @@ export const MASCOT_ACCESSORIES = [
     price: 75,
     isBase: false,
     isChain: true,
+    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_chain_black',
@@ -49,6 +65,7 @@ export const MASCOT_ACCESSORIES = [
     price: 80,
     isBase: false,
     isChain: true,
+    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_grillz',
@@ -58,6 +75,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-grillz.png',
     price: 150,
     isBase: false,
+    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_grillz_gold',
@@ -67,6 +85,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-grillz-gold.png',
     price: 120,
     isBase: false,
+    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_sneakers_converse',
@@ -76,6 +95,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-sneakers-converse.png',
     price: 70,
     isBase: false,
+    outfitCategory: 'pies',
   },
   {
     id: 'acc_sneakers_jordan',
@@ -85,15 +105,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-sneakers-jordan.png',
     price: 120,
     isBase: false,
-  },
-  {
-    id: 'acc_cap',
-    name: 'Gorra negra',
-    desc: 'Estilo urbano para cualquier plan.',
-    emoji: '🧢',
-    src: '/accessory-cap.png',
-    price: 45,
-    isBase: false,
+    outfitCategory: 'pies',
   },
 ];
 
