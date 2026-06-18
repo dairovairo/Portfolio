@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
-import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, useMascot } from '../context/MascotContext';
+import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, useMascot } from '../context/MascotContext';
 
 const COINS = 340;
 
@@ -60,7 +60,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
       canAfford={canAfford} price={activity.price}
       isBase={activity.isBase} onBuy={onBuy} onEquip={onEquip}
     >
-      {/* Preview con capas: mascota base + actividad encima */}
+      {/* Preview: mascota base + actividad encima */}
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
@@ -78,6 +78,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
           size={112}
           activityLayers={activity.layers}
           accessorySrc={null}
+          outfitSrc={null}
           style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
         />
       </div>
@@ -93,7 +94,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
   );
 }
 
-// ── Tarjeta de ACCESORIO/OUTFIT ───────────────────────────────────────────────
+// ── Tarjeta de ACCESORIO ──────────────────────────────────────────────────────
 function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
     <ItemCard
@@ -101,7 +102,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
       canAfford={canAfford} price={accessory.price}
       isBase={accessory.isBase} onBuy={onBuy} onEquip={onEquip}
     >
-      {/* Preview: mascota base + accesorio en capa intermedia */}
+      {/* Preview: mascota base + accesorio en capa 3 */}
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
@@ -119,6 +120,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
           size={112}
           accessorySrc={accessory.src}
           accessoryIsChain={accessory.isChain ?? false}
+          outfitSrc={null}
           activityLayers={[]}
           style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
         />
@@ -135,53 +137,69 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
   );
 }
 
-// ── Placeholder vacío para sub-secciones sin items aún ───────────────────────
-function EmptySlot({ label }) {
+// ── Tarjeta de OUTFIT ─────────────────────────────────────────────────────────
+function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
-    <div className="col-span-2 flex flex-col items-center justify-center py-10 text-center gap-2">
-      <span className="text-3xl opacity-30">🧥</span>
-      <p className="text-surface-muted text-sm font-display">
-        No hay {label} disponibles todavía
-      </p>
-    </div>
+    <ItemCard
+      isUnlocked={isUnlocked} isActive={isActive}
+      canAfford={canAfford} price={outfit.price}
+      isBase={outfit.isBase} onBuy={onBuy} onEquip={onEquip}
+    >
+      {/* Preview: mascota base + outfit en capa 2 */}
+      <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
+        {isActive && (
+          <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
+            ✓ Puesto
+          </span>
+        )}
+        {!isUnlocked && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
+            <span className="text-3xl">🔒</span>
+          </div>
+        )}
+        <MascotDisplay
+          tier="mid"
+          size={112}
+          outfitSrc={outfit.src}
+          accessorySrc={null}
+          activityLayers={[]}
+          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
+        />
+      </div>
+
+      <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
+        <div className="flex items-center gap-1.5">
+          <span style={{ fontVariantEmoji: 'emoji' }}>{outfit.emoji}</span>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{outfit.name}</div>
+        </div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{outfit.desc}</div>
+      </div>
+    </ItemCard>
   );
 }
-
-// ── Sub-tabs de Torso ─────────────────────────────────────────────────────────
-const TORSO_SUBTABS = [
-  { key: 'camisetas', label: 'Camisetas', emoji: '👕' },
-  { key: 'camisas',   label: 'Camisas',   emoji: '👔' },
-];
-
-// ── Secciones dentro de Outfit ────────────────────────────────────────────────
-const OUTFIT_SECTIONS = [
-  { key: 'pies',       label: 'Pies',       emoji: '👟' },
-  { key: 'torso',      label: 'Torso',      emoji: '👕' },
-  { key: 'cabeza',     label: 'Cabeza',     emoji: '🧢' },
-  { key: 'accesorios', label: 'Accesorios', emoji: '⛓️' },
-];
 
 // ── ShopPage ──────────────────────────────────────────────────────────────────
 export default function ShopPage() {
   const navigate = useNavigate();
   const {
-    unlockedActivities, unlockedAccessories,
-    activeActivity, activeAccessory,
-    unlockActivity, unlockAccessory,
-    equipActivity, equipAccessory,
+    unlockedActivities, unlockedAccessories, unlockedOutfits,
+    activeActivity, activeAccessory, activeOutfit,
+    unlockActivity, unlockAccessory, unlockOutfit,
+    equipActivity, equipAccessory, equipOutfit,
   } = useMascot();
 
-  const [tab, setTab]               = useState('activities');
-  const [outfitSection, setOutfitSection] = useState('pies');
-  const [torsoSubtab, setTorsoSubtab]     = useState('camisetas');
-  const [coins, setCoins]           = useState(COINS);
-  const [toast, setToast]           = useState(null);
+  const [tab, setTab]           = useState('activities');
+  const [outfitSubTab, setOutfitSubTab] = useState('camiseta'); // 'camiseta' | 'camisa'
+  const [coins, setCoins]       = useState(COINS);
+  const [toast, setToast]       = useState(null);
 
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   }
 
+  // ── Actividades ─────────────────────────────────────────────────────────────
   function handleBuyActivity(activity) {
     if (coins < activity.price) return;
     setCoins(c => c - activity.price);
@@ -194,6 +212,7 @@ export default function ShopPage() {
     showToast(`¡${activity.name} equipada! ✨`);
   }
 
+  // ── Accesorios ──────────────────────────────────────────────────────────────
   function handleBuyAccessory(accessory) {
     if (coins < accessory.price) return;
     setCoins(c => c - accessory.price);
@@ -206,20 +225,27 @@ export default function ShopPage() {
     showToast(`¡${accessory.name} equipado! ✨`);
   }
 
+  // ── Outfits ─────────────────────────────────────────────────────────────────
+  function handleBuyOutfit(outfit) {
+    if (coins < outfit.price) return;
+    setCoins(c => c - outfit.price);
+    unlockOutfit(outfit.id);
+    equipOutfit(outfit.id);
+    showToast(`¡${outfit.name} desbloqueada y puesta! 🎉`);
+  }
+  function handleEquipOutfit(outfit) {
+    equipOutfit(outfit.id);
+    showToast(`¡${outfit.name} puesta! ✨`);
+  }
+
   const activeAct = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
   const activeAcc = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
+  const activeOut = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
 
-  // Items filtrados por sección de outfit
-  const itemsBySection = (section) =>
-    MASCOT_ACCESSORIES.filter(a => a.outfitCategory === section && !a.isBase);
-
-  // Para torso, sub-filtramos por subcategoría (cuando haya items con outfitSubcategory)
-  const torsoItems = (sub) =>
-    MASCOT_ACCESSORIES.filter(a =>
-      a.outfitCategory === 'torso' &&
-      (a.outfitSubcategory === sub) &&
-      !a.isBase
-    );
+  // Outfits filtrados por sub-tab
+  const filteredOutfits = MASCOT_OUTFITS.filter(o =>
+    o.isBase || o.subcategory === outfitSubTab
+  );
 
   return (
     <div className="min-h-screen bg-surface-bg flex flex-col">
@@ -251,14 +277,17 @@ export default function ShopPage() {
         </div>
       </nav>
 
-      {/* Preview mascota activa */}
+      {/* Preview mascota activa con las 4 capas */}
       <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-2">
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-4">
           <MascotDisplay tier="mid" size={72} />
           <div className="flex-1 flex flex-col gap-0.5">
             <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
             <div className="text-[11px] text-surface-muted">
-              Outfit: <span className="text-accent-glow font-semibold">{activeAcc?.name ?? 'Ninguno'}</span>
+              Torso: <span className="text-accent-glow font-semibold">{activeOut?.name ?? 'Ninguno'}</span>
+            </div>
+            <div className="text-[11px] text-surface-muted">
+              Accesorio: <span className="text-accent-glow font-semibold">{activeAcc?.name ?? 'Ninguno'}</span>
             </div>
             <div className="text-[11px] text-surface-muted">
               Actividad: <span className="text-accent-glow font-semibold">{activeAct?.name ?? 'Ninguna'}</span>
@@ -270,17 +299,18 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {/* Tab bar principal: Actividades | Outfit */}
+      {/* Tab bar principal */}
       <div className="max-w-lg mx-auto w-full px-4 py-3">
         <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-1">
           {[
-            { key: 'activities', label: 'Actividades', emoji: '⚡' },
-            { key: 'outfit',     label: 'Outfit',       emoji: '👗' },
+            { key: 'activities',  label: 'Actividades', emoji: '⚡' },
+            { key: 'outfit',      label: 'Outfit',      emoji: '👕' },
+            { key: 'accessories', label: 'Accesorios',  emoji: '👟' },
           ].map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-display font-semibold transition-all duration-200
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-semibold transition-all duration-200
                 ${tab === t.key
                   ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
@@ -293,10 +323,10 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {/* ── Contenido ── */}
-      <div className="max-w-lg mx-auto w-full px-4 pb-32 flex-1 flex flex-col gap-3">
+      {/* Contenido */}
+      <div className="max-w-lg mx-auto w-full px-4 pb-32 flex-1">
 
-        {/* ── ACTIVIDADES ── */}
+        {/* ── Actividades ── */}
         {tab === 'activities' && (
           <div className="grid grid-cols-2 gap-3">
             {MASCOT_ACTIVITIES.map(activity => (
@@ -313,131 +343,69 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* ── OUTFIT ── */}
+        {/* ── Outfit / Torso ── */}
         {tab === 'outfit' && (
-          <>
-            {/* Sub-navegación: Pies | Torso | Cabeza | Accesorios */}
-            <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-0.5">
-              {OUTFIT_SECTIONS.map(s => (
-                <button
-                  key={s.key}
-                  onClick={() => setOutfitSection(s.key)}
-                  className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl text-[11px] font-display font-semibold transition-all duration-200
-                    ${outfitSection === s.key
-                      ? 'bg-accent-primary text-white shadow-sm'
-                      : 'text-surface-muted hover:text-surface-text'
-                    }`}
-                >
-                  <span style={{ fontVariantEmoji: 'emoji' }} className="text-base leading-tight">{s.emoji}</span>
-                  <span className="leading-tight mt-0.5">{s.label}</span>
-                </button>
-              ))}
+          <div className="flex flex-col gap-3">
+            {/* Sección: Torso */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base" style={{ fontVariantEmoji: 'emoji' }}>👕</span>
+                <span className="font-display font-bold text-surface-text text-sm">Torso</span>
+              </div>
+
+              {/* Sub-tabs: Camisetas / Camisas */}
+              <div className="flex bg-surface-card border border-surface-border rounded-xl p-0.5 gap-0.5 mb-3">
+                {[
+                  { key: 'camiseta', label: 'Camisetas', emoji: '👕' },
+                  { key: 'camisa',   label: 'Camisas',   emoji: '👔' },
+                ].map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => setOutfitSubTab(s.key)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-display font-semibold transition-all duration-200
+                      ${outfitSubTab === s.key
+                        ? 'bg-accent-primary/20 text-accent-glow border border-accent-primary/30'
+                        : 'text-surface-muted hover:text-surface-text'
+                      }`}
+                  >
+                    <span style={{ fontVariantEmoji: 'emoji' }}>{s.emoji}</span>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {filteredOutfits.map(outfit => (
+                  <OutfitCard
+                    key={outfit.id}
+                    outfit={outfit}
+                    isUnlocked={unlockedOutfits.has(outfit.id)}
+                    isActive={activeOutfit === outfit.id}
+                    canAfford={coins >= outfit.price}
+                    onBuy={() => handleBuyOutfit(outfit)}
+                    onEquip={() => handleEquipOutfit(outfit)}
+                  />
+                ))}
+              </div>
             </div>
+          </div>
+        )}
 
-            {/* ── PIES ── */}
-            {outfitSection === 'pies' && (
-              <div className="grid grid-cols-2 gap-3">
-                {itemsBySection('pies').length > 0 ? (
-                  itemsBySection('pies').map(accessory => (
-                    <AccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessory === accessory.id}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onEquip={() => handleEquipAccessory(accessory)}
-                    />
-                  ))
-                ) : (
-                  <EmptySlot label="zapatillas" />
-                )}
-              </div>
-            )}
-
-            {/* ── TORSO ── */}
-            {outfitSection === 'torso' && (
-              <>
-                {/* Sub-tabs: Camisetas | Camisas */}
-                <div className="flex bg-surface-hover border border-surface-border rounded-xl p-1 gap-1">
-                  {TORSO_SUBTABS.map(st => (
-                    <button
-                      key={st.key}
-                      onClick={() => setTorsoSubtab(st.key)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-display font-semibold transition-all duration-200
-                        ${torsoSubtab === st.key
-                          ? 'bg-surface-card text-surface-text shadow-sm border border-surface-border'
-                          : 'text-surface-muted hover:text-surface-text'
-                        }`}
-                    >
-                      <span style={{ fontVariantEmoji: 'emoji' }}>{st.emoji}</span>
-                      {st.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {torsoItems(torsoSubtab).length > 0 ? (
-                    torsoItems(torsoSubtab).map(accessory => (
-                      <AccessoryCard
-                        key={accessory.id}
-                        accessory={accessory}
-                        isUnlocked={unlockedAccessories.has(accessory.id)}
-                        isActive={activeAccessory === accessory.id}
-                        canAfford={coins >= accessory.price}
-                        onBuy={() => handleBuyAccessory(accessory)}
-                        onEquip={() => handleEquipAccessory(accessory)}
-                      />
-                    ))
-                  ) : (
-                    <EmptySlot label={torsoSubtab} />
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* ── CABEZA ── */}
-            {outfitSection === 'cabeza' && (
-              <div className="grid grid-cols-2 gap-3">
-                {itemsBySection('cabeza').length > 0 ? (
-                  itemsBySection('cabeza').map(accessory => (
-                    <AccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessory === accessory.id}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onEquip={() => handleEquipAccessory(accessory)}
-                    />
-                  ))
-                ) : (
-                  <EmptySlot label="items de cabeza" />
-                )}
-              </div>
-            )}
-
-            {/* ── ACCESORIOS ── */}
-            {outfitSection === 'accesorios' && (
-              <div className="grid grid-cols-2 gap-3">
-                {itemsBySection('accesorios').length > 0 ? (
-                  itemsBySection('accesorios').map(accessory => (
-                    <AccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessory === accessory.id}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onEquip={() => handleEquipAccessory(accessory)}
-                    />
-                  ))
-                ) : (
-                  <EmptySlot label="accesorios" />
-                )}
-              </div>
-            )}
-          </>
+        {/* ── Accesorios ── */}
+        {tab === 'accessories' && (
+          <div className="grid grid-cols-2 gap-3">
+            {MASCOT_ACCESSORIES.map(accessory => (
+              <AccessoryCard
+                key={accessory.id}
+                accessory={accessory}
+                isUnlocked={unlockedAccessories.has(accessory.id)}
+                isActive={activeAccessory === accessory.id}
+                canAfford={coins >= accessory.price}
+                onBuy={() => handleBuyAccessory(accessory)}
+                onEquip={() => handleEquipAccessory(accessory)}
+              />
+            ))}
+          </div>
         )}
       </div>
 

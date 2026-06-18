@@ -1,8 +1,172 @@
 import { createContext, useContext, useState } from 'react';
 
-// ── Catálogo de ACCESORIOS (capa intermedia) ──────────────────────────────────
-// outfitCategory: 'pies' | 'torso' | 'cabeza' | 'accesorios'
-// outfitSubcategory (solo torso): 'camiseta' | 'camisa'
+// ── Catálogo de OUTFITS / TORSO (capa 2: encima de base, debajo de actividades) ─
+export const MASCOT_OUTFITS = [
+  {
+    id: 'out_none',
+    name: 'Sin outfit',
+    desc: 'La mascota sin ropa en el torso.',
+    emoji: '✨',
+    src: null,
+    subcategory: 'camiseta',
+    price: 0,
+    isBase: true,
+  },
+  // ── Camisetas ────────────────────────────────────────────────────────────────
+  {
+    id: 'out_tshirt_1',
+    name: 'Camiseta negra',
+    desc: 'Básica y siempre elegante.',
+    emoji: '🖤',
+    src: '/outfit-tshirt-1.png',
+    subcategory: 'camiseta',
+    price: 50,
+    isBase: false,
+  },
+  {
+    id: 'out_tshirt_2',
+    name: 'Camiseta blanca',
+    desc: 'Minimalismo puro y versátil.',
+    emoji: '🤍',
+    src: '/outfit-tshirt-2.png',
+    subcategory: 'camiseta',
+    price: 50,
+    isBase: false,
+  },
+  {
+    id: 'out_tshirt_3',
+    name: 'Camiseta azul',
+    desc: 'Fresca y casual para el día a día.',
+    emoji: '💙',
+    src: '/outfit-tshirt-3.png',
+    subcategory: 'camiseta',
+    price: 55,
+    isBase: false,
+  },
+  {
+    id: 'out_tshirt_4',
+    name: 'Camiseta estampada',
+    desc: 'Con estampado exclusivo SocialBattery.',
+    emoji: '🎨',
+    src: '/outfit-tshirt-4.png',
+    subcategory: 'camiseta',
+    price: 70,
+    isBase: false,
+  },
+  {
+    id: 'out_tshirt_5',
+    name: 'Camiseta premium',
+    desc: 'Tejido de calidad y corte perfecto.',
+    emoji: '⭐',
+    src: '/outfit-tshirt-5.png',
+    subcategory: 'camiseta',
+    price: 75,
+    isBase: false,
+  },
+  {
+    id: 'out_tshirt_6',
+    name: 'Camiseta roja',
+    desc: 'Para los que quieren destacar.',
+    emoji: '❤️',
+    src: '/outfit-tshirt-6.png',
+    subcategory: 'camiseta',
+    price: 60,
+    isBase: false,
+  },
+  {
+    id: 'out_tshirt_7',
+    name: 'Camiseta morada',
+    desc: 'Vibra con la energía SB.',
+    emoji: '💜',
+    src: '/outfit-tshirt-7.png',
+    subcategory: 'camiseta',
+    price: 65,
+    isBase: false,
+  },
+  // ── Camisas ──────────────────────────────────────────────────────────────────
+  {
+    id: 'out_shirt_1',
+    name: 'Camisa Oxford',
+    desc: 'Clásica y sofisticada para cualquier ocasión.',
+    emoji: '👔',
+    src: '/outfit-shirt-1.png',
+    subcategory: 'camisa',
+    price: 80,
+    isBase: false,
+  },
+  {
+    id: 'out_shirt_2',
+    name: 'Camisa vaquera',
+    desc: 'Denim style para el look más casual.',
+    emoji: '🤠',
+    src: '/outfit-shirt-2.png',
+    subcategory: 'camisa',
+    price: 75,
+    isBase: false,
+  },
+  {
+    id: 'out_shirt_3',
+    name: 'Camisa de cuadros',
+    desc: 'Flannel vibes para los días relajados.',
+    emoji: '🟥',
+    src: '/outfit-shirt-3.png',
+    subcategory: 'camisa',
+    price: 70,
+    isBase: false,
+  },
+  {
+    id: 'out_shirt_4',
+    name: 'Camisa floral',
+    desc: 'Primavera donde vayas.',
+    emoji: '🌸',
+    src: '/outfit-shirt-4.png',
+    subcategory: 'camisa',
+    price: 85,
+    isBase: false,
+  },
+  {
+    id: 'out_shirt_5',
+    name: 'Camisa hawaiana',
+    desc: 'Modo vacaciones: activado.',
+    emoji: '🌺',
+    src: '/outfit-shirt-5.png',
+    subcategory: 'camisa',
+    price: 90,
+    isBase: false,
+  },
+  {
+    id: 'out_shirt_6',
+    name: 'Camisa urbana',
+    desc: 'Streetwear con clase.',
+    emoji: '🏙️',
+    src: '/outfit-shirt-6.png',
+    subcategory: 'camisa',
+    price: 80,
+    isBase: false,
+  },
+  {
+    id: 'out_shirt_7',
+    name: 'Camisa slim fit',
+    desc: 'Corte ajustado para la silueta perfecta.',
+    emoji: '✂️',
+    src: '/outfit-shirt-7.png',
+    subcategory: 'camisa',
+    price: 95,
+    isBase: false,
+  },
+  {
+    id: 'out_shirt_8',
+    name: 'Camisa premium',
+    desc: 'Edición limitada para los más flexeros.',
+    emoji: '💫',
+    src: '/outfit-shirt-8.png',
+    subcategory: 'camisa',
+    price: 110,
+    isBase: false,
+  },
+];
+
+// ── Catálogo de ACCESORIOS (capa 3: encima del outfit) ────────────────────────
 export const MASCOT_ACCESSORIES = [
   {
     id: 'acc_none',
@@ -12,7 +176,6 @@ export const MASCOT_ACCESSORIES = [
     src: null,
     price: 0,
     isBase: true,
-    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_glasses',
@@ -22,17 +185,6 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-glasses.png',
     price: 60,
     isBase: false,
-    outfitCategory: 'cabeza',
-  },
-  {
-    id: 'acc_cap',
-    name: 'Gorra negra',
-    desc: 'Estilo urbano para cualquier plan.',
-    emoji: '🧢',
-    src: '/accessory-cap.png',
-    price: 45,
-    isBase: false,
-    outfitCategory: 'cabeza',
   },
   {
     id: 'acc_chain',
@@ -43,7 +195,6 @@ export const MASCOT_ACCESSORIES = [
     price: 90,
     isBase: false,
     isChain: true,
-    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_chain_silver',
@@ -54,7 +205,6 @@ export const MASCOT_ACCESSORIES = [
     price: 75,
     isBase: false,
     isChain: true,
-    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_chain_black',
@@ -65,7 +215,6 @@ export const MASCOT_ACCESSORIES = [
     price: 80,
     isBase: false,
     isChain: true,
-    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_grillz',
@@ -75,7 +224,6 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-grillz.png',
     price: 150,
     isBase: false,
-    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_grillz_gold',
@@ -85,7 +233,6 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-grillz-gold.png',
     price: 120,
     isBase: false,
-    outfitCategory: 'accesorios',
   },
   {
     id: 'acc_sneakers_converse',
@@ -95,7 +242,6 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-sneakers-converse.png',
     price: 70,
     isBase: false,
-    outfitCategory: 'pies',
   },
   {
     id: 'acc_sneakers_jordan',
@@ -105,11 +251,19 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-sneakers-jordan.png',
     price: 120,
     isBase: false,
-    outfitCategory: 'pies',
+  },
+  {
+    id: 'acc_cap',
+    name: 'Gorra negra',
+    desc: 'Estilo urbano para cualquier plan.',
+    emoji: '🧢',
+    src: '/accessory-cap.png',
+    price: 45,
+    isBase: false,
   },
 ];
 
-// ── Catálogo de ACTIVIDADES (capa delantera) ──────────────────────────────────
+// ── Catálogo de ACTIVIDADES (capa 4: la más delantera) ────────────────────────
 export const MASCOT_ACTIVITIES = [
   {
     id: 'none',
@@ -203,7 +357,7 @@ export const MASCOT_ACTIVITIES = [
   },
 ];
 
-// ── Mascota base por tier (capa de atrás) ─────────────────────────────────────
+// ── Mascota base por tier (capa 1: la más trasera) ────────────────────────────
 export const MASCOT_BASE = {
   high: '/mascot-high.png',
   mid:  '/mascot-mid.png',
@@ -213,6 +367,7 @@ export const MASCOT_BASE = {
 // ── Estado por defecto ────────────────────────────────────────────────────────
 const DEFAULT_UNLOCKED_ACTIVITIES  = new Set(MASCOT_ACTIVITIES.filter(a => a.isBase).map(a => a.id));
 const DEFAULT_UNLOCKED_ACCESSORIES = new Set(MASCOT_ACCESSORIES.filter(a => a.isBase).map(a => a.id));
+const DEFAULT_UNLOCKED_OUTFITS     = new Set(MASCOT_OUTFITS.filter(o => o.isBase).map(o => o.id));
 
 // ── Context ───────────────────────────────────────────────────────────────────
 const MascotContext = createContext(null);
@@ -220,8 +375,11 @@ const MascotContext = createContext(null);
 export function MascotProvider({ children }) {
   const [unlockedActivities,  setUnlockedActivities]  = useState(DEFAULT_UNLOCKED_ACTIVITIES);
   const [unlockedAccessories, setUnlockedAccessories] = useState(DEFAULT_UNLOCKED_ACCESSORIES);
+  const [unlockedOutfits,     setUnlockedOutfits]     = useState(DEFAULT_UNLOCKED_OUTFITS);
+
   const [activeActivity,  setActiveActivity]  = useState('none');
   const [activeAccessory, setActiveAccessory] = useState('acc_none');
+  const [activeOutfit,    setActiveOutfit]    = useState('out_none');
 
   // Actividades
   function unlockActivity(id) {
@@ -239,21 +397,32 @@ export function MascotProvider({ children }) {
     setActiveAccessory(id);
   }
 
+  // Outfits
+  function unlockOutfit(id) {
+    setUnlockedOutfits(prev => new Set([...prev, id]));
+  }
+  function equipOutfit(id) {
+    setActiveOutfit(id);
+  }
+
   /**
-   * Devuelve las 3 capas para renderizar la mascota completa dado un tier:
-   *   base       → src imagen mascota según batería
-   *   accessory  → src accesorio activo (null si ninguno)
-   *   layers     → array de srcs de actividad
+   * Devuelve las capas para renderizar la mascota completa dado un tier:
+   *   Capa 1 → base        (mascota según batería)
+   *   Capa 2 → outfit      (camiseta/camisa del torso)   ← NUEVA
+   *   Capa 3 → accessory   (gafas, cadena, gorra…)
+   *   Capa 4 → layers      (actividad: ajedrez, balón…)
    */
   function getMascotLayers(tier) {
-    const base = MASCOT_BASE[tier] ?? MASCOT_BASE.mid;
-    const acc  = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
-    const act  = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
+    const base    = MASCOT_BASE[tier] ?? MASCOT_BASE.mid;
+    const outfit  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
+    const acc     = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
+    const act     = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
     return {
       base,
-      accessory: acc?.src ?? null,
+      outfit:           outfit?.src ?? null,
+      accessory:        acc?.src ?? null,
       accessoryIsChain: acc?.isChain ?? false,
-      layers: act?.layers ?? [],
+      layers:           act?.layers ?? [],
     };
   }
 
@@ -262,20 +431,23 @@ export function MascotProvider({ children }) {
     return MASCOT_BASE[tier] ?? MASCOT_BASE.mid;
   }
 
-  // unlocked combinado (para retrocompat con ShopPage)
-  const unlocked = new Set([...unlockedActivities, ...unlockedAccessories]);
+  const unlocked = new Set([...unlockedActivities, ...unlockedAccessories, ...unlockedOutfits]);
 
   return (
     <MascotContext.Provider value={{
       unlocked,
       unlockedActivities,
       unlockedAccessories,
+      unlockedOutfits,
       activeActivity,
       activeAccessory,
+      activeOutfit,
       unlockActivity,
       unlockAccessory,
+      unlockOutfit,
       equipActivity,
       equipAccessory,
+      equipOutfit,
       getMascotLayers,
       getActiveSrc,
     }}>
