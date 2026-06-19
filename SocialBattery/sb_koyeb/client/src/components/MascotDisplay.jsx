@@ -17,6 +17,8 @@
  *   outfitSrc        override outfit (null = sin outfit)
  *   accessorySrc     override accesorio (null = sin accesorio)
  *   activityLayers   override capas actividad []
+ *   outfitOffsetY    desplaza la capa de outfit hacia abajo (ej. '20%'), para
+ *                     que no tape la cara de la mascota (usado en la tienda)
  */
 import { useMascot } from '../context/MascotContext';
 
@@ -32,6 +34,7 @@ export default function MascotDisplay({
   accessorySrc,
   accessoryIsChain,
   activityLayers,
+  outfitOffsetY,
 }) {
   const { getMascotLayers } = useMascot();
 
@@ -69,6 +72,7 @@ export default function MascotDisplay({
           alt=""
           draggable={false}
           className={imgClass}
+          style={outfitOffsetY ? { transform: `translateY(${outfitOffsetY})` } : {}}
         />
       )}
 

@@ -164,6 +164,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
           outfitSrc={outfit.src}
           accessorySrc={null}
           activityLayers={[]}
+          outfitOffsetY="20%"
           style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
         />
       </div>
