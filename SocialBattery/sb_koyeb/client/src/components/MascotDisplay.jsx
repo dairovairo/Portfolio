@@ -22,11 +22,16 @@
  *                     (la misma posición usada en la vista previa de la tienda),
  *                     para que la mascota del menú principal luzca igual.
  *                     Pasar null/"" para desactivar el desplazamiento.
+ *   outfitSubcategory override de subcategoría ('camiseta' | 'camisa'), usado
+ *                     por la tienda para previsualizar un ítem que no es el
+ *                     equipado. Si no se pasa, se usa la del outfit activo.
  *
- * La capa de outfit (camiseta/camisa) se renderiza un 5% más grande que el
- * resto de capas y queda centrada antes de aplicar outfitOffsetY.
+ * La capa de outfit (camiseta/camisa) se escala y posiciona según su
+ * subcategoría (ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx) y queda
+ * centrada antes de aplicar outfitOffsetY. Mismo cálculo en tienda y en la
+ * mascota de la pantalla principal, porque ambas usan getMascotLayers().
  */
-import { useMascot } from '../context/MascotContext';
+import { useMascot, OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
 
 export default function MascotDisplay({
   tier = 'mid',
@@ -37,6 +42,7 @@ export default function MascotDisplay({
   animate = false,
   baseSrc,
   outfitSrc,
+  outfitSubcategory,
   accessorySrc,
   accessoryIsChain,
   activityLayers,
@@ -50,6 +56,17 @@ export default function MascotDisplay({
   const accessory = accessorySrc     !== undefined ? accessorySrc     : resolved.accessory;
   const isChain   = accessoryIsChain !== undefined ? accessoryIsChain : resolved.accessoryIsChain;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
+  const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
+
+  // Ajuste de tamaño/posición de la capa outfit según subcategoría
+  // (camiseta vs camisa) — ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx.
+  const outfitAdjust   = OUTFIT_VISUAL_ADJUST[subcat] ?? OUTFIT_VISUAL_ADJUST.camiseta;
+  const outfitSizePct  = outfitAdjust.scale * 100;
+  // Offset que centra la capa (puede ser negativo si es más grande que la base,
+  // o positivo si es más pequeña), más el empujoncito extra de la subcategoría.
+  const outfitCenterPct = (100 - outfitSizePct) / 2;
+  const outfitLeftPct   = outfitCenterPct + (outfitAdjust.offsetX ?? 0);
+  const outfitTopPct    = outfitCenterPct;
 
   const sizeStyle   = typeof size === 'number' ? { width: size, height: size } : {};
   const shadowStyle = glowColor ? { filter: `drop-shadow(0 0 18px ${glowColor}55)` } : {};
@@ -71,7 +88,8 @@ export default function MascotDisplay({
         style={{ ...shadowStyle, ...animStyle }}
       />
 
-      {/* Capa 2: outfit / torso (camiseta o camisa) — 5% más grande y centrada */}
+      {/* Capa 2: outfit / torso (camiseta o camisa) — tamaño/posición según
+          subcategoría, ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx */}
       {outfit && (
         <img
           src={outfit}
@@ -79,10 +97,10 @@ export default function MascotDisplay({
           draggable={false}
           className={imgClass}
           style={{
-            top: outfitOffsetY ? `calc(-2.5% + ${outfitOffsetY})` : '-2.5%',
-            left: '-2.5%',
-            width: '105%',
-            height: '105%',
+            top: outfitOffsetY ? `calc(${outfitTopPct}% + ${outfitOffsetY})` : `${outfitTopPct}%`,
+            left: `${outfitLeftPct}%`,
+            width: `${outfitSizePct}%`,
+            height: `${outfitSizePct}%`,
           }}
         />
       )}

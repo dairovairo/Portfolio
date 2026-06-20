@@ -162,6 +162,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
           tier="mid"
           size={112}
           outfitSrc={outfit.src}
+          outfitSubcategory={outfit.subcategory}
           accessorySrc={null}
           activityLayers={[]}
           outfitOffsetY="20%"

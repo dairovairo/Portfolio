@@ -497,6 +497,20 @@ export const MASCOT_BASE = {
   low:  '/mascot-low.png',
 };
 
+// ── Ajuste visual de la capa de OUTFIT por subcategoría ───────────────────────
+// `scale`    → tamaño de la capa outfit como múltiplo de la capa base (1 = 100%).
+//              El valor histórico (sin distinción de subcategoría) era 1.05.
+// `offsetX`  → desplazamiento horizontal extra en puntos porcentuales, ENCIMA
+//              del centrado automático. Positivo = se mueve a la derecha.
+// Usado por MascotDisplay tanto en la tienda como en la vista principal
+// (la mascota de la pantalla de batería usa el mismo getMascotLayers()).
+export const OUTFIT_VISUAL_ADJUST = {
+  camiseta: { scale: 1.05, offsetX: 0 },
+  // Camisas: 15% más pequeñas que el tamaño histórico (1.05 → 0.8925) y un
+  // empujoncito mínimo hacia la derecha.
+  camisa:   { scale: 1.05 * 0.85, offsetX: 1.5 },
+};
+
 // ── Estado por defecto ────────────────────────────────────────────────────────
 const DEFAULT_UNLOCKED_ACTIVITIES  = new Set(MASCOT_ACTIVITIES.filter(a => a.isBase).map(a => a.id));
 const DEFAULT_UNLOCKED_ACCESSORIES = new Set(MASCOT_ACCESSORIES.filter(a => a.isBase).map(a => a.id));
@@ -552,7 +566,8 @@ export function MascotProvider({ children }) {
     const act     = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
     return {
       base,
-      outfit:           outfit?.src ?? null,
+      outfit:             outfit?.src ?? null,
+      outfitSubcategory:  outfit?.subcategory ?? null,
       accessory:        acc?.src ?? null,
       accessoryIsChain: acc?.isChain ?? false,
       layers:           act?.layers ?? [],
