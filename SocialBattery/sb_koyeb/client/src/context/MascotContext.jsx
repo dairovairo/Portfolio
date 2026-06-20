@@ -507,9 +507,9 @@ export const MASCOT_BASE = {
 export const OUTFIT_VISUAL_ADJUST = {
   camiseta: { scale: 1.05, offsetX: 0 },
   // Camisas: 15% más pequeñas que el histórico, y luego otro 10% más
-  // (1.05 → 0.8925 → 0.80325). Offset a la derecha reducido a un término
-  // medio entre el centrado original (0) y el primer ajuste (1.5).
-  camisa:   { scale: 1.05 * 0.85 * 0.9, offsetX: 0.75 },
+  // (1.05 → 0.8925 → 0.80325). Offset a la derecha muy ligero, ajustado fino
+  // tras varias rondas de feedback para que quede bien centrada.
+  camisa:   { scale: 1.05 * 0.85 * 0.9, offsetX: 0.4 },
 };
 
 // ── Estado por defecto ────────────────────────────────────────────────────────
