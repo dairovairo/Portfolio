@@ -525,6 +525,24 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
   },
+  {
+    id: 'feet_loafer_1',
+    name: 'Mocasines penny camel',
+    desc: 'Estilo preppy en marrón camel con interior verde salvia.',
+    emoji: '🥿',
+    src: '/outfit-feet-3.png',
+    price: 85,
+    isBase: false,
+  },
+  {
+    id: 'feet_oxford_1',
+    name: 'Oxford negro charol',
+    desc: 'Zapato formal de cordones con suela de cuero, puro clásico.',
+    emoji: '👞',
+    src: '/outfit-feet-4.png',
+    price: 90,
+    isBase: false,
+  },
 ];
 
 // ── Catálogo de CABEZA (sub-categoría de Outfit) ───────────────────────────────

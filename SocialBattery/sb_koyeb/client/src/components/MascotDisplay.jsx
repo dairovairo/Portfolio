@@ -146,7 +146,7 @@ export default function MascotDisplay({
           className={imgClass}
         />
       )}
-      {/* Capa 5b: grillz — al 50% del tamaño, centrados */}
+      {/* Capa 5b: grillz — al 30% del tamaño, centrados */}
       {accessory && isGrillz && (
         <img
           src={accessory}
@@ -154,10 +154,10 @@ export default function MascotDisplay({
           draggable={false}
           className="absolute select-none pointer-events-none"
           style={{
-            left: '25%',
-            top: '25%',
-            width: '50%',
-            height: '50%',
+            left: '35%',
+            top: '35%',
+            width: '30%',
+            height: '30%',
             objectFit: 'contain',
             objectPosition: 'center',
           }}
@@ -171,10 +171,10 @@ export default function MascotDisplay({
           draggable={false}
           className="absolute select-none pointer-events-none"
           style={{
-            left: '2%',
-            width: '96%',
+            left: '9%',
+            width: '82%',
             top: '20%',
-            height: '75%',
+            height: '64%',
             objectFit: 'contain',
             objectPosition: 'top center',
           }}
