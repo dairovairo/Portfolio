@@ -53,6 +53,7 @@ export default function MascotDisplay({
   headSrc,
   accessorySrc,
   accessoryIsChain,
+  accessoryIsGrillz,
   activityLayers,
   outfitOffsetY = '20%',
 }) {
@@ -65,6 +66,7 @@ export default function MascotDisplay({
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
   const accessory = accessorySrc     !== undefined ? accessorySrc     : resolved.accessory;
   const isChain   = accessoryIsChain !== undefined ? accessoryIsChain : resolved.accessoryIsChain;
+  const isGrillz  = accessoryIsGrillz !== undefined ? accessoryIsGrillz : resolved.accessoryIsGrillz;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
 
@@ -136,7 +138,7 @@ export default function MascotDisplay({
       )}
 
       {/* Capa 5: accesorio (gafas, grillz… — intermedio sobre el outfit) */}
-      {accessory && !isChain && (
+      {accessory && !isChain && !isGrillz && (
         <img
           src={accessory}
           alt=""
@@ -144,7 +146,24 @@ export default function MascotDisplay({
           className={imgClass}
         />
       )}
-      {/* Capa 5b: cadena — posicionada en cuello/pecho */}
+      {/* Capa 5b: grillz — al 50% del tamaño, centrados */}
+      {accessory && isGrillz && (
+        <img
+          src={accessory}
+          alt=""
+          draggable={false}
+          className="absolute select-none pointer-events-none"
+          style={{
+            left: '25%',
+            top: '25%',
+            width: '50%',
+            height: '50%',
+            objectFit: 'contain',
+            objectPosition: 'center',
+          }}
+        />
+      )}
+      {/* Capa 5c: cadena — posicionada en cuello/pecho */}
       {accessory && isChain && (
         <img
           src={accessory}
@@ -152,10 +171,10 @@ export default function MascotDisplay({
           draggable={false}
           className="absolute select-none pointer-events-none"
           style={{
-            left: '-10%',
-            width: '120%',
-            top: '10%',
-            height: '85%',
+            left: '2%',
+            width: '96%',
+            top: '20%',
+            height: '75%',
             objectFit: 'contain',
             objectPosition: 'top center',
           }}

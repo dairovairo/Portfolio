@@ -482,6 +482,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-grillz.png',
     price: 150,
     isBase: false,
+    isGrillz: true,
   },
   {
     id: 'acc_grillz_gold',
@@ -491,6 +492,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-grillz-gold.png',
     price: 120,
     isBase: false,
+    isGrillz: true,
   },
 ];
 
@@ -754,6 +756,7 @@ export function MascotProvider({ children }) {
       head:             head?.src ?? null,
       accessory:        acc?.src ?? null,
       accessoryIsChain: acc?.isChain ?? false,
+      accessoryIsGrillz: acc?.isGrillz ?? false,
       layers:           act?.layers ?? [],
     };
   }
