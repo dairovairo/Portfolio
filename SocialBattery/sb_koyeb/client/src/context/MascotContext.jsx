@@ -696,11 +696,12 @@ export const MASCOT_BASE = {
 // Usado por MascotDisplay tanto en la tienda como en la vista principal
 // (la mascota de la pantalla de batería usa el mismo getMascotLayers()).
 export const OUTFIT_VISUAL_ADJUST = {
-  // Camisetas: 20% más pequeñas que el histórico, y luego otro 10% más
-  // (1.05 → 0.84 → 0.756). El primer ajuste de offsetX (+0.3) se pasó de
-  // largo hacia la derecha, así que ahora se corrige con un empujoncito
-  // mucho más sutil hacia la izquierda.
-  camiseta: { scale: 1.05 * 0.8 * 0.9, offsetX: -0.04 },
+  // Camisetas: 20% más pequeñas que el histórico, otro 10% más, y ahora un
+  // 1.5% adicional (dentro del rango 1-2% pedido) para que no se vean tan
+  // largas por abajo (1.05 → 0.84 → 0.756 → 0.74466). El primer ajuste de
+  // offsetX (+0.3) se pasó de largo hacia la derecha, así que ahora se
+  // corrige con un empujoncito mucho más sutil hacia la izquierda.
+  camiseta: { scale: 1.05 * 0.8 * 0.9 * 0.985, offsetX: -0.04 },
   // Camisas: 15% más pequeñas que el histórico, y luego otro 10% más
   // (1.05 → 0.8925 → 0.80325). Offset a la derecha muy ligero, ajustado fino
   // tras varias rondas de feedback para que quede bien centrada.
@@ -725,7 +726,10 @@ export function MascotProvider({ children }) {
   const [unlockedHead,        setUnlockedHead]        = useState(DEFAULT_UNLOCKED_HEAD);
 
   const [activeActivity,  setActiveActivity]  = useState('none');
-  const [activeAccessory, setActiveAccessory] = useState('acc_none');
+  // Los accesorios admiten selección múltiple y simultánea (p. ej. gafas +
+  // cadena + corbata a la vez), por eso se guardan en un Set en vez de un
+  // único id. 'acc_none' nunca se guarda dentro del Set: significa "vacío".
+  const [activeAccessories, setActiveAccessories] = useState(new Set());
   const [activeOutfit,    setActiveOutfit]    = useState('out_none');
   const [activeFeet,      setActiveFeet]      = useState('feet_none');
   const [activeHead,      setActiveHead]      = useState('head_none');
@@ -738,12 +742,37 @@ export function MascotProvider({ children }) {
     setActiveActivity(id);
   }
 
-  // Accesorios
+  // Accesorios — selección múltiple y simultánea (toggle on/off por id).
   function unlockAccessory(id) {
     setUnlockedAccessories(prev => new Set([...prev, id]));
   }
   function equipAccessory(id) {
-    setActiveAccessory(id);
+    // Compatibilidad: "equipar" un accesorio lo activa (sin desactivar los
+    // demás), ya que ahora pueden llevarse varios a la vez.
+    if (id === 'acc_none') {
+      setActiveAccessories(new Set());
+      return;
+    }
+    setActiveAccessories(prev => new Set([...prev, id]));
+  }
+  function toggleAccessory(id) {
+    if (id === 'acc_none') return;
+    setActiveAccessories(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+  function unequipAccessory(id) {
+    setActiveAccessories(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }
 
   // Outfits — Torso (camiseta/camisa)
@@ -784,7 +813,7 @@ export function MascotProvider({ children }) {
     const outfit  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
     const feet    = MASCOT_FEET.find(f => f.id === activeFeet);
     const head    = MASCOT_HEAD.find(h => h.id === activeHead);
-    const acc     = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
+    const accs    = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
     const act     = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
     return {
       base,
@@ -792,11 +821,8 @@ export function MascotProvider({ children }) {
       outfitSubcategory:  outfit?.subcategory ?? null,
       feet:             feet?.src ?? null,
       head:             head?.src ?? null,
-      accessory:        acc?.src ?? null,
-      accessoryIsChain: acc?.isChain ?? false,
-      accessoryIsGrillz: acc?.isGrillz ?? false,
-      accessoryIsTie: acc?.isTie ?? false,
-      accessoryIsBowTie: acc?.isBowTie ?? false,
+      // Lista de accesorios activos (selección múltiple simultánea).
+      accessories:      accs,
       layers:           act?.layers ?? [],
     };
   }
@@ -823,7 +849,7 @@ export function MascotProvider({ children }) {
       unlockedFeet,
       unlockedHead,
       activeActivity,
-      activeAccessory,
+      activeAccessories,
       activeOutfit,
       activeFeet,
       activeHead,
@@ -834,6 +860,8 @@ export function MascotProvider({ children }) {
       unlockHead,
       equipActivity,
       equipAccessory,
+      toggleAccessory,
+      unequipAccessory,
       equipOutfit,
       equipFeet,
       equipHead,

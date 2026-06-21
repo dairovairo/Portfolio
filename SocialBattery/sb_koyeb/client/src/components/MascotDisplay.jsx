@@ -4,7 +4,7 @@
  *   2. Capa pies       (calzado — outfit, sub-categoría Pies)     ← NUEVA
  *   3. Capa outfit     (torso: camiseta/camisa)
  *   4. Capa cabeza     (gorra… — outfit, sub-categoría Cabeza)    ← NUEVA
- *   5. Capa accesorio  (gafas, cadena, grillz…)
+ *   5. Capa accesorio  (gafas, cadena, grillz… — varios a la vez)
  *   6. Capa actividad  (ajedrez, balón, gaming…)
  *
  * Props:
@@ -19,7 +19,11 @@
  *   outfitSrc        override outfit / torso (null = sin outfit)
  *   feetSrc          override pies (null = sin calzado)
  *   headSrc          override cabeza (null = sin gorro)
- *   accessorySrc     override accesorio (null = sin accesorio)
+ *   accessories      override lista de accesorios activos (array de objetos
+ *                     del catálogo MASCOT_ACCESSORIES). Los accesorios pueden
+ *                     combinarse y mostrarse todos a la vez. Pasar [] para no
+ *                     mostrar ninguno, o no pasar la prop para usar los
+ *                     accesorios activos del contexto.
  *   activityLayers   override capas actividad []
  *   outfitOffsetY    desplaza la capa de outfit hacia abajo (ej. '20%'), para
  *                     que no tape la cara de la mascota. Por defecto es '20%'
@@ -34,8 +38,9 @@
  * subcategoría (ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx) y queda
  * centrada antes de aplicar outfitOffsetY. Mismo cálculo en tienda y en la
  * mascota de la pantalla principal, porque ambas usan getMascotLayers().
- * Las capas de pies y cabeza, igual que el accesorio, son overlays a tamaño
- * completo del lienzo (el PNG ya trae la posición correcta integrada).
+ * Las capas de pies y cabeza, igual que cada accesorio, son overlays
+ * posicionados según su tipo (el PNG ya trae la posición correcta integrada
+ * para los que son a tamaño completo del lienzo).
  */
 import { useMascot, OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
 
@@ -51,11 +56,7 @@ export default function MascotDisplay({
   outfitSubcategory,
   feetSrc,
   headSrc,
-  accessorySrc,
-  accessoryIsChain,
-  accessoryIsGrillz,
-  accessoryIsTie,
-  accessoryIsBowTie,
+  accessories,
   activityLayers,
   outfitOffsetY = '20%',
 }) {
@@ -66,11 +67,7 @@ export default function MascotDisplay({
   const outfit    = outfitSrc        !== undefined ? outfitSrc        : resolved.outfit;
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
-  const accessory = accessorySrc     !== undefined ? accessorySrc     : resolved.accessory;
-  const isChain   = accessoryIsChain   !== undefined ? accessoryIsChain   : resolved.accessoryIsChain;
-  const isGrillz  = accessoryIsGrillz  !== undefined ? accessoryIsGrillz  : resolved.accessoryIsGrillz;
-  const isTie     = accessoryIsTie     !== undefined ? accessoryIsTie     : resolved.accessoryIsTie;
-  const isBowTie  = accessoryIsBowTie  !== undefined ? accessoryIsBowTie  : resolved.accessoryIsBowTie;
+  const accs      = accessories      !== undefined ? accessories      : resolved.accessories;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
 
@@ -141,83 +138,115 @@ export default function MascotDisplay({
         />
       )}
 
-      {/* Capa 5: accesorio (gafas… — overlay a tamaño completo) */}
-      {accessory && !isChain && !isGrillz && !isTie && !isBowTie && (
-        <img
-          src={accessory}
-          alt=""
-          draggable={false}
-          className={imgClass}
-        />
-      )}
-      {/* Capa 5b: grillz — al 25.5% del tamaño, centrados */}
-      {accessory && isGrillz && (
-        <img
-          src={accessory}
-          alt=""
-          draggable={false}
-          className="absolute select-none pointer-events-none"
-          style={{
-            left: '37.25%',
-            top: '41%',
-            width: '25.5%',
-            height: '25.5%',
-            objectFit: 'contain',
-            objectPosition: 'center',
-          }}
-        />
-      )}
-      {/* Capa 5c: cadena — posicionada en cuello/pecho */}
-      {accessory && isChain && (
-        <img
-          src={accessory}
-          alt=""
-          draggable={false}
-          className="absolute select-none pointer-events-none"
-          style={{
-            left: '9%',
-            width: '82%',
-            top: '28%',
-            height: '64%',
-            objectFit: 'contain',
-            objectPosition: 'top center',
-          }}
-        />
-      )}
-      {/* Capa 5d: corbata — centrada verticalmente en cuello/pecho */}
-      {accessory && isTie && (
-        <img
-          src={accessory}
-          alt=""
-          draggable={false}
-          className="absolute select-none pointer-events-none"
-          style={{
-            left: '35%',
-            width: '30%',
-            top: '28%',
-            height: '60%',
-            objectFit: 'contain',
-            objectPosition: 'top center',
-          }}
-        />
-      )}
-      {/* Capa 5e: pajarita — centrada en el cuello */}
-      {accessory && isBowTie && (
-        <img
-          src={accessory}
-          alt=""
-          draggable={false}
-          className="absolute select-none pointer-events-none"
-          style={{
-            left: '25%',
-            width: '50%',
-            top: '34%',
-            height: '20%',
-            objectFit: 'contain',
-            objectPosition: 'center',
-          }}
-        />
-      )}
+      {/* Capa 5: accesorio(s) — gafas, cadena, grillz, corbata, pajarita…
+          Pueden combinarse y se muestran todos a la vez, cada uno con su
+          propio posicionamiento según tipo. */}
+      {accs.map(acc => {
+        if (!acc.src) return null;
+
+        // Gafas y resto de accesorios "planos" → overlay a tamaño completo.
+        if (!acc.isChain && !acc.isGrillz && !acc.isTie && !acc.isBowTie) {
+          return (
+            <img
+              key={acc.id}
+              src={acc.src}
+              alt=""
+              draggable={false}
+              className={imgClass}
+            />
+          );
+        }
+
+        // Grillz — al 25.5% del tamaño, centrados.
+        if (acc.isGrillz) {
+          return (
+            <img
+              key={acc.id}
+              src={acc.src}
+              alt=""
+              draggable={false}
+              className="absolute select-none pointer-events-none"
+              style={{
+                left: '37.25%',
+                top: '41%',
+                width: '25.5%',
+                height: '25.5%',
+                objectFit: 'contain',
+                objectPosition: 'center',
+              }}
+            />
+          );
+        }
+
+        // Cadena — posicionada en cuello/pecho.
+        if (acc.isChain) {
+          return (
+            <img
+              key={acc.id}
+              src={acc.src}
+              alt=""
+              draggable={false}
+              className="absolute select-none pointer-events-none"
+              style={{
+                left: '9%',
+                width: '82%',
+                top: '28%',
+                height: '64%',
+                objectFit: 'contain',
+                objectPosition: 'top center',
+              }}
+            />
+          );
+        }
+
+        // Corbata — 20% más grande que el tamaño original (30% → 36% de
+        // ancho, 60% → 72% de alto) y bajada respecto al cuello (28% → 34%
+        // de top) para que no quede tan pegada al cuello.
+        if (acc.isTie) {
+          return (
+            <img
+              key={acc.id}
+              src={acc.src}
+              alt=""
+              draggable={false}
+              className="absolute select-none pointer-events-none"
+              style={{
+                left: '32%',
+                width: '36%',
+                top: '34%',
+                height: '72%',
+                objectFit: 'contain',
+                objectPosition: 'top center',
+              }}
+            />
+          );
+        }
+
+        // Pajarita — 10% más grande que el tamaño original (50% → 55% de
+        // ancho, 20% → 22% de alto) y bajada respecto al cuello (34% → 40%
+        // de top).
+        if (acc.isBowTie) {
+          return (
+            <img
+              key={acc.id}
+              src={acc.src}
+              alt=""
+              draggable={false}
+              className="absolute select-none pointer-events-none"
+              style={{
+                left: '22.5%',
+                width: '55%',
+                top: '40%',
+                height: '22%',
+                objectFit: 'contain',
+                objectPosition: 'center',
+              }}
+            />
+          );
+        }
+
+        return null;
+      })}
 
       {/* Capa 6: actividad (la más delantera) */}
       {layers.map((src, i) => (

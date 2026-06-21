@@ -77,7 +77,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
           tier="mid"
           size={112}
           activityLayers={activity.layers}
-          accessorySrc={null}
+          accessories={[]}
           outfitSrc={null}
           feetSrc={null}
           headSrc={null}
@@ -97,14 +97,20 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
 }
 
 // ── Tarjeta de ACCESORIO ──────────────────────────────────────────────────────
-function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+// Los accesorios admiten selección múltiple simultánea: cada tarjeta se activa
+// o desactiva de forma independiente (como un interruptor), sin afectar a los
+// demás accesorios ya equipados.
+function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle }) {
   return (
-    <ItemCard
-      isUnlocked={isUnlocked} isActive={isActive}
-      canAfford={canAfford} price={accessory.price}
-      isBase={accessory.isBase} onBuy={onBuy} onEquip={onEquip}
+    <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
+      ${isActive
+        ? 'border-accent-primary shadow-md shadow-accent-primary/20'
+        : isUnlocked
+          ? 'border-surface-border hover:border-accent-primary/40'
+          : 'border-surface-border hover:border-surface-muted/40'
+      }`}
     >
-      {/* Preview: mascota base + accesorio en capa 3 */}
+      {/* Preview: mascota base + accesorio en capa 5 */}
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
@@ -120,11 +126,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
         <MascotDisplay
           tier="mid"
           size={112}
-          accessorySrc={accessory.src}
-          accessoryIsChain={accessory.isChain ?? false}
-          accessoryIsGrillz={accessory.isGrillz ?? false}
-          accessoryIsTie={accessory.isTie ?? false}
-          accessoryIsBowTie={accessory.isBowTie ?? false}
+          accessories={accessory.src ? [accessory] : []}
           outfitSrc={null}
           feetSrc={null}
           headSrc={null}
@@ -140,7 +142,41 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
         </div>
         <div className="text-surface-muted text-[11px] leading-snug flex-1">{accessory.desc}</div>
       </div>
-    </ItemCard>
+
+      {/* Acción — los accesorios se pueden combinar, así que el botón
+          siempre alterna (encender/apagar) en vez de "equipar de forma
+          exclusiva" como el resto de categorías. */}
+      <div className="px-3 pb-3 pt-1">
+        {accessory.isBase ? (
+          <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
+            ✓ Por defecto
+          </div>
+        ) : isUnlocked ? (
+          <button
+            onClick={onToggle}
+            className={`w-full py-2 rounded-xl text-xs font-display font-semibold transition-all
+              ${isActive
+                ? 'bg-accent-primary/10 border border-accent-primary/30 text-accent-glow hover:bg-accent-primary/20'
+                : 'bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40'
+              }`}
+          >
+            {isActive ? 'Quitar' : 'Equipar'}
+          </button>
+        ) : (
+          <button
+            onClick={onBuy}
+            disabled={!canAfford}
+            className={`w-full py-2 rounded-xl text-xs font-display font-semibold transition-all duration-200
+              ${canAfford
+                ? 'bg-accent-primary hover:bg-accent-primary/80 text-white hover:shadow-md hover:shadow-accent-primary/20'
+                : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
+              }`}
+          >
+            🪙 {accessory.price}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -170,7 +206,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
           size={112}
           outfitSrc={outfit.src}
           outfitSubcategory={outfit.subcategory}
-          accessorySrc={null}
+          accessories={[]}
           feetSrc={null}
           headSrc={null}
           activityLayers={[]}
@@ -217,7 +253,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           feetSrc={feet.src}
           outfitSrc={null}
           headSrc={null}
-          accessorySrc={null}
+          accessories={[]}
           activityLayers={[]}
           style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
         />
@@ -261,7 +297,7 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           headSrc={head.src}
           outfitSrc={null}
           feetSrc={null}
-          accessorySrc={null}
+          accessories={[]}
           activityLayers={[]}
           style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
         />
@@ -283,9 +319,9 @@ export default function ShopPage() {
   const navigate = useNavigate();
   const {
     unlockedActivities, unlockedAccessories, unlockedOutfits, unlockedFeet, unlockedHead,
-    activeActivity, activeAccessory, activeOutfit, activeFeet, activeHead,
+    activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
     unlockActivity, unlockAccessory, unlockOutfit, unlockFeet, unlockHead,
-    equipActivity, equipAccessory, equipOutfit, equipFeet, equipHead,
+    equipActivity, toggleAccessory, equipOutfit, equipFeet, equipHead,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -312,17 +348,19 @@ export default function ShopPage() {
     showToast(`¡${activity.name} equipada! ✨`);
   }
 
-  // ── Accesorios ──────────────────────────────────────────────────────────────
+  // ── Accesorios — selección múltiple: cada uno se enciende/apaga sin
+  // afectar a los demás (varios accesorios pueden estar activos a la vez).
   function handleBuyAccessory(accessory) {
     if (coins < accessory.price) return;
     setCoins(c => c - accessory.price);
     unlockAccessory(accessory.id);
-    equipAccessory(accessory.id);
+    toggleAccessory(accessory.id);
     showToast(`¡${accessory.name} desbloqueado y equipado! 🎉`);
   }
-  function handleEquipAccessory(accessory) {
-    equipAccessory(accessory.id);
-    showToast(`¡${accessory.name} equipado! ✨`);
+  function handleToggleAccessory(accessory) {
+    const wasActive = activeAccessories.has(accessory.id);
+    toggleAccessory(accessory.id);
+    showToast(wasActive ? `${accessory.name} retirado` : `¡${accessory.name} equipado! ✨`);
   }
 
   // ── Outfits — Torso ──────────────────────────────────────────────────────────
@@ -365,7 +403,7 @@ export default function ShopPage() {
   }
 
   const activeAct  = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
-  const activeAcc  = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
+  const activeAccs = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
   const activeOut  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
   const activeFt   = MASCOT_FEET.find(f => f.id === activeFeet);
   const activeHd   = MASCOT_HEAD.find(h => h.id === activeHead);
@@ -421,7 +459,9 @@ export default function ShopPage() {
               Cabeza: <span className="text-accent-glow font-semibold">{activeHd?.name ?? 'Ninguna'}</span>
             </div>
             <div className="text-[11px] text-surface-muted">
-              Accesorio: <span className="text-accent-glow font-semibold">{activeAcc?.name ?? 'Ninguno'}</span>
+              Accesorios: <span className="text-accent-glow font-semibold">
+                {activeAccs.length > 0 ? activeAccs.map(a => a.name).join(', ') : 'Ninguno'}
+              </span>
             </div>
             <div className="text-[11px] text-surface-muted">
               Actividad: <span className="text-accent-glow font-semibold">{activeAct?.name ?? 'Ninguna'}</span>
@@ -578,7 +618,7 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* ── Accesorios ── */}
+        {/* ── Accesorios (selección múltiple: se pueden combinar varios) ── */}
         {tab === 'accessories' && (
           <div className="grid grid-cols-2 gap-3">
             {MASCOT_ACCESSORIES.map(accessory => (
@@ -586,10 +626,10 @@ export default function ShopPage() {
                 key={accessory.id}
                 accessory={accessory}
                 isUnlocked={unlockedAccessories.has(accessory.id)}
-                isActive={activeAccessory === accessory.id}
+                isActive={activeAccessories.has(accessory.id)}
                 canAfford={coins >= accessory.price}
                 onBuy={() => handleBuyAccessory(accessory)}
-                onEquip={() => handleEquipAccessory(accessory)}
+                onToggle={() => handleToggleAccessory(accessory)}
               />
             ))}
           </div>
