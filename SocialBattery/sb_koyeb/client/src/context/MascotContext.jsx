@@ -567,21 +567,27 @@ export const MASCOT_FEET = [
   },
   {
     id: 'feet_loafer_1',
-    name: 'Mocasines penny camel',
+    name: 'Mocasines marrones',
     desc: 'Estilo preppy en marrón camel con interior verde salvia.',
     emoji: '🥿',
     src: '/outfit-feet-3.png',
     price: 85,
     isBase: false,
+    // Bajados respecto al resto del calzado (el PNG los traía un poco altos,
+    // sin tocar la base de la mascota).
+    offsetY: '10%',
   },
   {
     id: 'feet_oxford_1',
-    name: 'Oxford negro charol',
+    name: 'Zapatos negros',
     desc: 'Zapato formal de cordones con suela de cuero, puro clásico.',
     emoji: '👞',
     src: '/outfit-feet-4.png',
     price: 90,
     isBase: false,
+    // Bajados respecto al resto del calzado (el PNG los traía un poco altos,
+    // sin tocar la base de la mascota).
+    offsetY: '10%',
   },
 ];
 
@@ -840,6 +846,7 @@ export function MascotProvider({ children }) {
       outfit:             outfit?.src ?? null,
       outfitSubcategory:  outfit?.subcategory ?? null,
       feet:             feet?.src ?? null,
+      feetOffsetY:      feet?.offsetY ?? null,
       head:             head?.src ?? null,
       // Lista de accesorios activos (selección múltiple simultánea).
       accessories:      accs,

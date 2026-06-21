@@ -327,6 +327,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           tier="mid"
           size={112}
           feetSrc={feet.src}
+          feetOffsetY={feet.offsetY ?? null}
           outfitSrc={null}
           headSrc={null}
           accessories={[]}

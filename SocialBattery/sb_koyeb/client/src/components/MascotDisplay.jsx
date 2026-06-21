@@ -18,6 +18,10 @@
  *   baseSrc          override imagen base
  *   outfitSrc        override outfit / torso (null = sin outfit)
  *   feetSrc          override pies (null = sin calzado)
+ *   feetOffsetY      desplaza la capa de pies hacia abajo (ej. '6%'), para
+ *                     prendas cuyo PNG queda un poco alto respecto al resto
+ *                     del calzado (ver `offsetY` en MASCOT_FEET). Si no se
+ *                     pasa, se usa el offset del calzado activo del contexto.
  *   headSrc          override cabeza (null = sin gorro)
  *   accessories      override lista de accesorios activos (array de objetos
  *                     del catálogo MASCOT_ACCESSORIES). Los accesorios pueden
@@ -55,6 +59,7 @@ export default function MascotDisplay({
   outfitSrc,
   outfitSubcategory,
   feetSrc,
+  feetOffsetY,
   headSrc,
   accessories,
   activityLayers,
@@ -66,6 +71,7 @@ export default function MascotDisplay({
   const base      = baseSrc          !== undefined ? baseSrc          : resolved.base;
   const outfit    = outfitSrc        !== undefined ? outfitSrc        : resolved.outfit;
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
+  const feetOffset = feetOffsetY     !== undefined ? feetOffsetY      : resolved.feetOffsetY;
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
   const accs      = accessories      !== undefined ? accessories      : resolved.accessories;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
@@ -101,13 +107,15 @@ export default function MascotDisplay({
         style={{ ...shadowStyle, ...animStyle }}
       />
 
-      {/* Capa 2: pies / calzado (overlay a tamaño completo) */}
+      {/* Capa 2: pies / calzado (overlay a tamaño completo, con offset
+          opcional por prenda — ver feetOffsetY / MASCOT_FEET.offsetY) */}
       {feet && (
         <img
           src={feet}
           alt=""
           draggable={false}
           className={imgClass}
+          style={feetOffset ? { top: `calc(0% + ${feetOffset})` } : {}}
         />
       )}
 
@@ -200,8 +208,9 @@ export default function MascotDisplay({
         }
 
         // Corbata — 20% más grande que el tamaño original (30% → 36% de
-        // ancho, 60% → 72% de alto) y bajada respecto al cuello (28% → 34%
-        // de top) para que no quede tan pegada al cuello.
+        // ancho, 60% → 72% de alto). Bajada bastante respecto a la versión
+        // anterior (28% → 34% → 46% de top) para que el nudo quede justo
+        // debajo de la "boca" (la línea horizontal) de la mascota.
         if (acc.isTie) {
           return (
             <img
@@ -213,7 +222,7 @@ export default function MascotDisplay({
               style={{
                 left: '32%',
                 width: '36%',
-                top: '34%',
+                top: '46%',
                 height: '72%',
                 objectFit: 'contain',
                 objectPosition: 'top center',
@@ -223,8 +232,8 @@ export default function MascotDisplay({
         }
 
         // Pajarita — 10% más grande que el tamaño original (50% → 55% de
-        // ancho, 20% → 22% de alto) y bajada respecto al cuello (34% → 40%
-        // de top).
+        // ancho, 20% → 22% de alto). Bajada un poco más respecto a la
+        // versión anterior (34% → 40% → 42% de top).
         if (acc.isBowTie) {
           return (
             <img
@@ -236,7 +245,7 @@ export default function MascotDisplay({
               style={{
                 left: '22.5%',
                 width: '55%',
-                top: '40%',
+                top: '42%',
                 height: '22%',
                 objectFit: 'contain',
                 objectPosition: 'center',
