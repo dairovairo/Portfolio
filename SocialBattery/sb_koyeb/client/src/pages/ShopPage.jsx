@@ -646,29 +646,35 @@ export default function ShopPage() {
 
   // Outfits (torso) filtrados por sub-tab
   // - basicOutfits: colores lisos de esa sub-tab → carrusel horizontal arriba
-  // - restOutfits: el ítem base ("Sin outfit") + el resto de prendas
-  //   (estampados/temáticas) de esa sub-tab → grid vertical de siempre
-  const filteredOutfits = MASCOT_OUTFITS.filter(o =>
-    o.isBase || o.subcategory === outfitSubTab
-  );
+  // - restOutfits: el resto de prendas (estampados/temáticas) de esa
+  //   sub-tab → grid vertical de siempre
+  // El ítem base ("Sin outfit") se excluye de la tienda: es redundante en
+  // el sistema actual y no se muestra como tarjeta.
+  const filteredOutfits = MASCOT_OUTFITS.filter(o => o.subcategory === outfitSubTab);
   const basicOutfits = filteredOutfits.filter(o => o.isBasic);
   const restOutfits  = filteredOutfits.filter(o => !o.isBasic);
 
   // Pies: misma lógica que Torso — las variantes de color de la zapatilla
-  // retro (isBasic) van al carrusel horizontal; el resto (sin calzado,
-  // chunky, mocasines, oxford) va al grid vertical de siempre.
+  // retro (isBasic) van al carrusel horizontal; el resto (chunky, mocasines,
+  // oxford) va al grid vertical de siempre. El ítem base ("Sin calzado")
+  // se excluye de la tienda, igual que el resto de ítems base.
   const basicFeet = MASCOT_FEET.filter(f => f.isBasic);
-  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic);
+  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBase);
+
+  // Cabeza: se excluye el ítem base ("Sin gorro") de la tienda.
+  const headOptions = MASCOT_HEAD.filter(h => !h.isBase);
 
   // Accesorios: cadenas, grillz y gafas de sol son grupos de selección
   // única (solo una de cada a la vez) → cada grupo va a su propio carrusel
-  // horizontal arriba. El resto (corbata, pajarita, "sin accesorio") se
-  // puede combinar libremente y va al grid vertical de siempre.
+  // horizontal arriba. El resto (corbata, pajarita) se puede combinar
+  // libremente y va al grid vertical de siempre. El ítem base
+  // ("Sin accesorio") se excluye de la tienda, igual que el resto de
+  // ítems base.
   const chainAccessories   = MASCOT_ACCESSORIES.filter(a => a.isChain);
   const grillzAccessories  = MASCOT_ACCESSORIES.filter(a => a.isGrillz);
   const glassesAccessories = MASCOT_ACCESSORIES.filter(a => a.isGlasses);
   const restAccessories    = MASCOT_ACCESSORIES.filter(
-    a => !a.isChain && !a.isGrillz && !a.isGlasses
+    a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isBase
   );
 
   return (
@@ -915,7 +921,7 @@ export default function ShopPage() {
             {/* Sección: Cabeza */}
             {outfitMainTab === 'cabeza' && (
               <div className="grid grid-cols-2 gap-3">
-                {MASCOT_HEAD.map(head => (
+                {headOptions.map(head => (
                   <HeadCard
                     key={head.id}
                     head={head}
