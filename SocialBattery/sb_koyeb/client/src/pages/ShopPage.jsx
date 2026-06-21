@@ -594,8 +594,11 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* Header */}
-      <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/90 backdrop-blur-xl z-10">
+      {/* Header — z-20 (por encima del z-10 de las superposiciones de
+          items bloqueados/"Puesto" de las tarjetas) para que la flecha de
+          volver siga siendo clicable aunque, al hacer scroll, coincida
+          visualmente con la superposición de un item no comprado. */}
+      <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/90 backdrop-blur-xl z-20">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}

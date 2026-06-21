@@ -305,7 +305,8 @@ export default function MascotDisplay({
         // anteriores (28% → 34% → 46% → 48% → 50% de top) para que el nudo
         // quede justo debajo de la "boca" (la línea horizontal) de la mascota.
         // Bajada un 2% más (50% → 52%), mismo incremento que la pajarita para
-        // que ambas bajen por igual.
+        // que ambas bajen por igual. Bajada otro 2% más (52% → 54%), mismo
+        // incremento de nuevo en ambas.
         if (acc.isTie) {
           return (
             <img
@@ -317,7 +318,7 @@ export default function MascotDisplay({
               style={{
                 left: '32%',
                 width: '36%',
-                top: '52%',
+                top: '54%',
                 height: '72%',
                 objectFit: 'contain',
                 objectPosition: 'top center',
@@ -333,7 +334,8 @@ export default function MascotDisplay({
         // adicional (55%→49.5% ancho, 22%→19.8% alto), left recalculado para
         // seguir centrada. Bajada un poquito más dos veces (46%→46.7%→47.4%),
         // ajustes muy sutiles. Bajada un 2% más (47.4% → 49.4%), mismo
-        // incremento que la corbata para que ambas bajen por igual.
+        // incremento que la corbata para que ambas bajen por igual. Bajada
+        // otro 2% más (49.4% → 51.4%), mismo incremento de nuevo en ambas.
         if (acc.isBowTie) {
           return (
             <img
@@ -345,7 +347,7 @@ export default function MascotDisplay({
               style={{
                 left: '25.25%',
                 width: '49.5%',
-                top: '49.4%',
+                top: '51.4%',
                 height: '19.8%',
                 objectFit: 'contain',
                 objectPosition: 'center',
