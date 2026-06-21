@@ -207,6 +207,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
           outfitSrc={outfit.src}
           outfitSubcategory={outfit.subcategory}
           outfitItemOffsetY={outfit.offsetY}
+          outfitItemScale={outfit.scale}
           accessories={[]}
           feetSrc={null}
           headSrc={null}
@@ -260,6 +261,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
           outfitSrc={outfit.src}
           outfitSubcategory={outfit.subcategory}
           outfitItemOffsetY={outfit.offsetY}
+          outfitItemScale={outfit.scale}
           accessories={[]}
           feetSrc={null}
           headSrc={null}
@@ -451,6 +453,7 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           headSrc={head.src}
           headScale={head.scale}
           headOffsetY={head.offsetY}
+          headOffsetX={head.offsetX}
           headBox={head.box}
           outfitSrc={null}
           feetSrc={null}
@@ -622,11 +625,14 @@ export default function ShopPage() {
             size={72}
             outfitSrc={activeOut?.src ?? null}
             outfitSubcategory={activeOut?.subcategory ?? null}
+            outfitItemOffsetY={activeOut?.offsetY ?? null}
+            outfitItemScale={activeOut?.scale ?? null}
             feetSrc={activeFt?.src ?? null}
             feetOffsetY={activeFt?.offsetY ?? null}
             headSrc={activeHd?.src ?? null}
             headScale={activeHd?.scale ?? null}
             headOffsetY={activeHd?.offsetY ?? null}
+            headOffsetX={activeHd?.offsetX ?? null}
             headBox={activeHd?.box ?? null}
             accessories={activeAccs}
             activityLayers={activeAct?.layers ?? []}

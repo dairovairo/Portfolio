@@ -13,6 +13,10 @@ export const MASCOT_OUTFITS = [
     isBase: true,
   },
   // ── Camisetas ────────────────────────────────────────────────────────────────
+  // Todas las camisetas llevan un `scale: 0.985` propio (1.5%, dentro del
+  // rango 1-2% pedido) que se multiplica sobre el scale general de la
+  // subcategoría (ver OUTFIT_VISUAL_ADJUST.camiseta más abajo), EXCEPTO
+  // "Camiseta del abuelo" (out_tshirt_21), que se queda con su tamaño actual.
   {
     id: 'out_tshirt_1',
     name: 'Camiseta negra',
@@ -23,6 +27,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 50,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_2',
@@ -34,6 +39,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 50,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_3',
@@ -45,6 +51,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 55,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_4',
@@ -56,6 +63,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 70,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_5',
@@ -67,6 +75,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 75,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_6',
@@ -78,6 +87,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 60,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_7',
@@ -89,6 +99,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 65,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_8',
@@ -100,6 +111,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 55,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_9',
@@ -111,6 +123,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 50,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_10',
@@ -122,6 +135,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 60,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_11',
@@ -132,6 +146,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 85,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_12',
@@ -142,6 +157,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 80,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_13',
@@ -152,6 +168,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 80,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_14',
@@ -162,6 +179,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 75,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_15',
@@ -172,6 +190,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 85,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_16',
@@ -182,6 +201,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 85,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_17',
@@ -192,6 +212,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 85,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_18',
@@ -202,6 +223,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 95,
     isBase: false,
+    scale: 0.985,
   },
   {
     // NOTA: este PNG usa un canvas más alto (1490×2039 en vez de 1490×1200)
@@ -217,6 +239,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 55,
     isBase: false,
+    scale: 0.985,
   },
   {
     id: 'out_tshirt_20',
@@ -228,6 +251,7 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 50,
     isBase: false,
+    scale: 0.985,
   },
   {
     // Pendiente de ajuste manual de posicionamiento (igual que out_tshirt_19,
@@ -783,9 +807,11 @@ export const MASCOT_HEAD = [
     // lienzo cuadrado 1024×1024, se sube con offsetY para asentar sobre la
     // cabeza de la mascota. Reducida un 25% (scale 1 → 0.75); offsetY
     // recalculado para el nuevo tamaño y que siga asentando en el mismo
-    // sitio sobre la cabeza (-31.3% → -27.7%).
+    // sitio sobre la cabeza (-31.3% → -27.7%). Movida un pelín a la
+    // izquierda (offsetX), un ajuste muy sutil.
     scale: 0.75,
     offsetY: '-27.7%',
+    offsetX: '-1.5%',
   },
 ];
 
@@ -1022,11 +1048,13 @@ export function MascotProvider({ children }) {
       outfit:             outfit?.src ?? null,
       outfitSubcategory:  outfit?.subcategory ?? null,
       outfitItemOffsetY:  outfit?.offsetY ?? null,
+      outfitItemScale:    outfit?.scale ?? null,
       feet:             feet?.src ?? null,
       feetOffsetY:      feet?.offsetY ?? null,
       head:             head?.src ?? null,
       headScale:        head?.scale ?? null,
       headOffsetY:      head?.offsetY ?? null,
+      headOffsetX:      head?.offsetX ?? null,
       headBox:          head?.box ?? null,
       // Lista de accesorios activos (selección múltiple simultánea).
       accessories:      accs,

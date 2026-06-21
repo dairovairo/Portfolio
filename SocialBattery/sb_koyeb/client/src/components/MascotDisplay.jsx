@@ -32,6 +32,9 @@
  *   headOffsetY      desplaza la capa de cabeza (ej. '-5%' la sube un poco),
  *                     para que la prenda asiente justo encima de la cabeza
  *                     de la mascota (ver `offsetY` en MASCOT_HEAD).
+ *   headOffsetX      desplaza la capa de cabeza horizontalmente (ej. '-1.5%'
+ *                     la mueve un poco a la izquierda), encima del centrado
+ *                     automático (ver `offsetX` en MASCOT_HEAD).
  *   headBox          override de caja explícita {left,top,width,height} en %
  *                     (ver `box` en MASCOT_HEAD), para prendas cuyo PNG no es
  *                     cuadrado (ej. el halo, un anillo elíptico ancho). Si la
@@ -58,6 +61,11 @@
  *                     (ver `offsetY` en MASCOT_OUTFITS). Se suma al cálculo
  *                     normal de outfitOffsetY. Si no se pasa, se usa el de la
  *                     prenda activa del contexto.
+ *   outfitItemScale   ajuste de tamaño propio de la prenda concreta (ej. 0.985
+ *                     la reduce un 1.5%), multiplicado sobre el scale general
+ *                     de la subcategoría (ver `scale` en MASCOT_OUTFITS, p.ej.
+ *                     todas las camisetas salvo "Camiseta del abuelo"). Si no
+ *                     se pasa, se usa el de la prenda activa del contexto.
  *
  * La capa de outfit (camiseta/camisa) se escala y posiciona según su
  * subcategoría (ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx) y queda
@@ -80,11 +88,13 @@ export default function MascotDisplay({
   outfitSrc,
   outfitSubcategory,
   outfitItemOffsetY,
+  outfitItemScale,
   feetSrc,
   feetOffsetY,
   headSrc,
   headScale,
   headOffsetY,
+  headOffsetX,
   headBox,
   accessories,
   activityLayers,
@@ -100,16 +110,20 @@ export default function MascotDisplay({
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
   const headScl   = headScale        !== undefined ? headScale        : resolved.headScale;
   const headOffset = headOffsetY     !== undefined ? headOffsetY      : resolved.headOffsetY;
+  const headOffsetXResolved = headOffsetX !== undefined ? headOffsetX : resolved.headOffsetX;
   const headBx    = headBox          !== undefined ? headBox          : resolved.headBox;
   const accs      = accessories      !== undefined ? accessories      : resolved.accessories;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
   const outfitItemOffset = outfitItemOffsetY !== undefined ? outfitItemOffsetY : resolved.outfitItemOffsetY;
+  const outfitItemScl    = outfitItemScale   !== undefined ? outfitItemScale   : resolved.outfitItemScale;
 
   // Ajuste de tamaño/posición de la capa outfit según subcategoría
   // (camiseta vs camisa) — ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx.
+  // Se multiplica por el `scale` propio de la prenda si lo tiene (ej. todas
+  // las camisetas salvo "Camiseta del abuelo", ver outfitItemScale).
   const outfitAdjust   = OUTFIT_VISUAL_ADJUST[subcat] ?? OUTFIT_VISUAL_ADJUST.camiseta;
-  const outfitSizePct  = outfitAdjust.scale * 100;
+  const outfitSizePct  = outfitAdjust.scale * (outfitItemScl ?? 1) * 100;
   // Offset que centra la capa (puede ser negativo si es más grande que la base,
   // o positivo si es más pequeña), más el empujoncito extra de la subcategoría.
   const outfitCenterPct = (100 - outfitSizePct) / 2;
@@ -194,7 +208,7 @@ export default function MascotDisplay({
               : headScl
               ? {
                   top: `calc(${(100 - headScl * 100) / 2}% + ${headOffset || '0%'})`,
-                  left: `${(100 - headScl * 100) / 2}%`,
+                  left: `calc(${(100 - headScl * 100) / 2}% + ${headOffsetXResolved || '0%'})`,
                   width: `${headScl * 100}%`,
                   height: `${headScl * 100}%`,
                 }
@@ -290,6 +304,8 @@ export default function MascotDisplay({
         // ancho, 60% → 72% de alto). Bajada bastante respecto a versiones
         // anteriores (28% → 34% → 46% → 48% → 50% de top) para que el nudo
         // quede justo debajo de la "boca" (la línea horizontal) de la mascota.
+        // Bajada un 2% más (50% → 52%), mismo incremento que la pajarita para
+        // que ambas bajen por igual.
         if (acc.isTie) {
           return (
             <img
@@ -301,7 +317,7 @@ export default function MascotDisplay({
               style={{
                 left: '32%',
                 width: '36%',
-                top: '50%',
+                top: '52%',
                 height: '72%',
                 objectFit: 'contain',
                 objectPosition: 'top center',
@@ -316,7 +332,8 @@ export default function MascotDisplay({
         // que la corbata, para que ambas bajen por igual. Reducida un 10%
         // adicional (55%→49.5% ancho, 22%→19.8% alto), left recalculado para
         // seguir centrada. Bajada un poquito más dos veces (46%→46.7%→47.4%),
-        // ajustes muy sutiles.
+        // ajustes muy sutiles. Bajada un 2% más (47.4% → 49.4%), mismo
+        // incremento que la corbata para que ambas bajen por igual.
         if (acc.isBowTie) {
           return (
             <img
@@ -328,7 +345,7 @@ export default function MascotDisplay({
               style={{
                 left: '25.25%',
                 width: '49.5%',
-                top: '47.4%',
+                top: '49.4%',
                 height: '19.8%',
                 objectFit: 'contain',
                 objectPosition: 'center',
