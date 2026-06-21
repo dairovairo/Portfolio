@@ -32,6 +32,12 @@
  *   headOffsetY      desplaza la capa de cabeza (ej. '-5%' la sube un poco),
  *                     para que la prenda asiente justo encima de la cabeza
  *                     de la mascota (ver `offsetY` en MASCOT_HEAD).
+ *   headBox          override de caja explícita {left,top,width,height} en %
+ *                     (ver `box` en MASCOT_HEAD), para prendas cuyo PNG no es
+ *                     cuadrado (ej. el halo, un anillo elíptico ancho). Si la
+ *                     prenda define `box`, tiene prioridad sobre headScale/
+ *                     headOffsetY y se posiciona con esos cuatro valores
+ *                     directamente, sin cálculo de centrado.
  *   accessories      override lista de accesorios activos (array de objetos
  *                     del catálogo MASCOT_ACCESSORIES). Los accesorios pueden
  *                     combinarse y mostrarse todos a la vez. Pasar [] para no
@@ -72,6 +78,7 @@ export default function MascotDisplay({
   headSrc,
   headScale,
   headOffsetY,
+  headBox,
   accessories,
   activityLayers,
   outfitOffsetY = '20%',
@@ -86,6 +93,7 @@ export default function MascotDisplay({
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
   const headScl   = headScale        !== undefined ? headScale        : resolved.headScale;
   const headOffset = headOffsetY     !== undefined ? headOffsetY      : resolved.headOffsetY;
+  const headBx    = headBox          !== undefined ? headBox          : resolved.headBox;
   const accs      = accessories      !== undefined ? accessories      : resolved.accessories;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
@@ -149,11 +157,12 @@ export default function MascotDisplay({
         />
       )}
 
-      {/* Capa 4: cabeza (gorra…). Por defecto es overlay a tamaño completo,
-          pero si la prenda define headScale/headOffsetY (ver MASCOT_HEAD en
-          MascotContext.jsx) se reduce y se reposiciona — necesario para
-          prendas como la gorra, cuyo PNG viene mucho más grande que la
-          cabeza real de la mascota. */}
+      {/* Capa 4: cabeza (gorra…, halo…). Por defecto es overlay a tamaño
+          completo. Si la prenda define `box` (caja explícita left/top/width/
+          height, ver MASCOT_HEAD en MascotContext.jsx) se usa esa caja
+          directamente — necesario para PNGs no cuadrados como el halo.
+          Si en cambio define `scale`/`offsetY` (como la gorra) se reduce y
+          recentra con ese cálculo cuadrado. */}
       {head && (
         <img
           src={head}
@@ -161,7 +170,14 @@ export default function MascotDisplay({
           draggable={false}
           className={imgClass}
           style={
-            headScl
+            headBx
+              ? {
+                  top: headBx.top,
+                  left: headBx.left,
+                  width: headBx.width,
+                  height: headBx.height,
+                }
+              : headScl
               ? {
                   top: `calc(${(100 - headScl * 100) / 2}% + ${headOffset || '0%'})`,
                   left: `${(100 - headScl * 100) / 2}%`,
@@ -236,8 +252,8 @@ export default function MascotDisplay({
 
         // Corbata — 20% más grande que el tamaño original (30% → 36% de
         // ancho, 60% → 72% de alto). Bajada bastante respecto a versiones
-        // anteriores (28% → 34% → 46% → 48% de top) para que el nudo quede
-        // justo debajo de la "boca" (la línea horizontal) de la mascota.
+        // anteriores (28% → 34% → 46% → 48% → 50% de top) para que el nudo
+        // quede justo debajo de la "boca" (la línea horizontal) de la mascota.
         if (acc.isTie) {
           return (
             <img
@@ -249,7 +265,7 @@ export default function MascotDisplay({
               style={{
                 left: '32%',
                 width: '36%',
-                top: '48%',
+                top: '50%',
                 height: '72%',
                 objectFit: 'contain',
                 objectPosition: 'top center',

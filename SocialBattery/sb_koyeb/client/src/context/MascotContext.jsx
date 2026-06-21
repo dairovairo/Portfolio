@@ -668,8 +668,10 @@ export const MASCOT_HEAD = [
     // cabeza de la mascota, sin tapar ojos ni cejas. offsetY es relativo al
     // centrado vertical de la capa ya escalada (ver cálculo en
     // MascotDisplay.jsx), por eso el valor es grande y negativo.
-    scale: 0.33,
-    offsetY: '-38.5%',
+    // Escala aumentada un 20% (0.33 → 0.396) manteniendo la misma posición
+    // vertical final (offsetY recalculado para el nuevo tamaño).
+    scale: 0.396,
+    offsetY: '-35.2%',
   },
   {
     id: 'head_fedora',
@@ -697,6 +699,25 @@ export const MASCOT_HEAD = [
     src: '/outfit-head-4.png',
     price: 60,
     isBase: false,
+  },
+  {
+    id: 'head_halo',
+    name: 'Halo de luz',
+    desc: 'Aureola luminosa flotante, para la mascota más angelical.',
+    emoji: '😇',
+    src: '/outfit-head-5.png',
+    price: 95,
+    isBase: false,
+    // El PNG no es cuadrado (anillo elíptico, ratio ancho:alto ≈ 990:537),
+    // así que no usa scale/offsetY (pensado para overlays cuadrados como la
+    // gorra). En su lugar define una caja explícita: flota un poco por
+    // encima de la coronilla de la mascota, centrada horizontalmente.
+    box: {
+      left: '12.5%',
+      top: '-5%',
+      width: '75%',
+      height: '40.7%',
+    },
   },
 ];
 
@@ -937,6 +958,7 @@ export function MascotProvider({ children }) {
       head:             head?.src ?? null,
       headScale:        head?.scale ?? null,
       headOffsetY:      head?.offsetY ?? null,
+      headBox:          head?.box ?? null,
       // Lista de accesorios activos (selección múltiple simultánea).
       accessories:      accs,
       layers:           act?.layers ?? [],
