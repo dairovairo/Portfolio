@@ -155,7 +155,7 @@ export default function MascotDisplay({
           className="absolute select-none pointer-events-none"
           style={{
             left: '35%',
-            top: '35%',
+            top: '38%',
             width: '30%',
             height: '30%',
             objectFit: 'contain',
@@ -173,7 +173,7 @@ export default function MascotDisplay({
           style={{
             left: '9%',
             width: '82%',
-            top: '20%',
+            top: '25%',
             height: '64%',
             objectFit: 'contain',
             objectPosition: 'top center',
