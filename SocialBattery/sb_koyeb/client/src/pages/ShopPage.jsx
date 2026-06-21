@@ -639,6 +639,9 @@ export default function ShopPage() {
   }
 
   const activeAct  = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
+  // El ítem base ("Sin actividad") se excluye de la tienda, igual que el
+  // resto de ítems base en outfit/accesorios.
+  const activityOptions = MASCOT_ACTIVITIES.filter(a => !a.isBase);
   const activeAccs = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
   const activeOut  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
   const activeFt   = MASCOT_FEET.find(f => f.id === activeFeet);
@@ -650,7 +653,7 @@ export default function ShopPage() {
   //   sub-tab → grid vertical de siempre
   // El ítem base ("Sin outfit") se excluye de la tienda: es redundante en
   // el sistema actual y no se muestra como tarjeta.
-  const filteredOutfits = MASCOT_OUTFITS.filter(o => o.subcategory === outfitSubTab);
+  const filteredOutfits = MASCOT_OUTFITS.filter(o => !o.isBase && o.subcategory === outfitSubTab);
   const basicOutfits = filteredOutfits.filter(o => o.isBasic);
   const restOutfits  = filteredOutfits.filter(o => !o.isBasic);
 
@@ -772,7 +775,7 @@ export default function ShopPage() {
         {/* ── Actividades ── */}
         {tab === 'activities' && (
           <div className="grid grid-cols-2 gap-3">
-            {MASCOT_ACTIVITIES.map(activity => (
+            {activityOptions.map(activity => (
               <ActivityCard
                 key={activity.id}
                 activity={activity}
