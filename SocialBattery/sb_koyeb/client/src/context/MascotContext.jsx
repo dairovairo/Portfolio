@@ -516,7 +516,8 @@ export const MASCOT_ACCESSORIES = [
   {
     // Reducidas un 40% respecto al overlay a tamaño completo del lienzo
     // (igual que acc_glasses) — ver `scale` en MascotDisplay.jsx, capa de
-    // accesorios "planos". Reducidas un 5% más (0.6 → 0.57).
+    // accesorios "planos". Reducidas un 5% más (0.6 → 0.57), y otro 5% más
+    // (0.57 → 0.54).
     id: 'acc_glasses_gold',
     name: 'Gafas doradas',
     desc: 'Montura dorada con cristales oscuros, máximo estilo.',
@@ -524,7 +525,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-glasses-gold.png',
     price: 70,
     isBase: false,
-    scale: 0.57,
+    scale: 0.54,
     isGlasses: true,
   },
   {

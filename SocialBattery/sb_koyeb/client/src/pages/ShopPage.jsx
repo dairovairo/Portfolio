@@ -191,7 +191,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
 function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle }) {
   return (
     <div
-      className={`flex-shrink-0 w-24 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
+      className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
         ${isActive
           ? 'border-accent-primary shadow-md shadow-accent-primary/20'
           : isUnlocked
@@ -199,21 +199,21 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
             : 'border-surface-border hover:border-surface-muted/40'
         }`}
     >
-      <div className="relative flex items-center justify-center py-2 px-1 bg-surface-hover/30">
+      <div className="relative flex items-center justify-center py-3 px-2 bg-surface-hover/30">
         {isActive && (
-          <span className="absolute top-1 right-1 text-[8px] font-mono font-bold px-1 py-0.5 rounded bg-accent-primary text-white z-10">
+          <span className="absolute top-1 right-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-accent-primary text-white z-10">
             ✓
           </span>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
-            <span className="text-lg">🔒</span>
+            <span className="text-xl">🔒</span>
           </div>
         )}
         <MascotDisplay
           tier="mid"
-          size={64}
+          size={112}
           accessories={accessory.src ? [accessory] : []}
           outfitSrc={null}
           feetSrc={null}
@@ -223,14 +223,14 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
         />
       </div>
 
-      <div className="px-1.5 pt-1 pb-1 flex flex-col gap-0.5">
-        <div className="font-display font-semibold text-surface-text text-[10px] leading-tight text-center truncate" title={accessory.name}>
+      <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={accessory.name}>
           {accessory.name}
         </div>
         {isUnlocked ? (
           <button
             onClick={onToggle}
-            className={`w-full py-1 rounded-lg text-[9px] font-display font-semibold transition-all
+            className={`w-full py-1.5 rounded-lg text-[10px] font-display font-semibold transition-all
               ${isActive
                 ? 'bg-accent-primary/10 border border-accent-primary/30 text-accent-glow hover:bg-accent-primary/20'
                 : 'bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40'
@@ -242,7 +242,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
           <button
             onClick={onBuy}
             disabled={!canAfford}
-            className={`w-full py-1 rounded-lg text-[9px] font-display font-semibold transition-all duration-200
+            className={`w-full py-1.5 rounded-lg text-[10px] font-display font-semibold transition-all duration-200
               ${canAfford
                 ? 'bg-accent-primary hover:bg-accent-primary/80 text-white'
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
@@ -311,7 +311,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
 function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
     <div
-      className={`flex-shrink-0 w-24 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
+      className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
         ${isActive
           ? 'border-accent-primary shadow-md shadow-accent-primary/20'
           : isUnlocked
@@ -319,21 +319,21 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
             : 'border-surface-border hover:border-surface-muted/40'
         }`}
     >
-      <div className="relative flex items-center justify-center py-2 px-1 bg-surface-hover/30">
+      <div className="relative flex items-center justify-center py-3 px-2 bg-surface-hover/30">
         {isActive && (
-          <span className="absolute top-1 right-1 text-[8px] font-mono font-bold px-1 py-0.5 rounded bg-accent-primary text-white z-10">
+          <span className="absolute top-1 right-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-accent-primary text-white z-10">
             ✓
           </span>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
-            <span className="text-lg">🔒</span>
+            <span className="text-xl">🔒</span>
           </div>
         )}
         <MascotDisplay
           tier="mid"
-          size={64}
+          size={112}
           outfitSrc={outfit.src}
           outfitSubcategory={outfit.subcategory}
           outfitItemOffsetY={outfit.offsetY}
@@ -347,19 +347,19 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
         />
       </div>
 
-      <div className="px-1.5 pt-1 pb-1 flex flex-col gap-0.5">
-        <div className="font-display font-semibold text-surface-text text-[10px] leading-tight text-center truncate" title={outfit.name}>
+      <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={outfit.name}>
           {outfit.name}
         </div>
         {isUnlocked ? (
           isActive ? (
-            <div className="w-full text-center text-[9px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1">
+            <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
               Puesto
             </div>
           ) : (
             <button
               onClick={onEquip}
-              className="w-full py-1 rounded-lg text-[9px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
+              className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
             >
               Poner
             </button>
@@ -368,7 +368,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
           <button
             onClick={onBuy}
             disabled={!canAfford}
-            className={`w-full py-1 rounded-lg text-[9px] font-display font-semibold transition-all duration-200
+            className={`w-full py-1.5 rounded-lg text-[10px] font-display font-semibold transition-all duration-200
               ${canAfford
                 ? 'bg-accent-primary hover:bg-accent-primary/80 text-white'
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
@@ -389,7 +389,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
 function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
     <div
-      className={`flex-shrink-0 w-24 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
+      className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
         ${isActive
           ? 'border-accent-primary shadow-md shadow-accent-primary/20'
           : isUnlocked
@@ -397,21 +397,21 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
             : 'border-surface-border hover:border-surface-muted/40'
         }`}
     >
-      <div className="relative flex items-center justify-center py-2 px-1 bg-surface-hover/30">
+      <div className="relative flex items-center justify-center py-3 px-2 bg-surface-hover/30">
         {isActive && (
-          <span className="absolute top-1 right-1 text-[8px] font-mono font-bold px-1 py-0.5 rounded bg-accent-primary text-white z-10">
+          <span className="absolute top-1 right-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-accent-primary text-white z-10">
             ✓
           </span>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
-            <span className="text-lg">🔒</span>
+            <span className="text-xl">🔒</span>
           </div>
         )}
         <MascotDisplay
           tier="mid"
-          size={64}
+          size={112}
           feetSrc={feet.src}
           feetOffsetY={feet.offsetY ?? null}
           outfitSrc={null}
@@ -422,19 +422,19 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
         />
       </div>
 
-      <div className="px-1.5 pt-1 pb-1 flex flex-col gap-0.5">
-        <div className="font-display font-semibold text-surface-text text-[10px] leading-tight text-center truncate" title={feet.name}>
+      <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={feet.name}>
           {feet.name}
         </div>
         {isUnlocked ? (
           isActive ? (
-            <div className="w-full text-center text-[9px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1">
+            <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
               Puesto
             </div>
           ) : (
             <button
               onClick={onEquip}
-              className="w-full py-1 rounded-lg text-[9px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
+              className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
             >
               Poner
             </button>
@@ -443,7 +443,7 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
           <button
             onClick={onBuy}
             disabled={!canAfford}
-            className={`w-full py-1 rounded-lg text-[9px] font-display font-semibold transition-all duration-200
+            className={`w-full py-1.5 rounded-lg text-[10px] font-display font-semibold transition-all duration-200
               ${canAfford
                 ? 'bg-accent-primary hover:bg-accent-primary/80 text-white'
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
@@ -816,7 +816,7 @@ export default function ShopPage() {
                     <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                       Colores
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicFeet.map(feet => (
                         <BasicFeetCard
                           key={feet.id}
@@ -880,7 +880,7 @@ export default function ShopPage() {
                     <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                       Básicos
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicOutfits.map(outfit => (
                         <BasicOutfitCard
                           key={outfit.id}
@@ -942,7 +942,7 @@ export default function ShopPage() {
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Cadenas · elige una
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {chainAccessories.map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
@@ -964,7 +964,7 @@ export default function ShopPage() {
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Grillz · elige uno
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {grillzAccessories.map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
@@ -986,7 +986,7 @@ export default function ShopPage() {
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Gafas de sol · elige unas
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {glassesAccessories.map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
