@@ -525,29 +525,25 @@ export default function ShopPage() {
         </div>
       </nav>
 
-      {/* Preview mascota activa con las 6 capas */}
+      {/* Preview mascota activa con las 6 capas — se le pasan explícitamente
+          todos los valores activos (outfit, pies, cabeza, accesorios) para
+          que siempre refleje al instante cualquier cambio hecho en la
+          tienda, sin depender de ningún cálculo intermedio. */}
       <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-2">
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-4">
-          <MascotDisplay tier="mid" size={72} />
+          <MascotDisplay
+            tier="mid"
+            size={72}
+            outfitSrc={activeOut?.src ?? null}
+            outfitSubcategory={activeOut?.subcategory ?? null}
+            feetSrc={activeFt?.src ?? null}
+            feetOffsetY={activeFt?.offsetY ?? null}
+            headSrc={activeHd?.src ?? null}
+            accessories={activeAccs}
+            activityLayers={activeAct?.layers ?? []}
+          />
           <div className="flex-1 flex flex-col gap-0.5">
             <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
-            <div className="text-[11px] text-surface-muted">
-              Pies: <span className="text-accent-glow font-semibold">{activeFt?.name ?? 'Ninguno'}</span>
-            </div>
-            <div className="text-[11px] text-surface-muted">
-              Torso: <span className="text-accent-glow font-semibold">{activeOut?.name ?? 'Ninguno'}</span>
-            </div>
-            <div className="text-[11px] text-surface-muted">
-              Cabeza: <span className="text-accent-glow font-semibold">{activeHd?.name ?? 'Ninguna'}</span>
-            </div>
-            <div className="text-[11px] text-surface-muted">
-              Accesorios: <span className="text-accent-glow font-semibold">
-                {activeAccs.length > 0 ? activeAccs.map(a => a.name).join(', ') : 'Ninguno'}
-              </span>
-            </div>
-            <div className="text-[11px] text-surface-muted">
-              Actividad: <span className="text-accent-glow font-semibold">{activeAct?.name ?? 'Ninguna'}</span>
-            </div>
             <div className="text-[10px] text-surface-muted/60 mt-0.5">
               Ganas 🪙 actualizando tu batería cada día.
             </div>
