@@ -656,9 +656,11 @@ export const MASCOT_BASE = {
 // Usado por MascotDisplay tanto en la tienda como en la vista principal
 // (la mascota de la pantalla de batería usa el mismo getMascotLayers()).
 export const OUTFIT_VISUAL_ADJUST = {
-  // Camisetas: 20% más pequeñas que el histórico (1.05 → 0.84) y un empujoncito
-  // muy ligero a la derecha, casi imperceptible.
-  camiseta: { scale: 1.05 * 0.8, offsetX: 0.3 },
+  // Camisetas: 20% más pequeñas que el histórico, y luego otro 10% más
+  // (1.05 → 0.84 → 0.756). El primer ajuste de offsetX (+0.3) se pasó de
+  // largo hacia la derecha, así que ahora se corrige con un empujoncito
+  // mucho más sutil hacia la izquierda.
+  camiseta: { scale: 1.05 * 0.8 * 0.9, offsetX: -0.04 },
   // Camisas: 15% más pequeñas que el histórico, y luego otro 10% más
   // (1.05 → 0.8925 → 0.80325). Offset a la derecha muy ligero, ajustado fino
   // tras varias rondas de feedback para que quede bien centrada.
