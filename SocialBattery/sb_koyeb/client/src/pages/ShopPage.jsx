@@ -123,6 +123,8 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onEq
           accessorySrc={accessory.src}
           accessoryIsChain={accessory.isChain ?? false}
           accessoryIsGrillz={accessory.isGrillz ?? false}
+          accessoryIsTie={accessory.isTie ?? false}
+          accessoryIsBowTie={accessory.isBowTie ?? false}
           outfitSrc={null}
           feetSrc={null}
           headSrc={null}

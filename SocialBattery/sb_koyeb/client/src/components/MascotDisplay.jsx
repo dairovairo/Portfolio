@@ -54,6 +54,8 @@ export default function MascotDisplay({
   accessorySrc,
   accessoryIsChain,
   accessoryIsGrillz,
+  accessoryIsTie,
+  accessoryIsBowTie,
   activityLayers,
   outfitOffsetY = '20%',
 }) {
@@ -65,8 +67,10 @@ export default function MascotDisplay({
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
   const accessory = accessorySrc     !== undefined ? accessorySrc     : resolved.accessory;
-  const isChain   = accessoryIsChain !== undefined ? accessoryIsChain : resolved.accessoryIsChain;
-  const isGrillz  = accessoryIsGrillz !== undefined ? accessoryIsGrillz : resolved.accessoryIsGrillz;
+  const isChain   = accessoryIsChain   !== undefined ? accessoryIsChain   : resolved.accessoryIsChain;
+  const isGrillz  = accessoryIsGrillz  !== undefined ? accessoryIsGrillz  : resolved.accessoryIsGrillz;
+  const isTie     = accessoryIsTie     !== undefined ? accessoryIsTie     : resolved.accessoryIsTie;
+  const isBowTie  = accessoryIsBowTie  !== undefined ? accessoryIsBowTie  : resolved.accessoryIsBowTie;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
 
@@ -137,8 +141,8 @@ export default function MascotDisplay({
         />
       )}
 
-      {/* Capa 5: accesorio (gafas, grillz… — intermedio sobre el outfit) */}
-      {accessory && !isChain && !isGrillz && (
+      {/* Capa 5: accesorio (gafas… — overlay a tamaño completo) */}
+      {accessory && !isChain && !isGrillz && !isTie && !isBowTie && (
         <img
           src={accessory}
           alt=""
@@ -177,6 +181,40 @@ export default function MascotDisplay({
             height: '64%',
             objectFit: 'contain',
             objectPosition: 'top center',
+          }}
+        />
+      )}
+      {/* Capa 5d: corbata — centrada verticalmente en cuello/pecho */}
+      {accessory && isTie && (
+        <img
+          src={accessory}
+          alt=""
+          draggable={false}
+          className="absolute select-none pointer-events-none"
+          style={{
+            left: '35%',
+            width: '30%',
+            top: '28%',
+            height: '60%',
+            objectFit: 'contain',
+            objectPosition: 'top center',
+          }}
+        />
+      )}
+      {/* Capa 5e: pajarita — centrada en el cuello */}
+      {accessory && isBowTie && (
+        <img
+          src={accessory}
+          alt=""
+          draggable={false}
+          className="absolute select-none pointer-events-none"
+          style={{
+            left: '25%',
+            width: '50%',
+            top: '34%',
+            height: '20%',
+            objectFit: 'contain',
+            objectPosition: 'center',
           }}
         />
       )}

@@ -494,6 +494,26 @@ export const MASCOT_ACCESSORIES = [
     isBase: false,
     isGrillz: true,
   },
+  {
+    id: 'acc_tie',
+    name: 'Corbata azul marino',
+    desc: 'Look formal con corbata clásica en azul marino.',
+    emoji: '👔',
+    src: '/accessory-tie.png',
+    price: 65,
+    isBase: false,
+    isTie: true,
+  },
+  {
+    id: 'acc_bowtie',
+    name: 'Pajarita azul marino',
+    desc: 'Elegancia al máximo con pajarita de gala.',
+    emoji: '🎀',
+    src: '/accessory-bowtie.png',
+    price: 70,
+    isBase: false,
+    isBowTie: true,
+  },
 ];
 
 // ── Catálogo de PIES / CALZADO (sub-categoría de Outfit) ──────────────────────
@@ -775,6 +795,8 @@ export function MascotProvider({ children }) {
       accessory:        acc?.src ?? null,
       accessoryIsChain: acc?.isChain ?? false,
       accessoryIsGrillz: acc?.isGrillz ?? false,
+      accessoryIsTie: acc?.isTie ?? false,
+      accessoryIsBowTie: acc?.isBowTie ?? false,
       layers:           act?.layers ?? [],
     };
   }
