@@ -195,8 +195,30 @@ export default function MascotDisplay({
       {accs.map(acc => {
         if (!acc.src) return null;
 
-        // Gafas y resto de accesorios "planos" → overlay a tamaño completo.
+        // Gafas y resto de accesorios "planos" → overlay a tamaño completo
+        // del lienzo, salvo que la prenda defina `scale` (ver acc_glasses_gold
+        // en MASCOT_ACCESSORIES), en cuyo caso se reduce y recentra con el
+        // mismo cálculo cuadrado que usa la capa de cabeza.
         if (!acc.isChain && !acc.isGrillz && !acc.isTie && !acc.isBowTie) {
+          if (acc.scale) {
+            const pct = acc.scale * 100;
+            const pos = (100 - pct) / 2;
+            return (
+              <img
+                key={acc.id}
+                src={acc.src}
+                alt=""
+                draggable={false}
+                className={imgClass}
+                style={{
+                  top: `${pos}%`,
+                  left: `${pos}%`,
+                  width: `${pct}%`,
+                  height: `${pct}%`,
+                }}
+              />
+            );
+          }
           return (
             <img
               key={acc.id}

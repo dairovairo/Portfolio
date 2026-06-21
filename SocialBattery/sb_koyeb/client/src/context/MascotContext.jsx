@@ -500,8 +500,9 @@ export const MASCOT_ACCESSORIES = [
     isBase: false,
   },
   {
-    // Pendiente de ajuste manual de posicionamiento — por ahora se muestra
-    // como overlay a tamaño completo del lienzo, igual que acc_glasses.
+    // Reducidas un 40% respecto al overlay a tamaño completo del lienzo
+    // (igual que acc_glasses) — ver `scale` en MascotDisplay.jsx, capa de
+    // accesorios "planos".
     id: 'acc_glasses_gold',
     name: 'Gafas doradas',
     desc: 'Montura dorada con cristales oscuros, máximo estilo.',
@@ -509,6 +510,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-glasses-gold.png',
     price: 70,
     isBase: false,
+    scale: 0.6,
   },
   {
     id: 'acc_chain',
@@ -744,6 +746,36 @@ export const MASCOT_HEAD = [
       width: '52.5%',
       height: '28.49%',
     },
+  },
+  {
+    id: 'head_party',
+    name: 'Gorro de fiesta',
+    desc: 'Cono de lunares con flecos metálicos, modo celebración activado.',
+    emoji: '🎉',
+    src: '/outfit-head-6.png',
+    price: 55,
+    isBase: false,
+    // PNG aislado (sin alinear al lienzo estándar de las demás prendas de
+    // cabeza), recortado y centrado en un lienzo cuadrado 1024×1024 con
+    // fondo eliminado. El gorro queda en el centro vertical del lienzo, así
+    // que se sube bastante (offsetY muy negativo) para que asiente justo
+    // encima de la cabeza, igual que el resto de prendas.
+    scale: 1,
+    offsetY: '-35.6%',
+  },
+  {
+    id: 'head_beret',
+    name: 'Boina gris',
+    desc: 'Boina clásica ladeada, un toque chic y desenfadado.',
+    emoji: '🫥',
+    src: '/outfit-head-7.png',
+    price: 65,
+    isBase: false,
+    // Mismo tratamiento que el gorro de fiesta: PNG aislado centrado en
+    // lienzo cuadrado 1024×1024, se sube con offsetY para asentar sobre la
+    // cabeza de la mascota.
+    scale: 1,
+    offsetY: '-31.3%',
   },
 ];
 
