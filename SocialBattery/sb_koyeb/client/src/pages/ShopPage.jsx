@@ -550,6 +550,83 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   );
 }
 
+// ── Tarjeta compacta de GORRA (para el carrusel horizontal de "Gorras") ──────
+// Igual que BasicFeetCard/BasicOutfitCard pero para prendas de cabeza:
+// preview pequeño + nombre + acción "Poner/Puesto", sin descripción larga.
+function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+  return (
+    <div
+      className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
+        ${isActive
+          ? 'border-accent-primary shadow-md shadow-accent-primary/20'
+          : isUnlocked
+            ? 'border-surface-border hover:border-accent-primary/40'
+            : 'border-surface-border hover:border-surface-muted/40'
+        }`}
+    >
+      <div className="relative flex items-center justify-center py-3 px-2 bg-surface-hover/30">
+        {isActive && (
+          <span className="absolute top-1 right-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-accent-primary text-white z-10">
+            ✓
+          </span>
+        )}
+        {!isUnlocked && (
+          <div className="absolute inset-0 flex items-center justify-center z-10"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
+            <span className="text-xl">🔒</span>
+          </div>
+        )}
+        <MascotDisplay
+          tier="mid"
+          size={112}
+          headSrc={head.src}
+          headScale={head.scale}
+          headOffsetY={head.offsetY}
+          headOffsetX={head.offsetX}
+          headBox={head.box}
+          outfitSrc={null}
+          feetSrc={null}
+          accessories={[]}
+          activityLayers={[]}
+          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
+        />
+      </div>
+
+      <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={head.name}>
+          {head.name}
+        </div>
+        {isUnlocked ? (
+          isActive ? (
+            <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
+              Puesto
+            </div>
+          ) : (
+            <button
+              onClick={onEquip}
+              className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
+            >
+              Poner
+            </button>
+          )
+        ) : (
+          <button
+            onClick={onBuy}
+            disabled={!canAfford}
+            className={`w-full py-1.5 rounded-lg text-[10px] font-display font-semibold transition-all duration-200
+              ${canAfford
+                ? 'bg-accent-primary hover:bg-accent-primary/80 text-white'
+                : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
+              }`}
+          >
+            🪙 {head.price}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── ShopPage ──────────────────────────────────────────────────────────────────
 export default function ShopPage() {
   const navigate = useNavigate();
@@ -664,8 +741,12 @@ export default function ShopPage() {
   const basicFeet = MASCOT_FEET.filter(f => f.isBasic);
   const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBase);
 
-  // Cabeza: se excluye el ítem base ("Sin gorro") de la tienda.
-  const headOptions = MASCOT_HEAD.filter(h => !h.isBase);
+  // Cabeza: misma lógica que Pies/Torso — las gorras "negra y X" (mismo
+  // molde, distinto color de visera) van al carrusel horizontal; el resto
+  // (sombreros, gorro de fiesta, boina, halo...) va al grid vertical de
+  // siempre. El ítem base ("Sin gorro") se excluye de la tienda.
+  const basicHead = MASCOT_HEAD.filter(h => h.isBasic);
+  const restHead   = MASCOT_HEAD.filter(h => !h.isBase && !h.isBasic);
 
   // Accesorios: cadenas, grillz y gafas de sol son grupos de selección
   // única (solo una de cada a la vez) → cada grupo va a su propio carrusel
@@ -923,18 +1004,42 @@ export default function ShopPage() {
 
             {/* Sección: Cabeza */}
             {outfitMainTab === 'cabeza' && (
-              <div className="grid grid-cols-2 gap-3">
-                {headOptions.map(head => (
-                  <HeadCard
-                    key={head.id}
-                    head={head}
-                    isUnlocked={unlockedHead.has(head.id)}
-                    isActive={activeHead === head.id}
-                    canAfford={coins >= head.price}
-                    onBuy={() => handleBuyHead(head)}
-                    onEquip={() => handleEquipHead(head)}
-                  />
-                ))}
+              <div className="flex flex-col gap-4">
+                {/* Carrusel: Gorras (mismo molde, distinto color de visera) */}
+                {basicHead.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                      Gorras
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                      {basicHead.map(head => (
+                        <BasicHeadCard
+                          key={head.id}
+                          head={head}
+                          isUnlocked={unlockedHead.has(head.id)}
+                          isActive={activeHead === head.id}
+                          canAfford={coins >= head.price}
+                          onBuy={() => handleBuyHead(head)}
+                          onEquip={() => handleEquipHead(head)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  {restHead.map(head => (
+                    <HeadCard
+                      key={head.id}
+                      head={head}
+                      isUnlocked={unlockedHead.has(head.id)}
+                      isActive={activeHead === head.id}
+                      canAfford={coins >= head.price}
+                      onBuy={() => handleBuyHead(head)}
+                      onEquip={() => handleEquipHead(head)}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
