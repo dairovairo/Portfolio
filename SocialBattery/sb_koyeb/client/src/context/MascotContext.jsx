@@ -511,6 +511,7 @@ export const MASCOT_ACCESSORIES = [
     price: 60,
     isBase: false,
     scale: 0.97,
+    isGlasses: true,
   },
   {
     // Reducidas un 40% respecto al overlay a tamaño completo del lienzo
@@ -524,6 +525,7 @@ export const MASCOT_ACCESSORIES = [
     price: 70,
     isBase: false,
     scale: 0.57,
+    isGlasses: true,
   },
   {
     id: 'acc_chain',
@@ -939,6 +941,10 @@ export function MascotProvider({ children }) {
   // Los accesorios admiten selección múltiple y simultánea (p. ej. gafas +
   // cadena + corbata a la vez), por eso se guardan en un Set en vez de un
   // único id. 'acc_none' nunca se guarda dentro del Set: significa "vacío".
+  // Excepción: cadenas, grillz y gafas de sol son cada uno un grupo de
+  // selección única (solo una cadena / un grillz / unas gafas a la vez),
+  // aunque sí se pueden combinar libremente entre grupos distintos — ver
+  // `toggleAccessory`.
   const [activeAccessories, setActiveAccessories] = useState(new Set());
   const [activeOutfit,    setActiveOutfit]    = useState('out_none');
   const [activeFeet,      setActiveFeet]      = useState('feet_none');
@@ -952,7 +958,8 @@ export function MascotProvider({ children }) {
     setActiveActivity(id);
   }
 
-  // Accesorios — selección múltiple y simultánea (toggle on/off por id).
+  // Accesorios — selección múltiple y simultánea (toggle on/off por id),
+  // salvo cadenas/grillz/gafas, que son grupos de selección única entre sí.
   function unlockAccessory(id) {
     setUnlockedAccessories(prev => new Set([...prev, id]));
   }
@@ -967,11 +974,26 @@ export function MascotProvider({ children }) {
   }
   function toggleAccessory(id) {
     if (id === 'acc_none') return;
+    const item = MASCOT_ACCESSORIES.find(a => a.id === id);
     setActiveAccessories(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
       } else {
+        // Cadenas, grillz y gafas de sol son grupos de selección única: al
+        // activar uno, se desactivan automáticamente los demás del mismo
+        // grupo (no afecta a los accesorios de otros grupos, que siguen
+        // pudiendo combinarse libremente).
+        if (item?.isChain || item?.isGrillz || item?.isGlasses) {
+          MASCOT_ACCESSORIES.forEach(other => {
+            if (other.id === id) return;
+            const sameGroup =
+              (item.isChain && other.isChain) ||
+              (item.isGrillz && other.isGrillz) ||
+              (item.isGlasses && other.isGlasses);
+            if (sameGroup) next.delete(other.id);
+          });
+        }
         next.add(id);
       }
       return next;

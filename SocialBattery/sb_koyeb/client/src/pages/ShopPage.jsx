@@ -180,6 +180,82 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
   );
 }
 
+// ── Tarjeta compacta de ACCESORIO (para los carruseles horizontales de
+// cadenas / grillz / gafas de sol) ────────────────────────────────────────────
+// Versión reducida de AccessoryCard pensada para el scroll horizontal:
+// preview pequeño + nombre + acción, sin descripción larga, ancho fijo.
+// El toggle sigue llamando a la misma lógica de MascotContext, que ya se
+// encarga de que, dentro de su propio grupo (cadenas, grillz o gafas), solo
+// pueda haber un accesorio activo a la vez — al activar uno se desactivan
+// automáticamente los demás del mismo carrusel, sin tocar el resto.
+function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle }) {
+  return (
+    <div
+      className={`flex-shrink-0 w-24 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
+        ${isActive
+          ? 'border-accent-primary shadow-md shadow-accent-primary/20'
+          : isUnlocked
+            ? 'border-surface-border hover:border-accent-primary/40'
+            : 'border-surface-border hover:border-surface-muted/40'
+        }`}
+    >
+      <div className="relative flex items-center justify-center py-2 px-1 bg-surface-hover/30">
+        {isActive && (
+          <span className="absolute top-1 right-1 text-[8px] font-mono font-bold px-1 py-0.5 rounded bg-accent-primary text-white z-10">
+            ✓
+          </span>
+        )}
+        {!isUnlocked && (
+          <div className="absolute inset-0 flex items-center justify-center z-10"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
+            <span className="text-lg">🔒</span>
+          </div>
+        )}
+        <MascotDisplay
+          tier="mid"
+          size={64}
+          accessories={accessory.src ? [accessory] : []}
+          outfitSrc={null}
+          feetSrc={null}
+          headSrc={null}
+          activityLayers={[]}
+          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
+        />
+      </div>
+
+      <div className="px-1.5 pt-1 pb-1 flex flex-col gap-0.5">
+        <div className="font-display font-semibold text-surface-text text-[10px] leading-tight text-center truncate" title={accessory.name}>
+          {accessory.name}
+        </div>
+        {isUnlocked ? (
+          <button
+            onClick={onToggle}
+            className={`w-full py-1 rounded-lg text-[9px] font-display font-semibold transition-all
+              ${isActive
+                ? 'bg-accent-primary/10 border border-accent-primary/30 text-accent-glow hover:bg-accent-primary/20'
+                : 'bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40'
+              }`}
+          >
+            {isActive ? 'Quitar' : 'Poner'}
+          </button>
+        ) : (
+          <button
+            onClick={onBuy}
+            disabled={!canAfford}
+            className={`w-full py-1 rounded-lg text-[9px] font-display font-semibold transition-all duration-200
+              ${canAfford
+                ? 'bg-accent-primary hover:bg-accent-primary/80 text-white'
+                : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
+              }`}
+          >
+            🪙 {accessory.price}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Tarjeta de OUTFIT ─────────────────────────────────────────────────────────
 function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
@@ -584,6 +660,17 @@ export default function ShopPage() {
   const basicFeet = MASCOT_FEET.filter(f => f.isBasic);
   const restFeet   = MASCOT_FEET.filter(f => !f.isBasic);
 
+  // Accesorios: cadenas, grillz y gafas de sol son grupos de selección
+  // única (solo una de cada a la vez) → cada grupo va a su propio carrusel
+  // horizontal arriba. El resto (corbata, pajarita, "sin accesorio") se
+  // puede combinar libremente y va al grid vertical de siempre.
+  const chainAccessories   = MASCOT_ACCESSORIES.filter(a => a.isChain);
+  const grillzAccessories  = MASCOT_ACCESSORIES.filter(a => a.isGrillz);
+  const glassesAccessories = MASCOT_ACCESSORIES.filter(a => a.isGlasses);
+  const restAccessories    = MASCOT_ACCESSORIES.filter(
+    a => !a.isChain && !a.isGrillz && !a.isGlasses
+  );
+
   return (
     <div className="min-h-screen bg-surface-bg flex flex-col">
 
@@ -844,20 +931,92 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* ── Accesorios (selección múltiple: se pueden combinar varios) ── */}
+        {/* ── Accesorios (selección múltiple: se pueden combinar varios,
+            salvo dentro de cadenas/grillz/gafas, que son grupos de
+            selección única con su propio carrusel horizontal) ── */}
         {tab === 'accessories' && (
-          <div className="grid grid-cols-2 gap-3">
-            {MASCOT_ACCESSORIES.map(accessory => (
-              <AccessoryCard
-                key={accessory.id}
-                accessory={accessory}
-                isUnlocked={unlockedAccessories.has(accessory.id)}
-                isActive={activeAccessories.has(accessory.id)}
-                canAfford={coins >= accessory.price}
-                onBuy={() => handleBuyAccessory(accessory)}
-                onToggle={() => handleToggleAccessory(accessory)}
-              />
-            ))}
+          <div className="flex flex-col gap-4">
+            {/* Carrusel: Cadenas — elige una */}
+            {chainAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Cadenas · elige una
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                  {chainAccessories.map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={activeAccessories.has(accessory.id)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Grillz — elige uno */}
+            {grillzAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Grillz · elige uno
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                  {grillzAccessories.map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={activeAccessories.has(accessory.id)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Gafas de sol — elige unas */}
+            {glassesAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Gafas de sol · elige unas
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                  {glassesAccessories.map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={activeAccessories.has(accessory.id)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Resto de accesorios — selección libre, combinables entre sí
+                y con lo elegido en los 3 carruseles de arriba */}
+            <div className="grid grid-cols-2 gap-3">
+              {restAccessories.map(accessory => (
+                <AccessoryCard
+                  key={accessory.id}
+                  accessory={accessory}
+                  isUnlocked={unlockedAccessories.has(accessory.id)}
+                  isActive={activeAccessories.has(accessory.id)}
+                  canAfford={coins >= accessory.price}
+                  onBuy={() => handleBuyAccessory(accessory)}
+                  onToggle={() => handleToggleAccessory(accessory)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
