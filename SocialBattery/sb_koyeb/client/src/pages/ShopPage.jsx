@@ -226,6 +226,82 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
   );
 }
 
+// ── Tarjeta compacta de OUTFIT BÁSICO (para el carrusel horizontal) ───────────
+// Versión reducida de OutfitCard pensada para el scroll horizontal de
+// camisetas/camisas básicas (colores lisos): preview pequeño + nombre +
+// acción, sin descripción larga, con ancho fijo para que se vea el scroll.
+function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+  return (
+    <div
+      className={`flex-shrink-0 w-24 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
+        ${isActive
+          ? 'border-accent-primary shadow-md shadow-accent-primary/20'
+          : isUnlocked
+            ? 'border-surface-border hover:border-accent-primary/40'
+            : 'border-surface-border hover:border-surface-muted/40'
+        }`}
+    >
+      <div className="relative flex items-center justify-center py-2 px-1 bg-surface-hover/30">
+        {isActive && (
+          <span className="absolute top-1 right-1 text-[8px] font-mono font-bold px-1 py-0.5 rounded bg-accent-primary text-white z-10">
+            ✓
+          </span>
+        )}
+        {!isUnlocked && (
+          <div className="absolute inset-0 flex items-center justify-center z-10"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
+            <span className="text-lg">🔒</span>
+          </div>
+        )}
+        <MascotDisplay
+          tier="mid"
+          size={64}
+          outfitSrc={outfit.src}
+          outfitSubcategory={outfit.subcategory}
+          accessories={[]}
+          feetSrc={null}
+          headSrc={null}
+          activityLayers={[]}
+          outfitOffsetY="20%"
+          style={!isUnlocked ? { filter: 'grayscale(0.5) brightness(0.7)' } : {}}
+        />
+      </div>
+
+      <div className="px-1.5 pt-1 pb-1 flex flex-col gap-0.5">
+        <div className="font-display font-semibold text-surface-text text-[10px] leading-tight text-center truncate" title={outfit.name}>
+          {outfit.name}
+        </div>
+        {isUnlocked ? (
+          isActive ? (
+            <div className="w-full text-center text-[9px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1">
+              Puesto
+            </div>
+          ) : (
+            <button
+              onClick={onEquip}
+              className="w-full py-1 rounded-lg text-[9px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
+            >
+              Poner
+            </button>
+          )
+        ) : (
+          <button
+            onClick={onBuy}
+            disabled={!canAfford}
+            className={`w-full py-1 rounded-lg text-[9px] font-display font-semibold transition-all duration-200
+              ${canAfford
+                ? 'bg-accent-primary hover:bg-accent-primary/80 text-white'
+                : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
+              }`}
+          >
+            🪙 {outfit.price}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Tarjeta de PIES ───────────────────────────────────────────────────────────
 function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
@@ -409,9 +485,14 @@ export default function ShopPage() {
   const activeHd   = MASCOT_HEAD.find(h => h.id === activeHead);
 
   // Outfits (torso) filtrados por sub-tab
+  // - basicOutfits: colores lisos de esa sub-tab → carrusel horizontal arriba
+  // - restOutfits: el ítem base ("Sin outfit") + el resto de prendas
+  //   (estampados/temáticas) de esa sub-tab → grid vertical de siempre
   const filteredOutfits = MASCOT_OUTFITS.filter(o =>
     o.isBase || o.subcategory === outfitSubTab
   );
+  const basicOutfits = filteredOutfits.filter(o => o.isBasic);
+  const restOutfits  = filteredOutfits.filter(o => !o.isBasic);
 
   return (
     <div className="min-h-screen bg-surface-bg flex flex-col">
@@ -583,8 +664,32 @@ export default function ShopPage() {
                   ))}
                 </div>
 
+                {/* Carrusel horizontal: básicos de colores lisos de esta
+                    sub-tab (camisetas o camisas), siempre visible arriba del
+                    scroll vertical principal. */}
+                {basicOutfits.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                      Básicos
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+                      {basicOutfits.map(outfit => (
+                        <BasicOutfitCard
+                          key={outfit.id}
+                          outfit={outfit}
+                          isUnlocked={unlockedOutfits.has(outfit.id)}
+                          isActive={activeOutfit === outfit.id}
+                          canAfford={coins >= outfit.price}
+                          onBuy={() => handleBuyOutfit(outfit)}
+                          onEquip={() => handleEquipOutfit(outfit)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
-                  {filteredOutfits.map(outfit => (
+                  {restOutfits.map(outfit => (
                     <OutfitCard
                       key={outfit.id}
                       outfit={outfit}
