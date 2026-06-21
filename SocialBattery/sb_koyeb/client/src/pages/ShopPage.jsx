@@ -745,8 +745,12 @@ export default function ShopPage() {
   // molde, distinto color de visera) van al carrusel horizontal; el resto
   // (sombreros, gorro de fiesta, boina, halo...) va al grid vertical de
   // siempre. El ítem base ("Sin gorro") se excluye de la tienda.
-  const basicHead = MASCOT_HEAD.filter(h => h.isBasic);
-  const restHead   = MASCOT_HEAD.filter(h => !h.isBase && !h.isBasic);
+  // Hay un SEGUNDO molde de gorra ("Gorra negra" liso, sin visera bicolor)
+  // con sus propias variantes de color → su propio carrusel horizontal
+  // (isBasic2), independiente del de las gorras "negra y X" (isBasic).
+  const basicHead  = MASCOT_HEAD.filter(h => h.isBasic);
+  const basicHead2 = MASCOT_HEAD.filter(h => h.isBasic2);
+  const restHead    = MASCOT_HEAD.filter(h => !h.isBase && !h.isBasic && !h.isBasic2);
 
   // Accesorios: cadenas, grillz y gafas de sol son grupos de selección
   // única (solo una de cada a la vez) → cada grupo va a su propio carrusel
@@ -1013,6 +1017,28 @@ export default function ShopPage() {
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead.map(head => (
+                        <BasicHeadCard
+                          key={head.id}
+                          head={head}
+                          isUnlocked={unlockedHead.has(head.id)}
+                          isActive={activeHead === head.id}
+                          canAfford={coins >= head.price}
+                          onBuy={() => handleBuyHead(head)}
+                          onEquip={() => handleEquipHead(head)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Carrusel: Gorras lisas (segundo molde, un solo color) */}
+                {basicHead2.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                      Gorras lisas
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                      {basicHead2.map(head => (
                         <BasicHeadCard
                           key={head.id}
                           head={head}
