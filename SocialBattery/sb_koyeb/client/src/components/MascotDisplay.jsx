@@ -52,6 +52,12 @@
  *   outfitSubcategory override de subcategoría ('camiseta' | 'camisa'), usado
  *                     por la tienda para previsualizar un ítem que no es el
  *                     equipado. Si no se pasa, se usa la del outfit activo.
+ *   outfitItemOffsetY ajuste vertical propio de la prenda concreta (ej. '-4%'
+ *                     la sube un poco), para prendas cuyo PNG queda algo
+ *                     descolocado respecto al resto de la misma subcategoría
+ *                     (ver `offsetY` en MASCOT_OUTFITS). Se suma al cálculo
+ *                     normal de outfitOffsetY. Si no se pasa, se usa el de la
+ *                     prenda activa del contexto.
  *
  * La capa de outfit (camiseta/camisa) se escala y posiciona según su
  * subcategoría (ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx) y queda
@@ -73,6 +79,7 @@ export default function MascotDisplay({
   baseSrc,
   outfitSrc,
   outfitSubcategory,
+  outfitItemOffsetY,
   feetSrc,
   feetOffsetY,
   headSrc,
@@ -97,6 +104,7 @@ export default function MascotDisplay({
   const accs      = accessories      !== undefined ? accessories      : resolved.accessories;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
+  const outfitItemOffset = outfitItemOffsetY !== undefined ? outfitItemOffsetY : resolved.outfitItemOffsetY;
 
   // Ajuste de tamaño/posición de la capa outfit según subcategoría
   // (camiseta vs camisa) — ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx.
@@ -141,7 +149,9 @@ export default function MascotDisplay({
       )}
 
       {/* Capa 3: outfit / torso (camiseta o camisa) — tamaño/posición según
-          subcategoría, ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx */}
+          subcategoría, ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx. Si la
+          prenda define su propio offsetY (ver MASCOT_OUTFITS), se suma como
+          empujoncito extra encima del outfitOffsetY general. */}
       {outfit && (
         <img
           src={outfit}
@@ -149,7 +159,11 @@ export default function MascotDisplay({
           draggable={false}
           className={imgClass}
           style={{
-            top: outfitOffsetY ? `calc(${outfitTopPct}% + ${outfitOffsetY})` : `${outfitTopPct}%`,
+            top: outfitOffsetY
+              ? `calc(${outfitTopPct}% + ${outfitOffsetY}${outfitItemOffset ? ` + ${outfitItemOffset}` : ''})`
+              : outfitItemOffset
+                ? `calc(${outfitTopPct}% + ${outfitItemOffset})`
+                : `${outfitTopPct}%`,
             left: `${outfitLeftPct}%`,
             width: `${outfitSizePct}%`,
             height: `${outfitSizePct}%`,
@@ -301,7 +315,8 @@ export default function MascotDisplay({
         // anteriores (34% → 40% → 42% → 44% → 46% de top) — mismo incremento
         // que la corbata, para que ambas bajen por igual. Reducida un 10%
         // adicional (55%→49.5% ancho, 22%→19.8% alto), left recalculado para
-        // seguir centrada.
+        // seguir centrada. Bajada un poquito más (46%→46.7%), ajuste muy
+        // sutil.
         if (acc.isBowTie) {
           return (
             <img
@@ -313,7 +328,7 @@ export default function MascotDisplay({
               style={{
                 left: '25.25%',
                 width: '49.5%',
-                top: '46%',
+                top: '46.7%',
                 height: '19.8%',
                 objectFit: 'contain',
                 objectPosition: 'center',

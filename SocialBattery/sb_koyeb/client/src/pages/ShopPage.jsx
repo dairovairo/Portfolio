@@ -206,6 +206,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
           size={112}
           outfitSrc={outfit.src}
           outfitSubcategory={outfit.subcategory}
+          outfitItemOffsetY={outfit.offsetY}
           accessories={[]}
           feetSrc={null}
           headSrc={null}
@@ -258,6 +259,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
           size={64}
           outfitSrc={outfit.src}
           outfitSubcategory={outfit.subcategory}
+          outfitItemOffsetY={outfit.offsetY}
           accessories={[]}
           feetSrc={null}
           headSrc={null}

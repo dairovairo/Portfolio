@@ -232,15 +232,18 @@ export const MASCOT_OUTFITS = [
   {
     // Pendiente de ajuste manual de posicionamiento (igual que out_tshirt_19,
     // otra prenda de tirantes) — usa por ahora el mismo scale/offset por
-    // defecto del resto de camisetas en OUTFIT_VISUAL_ADJUST.
+    // defecto del resto de camisetas en OUTFIT_VISUAL_ADJUST, con un
+    // empujoncito propio hacia arriba (offsetY) para que los tirantes
+    // asienten un poco mejor sobre los hombros.
     id: 'out_tshirt_21',
-    name: 'Top blanco de tirantes',
+    name: 'Camiseta del abuelo',
     desc: 'Top deportivo con costuras dobles y escote redondo.',
     emoji: '🤍',
     src: '/outfit-tshirt-21.png',
     subcategory: 'camiseta',
     price: 55,
     isBase: false,
+    offsetY: '-4%',
   },
   // ── Camisas ──────────────────────────────────────────────────────────────────
   // Lote 1
@@ -1011,6 +1014,7 @@ export function MascotProvider({ children }) {
       base,
       outfit:             outfit?.src ?? null,
       outfitSubcategory:  outfit?.subcategory ?? null,
+      outfitItemOffsetY:  outfit?.offsetY ?? null,
       feet:             feet?.src ?? null,
       feetOffsetY:      feet?.offsetY ?? null,
       head:             head?.src ?? null,
