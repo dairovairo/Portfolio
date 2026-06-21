@@ -234,7 +234,8 @@ export const MASCOT_OUTFITS = [
     // otra prenda de tirantes) — usa por ahora el mismo scale/offset por
     // defecto del resto de camisetas en OUTFIT_VISUAL_ADJUST, con un
     // empujoncito propio hacia arriba (offsetY) para que los tirantes
-    // asienten un poco mejor sobre los hombros.
+    // asienten un poco mejor sobre los hombros. Subida un poco más dos
+    // veces (0% → -4% → -8%).
     id: 'out_tshirt_21',
     name: 'Camiseta del abuelo',
     desc: 'Top deportivo con costuras dobles y escote redondo.',
@@ -243,7 +244,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 55,
     isBase: false,
-    offsetY: '-4%',
+    offsetY: '-8%',
   },
   // ── Camisas ──────────────────────────────────────────────────────────────────
   // Lote 1
@@ -494,6 +495,8 @@ export const MASCOT_ACCESSORIES = [
     isBase: true,
   },
   {
+    // Reducidas un 3% respecto al overlay a tamaño completo del lienzo (ver
+    // `scale` en MascotDisplay.jsx, capa de accesorios "planos").
     id: 'acc_glasses',
     name: 'Gafas de sol',
     desc: 'Look icónico con montura negra.',
@@ -501,6 +504,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-glasses.png',
     price: 60,
     isBase: false,
+    scale: 0.97,
   },
   {
     // Reducidas un 40% respecto al overlay a tamaño completo del lienzo
@@ -762,9 +766,10 @@ export const MASCOT_HEAD = [
     // cabeza), recortado y centrado en un lienzo cuadrado 1024×1024 con
     // fondo eliminado. El gorro queda en el centro vertical del lienzo, así
     // que se sube bastante (offsetY muy negativo) para que asiente justo
-    // encima de la cabeza, igual que el resto de prendas.
+    // encima de la cabeza, igual que el resto de prendas. Subido un poco más
+    // (-35.6% → -39.6%).
     scale: 1,
-    offsetY: '-35.6%',
+    offsetY: '-39.6%',
   },
   {
     id: 'head_beret',
@@ -776,9 +781,11 @@ export const MASCOT_HEAD = [
     isBase: false,
     // Mismo tratamiento que el gorro de fiesta: PNG aislado centrado en
     // lienzo cuadrado 1024×1024, se sube con offsetY para asentar sobre la
-    // cabeza de la mascota.
-    scale: 1,
-    offsetY: '-31.3%',
+    // cabeza de la mascota. Reducida un 25% (scale 1 → 0.75); offsetY
+    // recalculado para el nuevo tamaño y que siga asentando en el mismo
+    // sitio sobre la cabeza (-31.3% → -27.7%).
+    scale: 0.75,
+    offsetY: '-27.7%',
   },
 ];
 

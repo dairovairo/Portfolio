@@ -315,8 +315,8 @@ export default function MascotDisplay({
         // anteriores (34% → 40% → 42% → 44% → 46% de top) — mismo incremento
         // que la corbata, para que ambas bajen por igual. Reducida un 10%
         // adicional (55%→49.5% ancho, 22%→19.8% alto), left recalculado para
-        // seguir centrada. Bajada un poquito más (46%→46.7%), ajuste muy
-        // sutil.
+        // seguir centrada. Bajada un poquito más dos veces (46%→46.7%→47.4%),
+        // ajustes muy sutiles.
         if (acc.isBowTie) {
           return (
             <img
@@ -328,7 +328,7 @@ export default function MascotDisplay({
               style={{
                 left: '25.25%',
                 width: '49.5%',
-                top: '46.7%',
+                top: '47.4%',
                 height: '19.8%',
                 objectFit: 'contain',
                 objectPosition: 'center',
