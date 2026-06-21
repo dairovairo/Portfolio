@@ -229,6 +229,19 @@ export const MASCOT_OUTFITS = [
     price: 50,
     isBase: false,
   },
+  {
+    // Pendiente de ajuste manual de posicionamiento (igual que out_tshirt_19,
+    // otra prenda de tirantes) — usa por ahora el mismo scale/offset por
+    // defecto del resto de camisetas en OUTFIT_VISUAL_ADJUST.
+    id: 'out_tshirt_21',
+    name: 'Top blanco de tirantes',
+    desc: 'Top deportivo con costuras dobles y escote redondo.',
+    emoji: '🤍',
+    src: '/outfit-tshirt-21.png',
+    subcategory: 'camiseta',
+    price: 55,
+    isBase: false,
+  },
   // ── Camisas ──────────────────────────────────────────────────────────────────
   // Lote 1
   {
@@ -487,6 +500,17 @@ export const MASCOT_ACCESSORIES = [
     isBase: false,
   },
   {
+    // Pendiente de ajuste manual de posicionamiento — por ahora se muestra
+    // como overlay a tamaño completo del lienzo, igual que acc_glasses.
+    id: 'acc_glasses_gold',
+    name: 'Gafas doradas',
+    desc: 'Montura dorada con cristales oscuros, máximo estilo.',
+    emoji: '🕶️',
+    src: '/accessory-glasses-gold.png',
+    price: 70,
+    isBase: false,
+  },
+  {
     id: 'acc_chain',
     name: 'Cadena de oro',
     desc: 'Bling-bling para los más flexeros.',
@@ -712,11 +736,13 @@ export const MASCOT_HEAD = [
     // así que no usa scale/offsetY (pensado para overlays cuadrados como la
     // gorra). En su lugar define una caja explícita: flota un poco por
     // encima de la coronilla de la mascota, centrada horizontalmente.
+    // Tamaño reducido un 30% (75%→52.5% de ancho) manteniendo la proporción
+    // y el mismo top; left recalculado para seguir centrado.
     box: {
-      left: '12.5%',
+      left: '23.75%',
       top: '-5%',
-      width: '75%',
-      height: '40.7%',
+      width: '52.5%',
+      height: '28.49%',
     },
   },
 ];

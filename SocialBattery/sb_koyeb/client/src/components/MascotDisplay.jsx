@@ -276,8 +276,10 @@ export default function MascotDisplay({
 
         // Pajarita — 10% más grande que el tamaño original (50% → 55% de
         // ancho, 20% → 22% de alto). Bajada un poco más respecto a versiones
-        // anteriores (34% → 40% → 42% → 44% de top) — mismo incremento que
-        // la corbata, para que ambas bajen por igual.
+        // anteriores (34% → 40% → 42% → 44% → 46% de top) — mismo incremento
+        // que la corbata, para que ambas bajen por igual. Reducida un 10%
+        // adicional (55%→49.5% ancho, 22%→19.8% alto), left recalculado para
+        // seguir centrada.
         if (acc.isBowTie) {
           return (
             <img
@@ -287,10 +289,10 @@ export default function MascotDisplay({
               draggable={false}
               className="absolute select-none pointer-events-none"
               style={{
-                left: '22.5%',
-                width: '55%',
-                top: '44%',
-                height: '22%',
+                left: '25.25%',
+                width: '49.5%',
+                top: '46%',
+                height: '19.8%',
                 objectFit: 'contain',
                 objectPosition: 'center',
               }}
