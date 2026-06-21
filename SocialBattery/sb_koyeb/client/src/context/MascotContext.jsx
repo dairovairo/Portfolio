@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from 'react';
 
-// ── Catálogo de OUTFITS / TORSO (capa 2: encima de base, debajo de actividades) ─
+// ── Catálogo de OUTFITS / TORSO (capa 3: encima de pies, debajo de cabeza) ─────
 export const MASCOT_OUTFITS = [
   {
     id: 'out_none',
@@ -424,7 +424,7 @@ export const MASCOT_OUTFITS = [
   },
 ];
 
-// ── Catálogo de ACCESORIOS (capa 3: encima del outfit) ────────────────────────
+// ── Catálogo de ACCESORIOS (capa 5: encima de cabeza) ──────────────────────────
 export const MASCOT_ACCESSORIES = [
   {
     id: 'acc_none',
@@ -492,26 +492,52 @@ export const MASCOT_ACCESSORIES = [
     price: 120,
     isBase: false,
   },
+];
+
+// ── Catálogo de PIES / CALZADO (sub-categoría de Outfit) ──────────────────────
+export const MASCOT_FEET = [
   {
-    id: 'acc_sneakers_converse',
-    name: 'Zapatillas retro gradient',
-    desc: 'Zapatillas retro con degradado energético.',
+    id: 'feet_none',
+    name: 'Sin calzado',
+    desc: 'La mascota sin nada en los pies.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+  },
+  {
+    id: 'feet_sneaker_1',
+    name: 'Zapatillas retro gris piedra',
+    desc: 'Estilo baloncesto clásico en blanco y gris, suela de goma.',
     emoji: '👟',
-    src: '/accessory-sneakers-converse.png',
+    src: '/outfit-feet-1.png',
     price: 70,
     isBase: false,
   },
   {
-    id: 'acc_sneakers_jordan',
-    name: 'Zapatillas SB Energy',
-    desc: 'Las zapatillas de edición especial SocialBattery.',
-    emoji: '🔥',
-    src: '/accessory-sneakers-jordan.png',
-    price: 120,
+    id: 'feet_sneaker_2',
+    name: 'Zapatillas chunky verde salvia',
+    desc: 'Silueta voluminosa con detalles en verde salvia y beige.',
+    emoji: '👟',
+    src: '/outfit-feet-2.png',
+    price: 75,
     isBase: false,
   },
+];
+
+// ── Catálogo de CABEZA (sub-categoría de Outfit) ───────────────────────────────
+export const MASCOT_HEAD = [
   {
-    id: 'acc_cap',
+    id: 'head_none',
+    name: 'Sin gorro',
+    desc: 'La mascota sin nada en la cabeza.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+  },
+  {
+    id: 'head_cap',
     name: 'Gorra negra',
     desc: 'Estilo urbano para cualquier plan.',
     emoji: '🧢',
@@ -521,7 +547,7 @@ export const MASCOT_ACCESSORIES = [
   },
 ];
 
-// ── Catálogo de ACTIVIDADES (capa 4: la más delantera) ────────────────────────
+// ── Catálogo de ACTIVIDADES (capa 6: la más delantera) ─────────────────────────
 export const MASCOT_ACTIVITIES = [
   {
     id: 'none',
@@ -641,6 +667,8 @@ export const OUTFIT_VISUAL_ADJUST = {
 const DEFAULT_UNLOCKED_ACTIVITIES  = new Set(MASCOT_ACTIVITIES.filter(a => a.isBase).map(a => a.id));
 const DEFAULT_UNLOCKED_ACCESSORIES = new Set(MASCOT_ACCESSORIES.filter(a => a.isBase).map(a => a.id));
 const DEFAULT_UNLOCKED_OUTFITS     = new Set(MASCOT_OUTFITS.filter(o => o.isBase).map(o => o.id));
+const DEFAULT_UNLOCKED_FEET        = new Set(MASCOT_FEET.filter(f => f.isBase).map(f => f.id));
+const DEFAULT_UNLOCKED_HEAD        = new Set(MASCOT_HEAD.filter(h => h.isBase).map(h => h.id));
 
 // ── Context ───────────────────────────────────────────────────────────────────
 const MascotContext = createContext(null);
@@ -649,10 +677,14 @@ export function MascotProvider({ children }) {
   const [unlockedActivities,  setUnlockedActivities]  = useState(DEFAULT_UNLOCKED_ACTIVITIES);
   const [unlockedAccessories, setUnlockedAccessories] = useState(DEFAULT_UNLOCKED_ACCESSORIES);
   const [unlockedOutfits,     setUnlockedOutfits]     = useState(DEFAULT_UNLOCKED_OUTFITS);
+  const [unlockedFeet,        setUnlockedFeet]        = useState(DEFAULT_UNLOCKED_FEET);
+  const [unlockedHead,        setUnlockedHead]        = useState(DEFAULT_UNLOCKED_HEAD);
 
   const [activeActivity,  setActiveActivity]  = useState('none');
   const [activeAccessory, setActiveAccessory] = useState('acc_none');
   const [activeOutfit,    setActiveOutfit]    = useState('out_none');
+  const [activeFeet,      setActiveFeet]      = useState('feet_none');
+  const [activeHead,      setActiveHead]      = useState('head_none');
 
   // Actividades
   function unlockActivity(id) {
@@ -670,7 +702,7 @@ export function MascotProvider({ children }) {
     setActiveAccessory(id);
   }
 
-  // Outfits
+  // Outfits — Torso (camiseta/camisa)
   function unlockOutfit(id) {
     setUnlockedOutfits(prev => new Set([...prev, id]));
   }
@@ -678,22 +710,44 @@ export function MascotProvider({ children }) {
     setActiveOutfit(id);
   }
 
+  // Outfits — Pies
+  function unlockFeet(id) {
+    setUnlockedFeet(prev => new Set([...prev, id]));
+  }
+  function equipFeet(id) {
+    setActiveFeet(id);
+  }
+
+  // Outfits — Cabeza
+  function unlockHead(id) {
+    setUnlockedHead(prev => new Set([...prev, id]));
+  }
+  function equipHead(id) {
+    setActiveHead(id);
+  }
+
   /**
    * Devuelve las capas para renderizar la mascota completa dado un tier:
    *   Capa 1 → base        (mascota según batería)
-   *   Capa 2 → outfit      (camiseta/camisa del torso)   ← NUEVA
-   *   Capa 3 → accessory   (gafas, cadena, gorra…)
-   *   Capa 4 → layers      (actividad: ajedrez, balón…)
+   *   Capa 2 → feet        (pies: calzado)                 ← NUEVA
+   *   Capa 3 → outfit      (torso: camiseta/camisa)
+   *   Capa 4 → head        (cabeza: gorra…)                ← NUEVA (antes era accessory)
+   *   Capa 5 → accessory   (gafas, cadena, grillz…)
+   *   Capa 6 → layers      (actividad: ajedrez, balón…)
    */
   function getMascotLayers(tier) {
     const base    = MASCOT_BASE[tier] ?? MASCOT_BASE.mid;
     const outfit  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
+    const feet    = MASCOT_FEET.find(f => f.id === activeFeet);
+    const head    = MASCOT_HEAD.find(h => h.id === activeHead);
     const acc     = MASCOT_ACCESSORIES.find(a => a.id === activeAccessory);
     const act     = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
     return {
       base,
       outfit:             outfit?.src ?? null,
       outfitSubcategory:  outfit?.subcategory ?? null,
+      feet:             feet?.src ?? null,
+      head:             head?.src ?? null,
       accessory:        acc?.src ?? null,
       accessoryIsChain: acc?.isChain ?? false,
       layers:           act?.layers ?? [],
@@ -705,7 +759,13 @@ export function MascotProvider({ children }) {
     return MASCOT_BASE[tier] ?? MASCOT_BASE.mid;
   }
 
-  const unlocked = new Set([...unlockedActivities, ...unlockedAccessories, ...unlockedOutfits]);
+  const unlocked = new Set([
+    ...unlockedActivities,
+    ...unlockedAccessories,
+    ...unlockedOutfits,
+    ...unlockedFeet,
+    ...unlockedHead,
+  ]);
 
   return (
     <MascotContext.Provider value={{
@@ -713,15 +773,23 @@ export function MascotProvider({ children }) {
       unlockedActivities,
       unlockedAccessories,
       unlockedOutfits,
+      unlockedFeet,
+      unlockedHead,
       activeActivity,
       activeAccessory,
       activeOutfit,
+      activeFeet,
+      activeHead,
       unlockActivity,
       unlockAccessory,
       unlockOutfit,
+      unlockFeet,
+      unlockHead,
       equipActivity,
       equipAccessory,
       equipOutfit,
+      equipFeet,
+      equipHead,
       getMascotLayers,
       getActiveSrc,
     }}>

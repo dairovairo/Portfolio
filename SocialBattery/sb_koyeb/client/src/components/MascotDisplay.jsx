@@ -1,9 +1,11 @@
 /**
- * MascotDisplay — renderiza la mascota en sistema de 4 capas:
+ * MascotDisplay — renderiza la mascota en sistema de 6 capas:
  *   1. Capa base       (mascota según tier de batería)
- *   2. Capa outfit     (torso: camiseta/camisa)          ← NUEVA
- *   3. Capa accesorio  (gafas, cadena, gorra…)
- *   4. Capa actividad  (ajedrez, balón, gaming…)
+ *   2. Capa pies       (calzado — outfit, sub-categoría Pies)     ← NUEVA
+ *   3. Capa outfit     (torso: camiseta/camisa)
+ *   4. Capa cabeza     (gorra… — outfit, sub-categoría Cabeza)    ← NUEVA
+ *   5. Capa accesorio  (gafas, cadena, grillz…)
+ *   6. Capa actividad  (ajedrez, balón, gaming…)
  *
  * Props:
  *   tier             'high' | 'mid' | 'low'
@@ -14,7 +16,9 @@
  *   animate          boolean — aplica mascotFadeIn al montar
  *   // Overrides para previews en tienda:
  *   baseSrc          override imagen base
- *   outfitSrc        override outfit (null = sin outfit)
+ *   outfitSrc        override outfit / torso (null = sin outfit)
+ *   feetSrc          override pies (null = sin calzado)
+ *   headSrc          override cabeza (null = sin gorro)
  *   accessorySrc     override accesorio (null = sin accesorio)
  *   activityLayers   override capas actividad []
  *   outfitOffsetY    desplaza la capa de outfit hacia abajo (ej. '20%'), para
@@ -30,6 +34,8 @@
  * subcategoría (ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx) y queda
  * centrada antes de aplicar outfitOffsetY. Mismo cálculo en tienda y en la
  * mascota de la pantalla principal, porque ambas usan getMascotLayers().
+ * Las capas de pies y cabeza, igual que el accesorio, son overlays a tamaño
+ * completo del lienzo (el PNG ya trae la posición correcta integrada).
  */
 import { useMascot, OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
 
@@ -43,6 +49,8 @@ export default function MascotDisplay({
   baseSrc,
   outfitSrc,
   outfitSubcategory,
+  feetSrc,
+  headSrc,
   accessorySrc,
   accessoryIsChain,
   activityLayers,
@@ -53,6 +61,8 @@ export default function MascotDisplay({
   const resolved  = getMascotLayers(tier);
   const base      = baseSrc          !== undefined ? baseSrc          : resolved.base;
   const outfit    = outfitSrc        !== undefined ? outfitSrc        : resolved.outfit;
+  const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
+  const head      = headSrc          !== undefined ? headSrc          : resolved.head;
   const accessory = accessorySrc     !== undefined ? accessorySrc     : resolved.accessory;
   const isChain   = accessoryIsChain !== undefined ? accessoryIsChain : resolved.accessoryIsChain;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
@@ -88,7 +98,17 @@ export default function MascotDisplay({
         style={{ ...shadowStyle, ...animStyle }}
       />
 
-      {/* Capa 2: outfit / torso (camiseta o camisa) — tamaño/posición según
+      {/* Capa 2: pies / calzado (overlay a tamaño completo) */}
+      {feet && (
+        <img
+          src={feet}
+          alt=""
+          draggable={false}
+          className={imgClass}
+        />
+      )}
+
+      {/* Capa 3: outfit / torso (camiseta o camisa) — tamaño/posición según
           subcategoría, ver OUTFIT_VISUAL_ADJUST en MascotContext.jsx */}
       {outfit && (
         <img
@@ -105,7 +125,17 @@ export default function MascotDisplay({
         />
       )}
 
-      {/* Capa 3: accesorio (intermedia sobre el outfit) */}
+      {/* Capa 4: cabeza (gorra…, overlay a tamaño completo) */}
+      {head && (
+        <img
+          src={head}
+          alt=""
+          draggable={false}
+          className={imgClass}
+        />
+      )}
+
+      {/* Capa 5: accesorio (gafas, grillz… — intermedio sobre el outfit) */}
       {accessory && !isChain && (
         <img
           src={accessory}
@@ -114,7 +144,7 @@ export default function MascotDisplay({
           className={imgClass}
         />
       )}
-      {/* Capa 3b: cadena — posicionada en cuello/pecho */}
+      {/* Capa 5b: cadena — posicionada en cuello/pecho */}
       {accessory && isChain && (
         <img
           src={accessory}
@@ -132,7 +162,7 @@ export default function MascotDisplay({
         />
       )}
 
-      {/* Capa 4: actividad (la más delantera) */}
+      {/* Capa 6: actividad (la más delantera) */}
       {layers.map((src, i) => (
         <img
           key={src}
