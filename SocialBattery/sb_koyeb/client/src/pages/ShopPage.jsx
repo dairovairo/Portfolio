@@ -447,6 +447,8 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           tier="mid"
           size={112}
           headSrc={head.src}
+          headScale={head.scale}
+          headOffsetY={head.offsetY}
           outfitSrc={null}
           feetSrc={null}
           accessories={[]}
@@ -620,6 +622,8 @@ export default function ShopPage() {
             feetSrc={activeFt?.src ?? null}
             feetOffsetY={activeFt?.offsetY ?? null}
             headSrc={activeHd?.src ?? null}
+            headScale={activeHd?.scale ?? null}
+            headOffsetY={activeHd?.offsetY ?? null}
             accessories={activeAccs}
             activityLayers={activeAct?.layers ?? []}
           />

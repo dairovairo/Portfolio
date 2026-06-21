@@ -23,6 +23,15 @@
  *                     del calzado (ver `offsetY` en MASCOT_FEET). Si no se
  *                     pasa, se usa el offset del calzado activo del contexto.
  *   headSrc          override cabeza (null = sin gorro)
+ *   headScale        override escala de la prenda de cabeza (0–1, ej. 0.33),
+ *                     para prendas cuyo PNG viene mucho más grande que la
+ *                     cabeza real (ver `scale` en MASCOT_HEAD). Si no se
+ *                     pasa, se usa la escala de la prenda activa del contexto.
+ *                     Si la prenda no define escala, se muestra a tamaño
+ *                     completo del lienzo (comportamiento por defecto).
+ *   headOffsetY      desplaza la capa de cabeza (ej. '-5%' la sube un poco),
+ *                     para que la prenda asiente justo encima de la cabeza
+ *                     de la mascota (ver `offsetY` en MASCOT_HEAD).
  *   accessories      override lista de accesorios activos (array de objetos
  *                     del catálogo MASCOT_ACCESSORIES). Los accesorios pueden
  *                     combinarse y mostrarse todos a la vez. Pasar [] para no
@@ -61,6 +70,8 @@ export default function MascotDisplay({
   feetSrc,
   feetOffsetY,
   headSrc,
+  headScale,
+  headOffsetY,
   accessories,
   activityLayers,
   outfitOffsetY = '20%',
@@ -73,6 +84,8 @@ export default function MascotDisplay({
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
   const feetOffset = feetOffsetY     !== undefined ? feetOffsetY      : resolved.feetOffsetY;
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
+  const headScl   = headScale        !== undefined ? headScale        : resolved.headScale;
+  const headOffset = headOffsetY     !== undefined ? headOffsetY      : resolved.headOffsetY;
   const accs      = accessories      !== undefined ? accessories      : resolved.accessories;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
@@ -136,13 +149,27 @@ export default function MascotDisplay({
         />
       )}
 
-      {/* Capa 4: cabeza (gorra…, overlay a tamaño completo) */}
+      {/* Capa 4: cabeza (gorra…). Por defecto es overlay a tamaño completo,
+          pero si la prenda define headScale/headOffsetY (ver MASCOT_HEAD en
+          MascotContext.jsx) se reduce y se reposiciona — necesario para
+          prendas como la gorra, cuyo PNG viene mucho más grande que la
+          cabeza real de la mascota. */}
       {head && (
         <img
           src={head}
           alt=""
           draggable={false}
           className={imgClass}
+          style={
+            headScl
+              ? {
+                  top: `calc(${(100 - headScl * 100) / 2}% + ${headOffset || '0%'})`,
+                  left: `${(100 - headScl * 100) / 2}%`,
+                  width: `${headScl * 100}%`,
+                  height: `${headScl * 100}%`,
+                }
+              : {}
+          }
         />
       )}
 

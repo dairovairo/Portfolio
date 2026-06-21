@@ -663,6 +663,13 @@ export const MASCOT_HEAD = [
     src: '/accessory-cap.png',
     price: 45,
     isBase: false,
+    // El PNG original trae la gorra a tamaño completo de lienzo (demasiado
+    // grande); se reduce y se sube para que asiente justo encima de la
+    // cabeza de la mascota, sin tapar ojos ni cejas. offsetY es relativo al
+    // centrado vertical de la capa ya escalada (ver cálculo en
+    // MascotDisplay.jsx), por eso el valor es grande y negativo.
+    scale: 0.33,
+    offsetY: '-38.5%',
   },
   {
     id: 'head_fedora',
@@ -928,6 +935,8 @@ export function MascotProvider({ children }) {
       feet:             feet?.src ?? null,
       feetOffsetY:      feet?.offsetY ?? null,
       head:             head?.src ?? null,
+      headScale:        head?.scale ?? null,
+      headOffsetY:      head?.offsetY ?? null,
       // Lista de accesorios activos (selección múltiple simultánea).
       accessories:      accs,
       layers:           act?.layers ?? [],
