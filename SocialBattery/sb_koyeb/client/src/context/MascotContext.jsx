@@ -226,22 +226,6 @@ export const MASCOT_OUTFITS = [
     scale: 0.985,
   },
   {
-    // NOTA: este PNG usa un canvas más alto (1490×2039 en vez de 1490×1200)
-    // porque la prenda tiene tirantes que suben hasta los hombros. Con el
-    // mismo `scale`/`offsetX`/offsetY que el resto de camisetas, los tirantes
-    // quedan muy arriba y pueden tapar la cara de la mascota — pendiente de
-    // ajuste manual de posicionamiento para esta prenda en concreto.
-    id: 'out_tshirt_19',
-    name: 'Camiseta de tirantes blanca',
-    desc: 'Top deportivo de tirantes, escote redondo.',
-    emoji: '🤍',
-    src: '/outfit-tshirt-19.png',
-    subcategory: 'camiseta',
-    price: 55,
-    isBase: false,
-    scale: 0.985,
-  },
-  {
     id: 'out_tshirt_20',
     name: 'Camiseta marrón',
     desc: 'Color tierra cálido, combina con todo.',
@@ -254,12 +238,10 @@ export const MASCOT_OUTFITS = [
     scale: 0.985,
   },
   {
-    // Pendiente de ajuste manual de posicionamiento (igual que out_tshirt_19,
-    // otra prenda de tirantes) — usa por ahora el mismo scale/offset por
-    // defecto del resto de camisetas en OUTFIT_VISUAL_ADJUST, con un
-    // empujoncito propio hacia arriba (offsetY) para que los tirantes
-    // asienten un poco mejor sobre los hombros. Subida un poco más dos
-    // veces (0% → -4% → -8%).
+    // Prenda de tirantes: usa por ahora el mismo scale/offset por defecto del
+    // resto de camisetas en OUTFIT_VISUAL_ADJUST, con un empujoncito propio
+    // hacia arriba (offsetY) para que los tirantes asienten un poco mejor
+    // sobre los hombros. Subida un poco más (0% → -4% → -8% → -12%).
     id: 'out_tshirt_21',
     name: 'Camiseta del abuelo',
     desc: 'Top deportivo con costuras dobles y escote redondo.',
@@ -268,7 +250,7 @@ export const MASCOT_OUTFITS = [
     subcategory: 'camiseta',
     price: 55,
     isBase: false,
-    offsetY: '-8%',
+    offsetY: '-12%',
   },
   // ── Camisas ──────────────────────────────────────────────────────────────────
   // Lote 1
@@ -533,7 +515,7 @@ export const MASCOT_ACCESSORIES = [
   {
     // Reducidas un 40% respecto al overlay a tamaño completo del lienzo
     // (igual que acc_glasses) — ver `scale` en MascotDisplay.jsx, capa de
-    // accesorios "planos".
+    // accesorios "planos". Reducidas un 5% más (0.6 → 0.57).
     id: 'acc_glasses_gold',
     name: 'Gafas doradas',
     desc: 'Montura dorada con cristales oscuros, máximo estilo.',
@@ -541,7 +523,7 @@ export const MASCOT_ACCESSORIES = [
     src: '/accessory-glasses-gold.png',
     price: 70,
     isBase: false,
-    scale: 0.6,
+    scale: 0.57,
   },
   {
     id: 'acc_chain',
