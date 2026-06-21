@@ -218,6 +218,17 @@ export const MASCOT_OUTFITS = [
     price: 55,
     isBase: false,
   },
+  {
+    id: 'out_tshirt_20',
+    name: 'Camiseta marrón',
+    desc: 'Color tierra cálido, combina con todo.',
+    emoji: '🤎',
+    src: '/outfit-tshirt-20.png',
+    subcategory: 'camiseta',
+    isBasic: true,
+    price: 50,
+    isBase: false,
+  },
   // ── Camisas ──────────────────────────────────────────────────────────────────
   // Lote 1
   {
@@ -442,6 +453,17 @@ export const MASCOT_OUTFITS = [
     price: 95,
     isBase: false,
   },
+  {
+    id: 'out_shirt_22',
+    name: 'Camisa marrón',
+    desc: 'Tono tierra clásico, fácil de combinar.',
+    emoji: '🤎',
+    src: '/outfit-shirt-22.png',
+    subcategory: 'camisa',
+    isBasic: true,
+    price: 65,
+    isBase: false,
+  },
 ];
 
 // ── Catálogo de ACCESORIOS (capa 5: encima de cabeza) ──────────────────────────
@@ -609,6 +631,33 @@ export const MASCOT_HEAD = [
     emoji: '🧢',
     src: '/accessory-cap.png',
     price: 45,
+    isBase: false,
+  },
+  {
+    id: 'head_fedora',
+    name: 'Sombrero de fieltro',
+    desc: 'Estilo detective clásico con raya diplomática y hebilla.',
+    emoji: '🎩',
+    src: '/outfit-head-2.png',
+    price: 70,
+    isBase: false,
+  },
+  {
+    id: 'head_cap_red',
+    name: 'Gorra negra y roja',
+    desc: 'Visera roja a juego, para destacar con estilo.',
+    emoji: '🧢',
+    src: '/outfit-head-3.png',
+    price: 50,
+    isBase: false,
+  },
+  {
+    id: 'head_conical',
+    name: 'Sombrero cónico de paja',
+    desc: 'Tejido artesanal de bambú, fresco y tradicional.',
+    emoji: '👒',
+    src: '/outfit-head-4.png',
+    price: 60,
     isBase: false,
   },
 ];

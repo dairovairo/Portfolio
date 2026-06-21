@@ -208,9 +208,9 @@ export default function MascotDisplay({
         }
 
         // Corbata — 20% más grande que el tamaño original (30% → 36% de
-        // ancho, 60% → 72% de alto). Bajada bastante respecto a la versión
-        // anterior (28% → 34% → 46% de top) para que el nudo quede justo
-        // debajo de la "boca" (la línea horizontal) de la mascota.
+        // ancho, 60% → 72% de alto). Bajada bastante respecto a versiones
+        // anteriores (28% → 34% → 46% → 48% de top) para que el nudo quede
+        // justo debajo de la "boca" (la línea horizontal) de la mascota.
         if (acc.isTie) {
           return (
             <img
@@ -222,7 +222,7 @@ export default function MascotDisplay({
               style={{
                 left: '32%',
                 width: '36%',
-                top: '46%',
+                top: '48%',
                 height: '72%',
                 objectFit: 'contain',
                 objectPosition: 'top center',
@@ -232,8 +232,9 @@ export default function MascotDisplay({
         }
 
         // Pajarita — 10% más grande que el tamaño original (50% → 55% de
-        // ancho, 20% → 22% de alto). Bajada un poco más respecto a la
-        // versión anterior (34% → 40% → 42% de top).
+        // ancho, 20% → 22% de alto). Bajada un poco más respecto a versiones
+        // anteriores (34% → 40% → 42% → 44% de top) — mismo incremento que
+        // la corbata, para que ambas bajen por igual.
         if (acc.isBowTie) {
           return (
             <img
@@ -245,7 +246,7 @@ export default function MascotDisplay({
               style={{
                 left: '22.5%',
                 width: '55%',
-                top: '42%',
+                top: '44%',
                 height: '22%',
                 objectFit: 'contain',
                 objectPosition: 'center',
