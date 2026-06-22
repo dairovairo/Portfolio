@@ -227,7 +227,20 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
         <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={accessory.name}>
           {accessory.name}
         </div>
-        {isUnlocked ? (
+        {accessory.isBase ? (
+          isActive ? (
+            <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
+              ✓ Por defecto
+            </div>
+          ) : (
+            <button
+              onClick={onToggle}
+              className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
+            >
+              Poner
+            </button>
+          )
+        ) : isUnlocked ? (
           <button
             onClick={onToggle}
             className={`w-full py-1.5 rounded-lg text-[10px] font-display font-semibold transition-all
@@ -414,6 +427,8 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
           size={112}
           feetSrc={feet.src}
           feetOffsetY={feet.offsetY ?? null}
+          feetOffsetX={feet.offsetX ?? null}
+          feetScale={feet.scale ?? null}
           outfitSrc={null}
           headSrc={null}
           accessories={[]}
@@ -483,6 +498,8 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           size={112}
           feetSrc={feet.src}
           feetOffsetY={feet.offsetY ?? null}
+          feetOffsetX={feet.offsetX ?? null}
+          feetScale={feet.scale ?? null}
           outfitSrc={null}
           headSrc={null}
           accessories={[]}
@@ -716,9 +733,11 @@ export default function ShopPage() {
   }
 
   const activeAct  = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
-  // El ítem base ("Sin actividad") se excluye de la tienda, igual que el
-  // resto de ítems base en outfit/accesorios.
-  const activityOptions = MASCOT_ACTIVITIES.filter(a => !a.isBase);
+  // El ítem base ("Sin actividad") SÍ se muestra en la tienda, como una
+  // tarjeta más al principio del grid (ya es el primer elemento del array
+  // MASCOT_ACTIVITIES), a diferencia del resto de ítems base de
+  // outfit/accesorios, que siguen excluidos.
+  const activityOptions = MASCOT_ACTIVITIES;
   const activeAccs = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
   const activeOut  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
   const activeFt   = MASCOT_FEET.find(f => f.id === activeFeet);
@@ -728,37 +747,40 @@ export default function ShopPage() {
   // - basicOutfits: colores lisos de esa sub-tab → carrusel horizontal arriba
   // - restOutfits: el resto de prendas (estampados/temáticas) de esa
   //   sub-tab → grid vertical de siempre
-  // El ítem base ("Sin outfit") se excluye de la tienda: es redundante en
-  // el sistema actual y no se muestra como tarjeta.
-  const filteredOutfits = MASCOT_OUTFITS.filter(o => !o.isBase && o.subcategory === outfitSubTab);
+  // El ítem base ("Sin prenda") SÍ se muestra como primera tarjeta del grid
+  // de cada sub-tab (hay una entrada por subcategoría en MASCOT_OUTFITS,
+  // ambas con id 'out_none'), igual que el resto de categorías de la
+  // tienda con su "Sin X".
+  const filteredOutfits = MASCOT_OUTFITS.filter(o => o.subcategory === outfitSubTab);
   const basicOutfits = filteredOutfits.filter(o => o.isBasic);
   const restOutfits  = filteredOutfits.filter(o => !o.isBasic);
 
   // Pies: misma lógica que Torso — las variantes de color de la zapatilla
   // retro (isBasic) van al carrusel horizontal; el resto (chunky, mocasines,
-  // oxford) va al grid vertical de siempre. El ítem base ("Sin calzado")
-  // se excluye de la tienda, igual que el resto de ítems base.
+  // oxford) va al grid vertical de siempre, junto con el ítem base
+  // ("Sin prenda") como primera tarjeta.
   const basicFeet  = MASCOT_FEET.filter(f => f.isBasic);
   const basicFeet2 = MASCOT_FEET.filter(f => f.isBasic2);
-  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBasic2 && !f.isBase);
+  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBasic2);
 
   // Cabeza: misma lógica que Pies/Torso — las gorras "negra y X" (mismo
   // molde, distinto color de visera) van al carrusel horizontal; el resto
   // (sombreros, gorro de fiesta, boina, halo...) va al grid vertical de
-  // siempre. El ítem base ("Sin gorro") se excluye de la tienda.
+  // siempre, junto con el ítem base ("Sin prenda") como primera tarjeta.
   // Hay un SEGUNDO molde de gorra ("Gorra negra" liso, sin visera bicolor)
   // con sus propias variantes de color → su propio carrusel horizontal
   // (isBasic2), independiente del de las gorras "negra y X" (isBasic).
   const basicHead  = MASCOT_HEAD.filter(h => h.isBasic);
   const basicHead2 = MASCOT_HEAD.filter(h => h.isBasic2);
-  const restHead    = MASCOT_HEAD.filter(h => !h.isBase && !h.isBasic && !h.isBasic2);
+  const restHead    = MASCOT_HEAD.filter(h => !h.isBasic && !h.isBasic2);
 
-  // Accesorios: cadenas, grillz y gafas de sol son grupos de selección
-  // única (solo una de cada a la vez) → cada grupo va a su propio carrusel
-  // horizontal arriba. El resto (corbata, pajarita) se puede combinar
-  // libremente y va al grid vertical de siempre. El ítem base
-  // ("Sin accesorio") se excluye de la tienda, igual que el resto de
-  // ítems base.
+  // Accesorios: cadenas, grillz, gafas de sol, corbatas y pajaritas son
+  // grupos de selección única (solo una de cada a la vez) → cada grupo va
+  // a su propio carrusel horizontal arriba, con su propia tarjeta "Sin X"
+  // al principio para poder dejar ese grupo vacío. El resto de accesorios
+  // (sin grupo dedicado) se puede combinar libremente y va al grid
+  // vertical de siempre. El ítem base general ("Sin accesorio") se sigue
+  // excluyendo de ese grid, igual que el resto de ítems base sin grupo.
   const chainAccessories   = MASCOT_ACCESSORIES.filter(a => a.isChain);
   const grillzAccessories  = MASCOT_ACCESSORIES.filter(a => a.isGrillz);
   const glassesAccessories = MASCOT_ACCESSORIES.filter(a => a.isGlasses);
@@ -767,6 +789,27 @@ export default function ShopPage() {
   const restAccessories    = MASCOT_ACCESSORIES.filter(
     a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie && !a.isBase
   );
+
+  // Una tarjeta "Sin X" de grupo se muestra como activa cuando ningún otro
+  // miembro de su mismo grupo está equipado (representa "grupo vacío"; su
+  // id nunca se guarda dentro de activeAccessories).
+  function isAccessoryCardActive(accessory) {
+    if (accessory.isBase) {
+      return !MASCOT_ACCESSORIES.some(other =>
+        other.id !== accessory.id &&
+        !other.isBase &&
+        (
+          (accessory.isChain && other.isChain) ||
+          (accessory.isGrillz && other.isGrillz) ||
+          (accessory.isGlasses && other.isGlasses) ||
+          (accessory.isTie && other.isTie) ||
+          (accessory.isBowTie && other.isBowTie)
+        ) &&
+        activeAccessories.has(other.id)
+      );
+    }
+    return activeAccessories.has(accessory.id);
+  }
 
   return (
     <div className="min-h-screen bg-surface-bg flex flex-col">
@@ -816,6 +859,8 @@ export default function ShopPage() {
             outfitItemScale={activeOut?.scale ?? null}
             feetSrc={activeFt?.src ?? null}
             feetOffsetY={activeFt?.offsetY ?? null}
+            feetOffsetX={activeFt?.offsetX ?? null}
+            feetScale={activeFt?.scale ?? null}
             headSrc={activeHd?.src ?? null}
             headScale={activeHd?.scale ?? null}
             headOffsetY={activeHd?.offsetY ?? null}
@@ -1119,7 +1164,7 @@ export default function ShopPage() {
                       key={accessory.id}
                       accessory={accessory}
                       isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
@@ -1141,7 +1186,7 @@ export default function ShopPage() {
                       key={accessory.id}
                       accessory={accessory}
                       isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
@@ -1163,7 +1208,7 @@ export default function ShopPage() {
                       key={accessory.id}
                       accessory={accessory}
                       isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
@@ -1185,7 +1230,7 @@ export default function ShopPage() {
                       key={accessory.id}
                       accessory={accessory}
                       isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
@@ -1207,7 +1252,7 @@ export default function ShopPage() {
                       key={accessory.id}
                       accessory={accessory}
                       isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={activeAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
@@ -1225,7 +1270,7 @@ export default function ShopPage() {
                   key={accessory.id}
                   accessory={accessory}
                   isUnlocked={unlockedAccessories.has(accessory.id)}
-                  isActive={activeAccessories.has(accessory.id)}
+                  isActive={isAccessoryCardActive(accessory)}
                   canAfford={coins >= accessory.price}
                   onBuy={() => handleBuyAccessory(accessory)}
                   onToggle={() => handleToggleAccessory(accessory)}

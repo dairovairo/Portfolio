@@ -22,6 +22,17 @@
  *                     prendas cuyo PNG queda un poco alto respecto al resto
  *                     del calzado (ver `offsetY` en MASCOT_FEET). Si no se
  *                     pasa, se usa el offset del calzado activo del contexto.
+ *   feetOffsetX      desplaza la capa de pies horizontalmente (ej. '2%' la
+ *                     mueve un poco a la derecha), para prendas cuyo PNG
+ *                     queda descentrado respecto al resto del calzado (ver
+ *                     `offsetX` en MASCOT_FEET).
+ *   feetScale        override de escala del calzado (0–1, ej. 0.73), para
+ *                     prendas cuyo PNG viene dibujado más grande que el
+ *                     resto del calzado de su mismo grupo (ver `scale` en
+ *                     MASCOT_FEET). Si no se pasa, se usa la escala de la
+ *                     prenda activa del contexto. Si la prenda no define
+ *                     escala, se muestra a tamaño completo del lienzo
+ *                     (comportamiento por defecto).
  *   headSrc          override cabeza (null = sin gorro)
  *   headScale        override escala de la prenda de cabeza (0–1, ej. 0.33),
  *                     para prendas cuyo PNG viene mucho más grande que la
@@ -91,6 +102,8 @@ export default function MascotDisplay({
   outfitItemScale,
   feetSrc,
   feetOffsetY,
+  feetOffsetX,
+  feetScale,
   headSrc,
   headScale,
   headOffsetY,
@@ -107,6 +120,8 @@ export default function MascotDisplay({
   const outfit    = outfitSrc        !== undefined ? outfitSrc        : resolved.outfit;
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
   const feetOffset = feetOffsetY     !== undefined ? feetOffsetY      : resolved.feetOffsetY;
+  const feetOffsetXResolved = feetOffsetX !== undefined ? feetOffsetX : resolved.feetOffsetX;
+  const feetScl   = feetScale        !== undefined ? feetScale        : resolved.feetScale;
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
   const headScl   = headScale        !== undefined ? headScale        : resolved.headScale;
   const headOffset = headOffsetY     !== undefined ? headOffsetY      : resolved.headOffsetY;
@@ -150,15 +165,31 @@ export default function MascotDisplay({
         style={{ ...shadowStyle, ...animStyle }}
       />
 
-      {/* Capa 2: pies / calzado (overlay a tamaño completo, con offset
-          opcional por prenda — ver feetOffsetY / MASCOT_FEET.offsetY) */}
+      {/* Capa 2: pies / calzado (overlay a tamaño completo por defecto, con
+          offset vertical/horizontal opcional por prenda — ver feetOffsetY/
+          feetOffsetX / MASCOT_FEET.offsetY/offsetX). Si la prenda define
+          `scale` (ver MASCOT_FEET.scale) se reduce y recentra con el mismo
+          cálculo cuadrado que usa la capa de cabeza, para las prendas cuyo
+          PNG viene dibujado más grande que el resto del calzado. */}
       {feet && (
         <img
           src={feet}
           alt=""
           draggable={false}
           className={imgClass}
-          style={feetOffset ? { top: `calc(0% + ${feetOffset})` } : {}}
+          style={
+            feetScl
+              ? {
+                  top: `calc(${(100 - feetScl * 100) / 2}% + ${feetOffset || '0%'})`,
+                  left: `calc(${(100 - feetScl * 100) / 2}% + ${feetOffsetXResolved || '0%'})`,
+                  width: `${feetScl * 100}%`,
+                  height: `${feetScl * 100}%`,
+                }
+              : {
+                  ...(feetOffset ? { top: `calc(0% + ${feetOffset})` } : {}),
+                  ...(feetOffsetXResolved ? { left: `calc(0% + ${feetOffsetXResolved})` } : {}),
+                }
+          }
         />
       )}
 

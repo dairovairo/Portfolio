@@ -2,13 +2,30 @@ import { createContext, useContext, useState } from 'react';
 
 // ── Catálogo de OUTFITS / TORSO (capa 3: encima de pies, debajo de cabeza) ─────
 export const MASCOT_OUTFITS = [
+  // El ítem base "Sin prenda" se duplica aquí: una entrada por subcategoría
+  // (camiseta / camisa), ambas con el MISMO id 'out_none'. Visualmente solo
+  // se ve una u otra a la vez (cada una aparece solo en su propia sub-tab,
+  // vía `filteredOutfits` en ShopPage.jsx), pero las dos representan
+  // exactamente lo mismo: el torso vacío. Al equipar cualquiera de las dos,
+  // se quita la camiseta Y la camisa a la vez (solo puede haber un outfit
+  // de torso activo, sea de la subcategoría que sea), por eso comparten id.
   {
     id: 'out_none',
-    name: 'Sin outfit',
-    desc: 'La mascota sin ropa en el torso.',
+    name: 'Sin prenda',
+    desc: 'La mascota sin camiseta en el torso.',
     emoji: '✨',
     src: null,
     subcategory: 'camiseta',
+    price: 0,
+    isBase: true,
+  },
+  {
+    id: 'out_none',
+    name: 'Sin prenda',
+    desc: 'La mascota sin camisa en el torso.',
+    emoji: '✨',
+    src: null,
+    subcategory: 'camisa',
     price: 0,
     isBase: true,
   },
@@ -500,6 +517,64 @@ export const MASCOT_ACCESSORIES = [
     price: 0,
     isBase: true,
   },
+  // ── Ítems "Sin X" por categoría de selección única ──────────────────────────
+  // Cada grupo de selección única (gafas, cadenas, grillz, corbatas,
+  // pajaritas) tiene su propia opción "Sin [categoría]" como primera
+  // tarjeta del carrusel correspondiente, igual que el resto de categorías
+  // de la tienda (outfit, pies, cabeza) tienen su "Sin X". Equiparla
+  // desactiva cualquier accesorio ya puesto de ese mismo grupo (ver
+  // `toggleAccessory`/`equipAccessory` en este mismo archivo), sin afectar
+  // a los accesorios de los demás grupos.
+  {
+    id: 'acc_glasses_none',
+    name: 'Sin gafas',
+    desc: 'Sin gafas de sol puestas.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+    isGlasses: true,
+  },
+  {
+    id: 'acc_chain_none',
+    name: 'Sin cadena',
+    desc: 'Sin cadena puesta.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+    isChain: true,
+  },
+  {
+    id: 'acc_grillz_none',
+    name: 'Sin grillz',
+    desc: 'Sin grillz puestos.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+    isGrillz: true,
+  },
+  {
+    id: 'acc_tie_none',
+    name: 'Sin corbata',
+    desc: 'Sin corbata puesta.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+    isTie: true,
+  },
+  {
+    id: 'acc_bowtie_none',
+    name: 'Sin pajarita',
+    desc: 'Sin pajarita puesta.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+    isBowTie: true,
+  },
   {
     // Reducidas un 3% respecto al overlay a tamaño completo del lienzo (ver
     // `scale` en MascotDisplay.jsx, capa de accesorios "planos").
@@ -804,7 +879,7 @@ export const MASCOT_ACCESSORIES = [
 export const MASCOT_FEET = [
   {
     id: 'feet_none',
-    name: 'Sin calzado',
+    name: 'Sin prenda',
     desc: 'La mascota sin nada en los pies.',
     emoji: '✨',
     src: null,
@@ -920,6 +995,9 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Movida un poco a la derecha: el PNG quedaba ligeramente descentrado
+    // hacia la izquierda respecto al resto del calzado chunky.
+    offsetX: '2%',
   },
   {
     id: 'feet_sneaker_2_blue',
@@ -930,6 +1008,8 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
+    offsetX: '2%',
   },
   {
     id: 'feet_sneaker_2_pink',
@@ -940,6 +1020,8 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
+    offsetX: '2%',
   },
   {
     id: 'feet_sneaker_2_purple',
@@ -950,6 +1032,11 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Reducida: el PNG venía dibujado notablemente más grande que el resto
+    // del calzado chunky del mismo grupo (misma anchura de lienzo, pero
+    // mucho más alto/voluminoso). Escalada a 0.73 para igualar el tamaño
+    // visual del resto de variantes de color.
+    scale: 0.73,
   },
   {
     id: 'feet_sneaker_2_black',
@@ -960,6 +1047,8 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
+    offsetX: '2%',
   },
   {
     id: 'feet_sneaker_2_yellow',
@@ -970,6 +1059,8 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
+    scale: 0.73,
   },
   {
     id: 'feet_sneaker_2_orange',
@@ -980,6 +1071,8 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
+    scale: 0.73,
   },
   {
     id: 'feet_sneaker_2_brown',
@@ -990,6 +1083,8 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
+    scale: 0.73,
   },
   {
     id: 'feet_sneaker_2_red',
@@ -1000,6 +1095,8 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
+    scale: 0.73,
   },
   {
     id: 'feet_sneaker_2_white',
@@ -1010,6 +1107,22 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Reducida (algo menos que el resto de "grandes": esta partía de un
+    // tamaño ya un poco más cercano al correcto).
+    scale: 0.75,
+  },
+  {
+    id: 'feet_sneaker_2_gray',
+    name: 'Chunky gris',
+    desc: 'Misma silueta chunky voluminosa, en gris y beige.',
+    emoji: '👟',
+    src: '/outfit-feet-23.png',
+    price: 75,
+    isBase: false,
+    isBasic2: true,
+    // Igual que verde salvia/azul/rosa/negra: movida un poco a la derecha,
+    // mismo ajuste que el resto de variantes de tamaño correcto del grupo.
+    offsetX: '2%',
   },
   {
     id: 'feet_loafer_1',
@@ -1041,7 +1154,7 @@ export const MASCOT_FEET = [
 export const MASCOT_HEAD = [
   {
     id: 'head_none',
-    name: 'Sin gorro',
+    name: 'Sin prenda',
     desc: 'La mascota sin nada en la cabeza.',
     emoji: '✨',
     src: null,
@@ -1524,10 +1637,13 @@ export function MascotProvider({ children }) {
   // Los accesorios admiten selección múltiple y simultánea (p. ej. gafas +
   // cadena + corbata a la vez), por eso se guardan en un Set en vez de un
   // único id. 'acc_none' nunca se guarda dentro del Set: significa "vacío".
-  // Excepción: cadenas, grillz y gafas de sol son cada uno un grupo de
-  // selección única (solo una cadena / un grillz / unas gafas a la vez),
-  // aunque sí se pueden combinar libremente entre grupos distintos — ver
-  // `toggleAccessory`.
+  // Excepción: cadenas, grillz, gafas de sol, corbatas y pajaritas son cada
+  // uno un grupo de selección única (solo una cadena / un grillz / unas
+  // gafas / una corbata / una pajarita a la vez), aunque sí se pueden
+  // combinar libremente entre grupos distintos — ver `toggleAccessory`. Los
+  // ids 'acc_*_none' (uno por grupo) tampoco se guardan nunca en el Set:
+  // representan ese grupo vacío, igual que 'acc_none' representa todos los
+  // grupos vacíos.
   const [activeAccessories, setActiveAccessories] = useState(new Set());
   const [activeOutfit,    setActiveOutfit]    = useState('out_none');
   const [activeFeet,      setActiveFeet]      = useState('feet_none');
@@ -1542,15 +1658,37 @@ export function MascotProvider({ children }) {
   }
 
   // Accesorios — selección múltiple y simultánea (toggle on/off por id),
-  // salvo cadenas/grillz/gafas, que son grupos de selección única entre sí.
+  // salvo cadenas/grillz/gafas/corbatas/pajaritas, que son grupos de
+  // selección única entre sí (cada uno con su propia opción "Sin X").
   function unlockAccessory(id) {
     setUnlockedAccessories(prev => new Set([...prev, id]));
   }
   function equipAccessory(id) {
     // Compatibilidad: "equipar" un accesorio lo activa (sin desactivar los
-    // demás), ya que ahora pueden llevarse varios a la vez.
+    // demás), ya que ahora pueden llevarse varios a la vez. Los ítems base
+    // ("Sin accesorio" y los "Sin X" por grupo — gafas/cadena/grillz/
+    // corbata/pajarita) representan "vacío" y nunca se guardan en el Set:
+    // en vez de añadirse, limpian su grupo (o todo, en el caso de
+    // 'acc_none').
+    const item = MASCOT_ACCESSORIES.find(a => a.id === id);
     if (id === 'acc_none') {
       setActiveAccessories(new Set());
+      return;
+    }
+    if (item?.isBase) {
+      setActiveAccessories(prev => {
+        const next = new Set(prev);
+        MASCOT_ACCESSORIES.forEach(other => {
+          const sameGroup =
+            (item.isChain && other.isChain) ||
+            (item.isGrillz && other.isGrillz) ||
+            (item.isGlasses && other.isGlasses) ||
+            (item.isTie && other.isTie) ||
+            (item.isBowTie && other.isBowTie);
+          if (sameGroup) next.delete(other.id);
+        });
+        return next;
+      });
       return;
     }
     setActiveAccessories(prev => new Set([...prev, id]));
@@ -1558,22 +1696,44 @@ export function MascotProvider({ children }) {
   function toggleAccessory(id) {
     if (id === 'acc_none') return;
     const item = MASCOT_ACCESSORIES.find(a => a.id === id);
+    // Los ítems "Sin X" de cada grupo (gafas/cadena/grillz/corbata/
+    // pajarita) son la representación visual de "ninguno equipado en este
+    // grupo": pulsarlos limpia el grupo en vez de añadirse al Set de
+    // accesorios activos (igual que 'acc_none' limpia todos los grupos).
+    if (item?.isBase) {
+      setActiveAccessories(prev => {
+        const next = new Set(prev);
+        MASCOT_ACCESSORIES.forEach(other => {
+          const sameGroup =
+            (item.isChain && other.isChain) ||
+            (item.isGrillz && other.isGrillz) ||
+            (item.isGlasses && other.isGlasses) ||
+            (item.isTie && other.isTie) ||
+            (item.isBowTie && other.isBowTie);
+          if (sameGroup) next.delete(other.id);
+        });
+        return next;
+      });
+      return;
+    }
     setActiveAccessories(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
       } else {
-        // Cadenas, grillz y gafas de sol son grupos de selección única: al
-        // activar uno, se desactivan automáticamente los demás del mismo
-        // grupo (no afecta a los accesorios de otros grupos, que siguen
-        // pudiendo combinarse libremente).
-        if (item?.isChain || item?.isGrillz || item?.isGlasses) {
+        // Cadenas, grillz, gafas de sol, corbatas y pajaritas son grupos de
+        // selección única: al activar uno, se desactivan automáticamente
+        // los demás del mismo grupo (no afecta a los accesorios de otros
+        // grupos, que siguen pudiendo combinarse libremente).
+        if (item?.isChain || item?.isGrillz || item?.isGlasses || item?.isTie || item?.isBowTie) {
           MASCOT_ACCESSORIES.forEach(other => {
             if (other.id === id) return;
             const sameGroup =
               (item.isChain && other.isChain) ||
               (item.isGrillz && other.isGrillz) ||
-              (item.isGlasses && other.isGlasses);
+              (item.isGlasses && other.isGlasses) ||
+              (item.isTie && other.isTie) ||
+              (item.isBowTie && other.isBowTie);
             if (sameGroup) next.delete(other.id);
           });
         }
@@ -1638,6 +1798,8 @@ export function MascotProvider({ children }) {
       outfitItemScale:    outfit?.scale ?? null,
       feet:             feet?.src ?? null,
       feetOffsetY:      feet?.offsetY ?? null,
+      feetOffsetX:      feet?.offsetX ?? null,
+      feetScale:        feet?.scale ?? null,
       head:             head?.src ?? null,
       headScale:        head?.scale ?? null,
       headOffsetY:      head?.offsetY ?? null,
