@@ -738,8 +738,9 @@ export default function ShopPage() {
   // retro (isBasic) van al carrusel horizontal; el resto (chunky, mocasines,
   // oxford) va al grid vertical de siempre. El ítem base ("Sin calzado")
   // se excluye de la tienda, igual que el resto de ítems base.
-  const basicFeet = MASCOT_FEET.filter(f => f.isBasic);
-  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBase);
+  const basicFeet  = MASCOT_FEET.filter(f => f.isBasic);
+  const basicFeet2 = MASCOT_FEET.filter(f => f.isBasic2);
+  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBasic2 && !f.isBase);
 
   // Cabeza: misma lógica que Pies/Torso — las gorras "negra y X" (mismo
   // molde, distinto color de visera) van al carrusel horizontal; el resto
@@ -761,8 +762,10 @@ export default function ShopPage() {
   const chainAccessories   = MASCOT_ACCESSORIES.filter(a => a.isChain);
   const grillzAccessories  = MASCOT_ACCESSORIES.filter(a => a.isGrillz);
   const glassesAccessories = MASCOT_ACCESSORIES.filter(a => a.isGlasses);
+  const tieAccessories     = MASCOT_ACCESSORIES.filter(a => a.isTie);
+  const bowTieAccessories  = MASCOT_ACCESSORIES.filter(a => a.isBowTie);
   const restAccessories    = MASCOT_ACCESSORIES.filter(
-    a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isBase
+    a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie && !a.isBase
   );
 
   return (
@@ -908,10 +911,33 @@ export default function ShopPage() {
                 {basicFeet.length > 0 && (
                   <div className="mb-3">
                     <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Colores
+                      Retro · colores
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicFeet.map(feet => (
+                        <BasicFeetCard
+                          key={feet.id}
+                          feet={feet}
+                          isUnlocked={unlockedFeet.has(feet.id)}
+                          isActive={activeFeet === feet.id}
+                          canAfford={coins >= feet.price}
+                          onBuy={() => handleBuyFeet(feet)}
+                          onEquip={() => handleEquipFeet(feet)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Carrusel horizontal: variaciones de color de la zapatilla
+                    chunky (mismo molde voluminoso, distinto color). */}
+                {basicFeet2.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                      Chunky · colores
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                      {basicFeet2.map(feet => (
                         <BasicFeetCard
                           key={feet.id}
                           feet={feet}
@@ -1147,8 +1173,52 @@ export default function ShopPage() {
               </div>
             )}
 
+            {/* Carrusel: Corbatas — elige una */}
+            {tieAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Corbatas · elige una
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {tieAccessories.map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={activeAccessories.has(accessory.id)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Pajaritas — elige una */}
+            {bowTieAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Pajaritas · elige una
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {bowTieAccessories.map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={activeAccessories.has(accessory.id)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Resto de accesorios — selección libre, combinables entre sí
-                y con lo elegido en los 3 carruseles de arriba */}
+                y con lo elegido en los carruseles de arriba */}
             <div className="grid grid-cols-2 gap-3">
               {restAccessories.map(accessory => (
                 <AccessoryCard
