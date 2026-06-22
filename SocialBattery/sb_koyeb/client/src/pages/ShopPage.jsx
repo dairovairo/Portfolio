@@ -889,7 +889,7 @@ export default function ShopPage() {
                   onClick={() => setOutfitMainTab(s.key)}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-display font-semibold transition-all duration-200
                     ${outfitMainTab === s.key
-                      ? 'bg-accent-primary/20 text-accent-glow border border-accent-primary/30'
+                      ? 'bg-accent-primary text-white shadow-sm'
                       : 'text-surface-muted hover:text-surface-text'
                     }`}
                 >
@@ -956,7 +956,7 @@ export default function ShopPage() {
                       onClick={() => setOutfitSubTab(s.key)}
                       className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-display font-semibold transition-all duration-200
                         ${outfitSubTab === s.key
-                          ? 'bg-accent-primary/20 text-accent-glow border border-accent-primary/30'
+                          ? 'bg-accent-primary text-white shadow-sm'
                           : 'text-surface-muted hover:text-surface-text'
                         }`}
                     >
