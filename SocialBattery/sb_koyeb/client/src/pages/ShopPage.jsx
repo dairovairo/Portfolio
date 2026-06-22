@@ -1009,11 +1009,13 @@ export default function ShopPage() {
             {/* Sección: Cabeza */}
             {outfitMainTab === 'cabeza' && (
               <div className="flex flex-col gap-4">
-                {/* Carrusel: Gorras (mismo molde, distinto color de visera) */}
+                {/* Carrusel: basicHead (mismo molde, distinto color de visera).
+                    Etiqueta mostrada: "Gorras lisas" (intercambiada con la del
+                    carrusel basicHead2 de abajo). */}
                 {basicHead.length > 0 && (
                   <div>
                     <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Gorras
+                      Gorras lisas
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead.map(head => (
@@ -1031,11 +1033,14 @@ export default function ShopPage() {
                   </div>
                 )}
 
-                {/* Carrusel: Gorras lisas (segundo molde, un solo color) */}
+                {/* Carrusel: basicHead2 (molde liso de un solo color + las 6
+                    gorras nuevas bicolor con costura central, añadidas aquí).
+                    Etiqueta mostrada: "Gorras" (intercambiada con la del
+                    carrusel basicHead de arriba). */}
                 {basicHead2.length > 0 && (
                   <div>
                     <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Gorras lisas
+                      Gorras
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead2.map(head => (
