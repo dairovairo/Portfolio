@@ -1,23 +1,35 @@
 import MascotDisplay from './MascotDisplay';
 
 /**
- * MyCustomizationsModal — galería de todo el calzado al que el usuario le
- * ha cambiado el color (ver FeetColorEditorModal / lib/colorZones.js). Cada
- * entrada es un ítem INDEPENDIENTE del modelo original (el original nunca
- * se modifica): desde aquí puede equipar una personalización, reabrir su
- * editor de color, o eliminarla por completo.
+ * MyCustomizationsModal - galería genérica de personalizaciones de color.
+ * Cada entrada es un ítem independiente del modelo original (el original
+ * nunca se modifica): desde aquí puede equipar una personalización, reabrir
+ * su editor de color, o eliminarla por completo.
  *
  * Props:
- *   items          lista de ítems personalizados (ver getCustomFeetItems en
- *                  MascotContext), cada uno con su propio id `feet_custom_*`
- *   activeFeetId   id del calzado actualmente equipado, para marcar cuál de
- *                  estas personalizaciones (si alguna) está puesta
+ *   title         título visible del modal
+ *   emptyText     texto mostrado cuando no hay personalizaciones
+ *   items         lista de ítems personalizados
+ *   activeItemId  id del ítem actualmente equipado (si aplica)
+ *   isItemActive   función opcional para resolver el estado activo por ítem
+ *   renderPreview render opcional del preview de cada ítem
  *   onEquip(item)  equipa esta personalización
  *   onEdit(item)   reabre el editor de color para ese ítem
  *   onRemove(item) elimina esa personalización por completo
- *   onClose        cierra el modal
+ *   onClose       cierra el modal
  */
-export default function MyCustomizationsModal({ items, activeFeetId, onEquip, onEdit, onRemove, onClose }) {
+export default function MyCustomizationsModal({
+  title = 'Mis personalizaciones',
+  emptyText = 'Aún no has personalizado ninguna prenda. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color sin tocar el modelo original.',
+  items,
+  activeItemId,
+  isItemActive,
+  renderPreview,
+  onEquip,
+  onEdit,
+  onRemove,
+  onClose,
+}) {
   return (
     <>
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
@@ -30,7 +42,7 @@ export default function MyCustomizationsModal({ items, activeFeetId, onEquip, on
             <div className="flex items-center gap-2">
               <span className="text-lg" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
               <div className="font-display font-bold text-surface-text text-sm">
-                Mis personalizaciones
+                {title}
               </div>
             </div>
             <button
@@ -45,13 +57,13 @@ export default function MyCustomizationsModal({ items, activeFeetId, onEquip, on
             <div className="py-8 flex flex-col items-center text-center gap-2">
               <span className="text-4xl opacity-60" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
               <p className="text-surface-muted text-xs leading-snug max-w-[230px]">
-                Aún no has personalizado ninguna prenda. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color sin tocar el modelo original.
+                {emptyText}
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
               {items.map(item => {
-                const isActive = activeFeetId === item.id;
+                const isActive = isItemActive ? isItemActive(item) : activeItemId === item.id;
                 return (
                   <div
                     key={item.id}
@@ -63,19 +75,21 @@ export default function MyCustomizationsModal({ items, activeFeetId, onEquip, on
                           ✓
                         </span>
                       )}
-                      <MascotDisplay
-                        tier="mid"
-                        size={64}
-                        feetSrc={item.src}
-                        feetItemId={item.id}
-                        feetOffsetY={item.offsetY ?? null}
-                        feetOffsetX={item.offsetX ?? null}
-                        feetScale={item.scale ?? null}
-                        outfitSrc={null}
-                        headSrc={null}
-                        accessories={[]}
-                        activityLayers={[]}
-                      />
+                      {renderPreview ? renderPreview(item, 64) : (
+                        <MascotDisplay
+                          tier="mid"
+                          size={64}
+                          feetSrc={item.src}
+                          feetItemId={item.id}
+                          feetOffsetY={item.offsetY ?? null}
+                          feetOffsetX={item.offsetX ?? null}
+                          feetScale={item.scale ?? null}
+                          outfitSrc={null}
+                          headSrc={null}
+                          accessories={[]}
+                          activityLayers={[]}
+                        />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-semibold text-surface-text text-xs truncate" title={item.name}>

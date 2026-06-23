@@ -77,6 +77,8 @@
  *                     (la misma posición usada en la vista previa de la tienda),
  *                     para que la mascota del menú principal luzca igual.
  *                     Pasar null/"" para desactivar el desplazamiento.
+ *   outfitItemId     id del outfit mostrado (catálogo o personalizado),
+ *                     usado para aplicar su personalización de color.
  *   outfitSubcategory override de subcategoría ('camiseta' | 'camisa'), usado
  *                     por la tienda para previsualizar un ítem que no es el
  *                     equipado. Si no se pasa, se usa la del outfit activo.
@@ -103,6 +105,120 @@
 import { useMascot, OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
 import { useColorizedSrc } from '../hooks/useColorizedSrc';
 
+function AccessoryLayer({ accessory, zones }) {
+  const displaySrc = useColorizedSrc(accessory.src, zones);
+  if (!displaySrc) return null;
+
+  const imgClass = 'absolute inset-0 w-full h-full object-contain select-none pointer-events-none';
+
+  if (!accessory.isChain && !accessory.isGrillz && !accessory.isTie && !accessory.isBowTie) {
+    if (accessory.scale) {
+      const pct = accessory.scale * 100;
+      const pos = (100 - pct) / 2;
+      return (
+        <img
+          src={displaySrc}
+          alt=""
+          draggable={false}
+          className={imgClass}
+          style={{
+            top: `${pos}%`,
+            left: `${pos}%`,
+            width: `${pct}%`,
+            height: `${pct}%`,
+          }}
+        />
+      );
+    }
+    return (
+      <img
+        src={displaySrc}
+        alt=""
+        draggable={false}
+        className={imgClass}
+      />
+    );
+  }
+
+  if (accessory.isGrillz) {
+    return (
+      <img
+        src={displaySrc}
+        alt=""
+        draggable={false}
+        className="absolute select-none pointer-events-none"
+        style={{
+          left: '37.25%',
+          top: '41%',
+          width: '25.5%',
+          height: '25.5%',
+          objectFit: 'contain',
+          objectPosition: 'center',
+        }}
+      />
+    );
+  }
+
+  if (accessory.isChain) {
+    return (
+      <img
+        src={displaySrc}
+        alt=""
+        draggable={false}
+        className="absolute select-none pointer-events-none"
+        style={{
+          left: '9%',
+          width: '82%',
+          top: '28%',
+          height: '64%',
+          objectFit: 'contain',
+          objectPosition: 'top center',
+        }}
+      />
+    );
+  }
+
+  if (accessory.isTie) {
+    return (
+      <img
+        src={displaySrc}
+        alt=""
+        draggable={false}
+        className="absolute select-none pointer-events-none"
+        style={{
+          left: '32%',
+          width: '36%',
+          top: '54%',
+          height: '72%',
+          objectFit: 'contain',
+          objectPosition: 'top center',
+        }}
+      />
+    );
+  }
+
+  if (accessory.isBowTie) {
+    return (
+      <img
+        src={displaySrc}
+        alt=""
+        draggable={false}
+        className="absolute select-none pointer-events-none"
+        style={{
+          left: '25.25%',
+          width: '49.5%',
+          top: '51.4%',
+          height: '19.8%',
+          objectFit: 'contain',
+          objectPosition: 'center',
+        }}
+      />
+    );
+  }
+
+  return null;
+}
+
 export default function MascotDisplay({
   tier = 'mid',
   size = 128,
@@ -115,6 +231,7 @@ export default function MascotDisplay({
   outfitSubcategory,
   outfitItemOffsetY,
   outfitItemScale,
+  outfitItemId,
   feetSrc,
   feetItemId,
   feetOffsetY,
@@ -132,11 +249,14 @@ export default function MascotDisplay({
   activityOffsetX,
   outfitOffsetY = '20%',
 }) {
-  const { getMascotLayers, getFeetZones, getHeadZones } = useMascot();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
 
   const resolved  = getMascotLayers(tier);
   const base      = baseSrc          !== undefined ? baseSrc          : resolved.base;
   const outfit    = outfitSrc        !== undefined ? outfitSrc        : resolved.outfit;
+  const outfitId  = outfitItemId     !== undefined ? outfitItemId     : resolved.outfitId ?? null;
+  const outfitZones = outfitId ? getOutfitZones(outfitId) : null;
+  const outfitDisplaySrc = useColorizedSrc(outfit, outfitZones);
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
   const feetId    = feetItemId       !== undefined ? feetItemId       : resolved.feetId;
   const feetZones = feetId ? getFeetZones(feetId) : null;
@@ -230,7 +350,7 @@ export default function MascotDisplay({
           empujoncito extra encima del outfitOffsetY general. */}
       {outfit && (
         <img
-          src={outfit}
+          src={outfitDisplaySrc}
           alt=""
           draggable={false}
           className={imgClass}
@@ -282,144 +402,13 @@ export default function MascotDisplay({
       {/* Capa 5: accesorio(s) — gafas, cadena, grillz, corbata, pajarita…
           Pueden combinarse y se muestran todos a la vez, cada uno con su
           propio posicionamiento según tipo. */}
-      {accs.map(acc => {
-        if (!acc.src) return null;
-
-        // Gafas y resto de accesorios "planos" → overlay a tamaño completo
-        // del lienzo, salvo que la prenda defina `scale` (ver acc_glasses_gold
-        // en MASCOT_ACCESSORIES), en cuyo caso se reduce y recentra con el
-        // mismo cálculo cuadrado que usa la capa de cabeza.
-        if (!acc.isChain && !acc.isGrillz && !acc.isTie && !acc.isBowTie) {
-          if (acc.scale) {
-            const pct = acc.scale * 100;
-            const pos = (100 - pct) / 2;
-            return (
-              <img
-                key={acc.id}
-                src={acc.src}
-                alt=""
-                draggable={false}
-                className={imgClass}
-                style={{
-                  top: `${pos}%`,
-                  left: `${pos}%`,
-                  width: `${pct}%`,
-                  height: `${pct}%`,
-                }}
-              />
-            );
-          }
-          return (
-            <img
-              key={acc.id}
-              src={acc.src}
-              alt=""
-              draggable={false}
-              className={imgClass}
-            />
-          );
-        }
-
-        // Grillz — al 25.5% del tamaño, centrados.
-        if (acc.isGrillz) {
-          return (
-            <img
-              key={acc.id}
-              src={acc.src}
-              alt=""
-              draggable={false}
-              className="absolute select-none pointer-events-none"
-              style={{
-                left: '37.25%',
-                top: '41%',
-                width: '25.5%',
-                height: '25.5%',
-                objectFit: 'contain',
-                objectPosition: 'center',
-              }}
-            />
-          );
-        }
-
-        // Cadena — posicionada en cuello/pecho.
-        if (acc.isChain) {
-          return (
-            <img
-              key={acc.id}
-              src={acc.src}
-              alt=""
-              draggable={false}
-              className="absolute select-none pointer-events-none"
-              style={{
-                left: '9%',
-                width: '82%',
-                top: '28%',
-                height: '64%',
-                objectFit: 'contain',
-                objectPosition: 'top center',
-              }}
-            />
-          );
-        }
-
-        // Corbata — 20% más grande que el tamaño original (30% → 36% de
-        // ancho, 60% → 72% de alto). Bajada bastante respecto a versiones
-        // anteriores (28% → 34% → 46% → 48% → 50% de top) para que el nudo
-        // quede justo debajo de la "boca" (la línea horizontal) de la mascota.
-        // Bajada un 2% más (50% → 52%), mismo incremento que la pajarita para
-        // que ambas bajen por igual. Bajada otro 2% más (52% → 54%), mismo
-        // incremento de nuevo en ambas.
-        if (acc.isTie) {
-          return (
-            <img
-              key={acc.id}
-              src={acc.src}
-              alt=""
-              draggable={false}
-              className="absolute select-none pointer-events-none"
-              style={{
-                left: '32%',
-                width: '36%',
-                top: '54%',
-                height: '72%',
-                objectFit: 'contain',
-                objectPosition: 'top center',
-              }}
-            />
-          );
-        }
-
-        // Pajarita — 10% más grande que el tamaño original (50% → 55% de
-        // ancho, 20% → 22% de alto). Bajada un poco más respecto a versiones
-        // anteriores (34% → 40% → 42% → 44% → 46% de top) — mismo incremento
-        // que la corbata, para que ambas bajen por igual. Reducida un 10%
-        // adicional (55%→49.5% ancho, 22%→19.8% alto), left recalculado para
-        // seguir centrada. Bajada un poquito más dos veces (46%→46.7%→47.4%),
-        // ajustes muy sutiles. Bajada un 2% más (47.4% → 49.4%), mismo
-        // incremento que la corbata para que ambas bajen por igual. Bajada
-        // otro 2% más (49.4% → 51.4%), mismo incremento de nuevo en ambas.
-        if (acc.isBowTie) {
-          return (
-            <img
-              key={acc.id}
-              src={acc.src}
-              alt=""
-              draggable={false}
-              className="absolute select-none pointer-events-none"
-              style={{
-                left: '25.25%',
-                width: '49.5%',
-                top: '51.4%',
-                height: '19.8%',
-                objectFit: 'contain',
-                objectPosition: 'center',
-              }}
-            />
-          );
-        }
-
-        return null;
-      })}
+      {accs.map(acc => (
+        <AccessoryLayer
+          key={acc.id}
+          accessory={acc}
+          zones={acc.id ? getAccessoryZones(acc.id) : null}
+        />
+      ))}
 
       {/* Capa 6: actividad (la más delantera).
           Si la actividad define `scale`/`offsetX` se reduce y recentra con el
