@@ -7,28 +7,6 @@ import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MAS
 
 const COINS = 340;
 
-// ── Botón de reset "Sin X" — aparece siempre encima de los carruseles/grid ───
-// Botón ancho, compacto, sin preview de mascota. Se usa en todas las secciones
-// que tienen un ítem base para devolver la categoría a su estado original.
-function ResetButton({ label, emoji = '✨', isActive, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all duration-200 mb-3
-        ${isActive
-          ? 'bg-accent-primary/10 border-accent-primary/40 text-accent-glow'
-          : 'bg-surface-card border-surface-border text-surface-muted hover:border-accent-primary/30 hover:text-surface-text'
-        }`}
-    >
-      <span style={{ fontVariantEmoji: 'emoji' }}>{emoji}</span>
-      <span className="flex-1 text-left">{label}</span>
-      {isActive && (
-        <span className="text-[10px] font-mono bg-accent-primary text-white px-2 py-0.5 rounded-lg">✓ Activo</span>
-      )}
-    </button>
-  );
-}
-
 // ── Tarjeta genérica de item con preview de mascota ───────────────────────────
 function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEquip, children }) {
   return (
@@ -422,7 +400,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
 // Versión reducida de FeetCard pensada para el scroll horizontal de
 // colores de la zapatilla retro (misma silueta, distinto color): preview
 // pequeño + nombre + acción, sin descripción larga, ancho fijo.
-function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
+function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -439,19 +417,9 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, 
             ✓
           </span>
         )}
-        {/* Botón de personalización extrema de color — siempre visible para
-            poder repintar esta zapatilla a cualquier color, esté o no
-            comprada/equipada. */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-          title="Personalizar colores"
-          className="absolute top-1 left-1 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-surface-card/90 border border-surface-border text-xs hover:border-accent-primary/50 hover:bg-surface-hover transition-all"
-        >
-          <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-          {isCustomized && (
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-glow" />
-          )}
-        </button>
+        {/* Sin botón de personalización individual aquí: esta tarjeta vive
+            siempre dentro de un carrusel horizontal, que ya tiene su propio
+            botón "🎨 Personalizar" general en la cabecera. */}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -525,18 +493,24 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
           </span>
         )}
         {/* Botón de personalización extrema de color — uno por cada ítem
-            "suelto" de calzado (mocasines, zapatos…), igual que en los
-            carruseles de zapatillas. */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-          title="Personalizar colores"
-          className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border border-surface-border text-sm hover:border-accent-primary/50 hover:bg-surface-hover transition-all"
-        >
-          <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-          {isCustomized && (
-            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
-          )}
-        </button>
+            "suelto" de calzado (mocasines, zapatos…), ya que estos no
+            pertenecen a ningún carrusel con su propio botón general. No se
+            muestra en el ítem "Sin prenda" porque no hay ninguna imagen de
+            calzado que recolorear. El contorno blanco (en vez del color de
+            borde habitual, demasiado oscuro) es lo que lo hace legible
+            encima del preview de la zapatilla. */}
+        {feet.src && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Personalizar colores"
+            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
+          >
+            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+            {isCustomized && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
+            )}
+          </button>
+        )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -837,11 +811,13 @@ export default function ShopPage() {
   const basicHead2 = MASCOT_HEAD.filter(h => h.isBasic2);
   const restHead   = MASCOT_HEAD.filter(h => !h.isBasic && !h.isBasic2 && !h.isBase);
 
-  // Accesorios: los ítems "Sin X" de cada grupo de selección única (gafas,
-  // cadenas, grillz, corbatas, pajaritas) salen de sus carruseles y se
-  // muestran como ResetButton encima de cada uno. El ítem general "Sin
-  // accesorio" (acc_none) va como ResetButton encima de todo el tab.
-  const baseAccessory      = MASCOT_ACCESSORIES.find(a => a.isBase && !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie) ?? null;
+  // Accesorios: el ítem "Sin X" de cada grupo de selección única (gafas,
+  // cadenas, grillz, corbatas, pajaritas) se muestra como la primera
+  // tarjeta de su propio carrusel (con preview de la mascota sin ese
+  // accesorio puesto), no como un botón de reset aparte. La opción general
+  // "Sin accesorio" (acc_none) no se muestra en la tienda; "ningún
+  // accesorio puesto" ya se representa de forma natural cuando no hay nada
+  // activo.
   const baseChain          = MASCOT_ACCESSORIES.find(a => a.isBase && a.isChain) ?? null;
   const baseGrillz         = MASCOT_ACCESSORIES.find(a => a.isBase && a.isGrillz) ?? null;
   const baseGlasses        = MASCOT_ACCESSORIES.find(a => a.isBase && a.isGlasses) ?? null;
@@ -1026,14 +1002,23 @@ export default function ShopPage() {
             {/* Sección: Pies */}
             {outfitMainTab === 'pies' && (
               <div>
-                {/* Botón reset — encima de todos los carruseles y el grid */}
+                {/* Ítem base "Sin prenda" — misma tarjeta con preview de
+                    mascota que se usa en Actividades para "Sin actividad",
+                    en vez del botón de reset compacto. Sigue colocada
+                    encima de los carruseles. */}
                 {baseFeet && (
-                  <ResetButton
-                    label={baseFeet.name}
-                    emoji={baseFeet.emoji}
-                    isActive={activeFeet === baseFeet.id}
-                    onClick={() => handleEquipFeet(baseFeet)}
-                  />
+                  <div className="mb-3">
+                    <FeetCard
+                      feet={baseFeet}
+                      isUnlocked={true}
+                      isActive={activeFeet === baseFeet.id}
+                      canAfford={true}
+                      onBuy={() => handleEquipFeet(baseFeet)}
+                      onEquip={() => handleEquipFeet(baseFeet)}
+                      onCustomize={() => {}}
+                      isCustomized={false}
+                    />
+                  </div>
                 )}
 
                 {/* Carrusel horizontal: colores de la zapatilla retro (misma
@@ -1063,8 +1048,6 @@ export default function ShopPage() {
                           canAfford={coins >= feet.price}
                           onBuy={() => handleBuyFeet(feet)}
                           onEquip={() => handleEquipFeet(feet)}
-                          onCustomize={() => setEditingFeetItem(feet)}
-                          isCustomized={hasFeetCustomization(feet.id)}
                         />
                       ))}
                     </div>
@@ -1097,8 +1080,6 @@ export default function ShopPage() {
                           canAfford={coins >= feet.price}
                           onBuy={() => handleBuyFeet(feet)}
                           onEquip={() => handleEquipFeet(feet)}
-                          onCustomize={() => setEditingFeetItem(feet)}
-                          isCustomized={hasFeetCustomization(feet.id)}
                         />
                       ))}
                     </div>
@@ -1147,14 +1128,21 @@ export default function ShopPage() {
                   ))}
                 </div>
 
-                {/* Botón reset — encima del carrusel y el grid */}
+                {/* Ítem base "Sin prenda" de esta sub-tab — misma tarjeta con
+                    preview de mascota que se usa en Actividades para "Sin
+                    actividad", en vez del botón de reset compacto. Sigue
+                    colocada encima del carrusel y el grid. */}
                 {baseOutfit && (
-                  <ResetButton
-                    label={baseOutfit.name}
-                    emoji={baseOutfit.emoji ?? '✨'}
-                    isActive={activeOutfit === baseOutfit.id}
-                    onClick={() => handleEquipOutfit(baseOutfit)}
-                  />
+                  <div className="mb-3">
+                    <OutfitCard
+                      outfit={baseOutfit}
+                      isUnlocked={true}
+                      isActive={activeOutfit === baseOutfit.id}
+                      canAfford={true}
+                      onBuy={() => handleEquipOutfit(baseOutfit)}
+                      onEquip={() => handleEquipOutfit(baseOutfit)}
+                    />
+                  </div>
                 )}
 
                 {/* Carrusel horizontal: básicos de colores lisos de esta
@@ -1200,14 +1188,21 @@ export default function ShopPage() {
             {/* Sección: Cabeza */}
             {outfitMainTab === 'cabeza' && (
               <div className="flex flex-col gap-4">
-                {/* Botón reset — encima de todos los carruseles y el grid */}
+                {/* Ítem base "Sin prenda" — misma tarjeta con preview de
+                    mascota que se usa en Actividades para "Sin actividad",
+                    en vez del botón de reset compacto. Sigue colocada
+                    encima de todos los carruseles y el grid. */}
                 {baseHead && (
-                  <ResetButton
-                    label={baseHead.name}
-                    emoji={baseHead.emoji ?? '✨'}
-                    isActive={activeHead === baseHead.id}
-                    onClick={() => handleEquipHead(baseHead)}
-                  />
+                  <div className="mb-3">
+                    <HeadCard
+                      head={baseHead}
+                      isUnlocked={true}
+                      isActive={activeHead === baseHead.id}
+                      canAfford={true}
+                      onBuy={() => handleEquipHead(baseHead)}
+                      onEquip={() => handleEquipHead(baseHead)}
+                    />
+                  </div>
                 )}
 
                 {/* Carrusel: basicHead (mismo molde, distinto color de visera).
@@ -1282,122 +1277,16 @@ export default function ShopPage() {
             selección única con su propio carrusel horizontal) ── */}
         {tab === 'accessories' && (
           <div className="flex flex-col gap-4">
-            {/* Botón reset general — quita todos los accesorios a la vez */}
-            {baseAccessory && (
-              <ResetButton
-                label={baseAccessory.name}
-                emoji={baseAccessory.emoji}
-                isActive={isAccessoryCardActive(baseAccessory)}
-                onClick={() => handleToggleAccessory(baseAccessory)}
-              />
-            )}
-
-            {/* Carrusel: Cadenas — elige una */}
-            {chainAccessories.length > 0 && (
-              <div>
-                {baseChain && (
-                  <ResetButton
-                    label={baseChain.name}
-                    emoji={baseChain.emoji}
-                    isActive={isAccessoryCardActive(baseChain)}
-                    onClick={() => handleToggleAccessory(baseChain)}
-                  />
-                )}
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Cadenas · elige una
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {chainAccessories.map(accessory => (
-                    <CompactAccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={isAccessoryCardActive(accessory)}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onToggle={() => handleToggleAccessory(accessory)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Carrusel: Grillz — elige uno */}
-            {grillzAccessories.length > 0 && (
-              <div>
-                {baseGrillz && (
-                  <ResetButton
-                    label={baseGrillz.name}
-                    emoji={baseGrillz.emoji}
-                    isActive={isAccessoryCardActive(baseGrillz)}
-                    onClick={() => handleToggleAccessory(baseGrillz)}
-                  />
-                )}
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Grillz · elige uno
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {grillzAccessories.map(accessory => (
-                    <CompactAccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={isAccessoryCardActive(accessory)}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onToggle={() => handleToggleAccessory(accessory)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Carrusel: Gafas de sol — elige unas */}
-            {glassesAccessories.length > 0 && (
-              <div>
-                {baseGlasses && (
-                  <ResetButton
-                    label={baseGlasses.name}
-                    emoji={baseGlasses.emoji}
-                    isActive={isAccessoryCardActive(baseGlasses)}
-                    onClick={() => handleToggleAccessory(baseGlasses)}
-                  />
-                )}
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Gafas de sol · elige unas
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {glassesAccessories.map(accessory => (
-                    <CompactAccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={isAccessoryCardActive(accessory)}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onToggle={() => handleToggleAccessory(accessory)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Carrusel: Corbatas — elige una */}
+            {/* Carrusel: Corbatas — elige una. La opción "Sin corbata" va
+                como primera tarjeta del propio carrusel (con preview de la
+                mascota sin corbata), en vez de un botón de reset aparte. */}
             {tieAccessories.length > 0 && (
               <div>
-                {baseTie && (
-                  <ResetButton
-                    label={baseTie.name}
-                    emoji={baseTie.emoji}
-                    isActive={isAccessoryCardActive(baseTie)}
-                    onClick={() => handleToggleAccessory(baseTie)}
-                  />
-                )}
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Corbatas · elige una
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {tieAccessories.map(accessory => (
+                  {[baseTie, ...tieAccessories].filter(Boolean).map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
                       accessory={accessory}
@@ -1415,19 +1304,77 @@ export default function ShopPage() {
             {/* Carrusel: Pajaritas — elige una */}
             {bowTieAccessories.length > 0 && (
               <div>
-                {baseBowTie && (
-                  <ResetButton
-                    label={baseBowTie.name}
-                    emoji={baseBowTie.emoji}
-                    isActive={isAccessoryCardActive(baseBowTie)}
-                    onClick={() => handleToggleAccessory(baseBowTie)}
-                  />
-                )}
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Pajaritas · elige una
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {bowTieAccessories.map(accessory => (
+                  {[baseBowTie, ...bowTieAccessories].filter(Boolean).map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Cadenas — elige una */}
+            {chainAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Cadenas · elige una
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {[baseChain, ...chainAccessories].filter(Boolean).map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Grillz — elige uno */}
+            {grillzAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Grillz · elige uno
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {[baseGrillz, ...grillzAccessories].filter(Boolean).map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Gafas de sol — elige unas */}
+            {glassesAccessories.length > 0 && (
+              <div>
+                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                  Gafas de sol · elige unas
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {[baseGlasses, ...glassesAccessories].filter(Boolean).map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
                       accessory={accessory}
