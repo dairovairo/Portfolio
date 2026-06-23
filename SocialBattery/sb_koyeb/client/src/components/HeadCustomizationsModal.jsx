@@ -14,7 +14,7 @@ import MascotDisplay from './MascotDisplay';
  *   onRemove(item) elimina esa personalización por completo
  *   onClose        cierra el modal
  */
-export default function HeadCustomizationsModal({ items, activeHeadId, onEquip, onEdit, onRemove, onClose }) {
+export default function HeadCustomizationsModal({ items, activeHeadId, onEquip, onEdit, onRemove, onClose, previewTier = 'mid' }) {
   return (
     <>
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
@@ -61,7 +61,7 @@ export default function HeadCustomizationsModal({ items, activeHeadId, onEquip, 
                         </span>
                       )}
                       <MascotDisplay
-                        tier="mid"
+                        tier={previewTier}
                         size={64}
                         headSrc={item.src}
                         headItemId={item.id}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
 import FeetColorEditorModal from '../components/FeetColorEditorModal';
@@ -7,8 +8,15 @@ import MyCustomizationsModal from '../components/MyCustomizationsModal';
 import HeadColorEditorModal from '../components/HeadColorEditorModal';
 import HeadCustomizationsModal from '../components/HeadCustomizationsModal';
 import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
+import { getEffectiveBatteryLevel } from '../lib/battery';
 
 const COINS = 340;
+
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 // ── Tarjeta "Mis personalizaciones" ───────────────────────────────────────────
 // Acceso rápido a la galería de prendas con color personalizado (ver
@@ -24,6 +32,7 @@ function MyCustomizationsCard({
   previewItems,
   onClick,
   renderPreview,
+  previewTier = 'mid',
   singularLabel = 'prenda personalizada',
   pluralLabel = 'prendas personalizadas',
   emptyLabel = 'Aún no has personalizado ninguna prenda',
@@ -43,7 +52,7 @@ function MyCustomizationsCard({
             >
               {renderPreview ? renderPreview(item, 64) : (
                 <MascotDisplay
-                  tier="mid"
+                  tier={previewTier}
                   size={64}
                   feetSrc={item.src}
                   feetItemId={item.id}
@@ -125,7 +134,7 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
 }
 
 // ── Tarjeta de ACTIVIDAD ──────────────────────────────────────────────────────
-function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -146,7 +155,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           activityLayers={activity.layers}
           accessories={[]}
@@ -172,7 +181,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
 // Los accesorios admiten selección múltiple simultánea: cada tarjeta se activa
 // o desactiva de forma independiente (como un interruptor), sin afectar a los
 // demás accesorios ya equipados.
-function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, onCustomize, isCustomized }) {
+function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, onCustomize, isCustomized, previewTier = 'mid' }) {
   return (
     <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
       ${isActive
@@ -208,7 +217,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           accessories={accessory.src ? [accessory] : []}
           outfitSrc={null}
@@ -272,7 +281,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
 // encarga de que, dentro de su propio grupo (cadenas, grillz o gafas), solo
 // pueda haber un accesorio activo a la vez — al activar uno se desactivan
 // automáticamente los demás del mismo carrusel, sin tocar el resto.
-function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle }) {
+function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, previewTier = 'mid' }) {
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -296,7 +305,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           accessories={accessory.src ? [accessory] : []}
           outfitSrc={null}
@@ -354,7 +363,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
 }
 
 // ── Tarjeta de OUTFIT ─────────────────────────────────────────────────────────
-function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
+function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized, previewTier = 'mid' }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -387,7 +396,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           outfitSrc={outfit.src}
           outfitItemId={outfit.id}
@@ -418,7 +427,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
 // Versión reducida de OutfitCard pensada para el scroll horizontal de
 // camisetas/camisas básicas (colores lisos): preview pequeño + nombre +
 // acción, sin descripción larga, con ancho fijo para que se vea el scroll.
-function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -442,7 +451,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           outfitSrc={outfit.src}
           outfitItemId={outfit.id}
@@ -497,7 +506,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
 // Versión reducida de FeetCard pensada para el scroll horizontal de
 // colores de la zapatilla retro (misma silueta, distinto color): preview
 // pequeño + nombre + acción, sin descripción larga, ancho fijo.
-function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -524,7 +533,7 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           feetSrc={feet.src}
           feetItemId={feet.id}
@@ -575,7 +584,7 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
 }
 
 // ── Tarjeta de PIES ───────────────────────────────────────────────────────────
-function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
+function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized, previewTier = 'mid' }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -615,7 +624,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           feetSrc={feet.src}
           feetItemId={feet.id}
@@ -642,7 +651,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
 }
 
 // ── Tarjeta de CABEZA ─────────────────────────────────────────────────────────
-function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
+function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized, previewTier = 'mid' }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -677,7 +686,7 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           headSrc={head.src}
           headScale={head.scale}
@@ -706,7 +715,7 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
 // ── Tarjeta compacta de GORRA (para el carrusel horizontal de "Gorras") ──────
 // Igual que BasicFeetCard/BasicOutfitCard pero para prendas de cabeza:
 // preview pequeño + nombre + acción "Poner/Puesto", sin descripción larga.
-function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -730,7 +739,7 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }
           </div>
         )}
         <MascotDisplay
-          tier="mid"
+          tier={previewTier}
           size={112}
           headSrc={head.src}
           headScale={head.scale}
@@ -783,6 +792,7 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }
 // ── ShopPage ──────────────────────────────────────────────────────────────────
 export default function ShopPage() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const {
     unlockedActivities, unlockedAccessories, unlockedOutfits, unlockedFeet, unlockedHead,
     activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
@@ -792,6 +802,7 @@ export default function ShopPage() {
     getHeadZones, saveHeadCustomization, removeHeadCustomization, getCustomHeadItems,
     getOutfitZones, saveOutfitCustomization, removeOutfitCustomization, getCustomOutfitItems,
     getAccessoryZones, saveAccessoryCustomization, removeAccessoryCustomization, getCustomAccessoryItems,
+    savedOutfits, saveCurrentOutfit, applySavedOutfit,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -829,6 +840,7 @@ export default function ShopPage() {
   const [editingOutfitItem, setEditingOutfitItem] = useState(null);
   const [editingOutfitCustomId, setEditingOutfitCustomId] = useState(null);
   const [showOutfitCustomizations, setShowOutfitCustomizations] = useState(false);
+  const [showSavedOutfits, setShowSavedOutfits] = useState(false);
 
   const [editingAccessoryItem, setEditingAccessoryItem] = useState(null);
   const [editingAccessoryCustomId, setEditingAccessoryCustomId] = useState(null);
@@ -846,10 +858,24 @@ export default function ShopPage() {
   const customizedOutfitItems = getCustomOutfitItems();
   const customizedAccessoryItems = getCustomAccessoryItems();
   const customizedOutfitsForSubTab = customizedOutfitItems.filter(o => o.subcategory === outfitSubTab);
+  const shopBatteryLevel = profile ? getEffectiveBatteryLevel(profile) : 50;
+  const previewTier = getMascotTier(shopBatteryLevel);
 
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
+  }
+
+  function handleSaveCurrentOutfit() {
+    const saved = saveCurrentOutfit();
+    setShowSavedOutfits(true);
+    showToast(`"${saved.name}" guardado`);
+  }
+
+  function handleApplySavedOutfit(outfit) {
+    applySavedOutfit(outfit);
+    setShowSavedOutfits(false);
+    showToast(`"${outfit.name}" aplicado`);
   }
 
   // Botón "🎨 Personalizar" de cada carrusel horizontal: aplica sobre la
@@ -1191,7 +1217,7 @@ export default function ShopPage() {
   function renderOutfitCustomizationPreview(item, size) {
     return (
       <MascotDisplay
-        tier="mid"
+        tier={previewTier}
         size={size}
         outfitSrc={item.src}
         outfitItemId={item.id}
@@ -1210,7 +1236,7 @@ export default function ShopPage() {
   function renderAccessoryCustomizationPreview(item, size) {
     return (
       <MascotDisplay
-        tier="mid"
+        tier={previewTier}
         size={size}
         accessories={item.src ? [item] : []}
         outfitSrc={null}
@@ -1252,6 +1278,7 @@ export default function ShopPage() {
           onEdit={handleEditFromGallery}
           onRemove={handleRemoveCustomization}
           onClose={() => setShowMyCustomizations(false)}
+          previewTier={previewTier}
         />
       )}
 
@@ -1278,6 +1305,7 @@ export default function ShopPage() {
           onEdit={handleEditOutfitFromGallery}
           onRemove={handleRemoveOutfitCustomization}
           onClose={() => setShowOutfitCustomizations(false)}
+          previewTier={previewTier}
         />
       )}
 
@@ -1298,6 +1326,7 @@ export default function ShopPage() {
           onEdit={handleEditHeadFromGallery}
           onRemove={handleRemoveHeadCustomization}
           onClose={() => setShowHeadCustomizations(false)}
+          previewTier={previewTier}
         />
       )}
 
@@ -1326,6 +1355,7 @@ export default function ShopPage() {
           onEdit={handleEditAccessoryFromGallery}
           onRemove={handleRemoveAccessoryCustomization}
           onClose={() => setShowAccessoryCustomizations(false)}
+          previewTier={previewTier}
         />
       )}
 
@@ -1359,7 +1389,7 @@ export default function ShopPage() {
       <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-2">
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-4">
           <MascotDisplay
-            tier="mid"
+            tier={previewTier}
             size={72}
             outfitSrc={activeOut?.src ?? null}
             outfitItemId={activeOut?.id ?? null}
@@ -1380,7 +1410,7 @@ export default function ShopPage() {
             accessories={activeAccs}
             activityLayers={activeAct?.layers ?? []}
           />
-          <div className="flex-1 flex flex-col gap-0.5">
+          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
             <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
             <div className="text-[10px] text-surface-muted/60 mt-0.5">
               Ganas 🪙 actualizando tu batería cada día.
@@ -1428,6 +1458,7 @@ export default function ShopPage() {
                 canAfford={coins >= activity.price}
                 onBuy={() => handleBuyActivity(activity)}
                 onEquip={() => handleEquipActivity(activity)}
+                previewTier={previewTier}
               />
             ))}
           </div>
@@ -1478,6 +1509,7 @@ export default function ShopPage() {
                       onEquip={() => handleEquipFeet(baseFeet)}
                       onCustomize={() => {}}
                       isCustomized={false}
+                      previewTier={previewTier}
                     />
                     <MyCustomizationsCard
                       title="Calzado personalizado"
@@ -1487,6 +1519,7 @@ export default function ShopPage() {
                       pluralLabel="calzados personalizados"
                       emptyLabel="Aún no has personalizado ningún calzado"
                       onClick={() => setShowMyCustomizations(true)}
+                      previewTier={previewTier}
                     />
                   </div>
                 )}
@@ -1518,6 +1551,7 @@ export default function ShopPage() {
                           canAfford={coins >= feet.price}
                           onBuy={() => handleBuyFeet(feet)}
                           onEquip={() => handleEquipFeet(feet)}
+                          previewTier={previewTier}
                         />
                       ))}
                     </div>
@@ -1550,6 +1584,7 @@ export default function ShopPage() {
                           canAfford={coins >= feet.price}
                           onBuy={() => handleBuyFeet(feet)}
                           onEquip={() => handleEquipFeet(feet)}
+                          previewTier={previewTier}
                         />
                       ))}
                     </div>
@@ -1568,6 +1603,7 @@ export default function ShopPage() {
                       onEquip={() => handleEquipFeet(feet)}
                       onCustomize={() => handleOpenCustomizeNew(feet)}
                       isCustomized={hasAnyCustomizationOf(feet.id)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1613,6 +1649,7 @@ export default function ShopPage() {
                       canAfford={true}
                       onBuy={() => handleEquipOutfit(baseOutfit)}
                       onEquip={() => handleEquipOutfit(baseOutfit)}
+                      previewTier={previewTier}
                     />
                     <MyCustomizationsCard
                       title={currentOutfitCustomizationLabels.title}
@@ -1623,6 +1660,7 @@ export default function ShopPage() {
                       emptyLabel={currentOutfitCustomizationLabels.empty}
                       onClick={() => setShowOutfitCustomizations(true)}
                       renderPreview={renderOutfitCustomizationPreview}
+                      previewTier={previewTier}
                     />
                   </div>
                 )}
@@ -1654,6 +1692,7 @@ export default function ShopPage() {
                           canAfford={coins >= outfit.price}
                           onBuy={() => handleBuyOutfit(outfit)}
                           onEquip={() => handleEquipOutfit(outfit)}
+                          previewTier={previewTier}
                         />
                       ))}
                     </div>
@@ -1672,6 +1711,7 @@ export default function ShopPage() {
                       onEquip={() => handleEquipOutfit(outfit)}
                       onCustomize={() => handleOpenCustomizeOutfitNew(outfit)}
                       isCustomized={hasAnyCustomizationOfOutfit(outfit.id)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1692,15 +1732,17 @@ export default function ShopPage() {
                       canAfford={true}
                       onBuy={() => handleEquipHead(baseHead)}
                       onEquip={() => handleEquipHead(baseHead)}
+                      previewTier={previewTier}
                     />
                     <MyCustomizationsCard
                       title="Gorros personalizados"
                       count={customizedHeadItems.length}
                       previewItems={customizedHeadItems}
                       onClick={() => setShowHeadCustomizations(true)}
+                      previewTier={previewTier}
                       renderPreview={(item, size) => (
                         <MascotDisplay
-                          tier="mid"
+                          tier={previewTier}
                           size={size}
                           headSrc={item.src}
                           headItemId={item.id}
@@ -1743,6 +1785,7 @@ export default function ShopPage() {
                           canAfford={coins >= head.price}
                           onBuy={() => handleBuyHead(head)}
                           onEquip={() => handleEquipHead(head)}
+                          previewTier={previewTier}
                         />
                       ))}
                     </div>
@@ -1774,6 +1817,7 @@ export default function ShopPage() {
                           canAfford={coins >= head.price}
                           onBuy={() => handleBuyHead(head)}
                           onEquip={() => handleEquipHead(head)}
+                          previewTier={previewTier}
                         />
                       ))}
                     </div>
@@ -1794,6 +1838,7 @@ export default function ShopPage() {
                       onEquip={() => handleEquipHead(head)}
                       onCustomize={() => handleOpenCustomizeHeadNew(head)}
                       isCustomized={hasAnyCustomizationOfHead(head.id)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1818,6 +1863,7 @@ export default function ShopPage() {
               emptyLabel="Aún no has personalizado ningún accesorio"
               onClick={() => setShowAccessoryCustomizations(true)}
               renderPreview={renderAccessoryCustomizationPreview}
+              previewTier={previewTier}
             />
 
             {/* Carrusel: Corbatas — elige una. La opción "Sin corbata" va
@@ -1847,6 +1893,7 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1878,6 +1925,7 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1909,6 +1957,7 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1940,6 +1989,7 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1971,6 +2021,7 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
                     />
                   ))}
                 </div>
@@ -1991,6 +2042,7 @@ export default function ShopPage() {
                   onToggle={() => handleToggleAccessory(accessory)}
                   onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
                   isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
+                  previewTier={previewTier}
                 />
               ))}
             </div>

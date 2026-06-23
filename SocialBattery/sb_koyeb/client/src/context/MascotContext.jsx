@@ -32,6 +32,7 @@ const FEET_CUSTOMIZATIONS_STORAGE_KEY = 'sb-feet-color-zones';
 const HEAD_CUSTOMIZATIONS_STORAGE_KEY = 'sb-head-color-zones';
 const OUTFIT_CUSTOMIZATIONS_STORAGE_KEY = 'sb-outfit-color-zones';
 const ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY = 'sb-accessory-color-zones';
+const SAVED_OUTFITS_STORAGE_KEY = 'sb-saved-outfits';
 
 function loadFeetCustomizations() {
   try {
@@ -71,6 +72,16 @@ function loadStoredCustomizations(storageKey) {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+function loadSavedOutfits() {
+  try {
+    const raw = localStorage.getItem(SAVED_OUTFITS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
   }
 }
 
@@ -1780,6 +1791,8 @@ export function MascotProvider({ children }) {
     () => loadStoredCustomizations(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY)
   );
 
+  const [savedOutfits, setSavedOutfits] = useState(loadSavedOutfits);
+
   const customAccessoryItems = Object.values(accessoryCustomizations);
   const allAccessories = [...MASCOT_ACCESSORIES, ...customAccessoryItems];
 
@@ -2156,6 +2169,53 @@ export function MascotProvider({ children }) {
     setActiveHead(id);
   }
 
+  function saveCurrentOutfit() {
+    const outfit = {
+      id: `saved_outfit_${Date.now()}`,
+      name: `Outfit ${savedOutfits.length + 1}`,
+      createdAt: new Date().toISOString(),
+      activeActivity,
+      activeAccessories: [...activeAccessories],
+      activeOutfit,
+      activeFeet,
+      activeHead,
+    };
+
+    setSavedOutfits(prev => {
+      const next = [outfit, ...prev].slice(0, 20);
+      try { localStorage.setItem(SAVED_OUTFITS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    return outfit;
+  }
+
+  function applySavedOutfit(outfit) {
+    if (!outfit) return;
+
+    const accessoryIds = Array.isArray(outfit.activeAccessories) ? outfit.activeAccessories : [];
+
+    setActiveActivity(outfit.activeActivity ?? 'none');
+    setActiveOutfit(outfit.activeOutfit ?? 'out_none');
+    setActiveFeet(outfit.activeFeet ?? 'feet_none');
+    setActiveHead(outfit.activeHead ?? 'head_none');
+    setActiveAccessories(new Set(accessoryIds));
+
+    setUnlockedActivities(prev => new Set([...prev, outfit.activeActivity].filter(Boolean)));
+    setUnlockedOutfits(prev => new Set([...prev, outfit.activeOutfit].filter(Boolean)));
+    setUnlockedFeet(prev => new Set([...prev, outfit.activeFeet].filter(Boolean)));
+    setUnlockedHead(prev => new Set([...prev, outfit.activeHead].filter(Boolean)));
+    setUnlockedAccessories(prev => new Set([...prev, ...accessoryIds]));
+  }
+
+  function removeSavedOutfit(id) {
+    setSavedOutfits(prev => {
+      const next = prev.filter(outfit => outfit.id !== id);
+      try { localStorage.setItem(SAVED_OUTFITS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
   /**
    * Devuelve las capas para renderizar la mascota completa dado un tier:
    *   Capa 1 → base        (mascota según batería)
@@ -2271,6 +2331,10 @@ export function MascotProvider({ children }) {
       removeAccessoryCustomization,
       getCustomAccessoryItems,
       hasAccessoryCustomization,
+      savedOutfits,
+      saveCurrentOutfit,
+      applySavedOutfit,
+      removeSavedOutfit,
     }}>
       {children}
     </MascotContext.Provider>

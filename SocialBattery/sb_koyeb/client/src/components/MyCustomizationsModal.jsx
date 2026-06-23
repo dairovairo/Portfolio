@@ -27,6 +27,7 @@ export default function MyCustomizationsModal({
   activeLabel = 'Puesto',
   equipLabel = 'Poner',
   renderPreview,
+  previewTier = 'mid',
   onEquip,
   onEdit,
   onRemove,
@@ -84,7 +85,7 @@ export default function MyCustomizationsModal({
                       )}
                       {renderPreview ? renderPreview(item, 64) : (
                         <MascotDisplay
-                          tier="mid"
+                          tier={previewTier}
                           size={64}
                           feetSrc={item.src}
                           feetItemId={item.id}
