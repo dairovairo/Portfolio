@@ -1,19 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadImageData, floodFillMask, recolorWithMask } from '../lib/colorZones';
 
-/**
- * ColorEditorModal â€” editor genÃ©rico de "personalizaciÃ³n extrema" por
- * zonas. Funciona igual que el editor de pies/cabeza, pero permite
- * reutilizar la misma interfaz para cualquier tipo de prenda.
- *
- * Props:
- *   item          Ã­tem que se estÃ¡ personalizando
- *   initialZones  receta de zonas ya guardada para este Ã­tem (o [])
- *   description   texto breve que explica quÃ© parte se puede tocar
- *   onClose       cierra el modal sin guardar
- *   onSave(zones) confirma y guarda la receta final
- */
-
 const PRESET_COLORS = [
   '#FFFFFF', '#1A1A1A', '#9E9E9E', '#E53935', '#FF7A00',
   '#FFD400', '#4CAF50', '#1E88E5', '#3949AB', '#8E24AA',
@@ -58,10 +45,10 @@ export default function ColorEditorModal({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    rebuildFromZones(initialZones).then(() => { if (!cancelled) setLoading(false); });
+    rebuildFromZones(initialZones).then(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => { cancelled = true; };
-    // Solo se reconstruye al montar; deshacer/restaurar llaman a
-    // rebuildFromZones directamente con su propio control de `loading`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -77,7 +64,6 @@ export default function ColorEditorModal({
     if (loading) return;
     const imageData = masterDataRef.current;
     if (!imageData) return;
-    // Descarta cualquier vista previa sin confirmar de la selección anterior.
     drawToVisibleCanvas(imageData);
 
     const { x, y } = getCanvasPixelCoords(e);
@@ -88,7 +74,7 @@ export default function ColorEditorModal({
     const idx = (y * imageData.width + x) * 4;
     if (imageData.data[idx + 3] < 10) {
       setPending(null);
-      return; // clic en zona transparente: no hay nada que seleccionar
+      return;
     }
     const mask = floodFillMask(imageData, x, y, tolerance);
     if (!mask) {

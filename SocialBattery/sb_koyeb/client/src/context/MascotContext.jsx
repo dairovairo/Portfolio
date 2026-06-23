@@ -1775,6 +1775,10 @@ export function MascotProvider({ children }) {
     setActiveActivity(id);
   }
 
+  function getAccessoryItemById(id) {
+    return MASCOT_ACCESSORIES.find(a => a.id === id) ?? accessoryCustomizations[id] ?? null;
+  }
+
   function sameAccessoryGroup(a, b) {
     return Boolean(
       a && b && (
@@ -1820,10 +1824,6 @@ export function MascotProvider({ children }) {
     setUnlockedAccessories(prev => new Set([...prev, id]));
   }
   function equipAccessory(id) {
-    // "Equipar" un accesorio lo activa y deja intactos los accesorios de
-    // otros grupos, pero reemplaza cualquier variante del mismo accesorio
-    // base (incluida la personalizada) y respeta los grupos de selección
-    // única. 'acc_none' sigue significando "vacío total".
     const item = getAccessoryItemById(id);
     if (!item) return;
     if (id === 'acc_none') {
@@ -2035,10 +2035,6 @@ export function MascotProvider({ children }) {
     return MASCOT_OUTFITS.find(o => o.id === id) ?? outfitCustomizations[id] ?? null;
   }
 
-  function getAccessoryItemById(id) {
-    return MASCOT_ACCESSORIES.find(a => a.id === id) ?? accessoryCustomizations[id] ?? null;
-  }
-
   // Personalización extrema de color — torso (camisetas/camisas).
   function getOutfitZones(id) {
     return outfitCustomizations[id]?.zones ?? [];
@@ -2236,8 +2232,11 @@ export function MascotProvider({ children }) {
       equipHead,
       getMascotLayers,
       getActiveSrc,
-      feetCustomizations,
       getFeetItemById,
+      getHeadItemById,
+      getOutfitItemById,
+      getAccessoryItemById,
+      feetCustomizations,
       getFeetZones,
       saveFeetCustomization,
       removeFeetCustomization,
@@ -2245,21 +2244,18 @@ export function MascotProvider({ children }) {
       resetFeetZones,
       hasFeetCustomization,
       headCustomizations,
-      getHeadItemById,
       getHeadZones,
       saveHeadCustomization,
       removeHeadCustomization,
       getCustomHeadItems,
       hasHeadCustomization,
       outfitCustomizations,
-      getOutfitItemById,
       getOutfitZones,
       saveOutfitCustomization,
       removeOutfitCustomization,
       getCustomOutfitItems,
       hasOutfitCustomization,
       accessoryCustomizations,
-      getAccessoryItemById,
       getAccessoryZones,
       saveAccessoryCustomization,
       removeAccessoryCustomization,

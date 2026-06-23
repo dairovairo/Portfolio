@@ -2,27 +2,15 @@ import MascotDisplay from './MascotDisplay';
 
 /**
  * MyCustomizationsModal - galería genérica de personalizaciones de color.
- * Cada entrada es un ítem independiente del modelo original (el original
- * nunca se modifica): desde aquí puede equipar una personalización, reabrir
- * su editor de color, o eliminarla por completo.
- *
- * Props:
- *   title         título visible del modal
- *   emptyText     texto mostrado cuando no hay personalizaciones
- *   items         lista de ítems personalizados
- *   activeItemId  id del ítem actualmente equipado (si aplica)
- *   isItemActive   función opcional para resolver el estado activo por ítem
- *   renderPreview render opcional del preview de cada ítem
- *   onEquip(item)  equipa esta personalización
- *   onEdit(item)   reabre el editor de color para ese ítem
- *   onRemove(item) elimina esa personalización por completo
- *   onClose       cierra el modal
+ * Cada entrada es un ítem independiente del modelo original: desde aquí se
+ * puede equipar, editar o eliminar una variante personalizada.
  */
 export default function MyCustomizationsModal({
   title = 'Mis personalizaciones',
   emptyText = 'Aún no has personalizado ninguna prenda. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color sin tocar el modelo original.',
   items,
   activeItemId,
+  activeFeetId,
   isItemActive,
   renderPreview,
   onEquip,
@@ -63,7 +51,7 @@ export default function MyCustomizationsModal({
           ) : (
             <div className="flex flex-col gap-2.5">
               {items.map(item => {
-                const isActive = isItemActive ? isItemActive(item) : activeItemId === item.id;
+                const isActive = isItemActive ? isItemActive(item) : (activeItemId ?? activeFeetId) === item.id;
                 return (
                   <div
                     key={item.id}

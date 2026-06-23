@@ -62,8 +62,8 @@ function MyCustomizationsCard({ title = 'Mis personalizaciones', count, previewI
         </div>
         <div className="text-surface-muted text-[11px] leading-snug flex-1">
           {count > 0
-            ? `${count} ${count === 1 ? 'personalización' : 'personalizaciones'}`
-            : 'Aún no has creado ninguna personalización'}
+            ? `${count} ${count === 1 ? 'prenda personalizada' : 'prendas personalizadas'}`
+            : 'Aún no has personalizado ninguna prenda'}
         </div>
       </div>
     </button>
@@ -131,42 +131,6 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
             ✓ Activa
           </span>
         )}
-        {accessory.src && onCustomize && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
-            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
-          >
-            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-            {isCustomized && (
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
-            )}
-          </button>
-        )}
-        {accessory.src && onCustomize && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
-            className="absolute top-1 left-1 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-[10px] hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
-          >
-            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-            {isCustomized && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-glow" />
-            )}
-          </button>
-        )}
-        {outfit.src && onCustomize && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
-            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
-          >
-            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-            {isCustomized && (
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
-            )}
-          </button>
-        )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -216,6 +180,18 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
             ✓ Activo
           </span>
+        )}
+        {accessory.src && onCustomize && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Personalizar colores"
+            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
+          >
+            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+            {isCustomized && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
+            )}
+          </button>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
@@ -305,6 +281,18 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
             ✓
           </span>
         )}
+        {accessory.src && onCustomize && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Personalizar colores"
+            className="absolute top-1 left-1 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-[10px] hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
+          >
+            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+            {isCustomized && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-glow" />
+            )}
+          </button>
+        )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -383,6 +371,18 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
             ✓ Puesto
           </span>
+        )}
+        {outfit.src && onCustomize && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Personalizar colores"
+            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
+          >
+            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+            {isCustomized && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
+            )}
+          </button>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
@@ -790,11 +790,9 @@ export default function ShopPage() {
     unlockedActivities, unlockedAccessories, unlockedOutfits, unlockedFeet, unlockedHead,
     activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
     unlockActivity, unlockAccessory, unlockOutfit, unlockFeet, unlockHead,
-    equipActivity, equipAccessory, toggleAccessory, equipOutfit, equipFeet, equipHead,
-    getFeetItemById, getFeetZones, saveFeetCustomization, removeFeetCustomization, getCustomFeetItems,
-    getHeadItemById, getHeadZones, saveHeadCustomization, removeHeadCustomization, getCustomHeadItems,
-    getOutfitItemById, getOutfitZones, saveOutfitCustomization, removeOutfitCustomization, getCustomOutfitItems,
-    getAccessoryItemById, getAccessoryZones, saveAccessoryCustomization, removeAccessoryCustomization, getCustomAccessoryItems,
+    equipActivity, toggleAccessory, equipOutfit, equipFeet, equipHead,
+    getFeetZones, saveFeetCustomization, removeFeetCustomization, getCustomFeetItems,
+    getHeadZones, saveHeadCustomization, removeHeadCustomization, getCustomHeadItems,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -818,16 +816,6 @@ export default function ShopPage() {
   // Galería "Mis personalizaciones" — true mientras está abierta.
   const [showMyCustomizations, setShowMyCustomizations] = useState(false);
 
-  // â”€â”€ Estado para camisetas/camisas personalizadas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const [editingOutfitItem, setEditingOutfitItem] = useState(null);
-  const [editingOutfitCustomId, setEditingOutfitCustomId] = useState(null);
-  const [showOutfitCustomizations, setShowOutfitCustomizations] = useState(false);
-
-  // â”€â”€ Estado para accesorios personalizados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const [editingAccessoryItem, setEditingAccessoryItem] = useState(null);
-  const [editingAccessoryCustomId, setEditingAccessoryCustomId] = useState(null);
-  const [showAccessoryCustomizations, setShowAccessoryCustomizations] = useState(false);
-
   // ── Estado análogo para gorros personalizados ────────────────────────────────
   // Ítem de cabeza que se está personalizando en el editor de color (null
   // = modal cerrado). Puede ser un ítem original del catálogo (MASCOT_HEAD)
@@ -848,12 +836,6 @@ export default function ShopPage() {
   // Ítems de cabeza personalizados — igual que los de pies.
   const customizedHeadItems = getCustomHeadItems();
 
-  // Ítems de torso personalizados.
-  const customizedOutfitItems = getCustomOutfitItems();
-
-  // Ítems de accesorios personalizados.
-  const customizedAccessoryItems = getCustomAccessoryItems();
-
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
@@ -862,10 +844,8 @@ export default function ShopPage() {
   // Botón "🎨 Personalizar" de cada carrusel horizontal: aplica sobre la
   // zapatilla actualmente equipada de esa familia (si hay una puesta) o,
   // si no, sobre la primera variante de color de la familia.
-  function pickCarouselTarget(family, activeId, customItems = []) {
-    const activeCustom = customItems.find(item => item.id === activeId);
-    const targetId = activeCustom?.baseId ?? activeId;
-    return family.find(f => f.id === targetId) ?? family[0] ?? null;
+  function pickCarouselTarget(family) {
+    return family.find(f => f.id === activeFeet) ?? family[0] ?? null;
   }
 
   // El indicador 🎨 de una tarjeta de calzado original ahora se basa en si
@@ -873,8 +853,8 @@ export default function ShopPage() {
   // ya que el id del original nunca aparece directamente en
   // feetCustomizations: cada personalización vive con su propio id
   // `feet_custom_<n>` (ver saveFeetCustomization en MascotContext).
-  function hasAnyCustomizationOf(items, baseId) {
-    return items.some(c => c.baseId === baseId);
+  function hasAnyCustomizationOf(baseId) {
+    return customizedFeetItems.some(c => c.baseId === baseId);
   }
 
   // Abre el editor para crear una personalización NUEVA a partir de un
@@ -887,11 +867,11 @@ export default function ShopPage() {
   // ── Análogos para cabeza ─────────────────────────────────────────────────────
 
   function hasAnyCustomizationOfHead(baseId) {
-    return hasAnyCustomizationOf(customizedHeadItems, baseId);
+    return customizedHeadItems.some(c => c.baseId === baseId);
   }
 
   function pickCarouselTargetHead(family) {
-    return pickCarouselTarget(family, activeHead, customizedHeadItems);
+    return family.find(h => h.id === activeHead) ?? family[0] ?? null;
   }
 
   function handleOpenCustomizeHeadNew(item) {
@@ -919,78 +899,6 @@ export default function ShopPage() {
 
   function handleEquipCustomHead(item) {
     equipHead(item.id);
-    showToast(`¡${item.name} puesto! ✨`);
-  }
-
-  function hasAnyCustomizationOfOutfit(baseId) {
-    return hasAnyCustomizationOf(customizedOutfitItems, baseId);
-  }
-
-  function pickCarouselTargetOutfit(family) {
-    return pickCarouselTarget(family, activeOutfit, customizedOutfitItems);
-  }
-
-  function handleOpenCustomizeOutfitNew(item) {
-    setEditingOutfitCustomId(null);
-    setEditingOutfitItem(item);
-  }
-
-  function handleSaveOutfitColors(zones) {
-    const newId = saveOutfitCustomization(editingOutfitItem, zones, editingOutfitCustomId);
-    if (newId) {
-      const sectionTitle = editingOutfitItem?.subcategory === 'camisa' ? 'Camisas personalizadas' : 'Camisetas personalizadas';
-      showToast(`¡"${editingOutfitItem.baseName ?? editingOutfitItem.name}" guardada en ${sectionTitle}! 🎨`);
-    }
-    setEditingOutfitItem(null);
-    setEditingOutfitCustomId(null);
-  }
-
-  function handleEditOutfitFromGallery(item) {
-    setShowOutfitCustomizations(false);
-    setEditingOutfitCustomId(item.id);
-    setEditingOutfitItem(item);
-  }
-
-  function handleRemoveOutfitCustomization(item) {
-    removeOutfitCustomization(item.id);
-    const sectionTitle = item.subcategory === 'camisa' ? 'Camisas personalizadas' : 'Camisetas personalizadas';
-    showToast(`"${item.name}" eliminada de ${sectionTitle} ✨`);
-  }
-
-  function handleEquipCustomOutfit(item) {
-    equipOutfit(item.id);
-    showToast(`¡${item.name} puesta! ✨`);
-  }
-
-  function hasAnyCustomizationOfAccessory(baseId) {
-    return hasAnyCustomizationOf(customizedAccessoryItems, baseId);
-  }
-
-  function handleOpenCustomizeAccessoryNew(item) {
-    setEditingAccessoryCustomId(null);
-    setEditingAccessoryItem(item);
-  }
-
-  function handleSaveAccessoryColors(zones) {
-    const newId = saveAccessoryCustomization(editingAccessoryItem, zones, editingAccessoryCustomId);
-    if (newId) showToast(`¡"${editingAccessoryItem.baseName ?? editingAccessoryItem.name}" guardada en Accesorios personalizados! 🎨`);
-    setEditingAccessoryItem(null);
-    setEditingAccessoryCustomId(null);
-  }
-
-  function handleEditAccessoryFromGallery(item) {
-    setShowAccessoryCustomizations(false);
-    setEditingAccessoryCustomId(item.id);
-    setEditingAccessoryItem(item);
-  }
-
-  function handleRemoveAccessoryCustomization(item) {
-    removeAccessoryCustomization(item.id);
-    showToast(`"${item.name}" eliminada de Accesorios personalizados ✨`);
-  }
-
-  function handleEquipCustomAccessory(item) {
-    equipAccessory(item.id);
     showToast(`¡${item.name} puesto! ✨`);
   }
 
@@ -1094,12 +1002,10 @@ export default function ShopPage() {
   // MASCOT_ACTIVITIES), a diferencia del resto de ítems base de
   // outfit/accesorios, que siguen excluidos.
   const activityOptions = MASCOT_ACTIVITIES;
-  const activeAccs = Array.from(activeAccessories)
-    .map(id => getAccessoryItemById(id))
-    .filter(Boolean);
-  const activeOut  = getOutfitItemById(activeOutfit);
-  const activeFt   = getFeetItemById(activeFeet);
-  const activeHd   = getHeadItemById(activeHead);
+  const activeAccs = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
+  const activeOut  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
+  const activeFt   = MASCOT_FEET.find(f => f.id === activeFeet);
+  const activeHd   = MASCOT_HEAD.find(h => h.id === activeHead);
 
   // Outfits (torso) filtrados por sub-tab
   // - baseOutfit: ítem "Sin prenda" de esta sub-tab → botón ResetButton encima
@@ -1190,83 +1096,11 @@ export default function ShopPage() {
       {showMyCustomizations && (
         <MyCustomizationsModal
           items={customizedFeetItems}
-          activeItemId={activeFeet}
+          activeFeetId={activeFeet}
           onEquip={handleEquipCustomFeet}
           onEdit={handleEditFromGallery}
           onRemove={handleRemoveCustomization}
           onClose={() => setShowMyCustomizations(false)}
-        />
-      )}
-
-      {editingOutfitItem && (
-        <ColorEditorModal
-          item={editingOutfitItem}
-          initialZones={getOutfitZones(editingOutfitItem.id)}
-          description={`Toca una zona de la ${editingOutfitItem.subcategory === 'camisa' ? 'camisa' : 'camiseta'} para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (pecho, mangas, logo...).`}
-          onClose={() => { setEditingOutfitItem(null); setEditingOutfitCustomId(null); }}
-          onSave={handleSaveOutfitColors}
-        />
-      )}
-
-      {showOutfitCustomizations && (
-        <MyCustomizationsModal
-          title={outfitSubTab === 'camisa' ? 'Camisas personalizadas' : 'Camisetas personalizadas'}
-          emptyText={`Aún no has personalizado ninguna ${outfitSubTab === 'camisa' ? 'camisa' : 'camiseta'}. Toca el botón 🎨 de cualquier ${outfitSubTab === 'camisa' ? 'camisa' : 'camiseta'} para crear tu propia variante de color sin tocar el modelo original.`}
-          items={customizedOutfitItems.filter(item => item.subcategory === outfitSubTab)}
-          activeItemId={activeOutfit}
-          renderPreview={(item, size) => (
-            <MascotDisplay
-              tier="mid"
-              size={size}
-              outfitSrc={item.src}
-              outfitItemId={item.id}
-              outfitSubcategory={item.subcategory}
-              outfitItemOffsetY={item.offsetY ?? null}
-              outfitItemScale={item.scale ?? null}
-              feetSrc={null}
-              headSrc={null}
-              accessories={[]}
-              activityLayers={[]}
-            />
-          )}
-          onEquip={handleEquipCustomOutfit}
-          onEdit={handleEditOutfitFromGallery}
-          onRemove={handleRemoveOutfitCustomization}
-          onClose={() => setShowOutfitCustomizations(false)}
-        />
-      )}
-
-      {editingAccessoryItem && (
-        <ColorEditorModal
-          item={editingAccessoryItem}
-          initialZones={getAccessoryZones(editingAccessoryItem.id)}
-          description="Toca una zona del accesorio para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites."
-          onClose={() => { setEditingAccessoryItem(null); setEditingAccessoryCustomId(null); }}
-          onSave={handleSaveAccessoryColors}
-        />
-      )}
-
-      {showAccessoryCustomizations && (
-        <MyCustomizationsModal
-          title="Accesorios personalizados"
-          emptyText="Aún no has personalizado ningún accesorio. Toca el botón 🎨 de cualquier accesorio para crear tu propia variante de color sin tocar el modelo original."
-          items={customizedAccessoryItems}
-          isItemActive={(item) => activeAccessories.has(item.id)}
-          renderPreview={(item, size) => (
-            <MascotDisplay
-              tier="mid"
-              size={size}
-              accessories={[item]}
-              outfitSrc={null}
-              feetSrc={null}
-              headSrc={null}
-              activityLayers={[]}
-            />
-          )}
-          onEquip={handleEquipCustomAccessory}
-          onEdit={handleEditAccessoryFromGallery}
-          onRemove={handleRemoveAccessoryCustomization}
-          onClose={() => setShowAccessoryCustomizations(false)}
         />
       )}
 
@@ -1323,7 +1157,6 @@ export default function ShopPage() {
             tier="mid"
             size={72}
             outfitSrc={activeOut?.src ?? null}
-            outfitItemId={activeOut?.id ?? null}
             outfitSubcategory={activeOut?.subcategory ?? null}
             outfitItemOffsetY={activeOut?.offsetY ?? null}
             outfitItemScale={activeOut?.scale ?? null}
@@ -1458,7 +1291,7 @@ export default function ShopPage() {
                         Retro · colores
                       </div>
                       <button
-                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet, activeFeet, customizedFeetItems))}
+                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet))}
                         className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
                       >
                         <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -1490,7 +1323,7 @@ export default function ShopPage() {
                         Chunky · colores
                       </div>
                       <button
-                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet2, activeFeet, customizedFeetItems))}
+                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet2))}
                         className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
                       >
                         <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -1524,7 +1357,7 @@ export default function ShopPage() {
                       onBuy={() => handleBuyFeet(feet)}
                       onEquip={() => handleEquipFeet(feet)}
                       onCustomize={() => handleOpenCustomizeNew(feet)}
-                      isCustomized={hasAnyCustomizationOf(customizedFeetItems, feet.id)}
+                      isCustomized={hasAnyCustomizationOf(feet.id)}
                     />
                   ))}
                 </div>
@@ -1572,25 +1405,9 @@ export default function ShopPage() {
                       onEquip={() => handleEquipOutfit(baseOutfit)}
                     />
                     <MyCustomizationsCard
-                      title={outfitSubTab === 'camisa' ? 'Camisas personalizadas' : 'Camisetas personalizadas'}
-                      count={customizedOutfitItems.filter(item => item.subcategory === outfitSubTab).length}
-                      previewItems={customizedOutfitItems.filter(item => item.subcategory === outfitSubTab)}
-                      onClick={() => setShowOutfitCustomizations(true)}
-                      renderPreview={(item, size) => (
-                        <MascotDisplay
-                          tier="mid"
-                          size={size}
-                          outfitSrc={item.src}
-                          outfitItemId={item.id}
-                          outfitSubcategory={item.subcategory}
-                          outfitItemOffsetY={item.offsetY ?? null}
-                          outfitItemScale={item.scale ?? null}
-                          feetSrc={null}
-                          headSrc={null}
-                          accessories={[]}
-                          activityLayers={[]}
-                        />
-                      )}
+                      count={customizedFeetItems.length}
+                      previewItems={customizedFeetItems}
+                      onClick={() => setShowMyCustomizations(true)}
                     />
                   </div>
                 )}
@@ -1600,17 +1417,8 @@ export default function ShopPage() {
                     scroll vertical principal. */}
                 {basicOutfits.length > 0 && (
                   <div className="mb-3">
-                    <div className="flex items-center justify-between px-0.5 mb-1.5">
-                      <div className="text-[11px] font-display font-semibold text-surface-muted">
-                        Básicos
-                      </div>
-                      <button
-                        onClick={() => handleOpenCustomizeOutfitNew(pickCarouselTargetOutfit(basicOutfits))}
-                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                      >
-                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                        Personalizar
-                      </button>
+                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
+                      Básicos
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicOutfits.map(outfit => (
@@ -1638,8 +1446,6 @@ export default function ShopPage() {
                       canAfford={coins >= outfit.price}
                       onBuy={() => handleBuyOutfit(outfit)}
                       onEquip={() => handleEquipOutfit(outfit)}
-                      onCustomize={() => handleOpenCustomizeOutfitNew(outfit)}
-                      isCustomized={hasAnyCustomizationOfOutfit(outfit.id)}
                     />
                   ))}
                 </div>
@@ -1779,20 +1585,9 @@ export default function ShopPage() {
                 todo del scroll vertical, antes de cualquier carrusel. */}
             <MyCustomizationsCard
               title="Accesorios personalizados"
-              count={customizedAccessoryItems.length}
-              previewItems={customizedAccessoryItems}
-              onClick={() => setShowAccessoryCustomizations(true)}
-              renderPreview={(item, size) => (
-                <MascotDisplay
-                  tier="mid"
-                  size={size}
-                  accessories={[item]}
-                  outfitSrc={null}
-                  feetSrc={null}
-                  headSrc={null}
-                  activityLayers={[]}
-                />
-              )}
+              count={customizedFeetItems.length}
+              previewItems={customizedFeetItems}
+              onClick={() => setShowMyCustomizations(true)}
             />
 
             {/* Carrusel: Corbatas — elige una. La opción "Sin corbata" va
@@ -1813,8 +1608,6 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
-                      onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
-                      isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
                     />
                   ))}
                 </div>
@@ -1837,8 +1630,6 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
-                      onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
-                      isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
                     />
                   ))}
                 </div>
@@ -1861,8 +1652,6 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
-                      onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
-                      isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
                     />
                   ))}
                 </div>
@@ -1885,8 +1674,6 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
-                      onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
-                      isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
                     />
                   ))}
                 </div>
@@ -1909,8 +1696,6 @@ export default function ShopPage() {
                       canAfford={coins >= accessory.price}
                       onBuy={() => handleBuyAccessory(accessory)}
                       onToggle={() => handleToggleAccessory(accessory)}
-                      onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
-                      isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
                     />
                   ))}
                 </div>
@@ -1929,8 +1714,6 @@ export default function ShopPage() {
                   canAfford={coins >= accessory.price}
                   onBuy={() => handleBuyAccessory(accessory)}
                   onToggle={() => handleToggleAccessory(accessory)}
-                  onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
-                  isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
                 />
               ))}
             </div>
