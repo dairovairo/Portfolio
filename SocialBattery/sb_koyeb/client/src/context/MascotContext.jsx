@@ -1082,8 +1082,8 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Movida un poco a la derecha: el PNG quedaba ligeramente descentrado
     // hacia la izquierda respecto al resto del calzado chunky.
-    // Incrementada de 2% → 4% por petición de ajuste fino.
-    offsetX: '4%',
+    // Incrementada de 2% → 4% → 6% por petición de ajuste fino.
+    offsetX: '6%',
   },
   {
     id: 'feet_sneaker_2_blue',
@@ -1095,8 +1095,8 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    // Incrementada de 2% → 4% por petición de ajuste fino.
-    offsetX: '4%',
+    // Incrementada de 2% → 4% → 6% por petición de ajuste fino.
+    offsetX: '6%',
   },
   {
     id: 'feet_sneaker_2_pink',
@@ -1108,8 +1108,8 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    // Incrementada de 2% → 4% por petición de ajuste fino.
-    offsetX: '4%',
+    // Incrementada de 2% → 4% → 6% por petición de ajuste fino.
+    offsetX: '6%',
   },
   {
     id: 'feet_sneaker_2_purple',
@@ -1136,8 +1136,8 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    // Incrementada de 2% → 4% por petición de ajuste fino.
-    offsetX: '4%',
+    // Incrementada de 2% → 4% → 6% por petición de ajuste fino.
+    offsetX: '6%',
   },
   {
     id: 'feet_sneaker_2_yellow',
@@ -1221,8 +1221,8 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Igual que verde salvia/azul/rosa/negra: movida un poco a la derecha,
     // mismo ajuste que el resto de variantes de tamaño correcto del grupo.
-    // Incrementada de 2% → 4% por petición de ajuste fino.
-    offsetX: '4%',
+    // Incrementada de 2% → 4% → 6% por petición de ajuste fino.
+    offsetX: '6%',
   },
   {
     id: 'feet_loafer_1',
@@ -1641,7 +1641,7 @@ export const MASCOT_ACTIVITIES = [
     emoji: '🎮',
     layers: ['/activity-gamepad.png'],
     scale: 0.85,    // 15% más pequeño
-    offsetX: 3,     // un poco a la derecha (puntos porcentuales)
+    offsetX: 5,     // un poco más a la derecha (puntos porcentuales)
     price: 120,
     isBase: false,
   },

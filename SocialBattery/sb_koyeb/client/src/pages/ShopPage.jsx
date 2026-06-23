@@ -1420,7 +1420,7 @@ export default function ShopPage() {
             <div className="flex flex-col gap-1.5 shrink-0">
               <button
                 onClick={() => setShowSavedOutfits(true)}
-                className="flex items-center gap-1 text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all whitespace-nowrap"
+                className="flex items-center gap-1 text-[10px] font-display font-semibold text-surface-text bg-surface-bg border border-surface-border rounded-lg px-2 py-1 hover:bg-surface-card transition-all whitespace-nowrap"
               >
                 <span style={{ fontVariantEmoji: 'emoji' }}>👗</span>
                 Tus outfits
