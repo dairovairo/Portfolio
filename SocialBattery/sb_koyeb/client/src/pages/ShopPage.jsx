@@ -4,6 +4,8 @@ import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
 import FeetColorEditorModal from '../components/FeetColorEditorModal';
 import MyCustomizationsModal from '../components/MyCustomizationsModal';
+import HeadColorEditorModal from '../components/HeadColorEditorModal';
+import HeadCustomizationsModal from '../components/HeadCustomizationsModal';
 import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
 
 const COINS = 340;
@@ -14,7 +16,9 @@ const COINS = 340;
 // lado de la tarjeta "Sin prenda" en un grid de 2 columnas, o como banner
 // suelto arriba de un scroll vertical — por eso no fija un ancho propio
 // (w-full) y mantiene la misma altura/estructura que el resto de tarjetas.
-function MyCustomizationsCard({ title = 'Mis personalizaciones', count, previewItems, onClick }) {
+// renderPreview(item, size) — función opcional para renderizar el preview de
+// cada ítem. Si no se pasa, se usa el default de pies (feetSrc).
+function MyCustomizationsCard({ title = 'Mis personalizaciones', count, previewItems, onClick, renderPreview }) {
   return (
     <button
       onClick={onClick}
@@ -28,19 +32,21 @@ function MyCustomizationsCard({ title = 'Mis personalizaciones', count, previewI
               className="rounded-xl overflow-hidden border border-surface-border bg-surface-card flex-shrink-0"
               style={{ marginLeft: i > 0 ? -18 : 0, zIndex: 10 - i }}
             >
-              <MascotDisplay
-                tier="mid"
-                size={64}
-                feetSrc={item.src}
-                feetItemId={item.id}
-                feetOffsetY={item.offsetY ?? null}
-                feetOffsetX={item.offsetX ?? null}
-                feetScale={item.scale ?? null}
-                outfitSrc={null}
-                headSrc={null}
-                accessories={[]}
-                activityLayers={[]}
-              />
+              {renderPreview ? renderPreview(item, 64) : (
+                <MascotDisplay
+                  tier="mid"
+                  size={64}
+                  feetSrc={item.src}
+                  feetItemId={item.id}
+                  feetOffsetY={item.offsetY ?? null}
+                  feetOffsetX={item.offsetX ?? null}
+                  feetScale={item.scale ?? null}
+                  outfitSrc={null}
+                  headSrc={null}
+                  accessories={[]}
+                  activityLayers={[]}
+                />
+              )}
             </div>
           ))
         ) : (
@@ -601,7 +607,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
 }
 
 // ── Tarjeta de CABEZA ─────────────────────────────────────────────────────────
-function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -614,6 +620,20 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
             ✓ Puesto
           </span>
+        )}
+        {/* Botón de personalización extrema de color — solo en ítems con
+            imagen (no en "Sin prenda"). Mismo diseño que en FeetCard. */}
+        {head.src && onCustomize && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Personalizar colores"
+            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
+          >
+            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+            {isCustomized && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
+            )}
+          </button>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
@@ -734,6 +754,7 @@ export default function ShopPage() {
     unlockActivity, unlockAccessory, unlockOutfit, unlockFeet, unlockHead,
     equipActivity, toggleAccessory, equipOutfit, equipFeet, equipHead,
     getFeetZones, saveFeetCustomization, removeFeetCustomization, getCustomFeetItems,
+    getHeadZones, saveHeadCustomization, removeHeadCustomization, getCustomHeadItems,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -757,11 +778,25 @@ export default function ShopPage() {
   // Galería "Mis personalizaciones" — true mientras está abierta.
   const [showMyCustomizations, setShowMyCustomizations] = useState(false);
 
+  // ── Estado análogo para gorros personalizados ────────────────────────────────
+  // Ítem de cabeza que se está personalizando en el editor de color (null
+  // = modal cerrado). Puede ser un ítem original del catálogo (MASCOT_HEAD)
+  // o un ítem ya personalizado (headCustomizations).
+  const [editingHeadItem,  setEditingHeadItem]  = useState(null);
+  // Si editingHeadItem es una personalización ya existente, aquí se guarda
+  // su id para que el guardado la actualice en vez de crear una nueva.
+  const [editingHeadCustomId, setEditingHeadCustomId] = useState(null);
+  // Galería "Gorros personalizados" — true mientras está abierta.
+  const [showHeadCustomizations, setShowHeadCustomizations] = useState(false);
+
   // Ítems de calzado personalizados: ahora son ítems INDEPENDIENTES (no el
   // modelo original recoloreado), ver getCustomFeetItems en MascotContext.
   // Se recalcula en cada render, así que siempre refleja el último cambio
   // guardado/eliminado.
   const customizedFeetItems = getCustomFeetItems();
+
+  // Ítems de cabeza personalizados — igual que los de pies.
+  const customizedHeadItems = getCustomHeadItems();
 
   function showToast(msg) {
     setToast(msg);
@@ -789,6 +824,44 @@ export default function ShopPage() {
   function handleOpenCustomizeNew(item) {
     setEditingCustomId(null);
     setEditingFeetItem(item);
+  }
+
+  // ── Análogos para cabeza ─────────────────────────────────────────────────────
+
+  function hasAnyCustomizationOfHead(baseId) {
+    return customizedHeadItems.some(c => c.baseId === baseId);
+  }
+
+  function pickCarouselTargetHead(family) {
+    return family.find(h => h.id === activeHead) ?? family[0] ?? null;
+  }
+
+  function handleOpenCustomizeHeadNew(item) {
+    setEditingHeadCustomId(null);
+    setEditingHeadItem(item);
+  }
+
+  function handleSaveHeadColors(zones) {
+    const newId = saveHeadCustomization(editingHeadItem, zones, editingHeadCustomId);
+    if (newId) showToast(`¡"${editingHeadItem.baseName ?? editingHeadItem.name}" guardada en Gorros personalizados! 🎨`);
+    setEditingHeadItem(null);
+    setEditingHeadCustomId(null);
+  }
+
+  function handleEditHeadFromGallery(item) {
+    setShowHeadCustomizations(false);
+    setEditingHeadCustomId(item.id);
+    setEditingHeadItem(item);
+  }
+
+  function handleRemoveHeadCustomization(item) {
+    removeHeadCustomization(item.id);
+    showToast(`"${item.name}" eliminada de Gorros personalizados ✨`);
+  }
+
+  function handleEquipCustomHead(item) {
+    equipHead(item.id);
+    showToast(`¡${item.name} puesto! ✨`);
   }
 
   function handleSaveFeetColors(zones) {
@@ -990,6 +1063,26 @@ export default function ShopPage() {
           onEdit={handleEditFromGallery}
           onRemove={handleRemoveCustomization}
           onClose={() => setShowMyCustomizations(false)}
+        />
+      )}
+
+      {editingHeadItem && (
+        <HeadColorEditorModal
+          item={editingHeadItem}
+          initialZones={getHeadZones(editingHeadItem.id)}
+          onClose={() => { setEditingHeadItem(null); setEditingHeadCustomId(null); }}
+          onSave={handleSaveHeadColors}
+        />
+      )}
+
+      {showHeadCustomizations && (
+        <HeadCustomizationsModal
+          items={customizedHeadItems}
+          activeHeadId={activeHead}
+          onEquip={handleEquipCustomHead}
+          onEdit={handleEditHeadFromGallery}
+          onRemove={handleRemoveHeadCustomization}
+          onClose={() => setShowHeadCustomizations(false)}
         />
       )}
 
@@ -1324,12 +1417,8 @@ export default function ShopPage() {
             {/* Sección: Cabeza */}
             {outfitMainTab === 'cabeza' && (
               <div className="flex flex-col gap-4">
-                {/* Ítem base "Sin prenda" — misma tarjeta con preview de
-                    mascota que se usa en Actividades para "Sin actividad",
-                    en vez del botón de reset compacto. Sigue colocada
-                    encima de todos los carruseles y el grid, ahora junto a
-                    la tarjeta de acceso a "Mis personalizaciones" en vez de
-                    a ancho completo. */}
+                {/* Ítem base "Sin prenda" junto a la tarjeta de acceso a
+                    "Gorros personalizados" — misma estructura que en Pies. */}
                 {baseHead && (
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <HeadCard
@@ -1342,20 +1431,43 @@ export default function ShopPage() {
                     />
                     <MyCustomizationsCard
                       title="Gorros personalizados"
-                      count={customizedFeetItems.length}
-                      previewItems={customizedFeetItems}
-                      onClick={() => setShowMyCustomizations(true)}
+                      count={customizedHeadItems.length}
+                      previewItems={customizedHeadItems}
+                      onClick={() => setShowHeadCustomizations(true)}
+                      renderPreview={(item, size) => (
+                        <MascotDisplay
+                          tier="mid"
+                          size={size}
+                          headSrc={item.src}
+                          headItemId={item.id}
+                          headScale={item.scale ?? null}
+                          headOffsetY={item.offsetY ?? null}
+                          headOffsetX={item.offsetX ?? null}
+                          headBox={item.box ?? null}
+                          outfitSrc={null}
+                          feetSrc={null}
+                          accessories={[]}
+                          activityLayers={[]}
+                        />
+                      )}
                     />
                   </div>
                 )}
 
-                {/* Carrusel: basicHead (mismo molde, distinto color de visera).
-                    Etiqueta mostrada: "Gorras lisas" (intercambiada con la del
-                    carrusel basicHead2 de abajo). */}
+                {/* Carrusel: Gorras lisas (basicHead) — con botón 🎨 */}
                 {basicHead.length > 0 && (
                   <div>
-                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Gorras lisas
+                    <div className="flex items-center justify-between px-0.5 mb-1.5">
+                      <div className="text-[11px] font-display font-semibold text-surface-muted">
+                        Gorras lisas
+                      </div>
+                      <button
+                        onClick={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead))}
+                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                      >
+                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                        Personalizar
+                      </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead.map(head => (
@@ -1373,14 +1485,20 @@ export default function ShopPage() {
                   </div>
                 )}
 
-                {/* Carrusel: basicHead2 (molde liso de un solo color + las 6
-                    gorras nuevas bicolor con costura central, añadidas aquí).
-                    Etiqueta mostrada: "Gorras" (intercambiada con la del
-                    carrusel basicHead de arriba). */}
+                {/* Carrusel: Gorras (basicHead2) — con botón 🎨 */}
                 {basicHead2.length > 0 && (
                   <div>
-                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Gorras
+                    <div className="flex items-center justify-between px-0.5 mb-1.5">
+                      <div className="text-[11px] font-display font-semibold text-surface-muted">
+                        Gorras
+                      </div>
+                      <button
+                        onClick={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead2))}
+                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                      >
+                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                        Personalizar
+                      </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead2.map(head => (
@@ -1398,6 +1516,8 @@ export default function ShopPage() {
                   </div>
                 )}
 
+                {/* Grid: ítems sueltos de cabeza (sombreros, halos…)
+                    con botón 🎨 individual, igual que FeetCard */}
                 <div className="grid grid-cols-2 gap-3">
                   {restHead.map(head => (
                     <HeadCard
@@ -1408,6 +1528,8 @@ export default function ShopPage() {
                       canAfford={coins >= head.price}
                       onBuy={() => handleBuyHead(head)}
                       onEquip={() => handleEquipHead(head)}
+                      onCustomize={() => handleOpenCustomizeHeadNew(head)}
+                      isCustomized={hasAnyCustomizationOfHead(head.id)}
                     />
                   ))}
                 </div>

@@ -29,6 +29,7 @@ import { createContext, useContext, useState } from 'react';
 // del estado de la mascota (equipado/desbloqueado) por ahora viva solo en
 // memoria.
 const FEET_CUSTOMIZATIONS_STORAGE_KEY = 'sb-feet-color-zones';
+const HEAD_CUSTOMIZATIONS_STORAGE_KEY = 'sb-head-color-zones';
 
 function loadFeetCustomizations() {
   try {
@@ -46,6 +47,16 @@ function loadFeetCustomizations() {
       if (looksLegacy) return {};
     }
     return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadHeadCustomizations() {
+  try {
+    const raw    = localStorage.getItem(HEAD_CUSTOMIZATIONS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -1722,6 +1733,12 @@ export function MascotProvider({ children }) {
   // calzado (ver comentario junto a FEET_CUSTOMIZATIONS_STORAGE_KEY).
   const [feetCustomizations, setFeetCustomizations] = useState(loadFeetCustomizations);
 
+  // Personalización extrema de color — gorros/prendas de cabeza.
+  // Misma arquitectura que feetCustomizations: cada personalización es un
+  // ítem independiente con id `head_custom_<timestamp>`, no una receta
+  // aplicada sobre el modelo original del catálogo.
+  const [headCustomizations, setHeadCustomizations] = useState(loadHeadCustomizations);
+
   // Actividades
   function unlockActivity(id) {
     setUnlockedActivities(prev => new Set([...prev, id]));
@@ -1926,6 +1943,72 @@ export function MascotProvider({ children }) {
     return Boolean(feetCustomizations[id]);
   }
 
+  // Personalización extrema de color — gorros (misma arquitectura que pies).
+
+  function getHeadZones(id) {
+    return headCustomizations[id]?.zones ?? [];
+  }
+
+  // Crea (o actualiza, si se le pasa un `existingCustomId`) un ítem de
+  // cabeza personalizado a partir de `baseItem` y la receta `zones`.
+  // El ítem original del catálogo NUNCA se modifica.
+  // Devuelve el id final del ítem personalizado.
+  function saveHeadCustomization(baseItem, zones, existingCustomId = null) {
+    if (!zones || zones.length === 0) return null;
+    const id       = existingCustomId ?? `head_custom_${Date.now()}`;
+    const baseId   = existingCustomId
+      ? (headCustomizations[existingCustomId]?.baseId ?? baseItem.id)
+      : baseItem.id;
+    const baseName = existingCustomId
+      ? (headCustomizations[existingCustomId]?.baseName ?? baseItem.name)
+      : baseItem.name;
+    const entry = {
+      id,
+      baseId,
+      baseName,
+      name:   `${baseName} (personalizada)`,
+      desc:   `Personalización de "${baseName}".`,
+      emoji:  baseItem.emoji,
+      src:    baseItem.src,
+      zones,
+      price:  0,
+      scale:   baseItem.scale   ?? null,
+      offsetX: baseItem.offsetX ?? null,
+      offsetY: baseItem.offsetY ?? null,
+      box:     baseItem.box     ?? null,
+    };
+    setHeadCustomizations(prev => {
+      const next = { ...prev, [id]: entry };
+      try { localStorage.setItem(HEAD_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    // Se desbloquea automáticamente (el usuario ya tenía el original).
+    setUnlockedHead(prev => new Set([...prev, id]));
+    return id;
+  }
+
+  // Elimina un ítem de cabeza personalizado. Si era el activo, vuelve a
+  // "Sin prenda" (head_none).
+  function removeHeadCustomization(id) {
+    setHeadCustomizations(prev => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      try { localStorage.setItem(HEAD_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setActiveHead(current => (current === id ? 'head_none' : current));
+  }
+
+  // Lista de ítems de cabeza personalizados, compatible con MASCOT_HEAD.
+  function getCustomHeadItems() {
+    return Object.values(headCustomizations);
+  }
+
+  function hasHeadCustomization(id) {
+    return Boolean(headCustomizations[id]);
+  }
+
   // Outfits — Cabeza
   function unlockHead(id) {
     setUnlockedHead(prev => new Set([...prev, id]));
@@ -1951,7 +2034,7 @@ export function MascotProvider({ children }) {
     // catálogo porque no es un molde nuevo: es una variante de color del
     // usuario sobre un molde existente (ver saveFeetCustomization arriba).
     const feet    = MASCOT_FEET.find(f => f.id === activeFeet) ?? feetCustomizations[activeFeet] ?? null;
-    const head    = MASCOT_HEAD.find(h => h.id === activeHead);
+    const head    = MASCOT_HEAD.find(h => h.id === activeHead) ?? headCustomizations[activeHead] ?? null;
     const accs    = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
     const act     = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
     return {
@@ -1966,6 +2049,7 @@ export function MascotProvider({ children }) {
       feetOffsetX:      feet?.offsetX ?? null,
       feetScale:        feet?.scale ?? null,
       head:             head?.src ?? null,
+      headId:           head?.id  ?? null,
       headScale:        head?.scale ?? null,
       headOffsetY:      head?.offsetY ?? null,
       headOffsetX:      head?.offsetX ?? null,
@@ -2025,6 +2109,12 @@ export function MascotProvider({ children }) {
       getCustomFeetItems,
       resetFeetZones,
       hasFeetCustomization,
+      headCustomizations,
+      getHeadZones,
+      saveHeadCustomization,
+      removeHeadCustomization,
+      getCustomHeadItems,
+      hasHeadCustomization,
     }}>
       {children}
     </MascotContext.Provider>

@@ -121,6 +121,7 @@ export default function MascotDisplay({
   feetOffsetX,
   feetScale,
   headSrc,
+  headItemId,
   headScale,
   headOffsetY,
   headOffsetX,
@@ -131,7 +132,7 @@ export default function MascotDisplay({
   activityOffsetX,
   outfitOffsetY = '20%',
 }) {
-  const { getMascotLayers, getFeetZones } = useMascot();
+  const { getMascotLayers, getFeetZones, getHeadZones } = useMascot();
 
   const resolved  = getMascotLayers(tier);
   const base      = baseSrc          !== undefined ? baseSrc          : resolved.base;
@@ -144,6 +145,13 @@ export default function MascotDisplay({
   const feetOffsetXResolved = feetOffsetX !== undefined ? feetOffsetX : resolved.feetOffsetX;
   const feetScl   = feetScale        !== undefined ? feetScale        : resolved.feetScale;
   const head      = headSrc          !== undefined ? headSrc          : resolved.head;
+  // headItemId permite aplicar zonas de color (personalización extrema) al
+  // gorro, igual que feetItemId lo hace con el calzado. Si no se pasa, se
+  // intenta resolver desde getMascotLayers (donde ya se incluye el id del
+  // gorro activo, sea de catálogo o personalizado).
+  const headId    = headItemId       !== undefined ? headItemId       : resolved.headId ?? null;
+  const headZones = headId ? getHeadZones(headId) : null;
+  const headDisplaySrc = useColorizedSrc(head, headZones);
   const headScl   = headScale        !== undefined ? headScale        : resolved.headScale;
   const headOffset = headOffsetY     !== undefined ? headOffsetY      : resolved.headOffsetY;
   const headOffsetXResolved = headOffsetX !== undefined ? headOffsetX : resolved.headOffsetX;
@@ -247,7 +255,7 @@ export default function MascotDisplay({
           recentra con ese cálculo cuadrado. */}
       {head && (
         <img
-          src={head}
+          src={headDisplaySrc}
           alt=""
           draggable={false}
           className={imgClass}
