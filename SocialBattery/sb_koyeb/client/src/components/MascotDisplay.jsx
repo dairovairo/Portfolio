@@ -33,6 +33,13 @@
  *                     prenda activa del contexto. Si la prenda no define
  *                     escala, se muestra a tamaño completo del lienzo
  *                     (comportamiento por defecto).
+ *   feetItemId       id del ítem de MASCOT_FEET que se está mostrando (ej.
+ *                     'feet_sneaker_1'), usado para aplicar su receta de
+ *                     personalización de color si el usuario le cambió los
+ *                     colores (ver feetCustomizations / lib/colorZones.js).
+ *                     Si no se pasa, se usa el id del calzado activo del
+ *                     contexto (comportamiento por defecto al no
+ *                     sobreescribir feetSrc).
  *   headSrc          override cabeza (null = sin gorro)
  *   headScale        override escala de la prenda de cabeza (0–1, ej. 0.33),
  *                     para prendas cuyo PNG viene mucho más grande que la
@@ -94,6 +101,7 @@
  * para los que son a tamaño completo del lienzo).
  */
 import { useMascot, OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
+import { useColorizedSrc } from '../hooks/useColorizedSrc';
 
 export default function MascotDisplay({
   tier = 'mid',
@@ -108,6 +116,7 @@ export default function MascotDisplay({
   outfitItemOffsetY,
   outfitItemScale,
   feetSrc,
+  feetItemId,
   feetOffsetY,
   feetOffsetX,
   feetScale,
@@ -122,12 +131,15 @@ export default function MascotDisplay({
   activityOffsetX,
   outfitOffsetY = '20%',
 }) {
-  const { getMascotLayers } = useMascot();
+  const { getMascotLayers, getFeetZones } = useMascot();
 
   const resolved  = getMascotLayers(tier);
   const base      = baseSrc          !== undefined ? baseSrc          : resolved.base;
   const outfit    = outfitSrc        !== undefined ? outfitSrc        : resolved.outfit;
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
+  const feetId    = feetItemId       !== undefined ? feetItemId       : resolved.feetId;
+  const feetZones = feetId ? getFeetZones(feetId) : null;
+  const feetDisplaySrc = useColorizedSrc(feet, feetZones);
   const feetOffset = feetOffsetY     !== undefined ? feetOffsetY      : resolved.feetOffsetY;
   const feetOffsetXResolved = feetOffsetX !== undefined ? feetOffsetX : resolved.feetOffsetX;
   const feetScl   = feetScale        !== undefined ? feetScale        : resolved.feetScale;
@@ -184,7 +196,7 @@ export default function MascotDisplay({
           PNG viene dibujado más grande que el resto del calzado. */}
       {feet && (
         <img
-          src={feet}
+          src={feetDisplaySrc}
           alt=""
           draggable={false}
           className={imgClass}

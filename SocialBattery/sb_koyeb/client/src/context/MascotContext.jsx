@@ -1,5 +1,23 @@
 import { createContext, useContext, useState } from 'react';
 
+// ── Personalización extrema de color (pies) ───────────────────────────────────
+// Receta de "zonas de color" por ítem de calzado (ver lib/colorZones.js):
+// { [feetItemId]: [{ x, y, tolerance, color }, …] }. Se guarda en
+// localStorage (como las preferencias de SettingsContext) para que una
+// personalización hecha en la zapatilla no se pierda al recargar la app,
+// aunque el resto del estado de la mascota (equipado/desbloqueado) por
+// ahora viva solo en memoria.
+const FEET_CUSTOMIZATIONS_STORAGE_KEY = 'sb-feet-color-zones';
+
+function loadFeetCustomizations() {
+  try {
+    const raw = localStorage.getItem(FEET_CUSTOMIZATIONS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 // ── Catálogo de OUTFITS / TORSO (capa 3: encima de pies, debajo de cabeza) ─────
 export const MASCOT_OUTFITS = [
   // El ítem base "Sin prenda" se duplica aquí: una entrada por subcategoría
@@ -1667,6 +1685,10 @@ export function MascotProvider({ children }) {
   const [activeFeet,      setActiveFeet]      = useState('feet_none');
   const [activeHead,      setActiveHead]      = useState('head_none');
 
+  // Personalización extrema de color — receta de zonas por ítem de
+  // calzado (ver comentario junto a FEET_CUSTOMIZATIONS_STORAGE_KEY).
+  const [feetCustomizations, setFeetCustomizations] = useState(loadFeetCustomizations);
+
   // Actividades
   function unlockActivity(id) {
     setUnlockedActivities(prev => new Set([...prev, id]));
@@ -1784,6 +1806,31 @@ export function MascotProvider({ children }) {
     setActiveFeet(id);
   }
 
+  // Personalización extrema de color — receta de zonas por ítem de calzado.
+  // `getFeetZones` siempre devuelve un array (nunca undefined) para que se
+  // pueda usar directamente como prop sin comprobaciones adicionales.
+  function getFeetZones(id) {
+    return feetCustomizations[id] ?? [];
+  }
+  function saveFeetZones(id, zones) {
+    setFeetCustomizations(prev => {
+      const next = { ...prev };
+      if (!zones || zones.length === 0) {
+        delete next[id];
+      } else {
+        next[id] = zones;
+      }
+      try { localStorage.setItem(FEET_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+  function resetFeetZones(id) {
+    saveFeetZones(id, []);
+  }
+  function hasFeetCustomization(id) {
+    return Boolean(feetCustomizations[id]?.length);
+  }
+
   // Outfits — Cabeza
   function unlockHead(id) {
     setUnlockedHead(prev => new Set([...prev, id]));
@@ -1815,6 +1862,7 @@ export function MascotProvider({ children }) {
       outfitItemOffsetY:  outfit?.offsetY ?? null,
       outfitItemScale:    outfit?.scale ?? null,
       feet:             feet?.src ?? null,
+      feetId:           feet?.id ?? null,
       feetOffsetY:      feet?.offsetY ?? null,
       feetOffsetX:      feet?.offsetX ?? null,
       feetScale:        feet?.scale ?? null,
@@ -1871,6 +1919,11 @@ export function MascotProvider({ children }) {
       equipHead,
       getMascotLayers,
       getActiveSrc,
+      feetCustomizations,
+      getFeetZones,
+      saveFeetZones,
+      resetFeetZones,
+      hasFeetCustomization,
     }}>
       {children}
     </MascotContext.Provider>

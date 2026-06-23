@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
+import FeetColorEditorModal from '../components/FeetColorEditorModal';
 import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
 
 const COINS = 340;
@@ -421,7 +422,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
 // Versión reducida de FeetCard pensada para el scroll horizontal de
 // colores de la zapatilla retro (misma silueta, distinto color): preview
 // pequeño + nombre + acción, sin descripción larga, ancho fijo.
-function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -438,6 +439,19 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
             ✓
           </span>
         )}
+        {/* Botón de personalización extrema de color — siempre visible para
+            poder repintar esta zapatilla a cualquier color, esté o no
+            comprada/equipada. */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+          title="Personalizar colores"
+          className="absolute top-1 left-1 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-surface-card/90 border border-surface-border text-xs hover:border-accent-primary/50 hover:bg-surface-hover transition-all"
+        >
+          <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+          {isCustomized && (
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-glow" />
+          )}
+        </button>
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -448,6 +462,7 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
           tier="mid"
           size={112}
           feetSrc={feet.src}
+          feetItemId={feet.id}
           feetOffsetY={feet.offsetY ?? null}
           feetOffsetX={feet.offsetX ?? null}
           feetScale={feet.scale ?? null}
@@ -495,7 +510,7 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }
 }
 
 // ── Tarjeta de PIES ───────────────────────────────────────────────────────────
-function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -509,6 +524,19 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
             ✓ Puesto
           </span>
         )}
+        {/* Botón de personalización extrema de color — uno por cada ítem
+            "suelto" de calzado (mocasines, zapatos…), igual que en los
+            carruseles de zapatillas. */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+          title="Personalizar colores"
+          className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border border-surface-border text-sm hover:border-accent-primary/50 hover:bg-surface-hover transition-all"
+        >
+          <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+          {isCustomized && (
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
+          )}
+        </button>
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -519,6 +547,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
           tier="mid"
           size={112}
           feetSrc={feet.src}
+          feetItemId={feet.id}
           feetOffsetY={feet.offsetY ?? null}
           feetOffsetX={feet.offsetX ?? null}
           feetScale={feet.scale ?? null}
@@ -674,6 +703,7 @@ export default function ShopPage() {
     activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
     unlockActivity, unlockAccessory, unlockOutfit, unlockFeet, unlockHead,
     equipActivity, toggleAccessory, equipOutfit, equipFeet, equipHead,
+    getFeetZones, saveFeetZones, hasFeetCustomization,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -681,10 +711,27 @@ export default function ShopPage() {
   const [outfitSubTab, setOutfitSubTab] = useState('camiseta'); // 'camiseta' | 'camisa'
   const [coins, setCoins]       = useState(COINS);
   const [toast, setToast]       = useState(null);
+  // Ítem de calzado que se está personalizando en el editor de color (null
+  // = modal cerrado). Se guarda el objeto completo del catálogo (no solo
+  // el id) para poder mostrar su nombre/imagen en el modal directamente.
+  const [editingFeetItem, setEditingFeetItem] = useState(null);
 
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
+  }
+
+  // Botón "🎨 Personalizar" de cada carrusel horizontal: aplica sobre la
+  // zapatilla actualmente equipada de esa familia (si hay una puesta) o,
+  // si no, sobre la primera variante de color de la familia.
+  function pickCarouselTarget(family) {
+    return family.find(f => f.id === activeFeet) ?? family[0] ?? null;
+  }
+
+  function handleSaveFeetColors(zones) {
+    saveFeetZones(editingFeetItem.id, zones);
+    showToast(`¡Colores de "${editingFeetItem.name}" guardados! 🎨`);
+    setEditingFeetItem(null);
   }
 
   // ── Actividades ─────────────────────────────────────────────────────────────
@@ -840,6 +887,15 @@ export default function ShopPage() {
         </div>
       )}
 
+      {editingFeetItem && (
+        <FeetColorEditorModal
+          item={editingFeetItem}
+          initialZones={getFeetZones(editingFeetItem.id)}
+          onClose={() => setEditingFeetItem(null)}
+          onSave={handleSaveFeetColors}
+        />
+      )}
+
       {/* Header — z-20 (por encima del z-10 de las superposiciones de
           items bloqueados/"Puesto" de las tarjetas) para que la flecha de
           volver siga siendo clicable aunque, al hacer scroll, coincida
@@ -877,6 +933,7 @@ export default function ShopPage() {
             outfitItemOffsetY={activeOut?.offsetY ?? null}
             outfitItemScale={activeOut?.scale ?? null}
             feetSrc={activeFt?.src ?? null}
+            feetItemId={activeFt?.id ?? null}
             feetOffsetY={activeFt?.offsetY ?? null}
             feetOffsetX={activeFt?.offsetX ?? null}
             feetScale={activeFt?.scale ?? null}
@@ -984,8 +1041,17 @@ export default function ShopPage() {
                     scroll vertical principal. */}
                 {basicFeet.length > 0 && (
                   <div className="mb-3">
-                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Retro · colores
+                    <div className="flex items-center justify-between px-0.5 mb-1.5">
+                      <div className="text-[11px] font-display font-semibold text-surface-muted">
+                        Retro · colores
+                      </div>
+                      <button
+                        onClick={() => setEditingFeetItem(pickCarouselTarget(basicFeet))}
+                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                      >
+                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                        Personalizar
+                      </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicFeet.map(feet => (
@@ -997,6 +1063,8 @@ export default function ShopPage() {
                           canAfford={coins >= feet.price}
                           onBuy={() => handleBuyFeet(feet)}
                           onEquip={() => handleEquipFeet(feet)}
+                          onCustomize={() => setEditingFeetItem(feet)}
+                          isCustomized={hasFeetCustomization(feet.id)}
                         />
                       ))}
                     </div>
@@ -1007,8 +1075,17 @@ export default function ShopPage() {
                     chunky (mismo molde voluminoso, distinto color). */}
                 {basicFeet2.length > 0 && (
                   <div className="mb-3">
-                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Chunky · colores
+                    <div className="flex items-center justify-between px-0.5 mb-1.5">
+                      <div className="text-[11px] font-display font-semibold text-surface-muted">
+                        Chunky · colores
+                      </div>
+                      <button
+                        onClick={() => setEditingFeetItem(pickCarouselTarget(basicFeet2))}
+                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                      >
+                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                        Personalizar
+                      </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicFeet2.map(feet => (
@@ -1020,6 +1097,8 @@ export default function ShopPage() {
                           canAfford={coins >= feet.price}
                           onBuy={() => handleBuyFeet(feet)}
                           onEquip={() => handleEquipFeet(feet)}
+                          onCustomize={() => setEditingFeetItem(feet)}
+                          isCustomized={hasFeetCustomization(feet.id)}
                         />
                       ))}
                     </div>
@@ -1036,6 +1115,8 @@ export default function ShopPage() {
                       canAfford={coins >= feet.price}
                       onBuy={() => handleBuyFeet(feet)}
                       onEquip={() => handleEquipFeet(feet)}
+                      onCustomize={() => setEditingFeetItem(feet)}
+                      isCustomized={hasFeetCustomization(feet.id)}
                     />
                   ))}
                 </div>
