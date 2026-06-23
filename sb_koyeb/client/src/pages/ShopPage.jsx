@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
-import ColorEditorModal from '../components/ColorEditorModal';
 import FeetColorEditorModal from '../components/FeetColorEditorModal';
 import MyCustomizationsModal from '../components/MyCustomizationsModal';
 import HeadColorEditorModal from '../components/HeadColorEditorModal';
@@ -164,7 +163,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
 // Los accesorios admiten selección múltiple simultánea: cada tarjeta se activa
 // o desactiva de forma independiente (como un interruptor), sin afectar a los
 // demás accesorios ya equipados.
-function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, onCustomize, isCustomized }) {
+function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle }) {
   return (
     <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
       ${isActive
@@ -180,18 +179,6 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
             ✓ Activo
           </span>
-        )}
-        {accessory.src && onCustomize && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
-            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
-          >
-            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-            {isCustomized && (
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
-            )}
-          </button>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
@@ -264,7 +251,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
 // encarga de que, dentro de su propio grupo (cadenas, grillz o gafas), solo
 // pueda haber un accesorio activo a la vez — al activar uno se desactivan
 // automáticamente los demás del mismo carrusel, sin tocar el resto.
-function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, onCustomize, isCustomized }) {
+function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle }) {
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -280,18 +267,6 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
           <span className="absolute top-1 right-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-accent-primary text-white z-10">
             ✓
           </span>
-        )}
-        {accessory.src && onCustomize && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
-            className="absolute top-1 left-1 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-[10px] hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
-          >
-            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-            {isCustomized && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-glow" />
-            )}
-          </button>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center z-10"
@@ -358,7 +333,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
 }
 
 // ── Tarjeta de OUTFIT ─────────────────────────────────────────────────────────
-function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
+function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -372,18 +347,6 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
             ✓ Puesto
           </span>
         )}
-        {outfit.src && onCustomize && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
-            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
-          >
-            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-            {isCustomized && (
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
-            )}
-          </button>
-        )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -394,7 +357,6 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
           tier="mid"
           size={112}
           outfitSrc={outfit.src}
-          outfitItemId={outfit.id}
           outfitSubcategory={outfit.subcategory}
           outfitItemOffsetY={outfit.offsetY}
           outfitItemScale={outfit.scale}
