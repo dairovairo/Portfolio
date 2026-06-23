@@ -1,20 +1,23 @@
 import MascotDisplay from './MascotDisplay';
 
 /**
- * MyCustomizationsModal — galería de todas las prendas a las que el usuario
- * les ha cambiado el color (ver FeetColorEditorModal / lib/colorZones.js).
- * Desde aquí puede reabrir el editor de una prenda ya personalizada o
- * restaurarla a su color original, sin tener que ir a buscarla de nuevo en
- * su carrusel o sub-tab.
+ * MyCustomizationsModal — galería de todo el calzado al que el usuario le
+ * ha cambiado el color (ver FeetColorEditorModal / lib/colorZones.js). Cada
+ * entrada es un ítem INDEPENDIENTE del modelo original (el original nunca
+ * se modifica): desde aquí puede equipar una personalización, reabrir su
+ * editor de color, o eliminarla por completo.
  *
  * Props:
- *   items     lista de ítems del catálogo (p. ej. MASCOT_FEET) que ya
- *             tienen una receta de color guardada
- *   onEdit(item)    reabre el editor de color para ese ítem
- *   onRemove(item)  restaura ese ítem a su color original
- *   onClose         cierra el modal
+ *   items          lista de ítems personalizados (ver getCustomFeetItems en
+ *                  MascotContext), cada uno con su propio id `feet_custom_*`
+ *   activeFeetId   id del calzado actualmente equipado, para marcar cuál de
+ *                  estas personalizaciones (si alguna) está puesta
+ *   onEquip(item)  equipa esta personalización
+ *   onEdit(item)   reabre el editor de color para ese ítem
+ *   onRemove(item) elimina esa personalización por completo
+ *   onClose        cierra el modal
  */
-export default function MyCustomizationsModal({ items, onEdit, onRemove, onClose }) {
+export default function MyCustomizationsModal({ items, activeFeetId, onEquip, onEdit, onRemove, onClose }) {
   return (
     <>
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
@@ -42,52 +45,72 @@ export default function MyCustomizationsModal({ items, onEdit, onRemove, onClose
             <div className="py-8 flex flex-col items-center text-center gap-2">
               <span className="text-4xl opacity-60" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
               <p className="text-surface-muted text-xs leading-snug max-w-[230px]">
-                Aún no has personalizado ninguna prenda. Toca el botón 🎨 de cualquier zapatilla para cambiarle el color a tu gusto.
+                Aún no has personalizado ninguna prenda. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color sin tocar el modelo original.
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {items.map(item => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 bg-surface-hover/40 border border-surface-border rounded-2xl p-2.5"
-                >
-                  <div className="flex-shrink-0 rounded-xl overflow-hidden bg-surface-hover/30">
-                    <MascotDisplay
-                      tier="mid"
-                      size={64}
-                      feetSrc={item.src}
-                      feetItemId={item.id}
-                      feetOffsetY={item.offsetY ?? null}
-                      feetOffsetX={item.offsetX ?? null}
-                      feetScale={item.scale ?? null}
-                      outfitSrc={null}
-                      headSrc={null}
-                      accessories={[]}
-                      activityLayers={[]}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-display font-semibold text-surface-text text-xs truncate" title={item.name}>
-                      {item.name}
+              {items.map(item => {
+                const isActive = activeFeetId === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-3 bg-surface-hover/40 border rounded-2xl p-2.5 ${isActive ? 'border-accent-primary' : 'border-surface-border'}`}
+                  >
+                    <div className="flex-shrink-0 rounded-xl overflow-hidden bg-surface-hover/30 relative">
+                      {isActive && (
+                        <span className="absolute top-0.5 right-0.5 text-[8px] font-mono font-bold px-1 py-0.5 rounded bg-accent-primary text-white z-10">
+                          ✓
+                        </span>
+                      )}
+                      <MascotDisplay
+                        tier="mid"
+                        size={64}
+                        feetSrc={item.src}
+                        feetItemId={item.id}
+                        feetOffsetY={item.offsetY ?? null}
+                        feetOffsetX={item.offsetX ?? null}
+                        feetScale={item.scale ?? null}
+                        outfitSrc={null}
+                        headSrc={null}
+                        accessories={[]}
+                        activityLayers={[]}
+                      />
                     </div>
-                    <div className="flex gap-2 mt-1.5">
-                      <button
-                        onClick={() => onEdit(item)}
-                        className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg bg-accent-primary/10 border border-accent-primary/30 text-accent-glow hover:bg-accent-primary/20 transition-all"
-                      >
-                        🎨 Editar
-                      </button>
-                      <button
-                        onClick={() => onRemove(item)}
-                        className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg bg-surface-hover border border-surface-border text-surface-muted hover:text-surface-text transition-all"
-                      >
-                        ↩ Restaurar original
-                      </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display font-semibold text-surface-text text-xs truncate" title={item.name}>
+                        {item.name}
+                      </div>
+                      <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                        {isActive ? (
+                          <span className="text-[10px] font-mono font-semibold px-2 py-1 rounded-lg bg-accent-primary/10 border border-accent-primary/20 text-accent-glow">
+                            ✓ Puesto
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => onEquip(item)}
+                            className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
+                          >
+                            Poner
+                          </button>
+                        )}
+                        <button
+                          onClick={() => onEdit(item)}
+                          className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg bg-accent-primary/10 border border-accent-primary/30 text-accent-glow hover:bg-accent-primary/20 transition-all"
+                        >
+                          🎨 Editar
+                        </button>
+                        <button
+                          onClick={() => onRemove(item)}
+                          className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg bg-surface-hover border border-surface-border text-surface-muted hover:text-surface-text transition-all"
+                        >
+                          🗑 Eliminar
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

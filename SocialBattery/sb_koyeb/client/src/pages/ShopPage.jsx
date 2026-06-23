@@ -733,7 +733,7 @@ export default function ShopPage() {
     activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
     unlockActivity, unlockAccessory, unlockOutfit, unlockFeet, unlockHead,
     equipActivity, toggleAccessory, equipOutfit, equipFeet, equipHead,
-    getFeetZones, saveFeetZones, resetFeetZones, hasFeetCustomization,
+    getFeetZones, saveFeetCustomization, removeFeetCustomization, getCustomFeetItems,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -742,17 +742,26 @@ export default function ShopPage() {
   const [coins, setCoins]       = useState(COINS);
   const [toast, setToast]       = useState(null);
   // Ítem de calzado que se está personalizando en el editor de color (null
-  // = modal cerrado). Se guarda el objeto completo del catálogo (no solo
-  // el id) para poder mostrar su nombre/imagen en el modal directamente.
+  // = modal cerrado). Se guarda el objeto completo (no solo el id) para
+  // poder mostrar su nombre/imagen en el modal directamente. Puede ser:
+  //   - un ítem ORIGINAL del catálogo (MASCOT_FEET) → al guardar se CREA una
+  //     personalización nueva, sin tocar el original.
+  //   - un ítem ya PERSONALIZADO (de feetCustomizations) → al guardar se
+  //     ACTUALIZA esa misma personalización (se sigue editando "la misma
+  //     prenda personalizada", no se crea una segunda).
   const [editingFeetItem, setEditingFeetItem] = useState(null);
+  // Si editingFeetItem es una personalización ya existente, aquí se guarda
+  // su id para que el guardado actualice esa entrada en vez de crear una
+  // nueva. null = se está creando una personalización nueva.
+  const [editingCustomId, setEditingCustomId] = useState(null);
   // Galería "Mis personalizaciones" — true mientras está abierta.
   const [showMyCustomizations, setShowMyCustomizations] = useState(false);
 
-  // Prendas que ya tienen una receta de color guardada (por ahora solo el
-  // calzado admite personalización extrema de color). Se recalcula en cada
-  // render a partir de feetCustomizations, así que siempre refleja el
-  // último cambio guardado/restaurado.
-  const customizedFeetItems = MASCOT_FEET.filter(f => hasFeetCustomization(f.id));
+  // Ítems de calzado personalizados: ahora son ítems INDEPENDIENTES (no el
+  // modelo original recoloreado), ver getCustomFeetItems en MascotContext.
+  // Se recalcula en cada render, así que siempre refleja el último cambio
+  // guardado/eliminado.
+  const customizedFeetItems = getCustomFeetItems();
 
   function showToast(msg) {
     setToast(msg);
@@ -766,22 +775,40 @@ export default function ShopPage() {
     return family.find(f => f.id === activeFeet) ?? family[0] ?? null;
   }
 
+  // El indicador 🎨 de una tarjeta de calzado original ahora se basa en si
+  // existe AL MENOS UNA personalización derivada de ese ítem (por baseId),
+  // ya que el id del original nunca aparece directamente en
+  // feetCustomizations: cada personalización vive con su propio id
+  // `feet_custom_<n>` (ver saveFeetCustomization en MascotContext).
+  function hasAnyCustomizationOf(baseId) {
+    return customizedFeetItems.some(c => c.baseId === baseId);
+  }
+
+  // Abre el editor para crear una personalización NUEVA a partir de un
+  // ítem original del catálogo (botón 🎨 en carruseles/tarjetas).
+  function handleOpenCustomizeNew(item) {
+    setEditingCustomId(null);
+    setEditingFeetItem(item);
+  }
+
   function handleSaveFeetColors(zones) {
-    saveFeetZones(editingFeetItem.id, zones);
-    showToast(`¡Colores de "${editingFeetItem.name}" guardados! 🎨`);
+    const newId = saveFeetCustomization(editingFeetItem, zones, editingCustomId);
+    if (newId) showToast(`¡"${editingFeetItem.baseName ?? editingFeetItem.name}" guardada en Calzado personalizado! 🎨`);
     setEditingFeetItem(null);
+    setEditingCustomId(null);
   }
 
   // Desde la galería "Mis personalizaciones": reabrir el editor de una
-  // prenda ya personalizada (cerrando la galería primero) o restaurarla a
-  // su color original sin salir de la galería.
+  // personalización ya existente (cerrando la galería primero) — al guardar
+  // se actualizará esa misma entrada — o eliminarla sin salir de la galería.
   function handleEditFromGallery(item) {
     setShowMyCustomizations(false);
+    setEditingCustomId(item.id);
     setEditingFeetItem(item);
   }
   function handleRemoveCustomization(item) {
-    resetFeetZones(item.id);
-    showToast(`"${item.name}" restaurada a su color original ✨`);
+    removeFeetCustomization(item.id);
+    showToast(`"${item.name}" eliminada de Calzado personalizado ✨`);
   }
 
   // ── Actividades ─────────────────────────────────────────────────────────────
@@ -836,6 +863,13 @@ export default function ShopPage() {
   function handleEquipFeet(feet) {
     equipFeet(feet.id);
     showToast(`¡${feet.name} puesto! ✨`);
+  }
+  // Equipar una personalización desde la galería "Mis personalizaciones":
+  // usa el mismo equipFeet del contexto (acepta cualquier id activo, sea
+  // del catálogo o de feetCustomizations — ver getMascotLayers).
+  function handleEquipCustomFeet(item) {
+    equipFeet(item.id);
+    showToast(`¡${item.name} puesta! ✨`);
   }
 
   // ── Outfits — Cabeza ─────────────────────────────────────────────────────────
@@ -943,7 +977,7 @@ export default function ShopPage() {
         <FeetColorEditorModal
           item={editingFeetItem}
           initialZones={getFeetZones(editingFeetItem.id)}
-          onClose={() => setEditingFeetItem(null)}
+          onClose={() => { setEditingFeetItem(null); setEditingCustomId(null); }}
           onSave={handleSaveFeetColors}
         />
       )}
@@ -951,6 +985,8 @@ export default function ShopPage() {
       {showMyCustomizations && (
         <MyCustomizationsModal
           items={customizedFeetItems}
+          activeFeetId={activeFeet}
+          onEquip={handleEquipCustomFeet}
           onEdit={handleEditFromGallery}
           onRemove={handleRemoveCustomization}
           onClose={() => setShowMyCustomizations(false)}
@@ -1124,7 +1160,7 @@ export default function ShopPage() {
                         Retro · colores
                       </div>
                       <button
-                        onClick={() => setEditingFeetItem(pickCarouselTarget(basicFeet))}
+                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet))}
                         className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
                       >
                         <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -1156,7 +1192,7 @@ export default function ShopPage() {
                         Chunky · colores
                       </div>
                       <button
-                        onClick={() => setEditingFeetItem(pickCarouselTarget(basicFeet2))}
+                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet2))}
                         className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
                       >
                         <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -1189,8 +1225,8 @@ export default function ShopPage() {
                       canAfford={coins >= feet.price}
                       onBuy={() => handleBuyFeet(feet)}
                       onEquip={() => handleEquipFeet(feet)}
-                      onCustomize={() => setEditingFeetItem(feet)}
-                      isCustomized={hasFeetCustomization(feet.id)}
+                      onCustomize={() => handleOpenCustomizeNew(feet)}
+                      isCustomized={hasAnyCustomizationOf(feet.id)}
                     />
                   ))}
                 </div>

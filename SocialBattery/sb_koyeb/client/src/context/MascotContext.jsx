@@ -1,18 +1,51 @@
 import { createContext, useContext, useState } from 'react';
 
 // ── Personalización extrema de color (pies) ───────────────────────────────────
-// Receta de "zonas de color" por ítem de calzado (ver lib/colorZones.js):
-// { [feetItemId]: [{ x, y, tolerance, color }, …] }. Se guarda en
-// localStorage (como las preferencias de SettingsContext) para que una
-// personalización hecha en la zapatilla no se pierda al recargar la app,
-// aunque el resto del estado de la mascota (equipado/desbloqueado) por
-// ahora viva solo en memoria.
+// A diferencia de antes, personalizar el color de una zapatilla YA NO
+// modifica el modelo original: en vez de guardar la receta de zonas bajo el
+// id del ítem del catálogo, cada personalización crea un ÍTEM NUEVO e
+// independiente (con su propio id `feet_custom_<n>`), que vive únicamente en
+// el apartado "Calzado personalizado". El ítem original (`baseId`) permanece
+// intacto en su carrusel/sub-tab, sin recolorear, en cualquier otro sitio
+// donde se muestre.
+//
+// Forma de cada entrada guardada (objeto completo, no solo la receta):
+//   {
+//     id: 'feet_custom_1719999999999',
+//     baseId: 'feet_sneaker_1',       // ítem original del que partió
+//     name: 'Zapatillas retro gris piedra (personalizada)',
+//     emoji: '👟',
+//     desc: 'Personalización de "Zapatillas retro gris piedra".',
+//     src: '/outfit-feet-1.png',      // src ORIGINAL (se recolorea al vuelo
+//                                     // con useColorizedSrc, igual que antes)
+//     zones: [{ x, y, tolerance, color }, …],
+//     price: 0,
+//     offsetX/offsetY/scale: copiados del ítem base, para que se posicione
+//                              igual que él.
+//   }
+//
+// Se guarda en localStorage (como las preferencias de SettingsContext) para
+// que una personalización no se pierda al recargar la app, aunque el resto
+// del estado de la mascota (equipado/desbloqueado) por ahora viva solo en
+// memoria.
 const FEET_CUSTOMIZATIONS_STORAGE_KEY = 'sb-feet-color-zones';
 
 function loadFeetCustomizations() {
   try {
     const raw = localStorage.getItem(FEET_CUSTOMIZATIONS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const parsed = raw ? JSON.parse(raw) : {};
+    // Migración silenciosa desde el formato antiguo (donde la clave era el
+    // id del modelo ORIGINAL y el valor era directamente el array de zonas:
+    // { [feetItemId]: [{x,y,tolerance,color}, …] }). Si detectamos ese
+    // formato, lo descartamos: ya no tiene sentido aplicarlo (recoloreaba el
+    // modelo original), así el usuario simplemente vuelve a personalizar
+    // desde cero con el nuevo sistema de ítems independientes.
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const values = Object.values(parsed);
+      const looksLegacy = values.length > 0 && Array.isArray(values[0]);
+      if (looksLegacy) return {};
+    }
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
   }
@@ -1806,29 +1839,91 @@ export function MascotProvider({ children }) {
     setActiveFeet(id);
   }
 
-  // Personalización extrema de color — receta de zonas por ítem de calzado.
-  // `getFeetZones` siempre devuelve un array (nunca undefined) para que se
-  // pueda usar directamente como prop sin comprobaciones adicionales.
+  // Personalización extrema de color — ahora cada personalización es un
+  // ÍTEM INDEPENDIENTE (ver comentario junto a FEET_CUSTOMIZATIONS_STORAGE_KEY
+  // arriba del archivo), no una receta aplicada sobre el modelo original.
+  //
+  // `getFeetZones(id)` sigue existiendo para que MascotDisplay/el editor
+  // sigan pudiendo leer "las zonas guardadas para este id" sin cambiar su
+  // forma de consumo: ahora simplemente mira si `id` es uno de los ítems
+  // personalizados (en cuyo caso devuelve sus zonas) — el modelo ORIGINAL
+  // nunca tiene zonas asociadas a su propio id, así que nunca se recolorea.
   function getFeetZones(id) {
-    return feetCustomizations[id] ?? [];
+    return feetCustomizations[id]?.zones ?? [];
   }
-  function saveFeetZones(id, zones) {
+
+  // `saveFeetCustomization` crea (o actualiza, si se le pasa un
+  // `existingCustomId` de una personalización ya existente) un ítem de
+  // calzado personalizado nuevo a partir de `baseItem` (el ítem original del
+  // catálogo) y la receta `zones`. El ítem original NUNCA se modifica: solo
+  // se usa como plantilla (src, offsets, escala) para el nuevo ítem.
+  // Devuelve el id final del ítem personalizado (nuevo o reutilizado), para
+  // que quien llame pueda equiparlo inmediatamente si quiere.
+  function saveFeetCustomization(baseItem, zones, existingCustomId = null) {
+    if (!zones || zones.length === 0) return null;
+    const id = existingCustomId ?? `feet_custom_${Date.now()}`;
+    const baseId = existingCustomId
+      ? (feetCustomizations[existingCustomId]?.baseId ?? baseItem.id)
+      : baseItem.id;
+    const baseName = existingCustomId
+      ? (feetCustomizations[existingCustomId]?.baseName ?? baseItem.name)
+      : baseItem.name;
+    const entry = {
+      id,
+      baseId,
+      baseName,
+      name: `${baseName} (personalizada)`,
+      desc: `Personalización de "${baseName}".`,
+      emoji: baseItem.emoji,
+      src: baseItem.src,
+      zones,
+      price: 0,
+      offsetX: baseItem.offsetX ?? null,
+      offsetY: baseItem.offsetY ?? null,
+      scale: baseItem.scale ?? null,
+    };
     setFeetCustomizations(prev => {
-      const next = { ...prev };
-      if (!zones || zones.length === 0) {
-        delete next[id];
-      } else {
-        next[id] = zones;
-      }
+      const next = { ...prev, [id]: entry };
       try { localStorage.setItem(FEET_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
+    // El ítem personalizado se desbloquea automáticamente: el usuario ya
+    // "pagó" por el calzado original, esto es solo una variante de color.
+    setUnlockedFeet(prev => new Set([...prev, id]));
+    return id;
   }
+
+  // Elimina por completo un ítem de calzado personalizado (ya no es una
+  // "receta sobre el original" que se pueda vaciar a [] — directamente deja
+  // de existir como ítem). Si era el calzado actualmente equipado, vuelve a
+  // "Sin calzado".
+  function removeFeetCustomization(id) {
+    setFeetCustomizations(prev => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      try { localStorage.setItem(FEET_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setActiveFeet(current => (current === id ? 'feet_none' : current));
+  }
+
+  // Lista de ítems de calzado personalizados, en forma de objetos
+  // compatibles con el catálogo MASCOT_FEET (mismas props que usan las
+  // tarjetas de la tienda: src, name, emoji, offsetX/offsetY/scale…), para
+  // poder reutilizar FeetCard/MascotDisplay sin distinguir su origen.
+  function getCustomFeetItems() {
+    return Object.values(feetCustomizations);
+  }
+
+  // Compatibilidad: ya no existe "resetear zonas de un id" (el id de un
+  // ítem personalizado SOLO existe mientras tiene zonas), así que restaurar
+  // equivale directamente a borrar esa personalización.
   function resetFeetZones(id) {
-    saveFeetZones(id, []);
+    removeFeetCustomization(id);
   }
   function hasFeetCustomization(id) {
-    return Boolean(feetCustomizations[id]?.length);
+    return Boolean(feetCustomizations[id]);
   }
 
   // Outfits — Cabeza
@@ -1851,7 +1946,11 @@ export function MascotProvider({ children }) {
   function getMascotLayers(tier) {
     const base    = MASCOT_BASE[tier] ?? MASCOT_BASE.mid;
     const outfit  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
-    const feet    = MASCOT_FEET.find(f => f.id === activeFeet);
+    // El calzado activo puede ser un ítem del catálogo (MASCOT_FEET) o un
+    // ítem de calzado PERSONALIZADO (feetCustomizations), que no vive en el
+    // catálogo porque no es un molde nuevo: es una variante de color del
+    // usuario sobre un molde existente (ver saveFeetCustomization arriba).
+    const feet    = MASCOT_FEET.find(f => f.id === activeFeet) ?? feetCustomizations[activeFeet] ?? null;
     const head    = MASCOT_HEAD.find(h => h.id === activeHead);
     const accs    = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
     const act     = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
@@ -1921,7 +2020,9 @@ export function MascotProvider({ children }) {
       getActiveSrc,
       feetCustomizations,
       getFeetZones,
-      saveFeetZones,
+      saveFeetCustomization,
+      removeFeetCustomization,
+      getCustomFeetItems,
       resetFeetZones,
       hasFeetCustomization,
     }}>
