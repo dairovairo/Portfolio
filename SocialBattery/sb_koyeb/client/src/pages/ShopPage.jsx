@@ -1410,10 +1410,28 @@ export default function ShopPage() {
             accessories={activeAccs}
             activityLayers={activeAct?.layers ?? []}
           />
-          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
-            <div className="text-[10px] text-surface-muted/60 mt-0.5">
-              Ganas 🪙 actualizando tu batería cada día.
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+              <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
+              <div className="text-[10px] text-surface-muted/60 mt-0.5 leading-tight">
+                Ganas 🪙 actualizando<br />tu batería cada día.
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <button
+                onClick={() => setShowSavedOutfits(true)}
+                className="flex items-center gap-1 text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all whitespace-nowrap"
+              >
+                <span style={{ fontVariantEmoji: 'emoji' }}>👗</span>
+                Tus outfits
+              </button>
+              <button
+                onClick={handleSaveCurrentOutfit}
+                className="flex items-center gap-1 text-[10px] font-display font-semibold text-surface-text bg-surface-bg border border-surface-border rounded-lg px-2 py-1 hover:bg-surface-card transition-all whitespace-nowrap"
+              >
+                <span style={{ fontVariantEmoji: 'emoji' }}>💾</span>
+                Guardar outfit
+              </button>
             </div>
           </div>
         </div>
@@ -2049,6 +2067,98 @@ export default function ShopPage() {
           </div>
         )}
       </div>
+
+      {/* Modal: Tus outfits guardados */}
+      {showSavedOutfits && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSavedOutfits(false)}>
+          <div className="bg-surface-card border border-surface-border rounded-t-3xl w-full max-w-lg p-5 pb-8 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header del modal */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-lg" style={{ fontVariantEmoji: 'emoji' }}>👗</span>
+                <span className="font-display font-bold text-surface-text">Tus outfits guardados</span>
+              </div>
+              <button
+                onClick={() => setShowSavedOutfits(false)}
+                className="p-1.5 rounded-xl text-surface-muted hover:text-surface-text hover:bg-surface-bg transition-all text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Lista de outfits guardados */}
+            {savedOutfits.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 py-8 text-center">
+                <span className="text-3xl" style={{ fontVariantEmoji: 'emoji' }}>🪆</span>
+                <div className="font-display font-semibold text-surface-text text-sm">Aún no hay outfits guardados</div>
+                <div className="text-[11px] text-surface-muted max-w-[220px]">
+                  Equipa tu look favorito y pulsa «Guardar outfit» para guardarlo aquí.
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1">
+                {savedOutfits.map(outfit => (
+                  <div
+                    key={outfit.id}
+                    className="flex items-center gap-3 bg-surface-bg border border-surface-border rounded-2xl p-3"
+                  >
+                    {/* Mini preview mascota con ese outfit — resolvemos IDs a ítems */}
+                    {(() => {
+                      const sOut  = MASCOT_OUTFITS.find(o => o.id === outfit.activeOutfit) ?? customizedOutfitItems.find(o => o.id === outfit.activeOutfit);
+                      const sFt   = MASCOT_FEET.find(f => f.id === outfit.activeFeet) ?? customizedFeetItems.find(f => f.id === outfit.activeFeet);
+                      const sHd   = MASCOT_HEAD.find(h => h.id === outfit.activeHead) ?? customizedHeadItems.find(h => h.id === outfit.activeHead);
+                      const sAccs = allShopAccessories.filter(a => (outfit.activeAccessories ?? []).includes(a.id));
+                      return (
+                        <MascotDisplay
+                          tier={previewTier}
+                          size={48}
+                          outfitSrc={sOut?.src ?? null}
+                          outfitItemId={sOut?.id ?? null}
+                          outfitSubcategory={sOut?.subcategory ?? null}
+                          outfitItemOffsetY={sOut?.offsetY ?? null}
+                          outfitItemScale={sOut?.scale ?? null}
+                          feetSrc={sFt?.src ?? null}
+                          feetItemId={sFt?.id ?? null}
+                          feetOffsetY={sFt?.offsetY ?? null}
+                          feetOffsetX={sFt?.offsetX ?? null}
+                          feetScale={sFt?.scale ?? null}
+                          headSrc={sHd?.src ?? null}
+                          headItemId={sHd?.id ?? null}
+                          headScale={sHd?.scale ?? null}
+                          headOffsetY={sHd?.offsetY ?? null}
+                          headOffsetX={sHd?.offsetX ?? null}
+                          headBox={sHd?.box ?? null}
+                          accessories={sAccs}
+                          activityLayers={[]}
+                        />
+                      );
+                    })()}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display font-semibold text-surface-text text-sm truncate">{outfit.name}</div>
+                      <div className="text-[10px] text-surface-muted mt-0.5">{outfit.createdAt ? new Date(outfit.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : ''}</div>
+                    </div>
+                    <button
+                      onClick={() => handleApplySavedOutfit(outfit)}
+                      className="text-[11px] font-display font-semibold text-white bg-accent-primary rounded-xl px-3 py-1.5 hover:opacity-90 transition-all shrink-0"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Botón guardar outfit actual desde el modal */}
+            <button
+              onClick={handleSaveCurrentOutfit}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-surface-border bg-surface-bg text-surface-text font-display font-semibold text-sm hover:bg-surface-card transition-all"
+            >
+              <span style={{ fontVariantEmoji: 'emoji' }}>💾</span>
+              Guardar outfit actual
+            </button>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>
