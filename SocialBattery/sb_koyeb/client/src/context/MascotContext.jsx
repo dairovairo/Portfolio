@@ -1082,11 +1082,11 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Movida un poco a la derecha: el PNG quedaba ligeramente descentrado
     // hacia la izquierda respecto al resto del calzado chunky.
-    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% por petición de ajuste fino.
+    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% junto con el resto del grupo chunky.
-    offsetX: '13%',
-    offsetY: '5%',
+    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    offsetX: '14%',
+    offsetY: '8%',
     scale: 0.9,
   },
   {
@@ -1099,11 +1099,11 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% por petición de ajuste fino.
+    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% junto con el resto del grupo chunky.
-    offsetX: '13%',
-    offsetY: '5%',
+    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    offsetX: '14%',
+    offsetY: '8%',
     scale: 0.9,
   },
   {
@@ -1116,11 +1116,11 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% por petición de ajuste fino.
+    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% junto con el resto del grupo chunky.
-    offsetX: '13%',
-    offsetY: '5%',
+    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    offsetX: '14%',
+    offsetY: '8%',
     scale: 0.9,
   },
   {
@@ -1135,10 +1135,10 @@ export const MASCOT_FEET = [
     // Reducida: el PNG venía dibujado notablemente más grande que el resto
     // del calzado chunky del mismo grupo. Escalada a 0.73 inicialmente;
     // reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
-    // Bajada un poco más (5% → 7% → 12% → 17%) y reducida un 10% adicional junto con
+    // Bajada un poco más (5% → 7% → 12% → 17% → 20%) y reducida un 10% adicional junto con
     // el resto del grupo chunky (0.62 × 0.9 ≈ 0.558).
     scale: 0.558,
-    offsetY: '17%',
+    offsetY: '20%',
   },
   {
     id: 'feet_sneaker_2_black',
@@ -1150,11 +1150,11 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% por petición de ajuste fino.
+    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% junto con el resto del grupo chunky.
-    offsetX: '13%',
-    offsetY: '5%',
+    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    offsetX: '14%',
+    offsetY: '8%',
     scale: 0.9,
   },
   {
@@ -1168,10 +1168,10 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
     // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
-    // Bajada un poco más (5% → 7% → 12% → 17%) y reducida un 10% adicional junto con
+    // Bajada un poco más (5% → 7% → 12% → 17% → 20%) y reducida un 10% adicional junto con
     // el resto del grupo chunky (0.62 × 0.9 ≈ 0.558).
     scale: 0.558,
-    offsetY: '17%',
+    offsetY: '20%',
   },
   {
     id: 'feet_sneaker_2_orange',
@@ -1184,10 +1184,10 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
     // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
-    // Bajada un poco más (5% → 7% → 12% → 17%) y reducida un 10% adicional junto con
+    // Bajada un poco más (5% → 7% → 12% → 17% → 20%) y reducida un 10% adicional junto con
     // el resto del grupo chunky (0.62 × 0.9 ≈ 0.558).
     scale: 0.558,
-    offsetY: '17%',
+    offsetY: '20%',
   },
   {
     id: 'feet_sneaker_2_brown',
@@ -1200,10 +1200,10 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
     // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
-    // Bajada un poco más (5% → 7% → 12% → 17%) y reducida un 10% adicional junto con
+    // Bajada un poco más (5% → 7% → 12% → 17% → 20%) y reducida un 10% adicional junto con
     // el resto del grupo chunky (0.62 × 0.9 ≈ 0.558).
     scale: 0.558,
-    offsetY: '17%',
+    offsetY: '20%',
   },
   {
     id: 'feet_sneaker_2_red',
@@ -1216,10 +1216,10 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
     // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
-    // Bajada un poco más (5% → 7% → 12% → 17%) y reducida un 10% adicional junto con
+    // Bajada un poco más (5% → 7% → 12% → 17% → 20%) y reducida un 10% adicional junto con
     // el resto del grupo chunky (0.62 × 0.9 ≈ 0.558).
     scale: 0.558,
-    offsetY: '17%',
+    offsetY: '20%',
   },
   {
     id: 'feet_sneaker_2_white',
@@ -1233,10 +1233,10 @@ export const MASCOT_FEET = [
     // Reducida (algo menos que el resto de "grandes": esta partía de un
     // tamaño ya un poco más cercano al correcto).
     // Reducida otro 15% más (0.75 × 0.85 ≈ 0.64) y bajada un poco.
-    // Bajada un poco más (5% → 7% → 12% → 17%) y reducida un 10% adicional junto con
+    // Bajada un poco más (5% → 7% → 12% → 17% → 20%) y reducida un 10% adicional junto con
     // el resto del grupo chunky (0.64 × 0.9 ≈ 0.576).
     scale: 0.576,
-    offsetY: '17%',
+    offsetY: '20%',
   },
   {
     id: 'feet_sneaker_2_gray',
@@ -1249,11 +1249,11 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Igual que verde salvia/azul/rosa/negra: movida un poco a la derecha,
     // mismo ajuste que el resto de variantes de tamaño correcto del grupo.
-    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% por petición de ajuste fino.
+    // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% junto con el resto del grupo chunky.
-    offsetX: '13%',
-    offsetY: '5%',
+    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    offsetX: '14%',
+    offsetY: '8%',
     scale: 0.9,
   },
   {
@@ -1833,7 +1833,7 @@ export function MascotProvider({ children }) {
     setUnlockedActivities(prev => new Set([...prev, id]));
   }
   function equipActivity(id) {
-    setActiveActivity(id);
+    setActiveActivity(current => (current === id ? 'none' : id));
   }
 
   // Accesorios — selección múltiple y simultánea (toggle on/off por id),
@@ -1916,7 +1916,7 @@ export function MascotProvider({ children }) {
     setUnlockedOutfits(prev => new Set([...prev, id]));
   }
   function equipOutfit(id) {
-    setActiveOutfit(id);
+    setActiveOutfit(current => (current === id ? 'out_none' : id));
   }
 
   // Outfits — Pies
@@ -1924,7 +1924,7 @@ export function MascotProvider({ children }) {
     setUnlockedFeet(prev => new Set([...prev, id]));
   }
   function equipFeet(id) {
-    setActiveFeet(id);
+    setActiveFeet(current => (current === id ? 'feet_none' : id));
   }
 
   // Personalización extrema de color — ahora cada personalización es un
@@ -2198,7 +2198,7 @@ export function MascotProvider({ children }) {
     setUnlockedHead(prev => new Set([...prev, id]));
   }
   function equipHead(id) {
-    setActiveHead(id);
+    setActiveHead(current => (current === id ? 'head_none' : id));
   }
 
   function saveCurrentOutfit() {

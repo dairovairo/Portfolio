@@ -105,9 +105,12 @@ export default function MyCustomizationsModal({
                       </div>
                       <div className="flex gap-1.5 mt-1.5 flex-wrap">
                         {isActive ? (
-                          <span className="text-[10px] font-mono font-semibold px-2 py-1 rounded-lg bg-accent-primary/10 border border-accent-primary/20 text-accent-glow">
+                          <button
+                            onClick={() => onEquip(item)}
+                            className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg bg-accent-primary/10 border border-accent-primary/20 text-accent-glow hover:bg-accent-primary/20 transition-all"
+                          >
                             ✓ {activeLabel}
-                          </span>
+                          </button>
                         ) : (
                           <button
                             onClick={() => onEquip(item)}

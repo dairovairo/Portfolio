@@ -104,9 +104,18 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
       <div className="px-3 pb-3 pt-1">
         {isBase || isUnlocked ? (
           isActive ? (
-            <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
-              ✓ Equipado
-            </div>
+            isBase ? (
+              <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
+                ✓ Equipado
+              </div>
+            ) : (
+              <button
+                onClick={onEquip}
+                className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2 hover:bg-accent-primary/20 transition-all"
+              >
+                ✓ Equipado (quitar)
+              </button>
+            )
           ) : (
             <button
               onClick={onEquip}
@@ -473,9 +482,12 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
         </div>
         {isUnlocked ? (
           isActive ? (
-            <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
+            <button
+              onClick={onEquip}
+              className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5 hover:bg-accent-primary/20 transition-all"
+            >
               Puesto
-            </div>
+            </button>
           ) : (
             <button
               onClick={onEquip}
@@ -554,9 +566,12 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, 
         </div>
         {isUnlocked ? (
           isActive ? (
-            <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
+            <button
+              onClick={onEquip}
+              className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5 hover:bg-accent-primary/20 transition-all"
+            >
               Puesto
-            </div>
+            </button>
           ) : (
             <button
               onClick={onEquip}
@@ -760,9 +775,12 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, 
         </div>
         {isUnlocked ? (
           isActive ? (
-            <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
+            <button
+              onClick={onEquip}
+              className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5 hover:bg-accent-primary/20 transition-all"
+            >
               Puesto
-            </div>
+            </button>
           ) : (
             <button
               onClick={onEquip}
@@ -979,8 +997,9 @@ export default function ShopPage() {
   }
 
   function handleEquipCustomOutfit(item) {
+    const wasActive = activeOutfit === item.id;
     equipOutfit(item.id);
-    showToast(`¡${item.name} puesta! ✨`);
+    showToast(wasActive ? `${item.name} retirada` : `¡${item.name} puesta! ✨`);
   }
 
   function hasAnyCustomizationOfAccessory(baseId) {
@@ -1021,8 +1040,9 @@ export default function ShopPage() {
   }
 
   function handleEquipCustomAccessory(item) {
+    const wasActive = activeAccessories.has(item.id);
     toggleAccessory(item.id);
-    showToast(`¡${item.name} equipado! ✨`);
+    showToast(wasActive ? `${item.name} retirado` : `¡${item.name} equipado! ✨`);
   }
 
   function handleSaveHeadColors(zones) {
@@ -1044,8 +1064,9 @@ export default function ShopPage() {
   }
 
   function handleEquipCustomHead(item) {
+    const wasActive = activeHead === item.id;
     equipHead(item.id);
-    showToast(`¡${item.name} puesto! ✨`);
+    showToast(wasActive ? `${item.name} retirada` : `¡${item.name} puesto! ✨`);
   }
 
   function handleSaveFeetColors(zones) {
@@ -1077,8 +1098,9 @@ export default function ShopPage() {
     showToast(`¡${activity.name} desbloqueada y equipada! 🎉`);
   }
   function handleEquipActivity(activity) {
+    const wasActive = activeActivity === activity.id;
     equipActivity(activity.id);
-    showToast(`¡${activity.name} equipada! ✨`);
+    showToast(wasActive ? `${activity.name} retirada` : `¡${activity.name} equipada! ✨`);
   }
 
   // ── Accesorios — selección múltiple: cada uno se enciende/apaga sin
@@ -1105,8 +1127,9 @@ export default function ShopPage() {
     showToast(`¡${outfit.name} desbloqueada y puesta! 🎉`);
   }
   function handleEquipOutfit(outfit) {
+    const wasActive = activeOutfit === outfit.id;
     equipOutfit(outfit.id);
-    showToast(`¡${outfit.name} puesta! ✨`);
+    showToast(wasActive ? `${outfit.name} retirada` : `¡${outfit.name} puesta! ✨`);
   }
 
   // ── Outfits — Pies ───────────────────────────────────────────────────────────
@@ -1118,15 +1141,17 @@ export default function ShopPage() {
     showToast(`¡${feet.name} desbloqueado y puesto! 🎉`);
   }
   function handleEquipFeet(feet) {
+    const wasActive = activeFeet === feet.id;
     equipFeet(feet.id);
-    showToast(`¡${feet.name} puesto! ✨`);
+    showToast(wasActive ? `${feet.name} retirado` : `¡${feet.name} puesto! ✨`);
   }
   // Equipar una personalización desde la galería "Mis personalizaciones":
   // usa el mismo equipFeet del contexto (acepta cualquier id activo, sea
   // del catálogo o de feetCustomizations — ver getMascotLayers).
   function handleEquipCustomFeet(item) {
+    const wasActive = activeFeet === item.id;
     equipFeet(item.id);
-    showToast(`¡${item.name} puesta! ✨`);
+    showToast(wasActive ? `${item.name} retirada` : `¡${item.name} puesta! ✨`);
   }
 
   // ── Outfits — Cabeza ─────────────────────────────────────────────────────────
@@ -1138,8 +1163,9 @@ export default function ShopPage() {
     showToast(`¡${head.name} desbloqueada y puesta! 🎉`);
   }
   function handleEquipHead(head) {
+    const wasActive = activeHead === head.id;
     equipHead(head.id);
-    showToast(`¡${head.name} puesta! ✨`);
+    showToast(wasActive ? `${head.name} retirada` : `¡${head.name} puesta! ✨`);
   }
 
   const activeAct  = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
