@@ -58,6 +58,13 @@
  *                     mostrar ninguno, o no pasar la prop para usar los
  *                     accesorios activos del contexto.
  *   activityLayers   override capas actividad []
+ *   activityScale    override escala de la capa de actividad (0–1). Si la
+ *                     actividad define `scale` en MASCOT_ACTIVITIES, se usa
+ *                     ese valor; este prop lo sobreescribe. Sin valor: tamaño
+ *                     completo del lienzo (comportamiento por defecto).
+ *   activityOffsetX  override desplazamiento horizontal de la capa de actividad
+ *                     en puntos porcentuales (positivo = derecha). Se suma al
+ *                     centrado automático derivado de activityScale.
  *   outfitOffsetY    desplaza la capa de outfit hacia abajo (ej. '20%'), para
  *                     que no tape la cara de la mascota. Por defecto es '20%'
  *                     (la misma posición usada en la vista previa de la tienda),
@@ -111,6 +118,8 @@ export default function MascotDisplay({
   headBox,
   accessories,
   activityLayers,
+  activityScale,
+  activityOffsetX,
   outfitOffsetY = '20%',
 }) {
   const { getMascotLayers } = useMascot();
@@ -129,6 +138,8 @@ export default function MascotDisplay({
   const headBx    = headBox          !== undefined ? headBox          : resolved.headBox;
   const accs      = accessories      !== undefined ? accessories      : resolved.accessories;
   const layers    = activityLayers   !== undefined ? activityLayers   : resolved.layers;
+  const actScl    = activityScale    !== undefined ? activityScale    : resolved.activityScale;
+  const actOffX   = activityOffsetX  !== undefined ? activityOffsetX  : resolved.activityOffsetX;
   const subcat    = outfitSubcategory !== undefined ? outfitSubcategory : resolved.outfitSubcategory;
   const outfitItemOffset = outfitItemOffsetY !== undefined ? outfitItemOffsetY : resolved.outfitItemOffsetY;
   const outfitItemScl    = outfitItemScale   !== undefined ? outfitItemScale   : resolved.outfitItemScale;
@@ -390,17 +401,45 @@ export default function MascotDisplay({
         return null;
       })}
 
-      {/* Capa 6: actividad (la más delantera) */}
-      {layers.map((src, i) => (
-        <img
-          key={src}
-          src={src}
-          alt=""
-          draggable={false}
-          className={imgClass}
-          style={i === layers.length - 1 ? animStyle : {}}
-        />
-      ))}
+      {/* Capa 6: actividad (la más delantera).
+          Si la actividad define `scale`/`offsetX` se reduce y recentra con el
+          mismo cálculo cuadrado que usa la capa de cabeza: el centrado se
+          obtiene como (100 - pct) / 2 y el offsetX se suma en puntos
+          porcentuales (positivo = derecha). */}
+      {layers.map((src, i) => {
+        const isLast = i === layers.length - 1;
+        if (actScl) {
+          const pct = actScl * 100;
+          const pos = (100 - pct) / 2;
+          const leftPct = pos + (actOffX ?? 0);
+          return (
+            <img
+              key={src}
+              src={src}
+              alt=""
+              draggable={false}
+              className={imgClass}
+              style={{
+                top:    `${pos}%`,
+                left:   `${leftPct}%`,
+                width:  `${pct}%`,
+                height: `${pct}%`,
+                ...(isLast ? animStyle : {}),
+              }}
+            />
+          );
+        }
+        return (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            draggable={false}
+            className={imgClass}
+            style={isLast ? animStyle : {}}
+          />
+        );
+      })}
     </div>
   );
 }

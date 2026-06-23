@@ -997,7 +997,8 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Movida un poco a la derecha: el PNG quedaba ligeramente descentrado
     // hacia la izquierda respecto al resto del calzado chunky.
-    offsetX: '2%',
+    // Incrementada de 2% → 4% por petición de ajuste fino.
+    offsetX: '4%',
   },
   {
     id: 'feet_sneaker_2_blue',
@@ -1009,7 +1010,8 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    offsetX: '2%',
+    // Incrementada de 2% → 4% por petición de ajuste fino.
+    offsetX: '4%',
   },
   {
     id: 'feet_sneaker_2_pink',
@@ -1021,7 +1023,8 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    offsetX: '2%',
+    // Incrementada de 2% → 4% por petición de ajuste fino.
+    offsetX: '4%',
   },
   {
     id: 'feet_sneaker_2_purple',
@@ -1033,10 +1036,10 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Reducida: el PNG venía dibujado notablemente más grande que el resto
-    // del calzado chunky del mismo grupo (misma anchura de lienzo, pero
-    // mucho más alto/voluminoso). Escalada a 0.73 para igualar el tamaño
-    // visual del resto de variantes de color.
-    scale: 0.73,
+    // del calzado chunky del mismo grupo. Escalada a 0.73 inicialmente;
+    // reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
+    scale: 0.62,
+    offsetY: '5%',
   },
   {
     id: 'feet_sneaker_2_black',
@@ -1048,7 +1051,8 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
-    offsetX: '2%',
+    // Incrementada de 2% → 4% por petición de ajuste fino.
+    offsetX: '4%',
   },
   {
     id: 'feet_sneaker_2_yellow',
@@ -1060,7 +1064,9 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
-    scale: 0.73,
+    // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
+    scale: 0.62,
+    offsetY: '5%',
   },
   {
     id: 'feet_sneaker_2_orange',
@@ -1072,7 +1078,9 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
-    scale: 0.73,
+    // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
+    scale: 0.62,
+    offsetY: '5%',
   },
   {
     id: 'feet_sneaker_2_brown',
@@ -1084,7 +1092,9 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
-    scale: 0.73,
+    // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
+    scale: 0.62,
+    offsetY: '5%',
   },
   {
     id: 'feet_sneaker_2_red',
@@ -1096,7 +1106,9 @@ export const MASCOT_FEET = [
     isBase: false,
     isBasic2: true,
     // Reducida, mismo ajuste que el resto de variantes "grandes" del grupo.
-    scale: 0.73,
+    // Reducida otro 15% más (0.73 × 0.85 ≈ 0.62) y bajada un poco.
+    scale: 0.62,
+    offsetY: '5%',
   },
   {
     id: 'feet_sneaker_2_white',
@@ -1109,7 +1121,9 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Reducida (algo menos que el resto de "grandes": esta partía de un
     // tamaño ya un poco más cercano al correcto).
-    scale: 0.75,
+    // Reducida otro 15% más (0.75 × 0.85 ≈ 0.64) y bajada un poco.
+    scale: 0.64,
+    offsetY: '5%',
   },
   {
     id: 'feet_sneaker_2_gray',
@@ -1122,7 +1136,8 @@ export const MASCOT_FEET = [
     isBasic2: true,
     // Igual que verde salvia/azul/rosa/negra: movida un poco a la derecha,
     // mismo ajuste que el resto de variantes de tamaño correcto del grupo.
-    offsetX: '2%',
+    // Incrementada de 2% → 4% por petición de ajuste fino.
+    offsetX: '4%',
   },
   {
     id: 'feet_loafer_1',
@@ -1521,6 +1536,7 @@ export const MASCOT_ACTIVITIES = [
     desc: 'A darle al balón con los amigos.',
     emoji: '⚽',
     layers: ['/activity-football.png'],
+    scale: 0.9,   // 10% más pequeño
     price: 60,
     isBase: false,
   },
@@ -1539,6 +1555,8 @@ export const MASCOT_ACTIVITIES = [
     desc: 'Mando en mano: modo gamer activado.',
     emoji: '🎮',
     layers: ['/activity-gamepad.png'],
+    scale: 0.85,    // 15% más pequeño
+    offsetX: 3,     // un poco a la derecha (puntos porcentuales)
     price: 120,
     isBase: false,
   },
@@ -1808,6 +1826,8 @@ export function MascotProvider({ children }) {
       // Lista de accesorios activos (selección múltiple simultánea).
       accessories:      accs,
       layers:           act?.layers ?? [],
+      activityScale:    act?.scale   ?? null,
+      activityOffsetX:  act?.offsetX ?? null,
     };
   }
 

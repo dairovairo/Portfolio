@@ -6,6 +6,28 @@ import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MAS
 
 const COINS = 340;
 
+// ── Botón de reset "Sin X" — aparece siempre encima de los carruseles/grid ───
+// Botón ancho, compacto, sin preview de mascota. Se usa en todas las secciones
+// que tienen un ítem base para devolver la categoría a su estado original.
+function ResetButton({ label, emoji = '✨', isActive, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all duration-200 mb-3
+        ${isActive
+          ? 'bg-accent-primary/10 border-accent-primary/40 text-accent-glow'
+          : 'bg-surface-card border-surface-border text-surface-muted hover:border-accent-primary/30 hover:text-surface-text'
+        }`}
+    >
+      <span style={{ fontVariantEmoji: 'emoji' }}>{emoji}</span>
+      <span className="flex-1 text-left">{label}</span>
+      {isActive && (
+        <span className="text-[10px] font-mono bg-accent-primary text-white px-2 py-0.5 rounded-lg">✓ Activo</span>
+      )}
+    </button>
+  );
+}
+
 // ── Tarjeta genérica de item con preview de mascota ───────────────────────────
 function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEquip, children }) {
   return (
@@ -744,48 +766,45 @@ export default function ShopPage() {
   const activeHd   = MASCOT_HEAD.find(h => h.id === activeHead);
 
   // Outfits (torso) filtrados por sub-tab
-  // - basicOutfits: colores lisos de esa sub-tab → carrusel horizontal arriba
-  // - restOutfits: el resto de prendas (estampados/temáticas) de esa
-  //   sub-tab → grid vertical de siempre
-  // El ítem base ("Sin prenda") SÍ se muestra como primera tarjeta del grid
-  // de cada sub-tab (hay una entrada por subcategoría en MASCOT_OUTFITS,
-  // ambas con id 'out_none'), igual que el resto de categorías de la
-  // tienda con su "Sin X".
+  // - baseOutfit: ítem "Sin prenda" de esta sub-tab → botón ResetButton encima
+  // - basicOutfits: colores lisos de esa sub-tab → carrusel horizontal
+  // - restOutfits: estampados/temáticas de esa sub-tab → grid vertical
   const filteredOutfits = MASCOT_OUTFITS.filter(o => o.subcategory === outfitSubTab);
+  const baseOutfit   = filteredOutfits.find(o => o.isBase) ?? null;
   const basicOutfits = filteredOutfits.filter(o => o.isBasic);
-  const restOutfits  = filteredOutfits.filter(o => !o.isBasic);
+  const restOutfits  = filteredOutfits.filter(o => !o.isBasic && !o.isBase);
 
-  // Pies: misma lógica que Torso — las variantes de color de la zapatilla
-  // retro (isBasic) van al carrusel horizontal; el resto (chunky, mocasines,
-  // oxford) va al grid vertical de siempre, junto con el ítem base
-  // ("Sin prenda") como primera tarjeta.
+  // Pies: ítem base ("Sin calzado") → botón ResetButton encima de los
+  // carruseles. Retro colores → carrusel. Chunky colores → carrusel.
+  // El resto (mocasines, oxford…) → grid vertical.
+  const baseFeet   = MASCOT_FEET.find(f => f.isBase) ?? null;
   const basicFeet  = MASCOT_FEET.filter(f => f.isBasic);
   const basicFeet2 = MASCOT_FEET.filter(f => f.isBasic2);
-  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBasic2);
+  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBasic2 && !f.isBase);
 
-  // Cabeza: misma lógica que Pies/Torso — las gorras "negra y X" (mismo
-  // molde, distinto color de visera) van al carrusel horizontal; el resto
-  // (sombreros, gorro de fiesta, boina, halo...) va al grid vertical de
-  // siempre, junto con el ítem base ("Sin prenda") como primera tarjeta.
-  // Hay un SEGUNDO molde de gorra ("Gorra negra" liso, sin visera bicolor)
-  // con sus propias variantes de color → su propio carrusel horizontal
-  // (isBasic2), independiente del de las gorras "negra y X" (isBasic).
+  // Cabeza: ítem base ("Sin prenda") → botón ResetButton encima de los
+  // carruseles. Gorras lisas → carrusel. Gorras bicolor → carrusel.
+  // El resto (sombreros, halos…) → grid vertical.
+  const baseHead   = MASCOT_HEAD.find(h => h.isBase) ?? null;
   const basicHead  = MASCOT_HEAD.filter(h => h.isBasic);
   const basicHead2 = MASCOT_HEAD.filter(h => h.isBasic2);
-  const restHead    = MASCOT_HEAD.filter(h => !h.isBasic && !h.isBasic2);
+  const restHead   = MASCOT_HEAD.filter(h => !h.isBasic && !h.isBasic2 && !h.isBase);
 
-  // Accesorios: cadenas, grillz, gafas de sol, corbatas y pajaritas son
-  // grupos de selección única (solo una de cada a la vez) → cada grupo va
-  // a su propio carrusel horizontal arriba, con su propia tarjeta "Sin X"
-  // al principio para poder dejar ese grupo vacío. El resto de accesorios
-  // (sin grupo dedicado) se puede combinar libremente y va al grid
-  // vertical de siempre. El ítem base general ("Sin accesorio") se sigue
-  // excluyendo de ese grid, igual que el resto de ítems base sin grupo.
-  const chainAccessories   = MASCOT_ACCESSORIES.filter(a => a.isChain);
-  const grillzAccessories  = MASCOT_ACCESSORIES.filter(a => a.isGrillz);
-  const glassesAccessories = MASCOT_ACCESSORIES.filter(a => a.isGlasses);
-  const tieAccessories     = MASCOT_ACCESSORIES.filter(a => a.isTie);
-  const bowTieAccessories  = MASCOT_ACCESSORIES.filter(a => a.isBowTie);
+  // Accesorios: los ítems "Sin X" de cada grupo de selección única (gafas,
+  // cadenas, grillz, corbatas, pajaritas) salen de sus carruseles y se
+  // muestran como ResetButton encima de cada uno. El ítem general "Sin
+  // accesorio" (acc_none) va como ResetButton encima de todo el tab.
+  const baseAccessory      = MASCOT_ACCESSORIES.find(a => a.isBase && !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie) ?? null;
+  const baseChain          = MASCOT_ACCESSORIES.find(a => a.isBase && a.isChain) ?? null;
+  const baseGrillz         = MASCOT_ACCESSORIES.find(a => a.isBase && a.isGrillz) ?? null;
+  const baseGlasses        = MASCOT_ACCESSORIES.find(a => a.isBase && a.isGlasses) ?? null;
+  const baseTie            = MASCOT_ACCESSORIES.find(a => a.isBase && a.isTie) ?? null;
+  const baseBowTie         = MASCOT_ACCESSORIES.find(a => a.isBase && a.isBowTie) ?? null;
+  const chainAccessories   = MASCOT_ACCESSORIES.filter(a => a.isChain && !a.isBase);
+  const grillzAccessories  = MASCOT_ACCESSORIES.filter(a => a.isGrillz && !a.isBase);
+  const glassesAccessories = MASCOT_ACCESSORIES.filter(a => a.isGlasses && !a.isBase);
+  const tieAccessories     = MASCOT_ACCESSORIES.filter(a => a.isTie && !a.isBase);
+  const bowTieAccessories  = MASCOT_ACCESSORIES.filter(a => a.isBowTie && !a.isBase);
   const restAccessories    = MASCOT_ACCESSORIES.filter(
     a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie && !a.isBase
   );
@@ -950,6 +969,16 @@ export default function ShopPage() {
             {/* Sección: Pies */}
             {outfitMainTab === 'pies' && (
               <div>
+                {/* Botón reset — encima de todos los carruseles y el grid */}
+                {baseFeet && (
+                  <ResetButton
+                    label={baseFeet.name}
+                    emoji={baseFeet.emoji}
+                    isActive={activeFeet === baseFeet.id}
+                    onClick={() => handleEquipFeet(baseFeet)}
+                  />
+                )}
+
                 {/* Carrusel horizontal: colores de la zapatilla retro (misma
                     silueta, distinto color), siempre visible arriba del
                     scroll vertical principal. */}
@@ -1037,6 +1066,16 @@ export default function ShopPage() {
                   ))}
                 </div>
 
+                {/* Botón reset — encima del carrusel y el grid */}
+                {baseOutfit && (
+                  <ResetButton
+                    label={baseOutfit.name}
+                    emoji={baseOutfit.emoji ?? '✨'}
+                    isActive={activeOutfit === baseOutfit.id}
+                    onClick={() => handleEquipOutfit(baseOutfit)}
+                  />
+                )}
+
                 {/* Carrusel horizontal: básicos de colores lisos de esta
                     sub-tab (camisetas o camisas), siempre visible arriba del
                     scroll vertical principal. */}
@@ -1080,6 +1119,16 @@ export default function ShopPage() {
             {/* Sección: Cabeza */}
             {outfitMainTab === 'cabeza' && (
               <div className="flex flex-col gap-4">
+                {/* Botón reset — encima de todos los carruseles y el grid */}
+                {baseHead && (
+                  <ResetButton
+                    label={baseHead.name}
+                    emoji={baseHead.emoji ?? '✨'}
+                    isActive={activeHead === baseHead.id}
+                    onClick={() => handleEquipHead(baseHead)}
+                  />
+                )}
+
                 {/* Carrusel: basicHead (mismo molde, distinto color de visera).
                     Etiqueta mostrada: "Gorras lisas" (intercambiada con la del
                     carrusel basicHead2 de abajo). */}
@@ -1152,9 +1201,27 @@ export default function ShopPage() {
             selección única con su propio carrusel horizontal) ── */}
         {tab === 'accessories' && (
           <div className="flex flex-col gap-4">
+            {/* Botón reset general — quita todos los accesorios a la vez */}
+            {baseAccessory && (
+              <ResetButton
+                label={baseAccessory.name}
+                emoji={baseAccessory.emoji}
+                isActive={isAccessoryCardActive(baseAccessory)}
+                onClick={() => handleToggleAccessory(baseAccessory)}
+              />
+            )}
+
             {/* Carrusel: Cadenas — elige una */}
             {chainAccessories.length > 0 && (
               <div>
+                {baseChain && (
+                  <ResetButton
+                    label={baseChain.name}
+                    emoji={baseChain.emoji}
+                    isActive={isAccessoryCardActive(baseChain)}
+                    onClick={() => handleToggleAccessory(baseChain)}
+                  />
+                )}
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Cadenas · elige una
                 </div>
@@ -1177,6 +1244,14 @@ export default function ShopPage() {
             {/* Carrusel: Grillz — elige uno */}
             {grillzAccessories.length > 0 && (
               <div>
+                {baseGrillz && (
+                  <ResetButton
+                    label={baseGrillz.name}
+                    emoji={baseGrillz.emoji}
+                    isActive={isAccessoryCardActive(baseGrillz)}
+                    onClick={() => handleToggleAccessory(baseGrillz)}
+                  />
+                )}
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Grillz · elige uno
                 </div>
@@ -1199,6 +1274,14 @@ export default function ShopPage() {
             {/* Carrusel: Gafas de sol — elige unas */}
             {glassesAccessories.length > 0 && (
               <div>
+                {baseGlasses && (
+                  <ResetButton
+                    label={baseGlasses.name}
+                    emoji={baseGlasses.emoji}
+                    isActive={isAccessoryCardActive(baseGlasses)}
+                    onClick={() => handleToggleAccessory(baseGlasses)}
+                  />
+                )}
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Gafas de sol · elige unas
                 </div>
@@ -1221,6 +1304,14 @@ export default function ShopPage() {
             {/* Carrusel: Corbatas — elige una */}
             {tieAccessories.length > 0 && (
               <div>
+                {baseTie && (
+                  <ResetButton
+                    label={baseTie.name}
+                    emoji={baseTie.emoji}
+                    isActive={isAccessoryCardActive(baseTie)}
+                    onClick={() => handleToggleAccessory(baseTie)}
+                  />
+                )}
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Corbatas · elige una
                 </div>
@@ -1243,6 +1334,14 @@ export default function ShopPage() {
             {/* Carrusel: Pajaritas — elige una */}
             {bowTieAccessories.length > 0 && (
               <div>
+                {baseBowTie && (
+                  <ResetButton
+                    label={baseBowTie.name}
+                    emoji={baseBowTie.emoji}
+                    isActive={isAccessoryCardActive(baseBowTie)}
+                    onClick={() => handleToggleAccessory(baseBowTie)}
+                  />
+                )}
                 <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
                   Pajaritas · elige una
                 </div>
