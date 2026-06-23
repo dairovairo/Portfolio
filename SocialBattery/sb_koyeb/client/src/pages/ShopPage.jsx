@@ -867,6 +867,10 @@ export default function ShopPage() {
   }
 
   function handleSaveCurrentOutfit() {
+    if (activeOutfit === 'out_none') {
+      showToast('Equipa alguna prenda antes de guardar el outfit');
+      return;
+    }
     const saved = saveCurrentOutfit();
     setShowSavedOutfits(true);
     showToast(`"${saved.name}" guardado`);
@@ -1432,7 +1436,8 @@ export default function ShopPage() {
               </button>
               <button
                 onClick={handleSaveCurrentOutfit}
-                className="flex items-center gap-1 text-[10px] font-display font-semibold text-surface-text bg-surface-bg border border-surface-border rounded-lg px-2 py-1 hover:bg-surface-card transition-all whitespace-nowrap"
+                disabled={activeOutfit === 'out_none'}
+                className="flex items-center gap-1 text-[10px] font-display font-semibold text-surface-text bg-surface-bg border border-surface-border rounded-lg px-2 py-1 hover:bg-surface-card transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface-bg"
               >
                 <span style={{ fontVariantEmoji: 'emoji' }}>💾</span>
                 Guardar outfit
@@ -2164,7 +2169,8 @@ export default function ShopPage() {
             {/* Botón guardar outfit actual desde el modal */}
             <button
               onClick={handleSaveCurrentOutfit}
-              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-surface-border bg-surface-bg text-surface-text font-display font-semibold text-sm hover:bg-surface-card transition-all"
+              disabled={activeOutfit === 'out_none'}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-surface-border bg-surface-bg text-surface-text font-display font-semibold text-sm hover:bg-surface-card transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface-bg"
             >
               <span style={{ fontVariantEmoji: 'emoji' }}>💾</span>
               Guardar outfit actual
