@@ -78,7 +78,7 @@ function hue2rgb(p, q, t) {
   return p;
 }
 
-function hslToRgb(h, s, l) {
+export function hslToRgb(h, s, l) {
   if (s === 0) {
     const v = Math.round(l * 255);
     return [v, v, v];
@@ -90,6 +90,31 @@ function hslToRgb(h, s, l) {
     Math.round(hue2rgb(p, q, h) * 255),
     Math.round(hue2rgb(p, q, h - 1 / 3) * 255),
   ];
+}
+
+function rgbToHex(r, g, b) {
+  return `#${[r, g, b]
+    .map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+/**
+ * hexToHslDegrees / hslDegreesToHex — variantes "en unidades humanas" de las
+ * conversiones de color anteriores, pensadas para los controles del editor
+ * (cuadrado tono×saturación + sliders de saturación/luminosidad): h en
+ * grados (0–360), s y l en porcentaje (0–100). rgbToHsl / hslToRgb de arriba
+ * siguen trabajando en 0–1 para el resto del módulo (flood fill, recolor…).
+ */
+export function hexToHslDegrees(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const [h, s, l] = rgbToHsl(r, g, b);
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+
+export function hslDegreesToHex(h, s, l) {
+  const hue01 = (((h % 360) + 360) % 360) / 360;
+  const [r, g, b] = hslToRgb(hue01, s / 100, l / 100);
+  return rgbToHex(r, g, b);
 }
 
 /**
