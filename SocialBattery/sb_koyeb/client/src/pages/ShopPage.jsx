@@ -802,7 +802,7 @@ export default function ShopPage() {
     getHeadZones, saveHeadCustomization, removeHeadCustomization, getCustomHeadItems,
     getOutfitZones, saveOutfitCustomization, removeOutfitCustomization, getCustomOutfitItems,
     getAccessoryZones, saveAccessoryCustomization, removeAccessoryCustomization, getCustomAccessoryItems,
-    savedOutfits, saveCurrentOutfit, applySavedOutfit,
+    savedOutfits, saveCurrentOutfit, applySavedOutfit, removeSavedOutfit,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -876,6 +876,11 @@ export default function ShopPage() {
     applySavedOutfit(outfit);
     setShowSavedOutfits(false);
     showToast(`"${outfit.name}" aplicado`);
+  }
+
+  function handleRemoveSavedOutfit(outfit) {
+    removeSavedOutfit(outfit.id);
+    showToast(`"${outfit.name}" eliminado`);
   }
 
   // Botón "🎨 Personalizar" de cada carrusel horizontal: aplica sobre la
@@ -2070,8 +2075,8 @@ export default function ShopPage() {
 
       {/* Modal: Tus outfits guardados */}
       {showSavedOutfits && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSavedOutfits(false)}>
-          <div className="bg-surface-card border border-surface-border rounded-t-3xl w-full max-w-lg p-5 pb-8 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSavedOutfits(false)}>
+          <div className="bg-surface-card border border-surface-border rounded-t-3xl w-full max-w-lg p-5 pb-8 mb-16 max-h-[65vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Header del modal */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -2137,12 +2142,20 @@ export default function ShopPage() {
                       <div className="font-display font-semibold text-surface-text text-sm truncate">{outfit.name}</div>
                       <div className="text-[10px] text-surface-muted mt-0.5">{outfit.createdAt ? new Date(outfit.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : ''}</div>
                     </div>
-                    <button
-                      onClick={() => handleApplySavedOutfit(outfit)}
-                      className="text-[11px] font-display font-semibold text-white bg-accent-primary rounded-xl px-3 py-1.5 hover:opacity-90 transition-all shrink-0"
-                    >
-                      Aplicar
-                    </button>
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleApplySavedOutfit(outfit)}
+                        className="text-[11px] font-display font-semibold text-white bg-accent-primary rounded-xl px-3 py-1.5 hover:opacity-90 transition-all"
+                      >
+                        Aplicar
+                      </button>
+                      <button
+                        onClick={() => handleRemoveSavedOutfit(outfit)}
+                        className="text-[11px] font-display font-semibold text-surface-muted bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5 hover:text-surface-text hover:border-red-400/40 transition-all"
+                      >
+                        🗑 Eliminar
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
