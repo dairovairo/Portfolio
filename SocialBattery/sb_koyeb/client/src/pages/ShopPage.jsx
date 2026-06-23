@@ -172,7 +172,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
 // Los accesorios admiten selección múltiple simultánea: cada tarjeta se activa
 // o desactiva de forma independiente (como un interruptor), sin afectar a los
 // demás accesorios ya equipados.
-function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle }) {
+function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, onCustomize, isCustomized }) {
   return (
     <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
       ${isActive
@@ -188,6 +188,18 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
             ✓ Activo
           </span>
+        )}
+        {accessory.src && onCustomize && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Personalizar colores"
+            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
+          >
+            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+            {isCustomized && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
+            )}
+          </button>
         )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
@@ -778,6 +790,8 @@ export default function ShopPage() {
     equipActivity, toggleAccessory, equipOutfit, equipFeet, equipHead,
     getFeetZones, saveFeetCustomization, removeFeetCustomization, getCustomFeetItems,
     getHeadZones, saveHeadCustomization, removeHeadCustomization, getCustomHeadItems,
+    getOutfitZones, saveOutfitCustomization, removeOutfitCustomization, getCustomOutfitItems,
+    getAccessoryZones, saveAccessoryCustomization, removeAccessoryCustomization, getCustomAccessoryItems,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -812,6 +826,14 @@ export default function ShopPage() {
   // Galería "Gorros personalizados" — true mientras está abierta.
   const [showHeadCustomizations, setShowHeadCustomizations] = useState(false);
 
+  const [editingOutfitItem, setEditingOutfitItem] = useState(null);
+  const [editingOutfitCustomId, setEditingOutfitCustomId] = useState(null);
+  const [showOutfitCustomizations, setShowOutfitCustomizations] = useState(false);
+
+  const [editingAccessoryItem, setEditingAccessoryItem] = useState(null);
+  const [editingAccessoryCustomId, setEditingAccessoryCustomId] = useState(null);
+  const [showAccessoryCustomizations, setShowAccessoryCustomizations] = useState(false);
+
   // Ítems de calzado personalizados: ahora son ítems INDEPENDIENTES (no el
   // modelo original recoloreado), ver getCustomFeetItems en MascotContext.
   // Se recalcula en cada render, así que siempre refleja el último cambio
@@ -820,6 +842,10 @@ export default function ShopPage() {
 
   // Ítems de cabeza personalizados — igual que los de pies.
   const customizedHeadItems = getCustomHeadItems();
+
+  const customizedOutfitItems = getCustomOutfitItems();
+  const customizedAccessoryItems = getCustomAccessoryItems();
+  const customizedOutfitsForSubTab = customizedOutfitItems.filter(o => o.subcategory === outfitSubTab);
 
   function showToast(msg) {
     setToast(msg);
@@ -862,6 +888,106 @@ export default function ShopPage() {
   function handleOpenCustomizeHeadNew(item) {
     setEditingHeadCustomId(null);
     setEditingHeadItem(item);
+  }
+
+  function outfitCustomizationLabels(subcategory = outfitSubTab) {
+    return subcategory === 'camisa'
+      ? {
+          title: 'Camisas personalizadas',
+          singular: 'camisa personalizada',
+          plural: 'camisas personalizadas',
+          empty: 'Aún no has personalizado ninguna camisa',
+          saved: 'Camisas personalizadas',
+        }
+      : {
+          title: 'Camisetas personalizadas',
+          singular: 'camiseta personalizada',
+          plural: 'camisetas personalizadas',
+          empty: 'Aún no has personalizado ninguna camiseta',
+          saved: 'Camisetas personalizadas',
+        };
+  }
+
+  function hasAnyCustomizationOfOutfit(baseId) {
+    return customizedOutfitItems.some(c => c.baseId === baseId);
+  }
+
+  function pickCarouselTargetOutfit(family) {
+    const activeCustom = customizedOutfitItems.find(c => c.id === activeOutfit);
+    return family.find(o => o.id === activeOutfit || o.id === activeCustom?.baseId) ?? family[0] ?? null;
+  }
+
+  function handleOpenCustomizeOutfitNew(item) {
+    if (!item) return;
+    setEditingOutfitCustomId(null);
+    setEditingOutfitItem(item);
+  }
+
+  function handleSaveOutfitColors(zones) {
+    const labels = outfitCustomizationLabels(editingOutfitItem?.subcategory);
+    const newId = saveOutfitCustomization(editingOutfitItem, zones, editingOutfitCustomId);
+    if (newId) showToast(`¡"${editingOutfitItem.baseName ?? editingOutfitItem.name}" guardada en ${labels.saved}! 🎨`);
+    setEditingOutfitItem(null);
+    setEditingOutfitCustomId(null);
+  }
+
+  function handleEditOutfitFromGallery(item) {
+    setShowOutfitCustomizations(false);
+    setEditingOutfitCustomId(item.id);
+    setEditingOutfitItem(item);
+  }
+
+  function handleRemoveOutfitCustomization(item) {
+    const labels = outfitCustomizationLabels(item.subcategory);
+    removeOutfitCustomization(item.id);
+    showToast(`"${item.name}" eliminada de ${labels.saved} ✨`);
+  }
+
+  function handleEquipCustomOutfit(item) {
+    equipOutfit(item.id);
+    showToast(`¡${item.name} puesta! ✨`);
+  }
+
+  function hasAnyCustomizationOfAccessory(baseId) {
+    return customizedAccessoryItems.some(c => c.baseId === baseId);
+  }
+
+  function pickAccessoryTarget(family) {
+    const activeOriginal = family.find(a => activeAccessories.has(a.id));
+    if (activeOriginal) return activeOriginal;
+    const activeCustom = customizedAccessoryItems.find(c =>
+      activeAccessories.has(c.id) && family.some(a => a.id === c.baseId)
+    );
+    return family.find(a => a.id === activeCustom?.baseId) ?? family[0] ?? null;
+  }
+
+  function handleOpenCustomizeAccessoryNew(item) {
+    if (!item) return;
+    setEditingAccessoryCustomId(null);
+    setEditingAccessoryItem(item);
+  }
+
+  function handleSaveAccessoryColors(zones) {
+    const newId = saveAccessoryCustomization(editingAccessoryItem, zones, editingAccessoryCustomId);
+    if (newId) showToast(`¡"${editingAccessoryItem.baseName ?? editingAccessoryItem.name}" guardado en Accesorios personalizados! 🎨`);
+    setEditingAccessoryItem(null);
+    setEditingAccessoryCustomId(null);
+  }
+
+  function handleEditAccessoryFromGallery(item) {
+    setShowAccessoryCustomizations(false);
+    setEditingAccessoryCustomId(item.id);
+    setEditingAccessoryItem(item);
+  }
+
+  function handleRemoveAccessoryCustomization(item) {
+    removeAccessoryCustomization(item.id);
+    showToast(`"${item.name}" eliminado de Accesorios personalizados ✨`);
+  }
+
+  function handleEquipCustomAccessory(item) {
+    toggleAccessory(item.id);
+    showToast(`¡${item.name} equipado! ✨`);
   }
 
   function handleSaveHeadColors(zones) {
@@ -987,10 +1113,11 @@ export default function ShopPage() {
   // MASCOT_ACTIVITIES), a diferencia del resto de ítems base de
   // outfit/accesorios, que siguen excluidos.
   const activityOptions = MASCOT_ACTIVITIES;
-  const activeAccs = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
-  const activeOut  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
-  const activeFt   = MASCOT_FEET.find(f => f.id === activeFeet);
-  const activeHd   = MASCOT_HEAD.find(h => h.id === activeHead);
+  const allShopAccessories = [...MASCOT_ACCESSORIES, ...customizedAccessoryItems];
+  const activeAccs = allShopAccessories.filter(a => activeAccessories.has(a.id));
+  const activeOut  = MASCOT_OUTFITS.find(o => o.id === activeOutfit) ?? customizedOutfitItems.find(o => o.id === activeOutfit);
+  const activeFt   = MASCOT_FEET.find(f => f.id === activeFeet) ?? customizedFeetItems.find(f => f.id === activeFeet);
+  const activeHd   = MASCOT_HEAD.find(h => h.id === activeHead) ?? customizedHeadItems.find(h => h.id === activeHead);
 
   // Outfits (torso) filtrados por sub-tab
   // - baseOutfit: ítem "Sin prenda" de esta sub-tab → botón ResetButton encima
@@ -1043,7 +1170,7 @@ export default function ShopPage() {
   // id nunca se guarda dentro de activeAccessories).
   function isAccessoryCardActive(accessory) {
     if (accessory.isBase) {
-      return !MASCOT_ACCESSORIES.some(other =>
+      return !allShopAccessories.some(other =>
         other.id !== accessory.id &&
         !other.isBase &&
         (
@@ -1057,6 +1184,41 @@ export default function ShopPage() {
       );
     }
     return activeAccessories.has(accessory.id);
+  }
+
+  const currentOutfitCustomizationLabels = outfitCustomizationLabels();
+
+  function renderOutfitCustomizationPreview(item, size) {
+    return (
+      <MascotDisplay
+        tier="mid"
+        size={size}
+        outfitSrc={item.src}
+        outfitItemId={item.id}
+        outfitSubcategory={item.subcategory}
+        outfitItemOffsetY={item.offsetY ?? null}
+        outfitItemScale={item.scale ?? null}
+        accessories={[]}
+        feetSrc={null}
+        headSrc={null}
+        activityLayers={[]}
+        outfitOffsetY="20%"
+      />
+    );
+  }
+
+  function renderAccessoryCustomizationPreview(item, size) {
+    return (
+      <MascotDisplay
+        tier="mid"
+        size={size}
+        accessories={item.src ? [item] : []}
+        outfitSrc={null}
+        feetSrc={null}
+        headSrc={null}
+        activityLayers={[]}
+      />
+    );
   }
 
   return (
@@ -1080,12 +1242,42 @@ export default function ShopPage() {
 
       {showMyCustomizations && (
         <MyCustomizationsModal
+          title="Calzado personalizado"
           items={customizedFeetItems}
           activeFeetId={activeFeet}
+          emptyText="Aún no has personalizado ningún calzado. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color."
+          singularLabel="calzado personalizado"
+          pluralLabel="calzados personalizados"
           onEquip={handleEquipCustomFeet}
           onEdit={handleEditFromGallery}
           onRemove={handleRemoveCustomization}
           onClose={() => setShowMyCustomizations(false)}
+        />
+      )}
+
+      {editingOutfitItem && (
+        <FeetColorEditorModal
+          item={editingOutfitItem}
+          initialZones={getOutfitZones(editingOutfitItem.id)}
+          helpText={`Toca una zona de la ${editingOutfitItem.subcategory === 'camisa' ? 'camisa' : 'camiseta'} para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites.`}
+          onClose={() => { setEditingOutfitItem(null); setEditingOutfitCustomId(null); }}
+          onSave={handleSaveOutfitColors}
+        />
+      )}
+
+      {showOutfitCustomizations && (
+        <MyCustomizationsModal
+          title={currentOutfitCustomizationLabels.title}
+          items={customizedOutfitsForSubTab}
+          activeItemId={activeOutfit}
+          emptyText={currentOutfitCustomizationLabels.empty}
+          singularLabel={currentOutfitCustomizationLabels.singular}
+          pluralLabel={currentOutfitCustomizationLabels.plural}
+          renderPreview={renderOutfitCustomizationPreview}
+          onEquip={handleEquipCustomOutfit}
+          onEdit={handleEditOutfitFromGallery}
+          onRemove={handleRemoveOutfitCustomization}
+          onClose={() => setShowOutfitCustomizations(false)}
         />
       )}
 
@@ -1106,6 +1298,34 @@ export default function ShopPage() {
           onEdit={handleEditHeadFromGallery}
           onRemove={handleRemoveHeadCustomization}
           onClose={() => setShowHeadCustomizations(false)}
+        />
+      )}
+
+      {editingAccessoryItem && (
+        <FeetColorEditorModal
+          item={editingAccessoryItem}
+          initialZones={getAccessoryZones(editingAccessoryItem.id)}
+          helpText="Toca una zona del accesorio para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites."
+          onClose={() => { setEditingAccessoryItem(null); setEditingAccessoryCustomId(null); }}
+          onSave={handleSaveAccessoryColors}
+        />
+      )}
+
+      {showAccessoryCustomizations && (
+        <MyCustomizationsModal
+          title="Accesorios personalizados"
+          items={customizedAccessoryItems}
+          activeItemIds={activeAccessories}
+          activeLabel="Activo"
+          equipLabel="Equipar"
+          emptyText="Aún no has personalizado ningún accesorio. Toca el botón 🎨 de cualquier accesorio para crear tu propia variante de color."
+          singularLabel="accesorio personalizado"
+          pluralLabel="accesorios personalizados"
+          renderPreview={renderAccessoryCustomizationPreview}
+          onEquip={handleEquipCustomAccessory}
+          onEdit={handleEditAccessoryFromGallery}
+          onRemove={handleRemoveAccessoryCustomization}
+          onClose={() => setShowAccessoryCustomizations(false)}
         />
       )}
 
@@ -1142,6 +1362,7 @@ export default function ShopPage() {
             tier="mid"
             size={72}
             outfitSrc={activeOut?.src ?? null}
+            outfitItemId={activeOut?.id ?? null}
             outfitSubcategory={activeOut?.subcategory ?? null}
             outfitItemOffsetY={activeOut?.offsetY ?? null}
             outfitItemScale={activeOut?.scale ?? null}
@@ -1151,6 +1372,7 @@ export default function ShopPage() {
             feetOffsetX={activeFt?.offsetX ?? null}
             feetScale={activeFt?.scale ?? null}
             headSrc={activeHd?.src ?? null}
+            headItemId={activeHd?.id ?? null}
             headScale={activeHd?.scale ?? null}
             headOffsetY={activeHd?.offsetY ?? null}
             headOffsetX={activeHd?.offsetX ?? null}
@@ -1261,6 +1483,9 @@ export default function ShopPage() {
                       title="Calzado personalizado"
                       count={customizedFeetItems.length}
                       previewItems={customizedFeetItems}
+                      singularLabel="calzado personalizado"
+                      pluralLabel="calzados personalizados"
+                      emptyLabel="Aún no has personalizado ningún calzado"
                       onClick={() => setShowMyCustomizations(true)}
                     />
                   </div>
@@ -1390,9 +1615,14 @@ export default function ShopPage() {
                       onEquip={() => handleEquipOutfit(baseOutfit)}
                     />
                     <MyCustomizationsCard
-                      count={customizedFeetItems.length}
-                      previewItems={customizedFeetItems}
-                      onClick={() => setShowMyCustomizations(true)}
+                      title={currentOutfitCustomizationLabels.title}
+                      count={customizedOutfitsForSubTab.length}
+                      previewItems={customizedOutfitsForSubTab}
+                      singularLabel={currentOutfitCustomizationLabels.singular}
+                      pluralLabel={currentOutfitCustomizationLabels.plural}
+                      emptyLabel={currentOutfitCustomizationLabels.empty}
+                      onClick={() => setShowOutfitCustomizations(true)}
+                      renderPreview={renderOutfitCustomizationPreview}
                     />
                   </div>
                 )}
@@ -1402,8 +1632,17 @@ export default function ShopPage() {
                     scroll vertical principal. */}
                 {basicOutfits.length > 0 && (
                   <div className="mb-3">
-                    <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                      Básicos
+                    <div className="flex items-center justify-between px-0.5 mb-1.5">
+                      <div className="text-[11px] font-display font-semibold text-surface-muted">
+                        Básicos
+                      </div>
+                      <button
+                        onClick={() => handleOpenCustomizeOutfitNew(pickCarouselTargetOutfit(basicOutfits))}
+                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                      >
+                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                        Personalizar
+                      </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicOutfits.map(outfit => (
@@ -1431,6 +1670,8 @@ export default function ShopPage() {
                       canAfford={coins >= outfit.price}
                       onBuy={() => handleBuyOutfit(outfit)}
                       onEquip={() => handleEquipOutfit(outfit)}
+                      onCustomize={() => handleOpenCustomizeOutfitNew(outfit)}
+                      isCustomized={hasAnyCustomizationOfOutfit(outfit.id)}
                     />
                   ))}
                 </div>
@@ -1570,9 +1811,13 @@ export default function ShopPage() {
                 todo del scroll vertical, antes de cualquier carrusel. */}
             <MyCustomizationsCard
               title="Accesorios personalizados"
-              count={customizedFeetItems.length}
-              previewItems={customizedFeetItems}
-              onClick={() => setShowMyCustomizations(true)}
+              count={customizedAccessoryItems.length}
+              previewItems={customizedAccessoryItems}
+              singularLabel="accesorio personalizado"
+              pluralLabel="accesorios personalizados"
+              emptyLabel="Aún no has personalizado ningún accesorio"
+              onClick={() => setShowAccessoryCustomizations(true)}
+              renderPreview={renderAccessoryCustomizationPreview}
             />
 
             {/* Carrusel: Corbatas — elige una. La opción "Sin corbata" va
@@ -1580,8 +1825,17 @@ export default function ShopPage() {
                 mascota sin corbata), en vez de un botón de reset aparte. */}
             {tieAccessories.length > 0 && (
               <div>
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Corbatas · elige una
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    Corbatas · elige una
+                  </div>
+                  <button
+                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(tieAccessories))}
+                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                  >
+                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                    Personalizar
+                  </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseTie, ...tieAccessories].filter(Boolean).map(accessory => (
@@ -1602,8 +1856,17 @@ export default function ShopPage() {
             {/* Carrusel: Pajaritas — elige una */}
             {bowTieAccessories.length > 0 && (
               <div>
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Pajaritas · elige una
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    Pajaritas · elige una
+                  </div>
+                  <button
+                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(bowTieAccessories))}
+                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                  >
+                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                    Personalizar
+                  </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseBowTie, ...bowTieAccessories].filter(Boolean).map(accessory => (
@@ -1624,8 +1887,17 @@ export default function ShopPage() {
             {/* Carrusel: Cadenas — elige una */}
             {chainAccessories.length > 0 && (
               <div>
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Cadenas · elige una
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    Cadenas · elige una
+                  </div>
+                  <button
+                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(chainAccessories))}
+                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                  >
+                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                    Personalizar
+                  </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseChain, ...chainAccessories].filter(Boolean).map(accessory => (
@@ -1646,8 +1918,17 @@ export default function ShopPage() {
             {/* Carrusel: Grillz — elige uno */}
             {grillzAccessories.length > 0 && (
               <div>
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Grillz · elige uno
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    Grillz · elige uno
+                  </div>
+                  <button
+                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(grillzAccessories))}
+                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                  >
+                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                    Personalizar
+                  </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseGrillz, ...grillzAccessories].filter(Boolean).map(accessory => (
@@ -1668,8 +1949,17 @@ export default function ShopPage() {
             {/* Carrusel: Gafas de sol — elige unas */}
             {glassesAccessories.length > 0 && (
               <div>
-                <div className="text-[11px] font-display font-semibold text-surface-muted px-0.5 mb-1.5">
-                  Gafas de sol · elige unas
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    Gafas de sol · elige unas
+                  </div>
+                  <button
+                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(glassesAccessories))}
+                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                  >
+                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                    Personalizar
+                  </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseGlasses, ...glassesAccessories].filter(Boolean).map(accessory => (
@@ -1699,6 +1989,8 @@ export default function ShopPage() {
                   canAfford={coins >= accessory.price}
                   onBuy={() => handleBuyAccessory(accessory)}
                   onToggle={() => handleToggleAccessory(accessory)}
+                  onCustomize={() => handleOpenCustomizeAccessoryNew(accessory)}
+                  isCustomized={hasAnyCustomizationOfAccessory(accessory.id)}
                 />
               ))}
             </div>
