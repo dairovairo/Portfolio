@@ -3,9 +3,65 @@ import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
 import FeetColorEditorModal from '../components/FeetColorEditorModal';
+import MyCustomizationsModal from '../components/MyCustomizationsModal';
 import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
 
 const COINS = 340;
+
+// ── Tarjeta "Mis personalizaciones" ───────────────────────────────────────────
+// Acceso rápido a la galería de prendas con color personalizado (ver
+// FeetColorEditorModal/MyCustomizationsModal). Pensada para sentarse al
+// lado de la tarjeta "Sin prenda" en un grid de 2 columnas, o como banner
+// suelto arriba de un scroll vertical — por eso no fija un ancho propio
+// (w-full) y mantiene la misma altura/estructura que el resto de tarjetas.
+function MyCustomizationsCard({ title = 'Mis personalizaciones', count, previewItems, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden flex flex-col transition-all duration-200 hover:border-accent-primary/40"
+    >
+      <div className="relative flex items-center justify-center gap-1 py-4 px-2 bg-surface-hover/30 min-h-[112px]">
+        {previewItems.length > 0 ? (
+          previewItems.slice(0, 3).map((item, i) => (
+            <div
+              key={item.id}
+              className="rounded-xl overflow-hidden border border-surface-border bg-surface-card flex-shrink-0"
+              style={{ marginLeft: i > 0 ? -18 : 0, zIndex: 10 - i }}
+            >
+              <MascotDisplay
+                tier="mid"
+                size={64}
+                feetSrc={item.src}
+                feetItemId={item.id}
+                feetOffsetY={item.offsetY ?? null}
+                feetOffsetX={item.offsetX ?? null}
+                feetScale={item.scale ?? null}
+                outfitSrc={null}
+                headSrc={null}
+                accessories={[]}
+                activityLayers={[]}
+              />
+            </div>
+          ))
+        ) : (
+          <span className="text-3xl opacity-60" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+        )}
+      </div>
+
+      <div className="px-3 pt-2 pb-3 flex-1 flex flex-col gap-1">
+        <div className="flex items-center gap-1.5">
+          <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{title}</div>
+        </div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">
+          {count > 0
+            ? `${count} ${count === 1 ? 'prenda personalizada' : 'prendas personalizadas'}`
+            : 'Aún no has personalizado ninguna prenda'}
+        </div>
+      </div>
+    </button>
+  );
+}
 
 // ── Tarjeta genérica de item con preview de mascota ───────────────────────────
 function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEquip, children }) {
@@ -677,7 +733,7 @@ export default function ShopPage() {
     activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
     unlockActivity, unlockAccessory, unlockOutfit, unlockFeet, unlockHead,
     equipActivity, toggleAccessory, equipOutfit, equipFeet, equipHead,
-    getFeetZones, saveFeetZones, hasFeetCustomization,
+    getFeetZones, saveFeetZones, resetFeetZones, hasFeetCustomization,
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
@@ -689,6 +745,14 @@ export default function ShopPage() {
   // = modal cerrado). Se guarda el objeto completo del catálogo (no solo
   // el id) para poder mostrar su nombre/imagen en el modal directamente.
   const [editingFeetItem, setEditingFeetItem] = useState(null);
+  // Galería "Mis personalizaciones" — true mientras está abierta.
+  const [showMyCustomizations, setShowMyCustomizations] = useState(false);
+
+  // Prendas que ya tienen una receta de color guardada (por ahora solo el
+  // calzado admite personalización extrema de color). Se recalcula en cada
+  // render a partir de feetCustomizations, así que siempre refleja el
+  // último cambio guardado/restaurado.
+  const customizedFeetItems = MASCOT_FEET.filter(f => hasFeetCustomization(f.id));
 
   function showToast(msg) {
     setToast(msg);
@@ -706,6 +770,18 @@ export default function ShopPage() {
     saveFeetZones(editingFeetItem.id, zones);
     showToast(`¡Colores de "${editingFeetItem.name}" guardados! 🎨`);
     setEditingFeetItem(null);
+  }
+
+  // Desde la galería "Mis personalizaciones": reabrir el editor de una
+  // prenda ya personalizada (cerrando la galería primero) o restaurarla a
+  // su color original sin salir de la galería.
+  function handleEditFromGallery(item) {
+    setShowMyCustomizations(false);
+    setEditingFeetItem(item);
+  }
+  function handleRemoveCustomization(item) {
+    resetFeetZones(item.id);
+    showToast(`"${item.name}" restaurada a su color original ✨`);
   }
 
   // ── Actividades ─────────────────────────────────────────────────────────────
@@ -872,6 +948,15 @@ export default function ShopPage() {
         />
       )}
 
+      {showMyCustomizations && (
+        <MyCustomizationsModal
+          items={customizedFeetItems}
+          onEdit={handleEditFromGallery}
+          onRemove={handleRemoveCustomization}
+          onClose={() => setShowMyCustomizations(false)}
+        />
+      )}
+
       {/* Header — z-20 (por encima del z-10 de las superposiciones de
           items bloqueados/"Puesto" de las tarjetas) para que la flecha de
           volver siga siendo clicable aunque, al hacer scroll, coincida
@@ -1005,9 +1090,11 @@ export default function ShopPage() {
                 {/* Ítem base "Sin prenda" — misma tarjeta con preview de
                     mascota que se usa en Actividades para "Sin actividad",
                     en vez del botón de reset compacto. Sigue colocada
-                    encima de los carruseles. */}
+                    encima de los carruseles, ahora junto a la tarjeta de
+                    acceso a "Mis personalizaciones" en vez de a ancho
+                    completo. */}
                 {baseFeet && (
-                  <div className="mb-3">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
                     <FeetCard
                       feet={baseFeet}
                       isUnlocked={true}
@@ -1017,6 +1104,12 @@ export default function ShopPage() {
                       onEquip={() => handleEquipFeet(baseFeet)}
                       onCustomize={() => {}}
                       isCustomized={false}
+                    />
+                    <MyCustomizationsCard
+                      title="Calzado personalizado"
+                      count={customizedFeetItems.length}
+                      previewItems={customizedFeetItems}
+                      onClick={() => setShowMyCustomizations(true)}
                     />
                   </div>
                 )}
@@ -1131,9 +1224,11 @@ export default function ShopPage() {
                 {/* Ítem base "Sin prenda" de esta sub-tab — misma tarjeta con
                     preview de mascota que se usa en Actividades para "Sin
                     actividad", en vez del botón de reset compacto. Sigue
-                    colocada encima del carrusel y el grid. */}
+                    colocada encima del carrusel y el grid, ahora junto a la
+                    tarjeta de acceso a "Mis personalizaciones" en vez de a
+                    ancho completo. */}
                 {baseOutfit && (
-                  <div className="mb-3">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
                     <OutfitCard
                       outfit={baseOutfit}
                       isUnlocked={true}
@@ -1141,6 +1236,11 @@ export default function ShopPage() {
                       canAfford={true}
                       onBuy={() => handleEquipOutfit(baseOutfit)}
                       onEquip={() => handleEquipOutfit(baseOutfit)}
+                    />
+                    <MyCustomizationsCard
+                      count={customizedFeetItems.length}
+                      previewItems={customizedFeetItems}
+                      onClick={() => setShowMyCustomizations(true)}
                     />
                   </div>
                 )}
@@ -1191,9 +1291,11 @@ export default function ShopPage() {
                 {/* Ítem base "Sin prenda" — misma tarjeta con preview de
                     mascota que se usa en Actividades para "Sin actividad",
                     en vez del botón de reset compacto. Sigue colocada
-                    encima de todos los carruseles y el grid. */}
+                    encima de todos los carruseles y el grid, ahora junto a
+                    la tarjeta de acceso a "Mis personalizaciones" en vez de
+                    a ancho completo. */}
                 {baseHead && (
-                  <div className="mb-3">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
                     <HeadCard
                       head={baseHead}
                       isUnlocked={true}
@@ -1201,6 +1303,12 @@ export default function ShopPage() {
                       canAfford={true}
                       onBuy={() => handleEquipHead(baseHead)}
                       onEquip={() => handleEquipHead(baseHead)}
+                    />
+                    <MyCustomizationsCard
+                      title="Gorros personalizados"
+                      count={customizedFeetItems.length}
+                      previewItems={customizedFeetItems}
+                      onClick={() => setShowMyCustomizations(true)}
                     />
                   </div>
                 )}
@@ -1277,6 +1385,15 @@ export default function ShopPage() {
             selección única con su propio carrusel horizontal) ── */}
         {tab === 'accessories' && (
           <div className="flex flex-col gap-4">
+            {/* Acceso a la galería "Mis personalizaciones" — arriba del
+                todo del scroll vertical, antes de cualquier carrusel. */}
+            <MyCustomizationsCard
+              title="Accesorios personalizados"
+              count={customizedFeetItems.length}
+              previewItems={customizedFeetItems}
+              onClick={() => setShowMyCustomizations(true)}
+            />
+
             {/* Carrusel: Corbatas — elige una. La opción "Sin corbata" va
                 como primera tarjeta del propio carrusel (con preview de la
                 mascota sin corbata), en vez de un botón de reset aparte. */}

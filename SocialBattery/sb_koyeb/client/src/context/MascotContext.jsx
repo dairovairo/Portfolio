@@ -897,7 +897,7 @@ export const MASCOT_ACCESSORIES = [
 export const MASCOT_FEET = [
   {
     id: 'feet_none',
-    name: 'Sin prenda',
+    name: 'Sin calzado',
     desc: 'La mascota sin nada en los pies.',
     emoji: '✨',
     src: null,
@@ -1187,7 +1187,7 @@ export const MASCOT_FEET = [
 export const MASCOT_HEAD = [
   {
     id: 'head_none',
-    name: 'Sin prenda',
+    name: 'Sin gorro',
     desc: 'La mascota sin nada en la cabeza.',
     emoji: '✨',
     src: null,
