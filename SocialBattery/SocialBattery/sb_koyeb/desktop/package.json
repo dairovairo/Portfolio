@@ -1,0 +1,61 @@
+{
+  "name": "socialbattery-desktop",
+  "version": "1.0.0",
+  "description": "SocialBattery desktop wrapper",
+  "main": "main.js",
+  "private": true,
+  "author": "SocialBattery",
+  "license": "UNLICENSED",
+  "appUrl": "https://portfolio-nmc3.onrender.com",
+  "scripts": {
+    "set-url": "node scripts/set-app-url.js",
+    "check-url": "node scripts/check-app-url.js",
+    "start": "electron .",
+    "dist": "npm run check-url && electron-builder --win nsis portable",
+    "dist:installer": "npm run check-url && electron-builder --win nsis",
+    "dist:portable": "npm run check-url && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.socialbattery.app",
+    "productName": "SocialBattery",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "assets/**/*",
+      "scripts/**/*"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SocialBattery"
+    }
+  }
+}
