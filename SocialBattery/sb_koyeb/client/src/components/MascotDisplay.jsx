@@ -103,6 +103,11 @@
 import { useMascot, OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
 import { useColorizedSrc } from '../hooks/useColorizedSrc';
 
+function ColorizedImage({ src, zones, ...props }) {
+  const displaySrc = useColorizedSrc(src, zones);
+  return <img src={displaySrc} {...props} />;
+}
+
 export default function MascotDisplay({
   tier = 'mid',
   size = 128,
@@ -112,6 +117,7 @@ export default function MascotDisplay({
   animate = false,
   baseSrc,
   outfitSrc,
+  outfitItemId,
   outfitSubcategory,
   outfitItemOffsetY,
   outfitItemScale,
@@ -132,11 +138,14 @@ export default function MascotDisplay({
   activityOffsetX,
   outfitOffsetY = '20%',
 }) {
-  const { getMascotLayers, getFeetZones, getHeadZones } = useMascot();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
 
   const resolved  = getMascotLayers(tier);
   const base      = baseSrc          !== undefined ? baseSrc          : resolved.base;
   const outfit    = outfitSrc        !== undefined ? outfitSrc        : resolved.outfit;
+  const outfitId  = outfitItemId     !== undefined ? outfitItemId     : resolved.outfitId ?? null;
+  const outfitZones = outfitId ? getOutfitZones(outfitId) : null;
+  const outfitDisplaySrc = useColorizedSrc(outfit, outfitZones);
   const feet      = feetSrc          !== undefined ? feetSrc          : resolved.feet;
   const feetId    = feetItemId       !== undefined ? feetItemId       : resolved.feetId;
   const feetZones = feetId ? getFeetZones(feetId) : null;
@@ -230,7 +239,7 @@ export default function MascotDisplay({
           empujoncito extra encima del outfitOffsetY general. */}
       {outfit && (
         <img
-          src={outfit}
+          src={outfitDisplaySrc}
           alt=""
           draggable={false}
           className={imgClass}
@@ -284,6 +293,7 @@ export default function MascotDisplay({
           propio posicionamiento según tipo. */}
       {accs.map(acc => {
         if (!acc.src) return null;
+        const accZones = acc.id ? getAccessoryZones(acc.id) : null;
 
         // Gafas y resto de accesorios "planos" → overlay a tamaño completo
         // del lienzo, salvo que la prenda defina `scale` (ver acc_glasses_gold
@@ -294,9 +304,10 @@ export default function MascotDisplay({
             const pct = acc.scale * 100;
             const pos = (100 - pct) / 2;
             return (
-              <img
+              <ColorizedImage
                 key={acc.id}
                 src={acc.src}
+                zones={accZones}
                 alt=""
                 draggable={false}
                 className={imgClass}
@@ -310,9 +321,10 @@ export default function MascotDisplay({
             );
           }
           return (
-            <img
+            <ColorizedImage
               key={acc.id}
               src={acc.src}
+              zones={accZones}
               alt=""
               draggable={false}
               className={imgClass}
@@ -323,9 +335,10 @@ export default function MascotDisplay({
         // Grillz — al 25.5% del tamaño, centrados.
         if (acc.isGrillz) {
           return (
-            <img
+            <ColorizedImage
               key={acc.id}
               src={acc.src}
+              zones={accZones}
               alt=""
               draggable={false}
               className="absolute select-none pointer-events-none"
@@ -344,9 +357,10 @@ export default function MascotDisplay({
         // Cadena — posicionada en cuello/pecho.
         if (acc.isChain) {
           return (
-            <img
+            <ColorizedImage
               key={acc.id}
               src={acc.src}
+              zones={accZones}
               alt=""
               draggable={false}
               className="absolute select-none pointer-events-none"
@@ -371,9 +385,10 @@ export default function MascotDisplay({
         // incremento de nuevo en ambas.
         if (acc.isTie) {
           return (
-            <img
+            <ColorizedImage
               key={acc.id}
               src={acc.src}
+              zones={accZones}
               alt=""
               draggable={false}
               className="absolute select-none pointer-events-none"
@@ -400,9 +415,10 @@ export default function MascotDisplay({
         // otro 2% más (49.4% → 51.4%), mismo incremento de nuevo en ambas.
         if (acc.isBowTie) {
           return (
-            <img
+            <ColorizedImage
               key={acc.id}
               src={acc.src}
+              zones={accZones}
               alt=""
               draggable={false}
               className="absolute select-none pointer-events-none"

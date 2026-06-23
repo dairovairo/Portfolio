@@ -27,7 +27,13 @@ const PRESET_COLORS = [
 
 const DISPLAY_SIZE = 270; // tamaño visible del lienzo de edición (px CSS)
 
-export default function FeetColorEditorModal({ item, initialZones = [], onClose, onSave }) {
+export default function FeetColorEditorModal({
+  item,
+  initialZones = [],
+  onClose,
+  onSave,
+  helpText = 'Toca una zona de la zapatilla para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (suela, cuerpo, cordones…).',
+}) {
   const canvasRef = useRef(null);
   const masterDataRef = useRef(null); // ImageData "confirmada" actual
 
@@ -165,7 +171,7 @@ export default function FeetColorEditorModal({ item, initialZones = [], onClose,
           </div>
 
           <p className="text-[11px] text-surface-muted leading-snug mb-3">
-            Toca una zona de la zapatilla para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (suela, cuerpo, cordones…).
+            {helpText}
           </p>
 
           {/* Lienzo de edición */}

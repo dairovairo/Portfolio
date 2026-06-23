@@ -30,6 +30,8 @@ import { createContext, useContext, useState } from 'react';
 // memoria.
 const FEET_CUSTOMIZATIONS_STORAGE_KEY = 'sb-feet-color-zones';
 const HEAD_CUSTOMIZATIONS_STORAGE_KEY = 'sb-head-color-zones';
+const OUTFIT_CUSTOMIZATIONS_STORAGE_KEY = 'sb-outfit-color-zones';
+const ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY = 'sb-accessory-color-zones';
 
 function loadFeetCustomizations() {
   try {
@@ -55,6 +57,16 @@ function loadFeetCustomizations() {
 function loadHeadCustomizations() {
   try {
     const raw    = localStorage.getItem(HEAD_CUSTOMIZATIONS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadStoredCustomizations(storageKey) {
+  try {
+    const raw = localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
@@ -1703,6 +1715,25 @@ const DEFAULT_UNLOCKED_OUTFITS     = new Set(MASCOT_OUTFITS.filter(o => o.isBase
 const DEFAULT_UNLOCKED_FEET        = new Set(MASCOT_FEET.filter(f => f.isBase).map(f => f.id));
 const DEFAULT_UNLOCKED_HEAD        = new Set(MASCOT_HEAD.filter(h => h.isBase).map(h => h.id));
 
+function isSameAccessoryGroup(a, b) {
+  return Boolean(a && b && (
+    (a.isChain && b.isChain) ||
+    (a.isGrillz && b.isGrillz) ||
+    (a.isGlasses && b.isGlasses) ||
+    (a.isTie && b.isTie) ||
+    (a.isBowTie && b.isBowTie)
+  ));
+}
+
+function accessoryLayerRank(accessory) {
+  if (accessory.isGlasses) return 10;
+  if (accessory.isChain) return 20;
+  if (accessory.isGrillz) return 30;
+  if (accessory.isTie) return 40;
+  if (accessory.isBowTie) return 50;
+  return 60;
+}
+
 // ── Context ───────────────────────────────────────────────────────────────────
 const MascotContext = createContext(null);
 
@@ -1739,6 +1770,19 @@ export function MascotProvider({ children }) {
   // aplicada sobre el modelo original del catálogo.
   const [headCustomizations, setHeadCustomizations] = useState(loadHeadCustomizations);
 
+  // Personalización extrema de color — torso (camisetas/camisas).
+  const [outfitCustomizations, setOutfitCustomizations] = useState(
+    () => loadStoredCustomizations(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY)
+  );
+
+  // Personalización extrema de color — accesorios.
+  const [accessoryCustomizations, setAccessoryCustomizations] = useState(
+    () => loadStoredCustomizations(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY)
+  );
+
+  const customAccessoryItems = Object.values(accessoryCustomizations);
+  const allAccessories = [...MASCOT_ACCESSORIES, ...customAccessoryItems];
+
   // Actividades
   function unlockActivity(id) {
     setUnlockedActivities(prev => new Set([...prev, id]));
@@ -1760,7 +1804,7 @@ export function MascotProvider({ children }) {
     // corbata/pajarita) representan "vacío" y nunca se guardan en el Set:
     // en vez de añadirse, limpian su grupo (o todo, en el caso de
     // 'acc_none').
-    const item = MASCOT_ACCESSORIES.find(a => a.id === id);
+    const item = allAccessories.find(a => a.id === id);
     if (id === 'acc_none') {
       setActiveAccessories(new Set());
       return;
@@ -1768,14 +1812,8 @@ export function MascotProvider({ children }) {
     if (item?.isBase) {
       setActiveAccessories(prev => {
         const next = new Set(prev);
-        MASCOT_ACCESSORIES.forEach(other => {
-          const sameGroup =
-            (item.isChain && other.isChain) ||
-            (item.isGrillz && other.isGrillz) ||
-            (item.isGlasses && other.isGlasses) ||
-            (item.isTie && other.isTie) ||
-            (item.isBowTie && other.isBowTie);
-          if (sameGroup) next.delete(other.id);
+        allAccessories.forEach(other => {
+          if (isSameAccessoryGroup(item, other)) next.delete(other.id);
         });
         return next;
       });
@@ -1785,7 +1823,7 @@ export function MascotProvider({ children }) {
   }
   function toggleAccessory(id) {
     if (id === 'acc_none') return;
-    const item = MASCOT_ACCESSORIES.find(a => a.id === id);
+    const item = allAccessories.find(a => a.id === id);
     // Los ítems "Sin X" de cada grupo (gafas/cadena/grillz/corbata/
     // pajarita) son la representación visual de "ninguno equipado en este
     // grupo": pulsarlos limpia el grupo en vez de añadirse al Set de
@@ -1793,14 +1831,8 @@ export function MascotProvider({ children }) {
     if (item?.isBase) {
       setActiveAccessories(prev => {
         const next = new Set(prev);
-        MASCOT_ACCESSORIES.forEach(other => {
-          const sameGroup =
-            (item.isChain && other.isChain) ||
-            (item.isGrillz && other.isGrillz) ||
-            (item.isGlasses && other.isGlasses) ||
-            (item.isTie && other.isTie) ||
-            (item.isBowTie && other.isBowTie);
-          if (sameGroup) next.delete(other.id);
+        allAccessories.forEach(other => {
+          if (isSameAccessoryGroup(item, other)) next.delete(other.id);
         });
         return next;
       });
@@ -1816,15 +1848,9 @@ export function MascotProvider({ children }) {
         // los demás del mismo grupo (no afecta a los accesorios de otros
         // grupos, que siguen pudiendo combinarse libremente).
         if (item?.isChain || item?.isGrillz || item?.isGlasses || item?.isTie || item?.isBowTie) {
-          MASCOT_ACCESSORIES.forEach(other => {
+          allAccessories.forEach(other => {
             if (other.id === id) return;
-            const sameGroup =
-              (item.isChain && other.isChain) ||
-              (item.isGrillz && other.isGrillz) ||
-              (item.isGlasses && other.isGlasses) ||
-              (item.isTie && other.isTie) ||
-              (item.isBowTie && other.isBowTie);
-            if (sameGroup) next.delete(other.id);
+            if (isSameAccessoryGroup(item, other)) next.delete(other.id);
           });
         }
         next.add(id);
@@ -2009,6 +2035,119 @@ export function MascotProvider({ children }) {
     return Boolean(headCustomizations[id]);
   }
 
+  // Personalización extrema de color — torso (camisetas/camisas).
+  function getOutfitZones(id) {
+    return outfitCustomizations[id]?.zones ?? [];
+  }
+
+  function saveOutfitCustomization(baseItem, zones, existingCustomId = null) {
+    if (!baseItem || !zones || zones.length === 0) return null;
+    const current = existingCustomId ? outfitCustomizations[existingCustomId] : null;
+    const id = existingCustomId ?? `outfit_custom_${Date.now()}`;
+    const baseId = current?.baseId ?? baseItem.baseId ?? baseItem.id;
+    const baseName = current?.baseName ?? baseItem.baseName ?? baseItem.name;
+    const entry = {
+      id,
+      baseId,
+      baseName,
+      name: `${baseName} (personalizada)`,
+      desc: `Personalización de "${baseName}".`,
+      emoji: baseItem.emoji,
+      src: baseItem.src,
+      zones,
+      price: 0,
+      subcategory: baseItem.subcategory,
+      offsetY: baseItem.offsetY ?? null,
+      scale: baseItem.scale ?? null,
+    };
+    setOutfitCustomizations(prev => {
+      const next = { ...prev, [id]: entry };
+      try { localStorage.setItem(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setUnlockedOutfits(prev => new Set([...prev, id]));
+    return id;
+  }
+
+  function removeOutfitCustomization(id) {
+    setOutfitCustomizations(prev => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      try { localStorage.setItem(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setActiveOutfit(current => (current === id ? 'out_none' : current));
+  }
+
+  function getCustomOutfitItems() {
+    return Object.values(outfitCustomizations);
+  }
+
+  function hasOutfitCustomization(id) {
+    return Boolean(outfitCustomizations[id]);
+  }
+
+  // Personalización extrema de color — accesorios.
+  function getAccessoryZones(id) {
+    return accessoryCustomizations[id]?.zones ?? [];
+  }
+
+  function saveAccessoryCustomization(baseItem, zones, existingCustomId = null) {
+    if (!baseItem || !zones || zones.length === 0) return null;
+    const current = existingCustomId ? accessoryCustomizations[existingCustomId] : null;
+    const id = existingCustomId ?? `accessory_custom_${Date.now()}`;
+    const baseId = current?.baseId ?? baseItem.baseId ?? baseItem.id;
+    const baseName = current?.baseName ?? baseItem.baseName ?? baseItem.name;
+    const entry = {
+      id,
+      baseId,
+      baseName,
+      name: `${baseName} (personalizado)`,
+      desc: `Personalización de "${baseName}".`,
+      emoji: baseItem.emoji,
+      src: baseItem.src,
+      zones,
+      price: 0,
+      scale: baseItem.scale ?? null,
+      isChain: Boolean(baseItem.isChain),
+      isGrillz: Boolean(baseItem.isGrillz),
+      isGlasses: Boolean(baseItem.isGlasses),
+      isTie: Boolean(baseItem.isTie),
+      isBowTie: Boolean(baseItem.isBowTie),
+    };
+    setAccessoryCustomizations(prev => {
+      const next = { ...prev, [id]: entry };
+      try { localStorage.setItem(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setUnlockedAccessories(prev => new Set([...prev, id]));
+    return id;
+  }
+
+  function removeAccessoryCustomization(id) {
+    setAccessoryCustomizations(prev => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      try { localStorage.setItem(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setActiveAccessories(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  function getCustomAccessoryItems() {
+    return Object.values(accessoryCustomizations);
+  }
+
+  function hasAccessoryCustomization(id) {
+    return Boolean(accessoryCustomizations[id]);
+  }
+
   // Outfits — Cabeza
   function unlockHead(id) {
     setUnlockedHead(prev => new Set([...prev, id]));
@@ -2028,17 +2167,20 @@ export function MascotProvider({ children }) {
    */
   function getMascotLayers(tier) {
     const base    = MASCOT_BASE[tier] ?? MASCOT_BASE.mid;
-    const outfit  = MASCOT_OUTFITS.find(o => o.id === activeOutfit);
+    const outfit  = MASCOT_OUTFITS.find(o => o.id === activeOutfit) ?? outfitCustomizations[activeOutfit] ?? null;
     // El calzado activo puede ser un ítem del catálogo (MASCOT_FEET) o un
     // ítem de calzado PERSONALIZADO (feetCustomizations), que no vive en el
     // catálogo porque no es un molde nuevo: es una variante de color del
     // usuario sobre un molde existente (ver saveFeetCustomization arriba).
     const feet    = MASCOT_FEET.find(f => f.id === activeFeet) ?? feetCustomizations[activeFeet] ?? null;
     const head    = MASCOT_HEAD.find(h => h.id === activeHead) ?? headCustomizations[activeHead] ?? null;
-    const accs    = MASCOT_ACCESSORIES.filter(a => activeAccessories.has(a.id));
+    const accs    = allAccessories
+      .filter(a => activeAccessories.has(a.id))
+      .sort((a, b) => accessoryLayerRank(a) - accessoryLayerRank(b));
     const act     = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
     return {
       base,
+      outfitId:           outfit?.id ?? null,
       outfit:             outfit?.src ?? null,
       outfitSubcategory:  outfit?.subcategory ?? null,
       outfitItemOffsetY:  outfit?.offsetY ?? null,
@@ -2073,6 +2215,8 @@ export function MascotProvider({ children }) {
     ...unlockedOutfits,
     ...unlockedFeet,
     ...unlockedHead,
+    ...Object.keys(outfitCustomizations),
+    ...Object.keys(accessoryCustomizations),
   ]);
 
   return (
@@ -2115,6 +2259,18 @@ export function MascotProvider({ children }) {
       removeHeadCustomization,
       getCustomHeadItems,
       hasHeadCustomization,
+      outfitCustomizations,
+      getOutfitZones,
+      saveOutfitCustomization,
+      removeOutfitCustomization,
+      getCustomOutfitItems,
+      hasOutfitCustomization,
+      accessoryCustomizations,
+      getAccessoryZones,
+      saveAccessoryCustomization,
+      removeAccessoryCustomization,
+      getCustomAccessoryItems,
+      hasAccessoryCustomization,
     }}>
       {children}
     </MascotContext.Provider>

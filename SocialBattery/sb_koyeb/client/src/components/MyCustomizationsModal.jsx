@@ -17,7 +17,26 @@ import MascotDisplay from './MascotDisplay';
  *   onRemove(item) elimina esa personalización por completo
  *   onClose        cierra el modal
  */
-export default function MyCustomizationsModal({ items, activeFeetId, onEquip, onEdit, onRemove, onClose }) {
+export default function MyCustomizationsModal({
+  items,
+  activeFeetId,
+  activeItemId,
+  activeItemIds,
+  title = 'Mis personalizaciones',
+  emptyText = 'Aún no has personalizado ninguna prenda. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color sin tocar el modelo original.',
+  activeLabel = 'Puesto',
+  equipLabel = 'Poner',
+  renderPreview,
+  onEquip,
+  onEdit,
+  onRemove,
+  onClose,
+}) {
+  function isItemActive(item) {
+    if (activeItemIds) return activeItemIds.has(item.id);
+    return (activeItemId ?? activeFeetId) === item.id;
+  }
+
   return (
     <>
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
@@ -30,7 +49,7 @@ export default function MyCustomizationsModal({ items, activeFeetId, onEquip, on
             <div className="flex items-center gap-2">
               <span className="text-lg" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
               <div className="font-display font-bold text-surface-text text-sm">
-                Mis personalizaciones
+                {title}
               </div>
             </div>
             <button
@@ -45,13 +64,13 @@ export default function MyCustomizationsModal({ items, activeFeetId, onEquip, on
             <div className="py-8 flex flex-col items-center text-center gap-2">
               <span className="text-4xl opacity-60" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
               <p className="text-surface-muted text-xs leading-snug max-w-[230px]">
-                Aún no has personalizado ninguna prenda. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color sin tocar el modelo original.
+                {emptyText}
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
               {items.map(item => {
-                const isActive = activeFeetId === item.id;
+                const isActive = isItemActive(item);
                 return (
                   <div
                     key={item.id}
@@ -63,19 +82,21 @@ export default function MyCustomizationsModal({ items, activeFeetId, onEquip, on
                           ✓
                         </span>
                       )}
-                      <MascotDisplay
-                        tier="mid"
-                        size={64}
-                        feetSrc={item.src}
-                        feetItemId={item.id}
-                        feetOffsetY={item.offsetY ?? null}
-                        feetOffsetX={item.offsetX ?? null}
-                        feetScale={item.scale ?? null}
-                        outfitSrc={null}
-                        headSrc={null}
-                        accessories={[]}
-                        activityLayers={[]}
-                      />
+                      {renderPreview ? renderPreview(item, 64) : (
+                        <MascotDisplay
+                          tier="mid"
+                          size={64}
+                          feetSrc={item.src}
+                          feetItemId={item.id}
+                          feetOffsetY={item.offsetY ?? null}
+                          feetOffsetX={item.offsetX ?? null}
+                          feetScale={item.scale ?? null}
+                          outfitSrc={null}
+                          headSrc={null}
+                          accessories={[]}
+                          activityLayers={[]}
+                        />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-semibold text-surface-text text-xs truncate" title={item.name}>
@@ -84,14 +105,14 @@ export default function MyCustomizationsModal({ items, activeFeetId, onEquip, on
                       <div className="flex gap-1.5 mt-1.5 flex-wrap">
                         {isActive ? (
                           <span className="text-[10px] font-mono font-semibold px-2 py-1 rounded-lg bg-accent-primary/10 border border-accent-primary/20 text-accent-glow">
-                            ✓ Puesto
+                            ✓ {activeLabel}
                           </span>
                         ) : (
                           <button
                             onClick={() => onEquip(item)}
                             className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
                           >
-                            Poner
+                            {equipLabel}
                           </button>
                         )}
                         <button

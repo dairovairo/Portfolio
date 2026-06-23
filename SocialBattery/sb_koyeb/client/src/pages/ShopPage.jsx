@@ -18,7 +18,16 @@ const COINS = 340;
 // (w-full) y mantiene la misma altura/estructura que el resto de tarjetas.
 // renderPreview(item, size) — función opcional para renderizar el preview de
 // cada ítem. Si no se pasa, se usa el default de pies (feetSrc).
-function MyCustomizationsCard({ title = 'Mis personalizaciones', count, previewItems, onClick, renderPreview }) {
+function MyCustomizationsCard({
+  title = 'Mis personalizaciones',
+  count,
+  previewItems,
+  onClick,
+  renderPreview,
+  singularLabel = 'prenda personalizada',
+  pluralLabel = 'prendas personalizadas',
+  emptyLabel = 'Aún no has personalizado ninguna prenda',
+}) {
   return (
     <button
       onClick={onClick}
@@ -61,8 +70,8 @@ function MyCustomizationsCard({ title = 'Mis personalizaciones', count, previewI
         </div>
         <div className="text-surface-muted text-[11px] leading-snug flex-1">
           {count > 0
-            ? `${count} ${count === 1 ? 'prenda personalizada' : 'prendas personalizadas'}`
-            : 'Aún no has personalizado ninguna prenda'}
+            ? `${count} ${count === 1 ? singularLabel : pluralLabel}`
+            : emptyLabel}
         </div>
       </div>
     </button>
@@ -333,7 +342,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
 }
 
 // ── Tarjeta de OUTFIT ─────────────────────────────────────────────────────────
-function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip }) {
+function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized }) {
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -347,6 +356,18 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
             ✓ Puesto
           </span>
         )}
+        {outfit.src && onCustomize && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Personalizar colores"
+            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
+          >
+            <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+            {isCustomized && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent-glow" />
+            )}
+          </button>
+        )}
         {!isUnlocked && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl z-10"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}>
@@ -357,6 +378,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip })
           tier="mid"
           size={112}
           outfitSrc={outfit.src}
+          outfitItemId={outfit.id}
           outfitSubcategory={outfit.subcategory}
           outfitItemOffsetY={outfit.offsetY}
           outfitItemScale={outfit.scale}
@@ -411,6 +433,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
           tier="mid"
           size={112}
           outfitSrc={outfit.src}
+          outfitItemId={outfit.id}
           outfitSubcategory={outfit.subcategory}
           outfitItemOffsetY={outfit.offsetY}
           outfitItemScale={outfit.scale}
