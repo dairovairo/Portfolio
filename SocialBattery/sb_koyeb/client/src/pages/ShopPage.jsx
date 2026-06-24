@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from '../components/BottomNav';
@@ -9,7 +9,31 @@ import HeadCustomizationsModal from '../components/HeadCustomizationsModal';
 import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
 import { getEffectiveBatteryLevel } from '../lib/battery';
 
+// Monedas iniciales de un usuario nuevo (antes de comprar nada). A partir de
+// aquí, el saldo se persiste en localStorage por usuario — ver
+// COINS_STORAGE_KEY — para que no se regenere cada vez que se entra a la
+// tienda o se reabre la app.
 const COINS = 340;
+const COINS_STORAGE_KEY = 'sb-shop-coins';
+
+function loadCoins(userId) {
+  if (!userId) return COINS;
+  try {
+    const raw = localStorage.getItem(`${COINS_STORAGE_KEY}_${userId}`);
+    if (raw === null) return COINS;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : COINS;
+  } catch {
+    return COINS;
+  }
+}
+
+function saveCoins(userId, value) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(`${COINS_STORAGE_KEY}_${userId}`, String(value));
+  } catch {}
+}
 
 function getMascotTier(level) {
   if (level <= 33) return 'low';
@@ -825,8 +849,22 @@ export default function ShopPage() {
   const [tab, setTab]                   = useState('activities');
   const [outfitMainTab, setOutfitMainTab] = useState('torso'); // 'pies' | 'torso' | 'cabeza'
   const [outfitSubTab, setOutfitSubTab] = useState('camiseta'); // 'camiseta' | 'camisa'
-  const [coins, setCoins]       = useState(COINS);
+  const [coins, setCoins]       = useState(() => loadCoins(profile?.id));
   const [toast, setToast]       = useState(null);
+
+  // Releer el saldo guardado en cuanto se conoce el usuario (profile.id
+  // tarda un tick en resolverse tras montar, por la sesión async de
+  // Supabase), y guardarlo en cada cambio posterior. Mismo patrón que el
+  // "skin" persistente en MascotContext.
+  useEffect(() => {
+    if (profile?.id) setCoins(loadCoins(profile.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (profile?.id) saveCoins(profile.id, coins);
+  }, [coins, profile?.id]);
+
   // Ítem de calzado que se está personalizando en el editor de color (null
   // = modal cerrado). Se guarda el objeto completo (no solo el id) para
   // poder mostrar su nombre/imagen en el modal directamente. Puede ser:

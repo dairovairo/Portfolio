@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { useAuth } from './AuthContext';
 
 // ── Personalización extrema de color (pies) ───────────────────────────────────
 // A diferencia de antes, personalizar el color de una zapatilla YA NO
@@ -25,14 +26,41 @@ import { createContext, useContext, useState } from 'react';
 //   }
 //
 // Se guarda en localStorage (como las preferencias de SettingsContext) para
-// que una personalización no se pierda al recargar la app, aunque el resto
-// del estado de la mascota (equipado/desbloqueado) por ahora viva solo en
-// memoria.
+// que una personalización no se pierda al recargar la app. El resto del
+// estado de la mascota (equipado/desbloqueado, ver SKIN_STATE_STORAGE_KEY
+// más abajo) sigue el mismo patrón, pero guardado bajo una clave por
+// usuario (como TutorialContext con TUTORIAL_KEY_<profile.id>), ya que es
+// estado "de cuenta" y no algo que tenga sentido compartir entre perfiles
+// distintos en el mismo dispositivo.
 const FEET_CUSTOMIZATIONS_STORAGE_KEY = 'sb-feet-color-zones';
 const HEAD_CUSTOMIZATIONS_STORAGE_KEY = 'sb-head-color-zones';
 const OUTFIT_CUSTOMIZATIONS_STORAGE_KEY = 'sb-outfit-color-zones';
 const ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY = 'sb-accessory-color-zones';
 const SAVED_OUTFITS_STORAGE_KEY = 'sb-saved-outfits';
+// Estado de "skin" equipada: qué hay puesto (activeOutfit/activeFeet/
+// activeHead/activeAccessories/activeActivity) y qué se ha desbloqueado
+// (comprado) de cada categoría. Antes vivía solo en memoria (useState sin
+// persistencia), por eso se perdía al cerrar la app o recargar la tienda.
+const SKIN_STATE_STORAGE_KEY = 'sb-mascot-skin-state';
+
+function loadSkinState(userId) {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(`${SKIN_STATE_STORAGE_KEY}_${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSkinState(userId, state) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(`${SKIN_STATE_STORAGE_KEY}_${userId}`, JSON.stringify(state));
+  } catch {}
+}
 
 function loadFeetCustomizations() {
   try {
@@ -1106,9 +1134,9 @@ export const MASCOT_FEET = [
     // hacia la izquierda respecto al resto del calzado chunky.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%) → subida 1% (7% → 6%).
     offsetX: '14%',
-    offsetY: '7%',
+    offsetY: '6%',
     scale: 0.9,
   },
   {
@@ -1123,9 +1151,9 @@ export const MASCOT_FEET = [
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%) → subida 1% (7% → 6%).
     offsetX: '14%',
-    offsetY: '7%',
+    offsetY: '6%',
     scale: 0.9,
   },
   {
@@ -1140,9 +1168,9 @@ export const MASCOT_FEET = [
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 2% (8% → 6%).
     offsetX: '14%',
-    offsetY: '8%',
+    offsetY: '6%',
     scale: 0.9,
   },
   {
@@ -1174,9 +1202,9 @@ export const MASCOT_FEET = [
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%) → subida 1% (7% → 6%).
     offsetX: '14%',
-    offsetY: '7%',
+    offsetY: '6%',
     scale: 0.9,
   },
   {
@@ -1277,9 +1305,9 @@ export const MASCOT_FEET = [
     // mismo ajuste que el resto de variantes de tamaño correcto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%) → subida 1% (7% → 6%).
     offsetX: '14%',
-    offsetY: '7%',
+    offsetY: '6%',
     scale: 0.9,
   },
   {
@@ -1669,6 +1697,20 @@ export const MASCOT_HEAD = [
     offsetY: '-27.7%',
     offsetX: '-1.5%',
   },
+  {
+    id: 'head_straw',
+    name: 'Sombrero de paja',
+    desc: 'Ala ancha de paja con cinta roja, icónico y aventurero.',
+    emoji: '👒',
+    src: '/outfit-head-17.png',
+    price: 75,
+    isBase: false,
+    // PNG normalizado a 900×900 con el sombrero centrado horizontalmente
+    // y verticalmente en el lienzo (corona arriba, ala abajo).
+    // Ajuste inicial: scale=0.85, offsetY=-35%.
+    scale: 0.85,
+    offsetY: '-35%',
+  },
 ];
 
 // ── Catálogo de ACTIVIDADES (capa 6: la más delantera) ─────────────────────────
@@ -1825,6 +1867,10 @@ function accessoryLayerRank(accessory) {
 const MascotContext = createContext(null);
 
 export function MascotProvider({ children }) {
+  // Necesario para guardar/leer el estado de equipado-desbloqueado (el
+  // "skin") bajo una clave por usuario — ver SKIN_STATE_STORAGE_KEY arriba.
+  const { profile } = useAuth();
+
   const [unlockedActivities,  setUnlockedActivities]  = useState(DEFAULT_UNLOCKED_ACTIVITIES);
   const [unlockedAccessories, setUnlockedAccessories] = useState(DEFAULT_UNLOCKED_ACCESSORIES);
   const [unlockedOutfits,     setUnlockedOutfits]     = useState(DEFAULT_UNLOCKED_OUTFITS);
@@ -1846,6 +1892,55 @@ export function MascotProvider({ children }) {
   const [activeOutfit,    setActiveOutfit]    = useState('out_none');
   const [activeFeet,      setActiveFeet]      = useState('feet_none');
   const [activeHead,      setActiveHead]      = useState('head_none');
+
+  // ── Persistencia del "skin" (equipado + desbloqueado) ──────────────────────
+  // true en cuanto se ha intentado leer localStorage al menos una vez para
+  // este usuario. Evita que el efecto de guardado de abajo sobrescriba lo ya
+  // guardado con los valores por defecto durante el primer render, antes de
+  // que dé tiempo a leerlos (la sesión de Supabase resuelve de forma
+  // asíncrona, así que profile.id no está listo en el primer render).
+  const [skinHydrated, setSkinHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const stored = loadSkinState(profile.id);
+    if (stored) {
+      if (Array.isArray(stored.unlockedActivities))  setUnlockedActivities(new Set(stored.unlockedActivities));
+      if (Array.isArray(stored.unlockedAccessories)) setUnlockedAccessories(new Set(stored.unlockedAccessories));
+      if (Array.isArray(stored.unlockedOutfits))     setUnlockedOutfits(new Set(stored.unlockedOutfits));
+      if (Array.isArray(stored.unlockedFeet))        setUnlockedFeet(new Set(stored.unlockedFeet));
+      if (Array.isArray(stored.unlockedHead))        setUnlockedHead(new Set(stored.unlockedHead));
+      if (typeof stored.activeActivity === 'string') setActiveActivity(stored.activeActivity);
+      if (Array.isArray(stored.activeAccessories))   setActiveAccessories(new Set(stored.activeAccessories));
+      if (typeof stored.activeOutfit === 'string')   setActiveOutfit(stored.activeOutfit);
+      if (typeof stored.activeFeet === 'string')     setActiveFeet(stored.activeFeet);
+      if (typeof stored.activeHead === 'string')     setActiveHead(stored.activeHead);
+    }
+    setSkinHydrated(true);
+    // Solo se relee al cambiar de usuario (login/logout), no en cada cambio
+    // de estado: para eso está el efecto de guardado de abajo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id || !skinHydrated) return;
+    saveSkinState(profile.id, {
+      unlockedActivities:  [...unlockedActivities],
+      unlockedAccessories: [...unlockedAccessories],
+      unlockedOutfits:     [...unlockedOutfits],
+      unlockedFeet:        [...unlockedFeet],
+      unlockedHead:        [...unlockedHead],
+      activeActivity,
+      activeAccessories:   [...activeAccessories],
+      activeOutfit,
+      activeFeet,
+      activeHead,
+    });
+  }, [
+    profile?.id, skinHydrated,
+    unlockedActivities, unlockedAccessories, unlockedOutfits, unlockedFeet, unlockedHead,
+    activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
+  ]);
 
   // Personalización extrema de color — receta de zonas por ítem de
   // calzado (ver comentario junto a FEET_CUSTOMIZATIONS_STORAGE_KEY).
