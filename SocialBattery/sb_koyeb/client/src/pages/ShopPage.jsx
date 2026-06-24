@@ -904,11 +904,12 @@ export default function ShopPage() {
     showToast(`"${outfit.name}" eliminado`);
   }
 
-  // Botón "🎨 Personalizar" de cada carrusel horizontal: aplica sobre la
-  // zapatilla actualmente equipada de esa familia (si hay una puesta) o,
-  // si no, sobre la primera variante de color de la familia.
+  // Botón "🎨 Personalizar" de cada carrusel horizontal: SIEMPRE aplica
+  // sobre la variante blanca de la familia (isCustomizeBase), sin importar
+  // qué color esté equipado. Así el lienzo de partida es neutro y el color
+  // base no interfiere con el color que el usuario quiera pintar.
   function pickCarouselTarget(family) {
-    return family.find(f => f.id === activeFeet) ?? family[0] ?? null;
+    return family.find(f => f.isCustomizeBase) ?? family[0] ?? null;
   }
 
   // El indicador 🎨 de una tarjeta de calzado original ahora se basa en si
@@ -933,8 +934,11 @@ export default function ShopPage() {
     return customizedHeadItems.some(c => c.baseId === baseId);
   }
 
+  // Botón "🎨 Personalizar" de los carruseles de cabeza: SIEMPRE aplica
+  // sobre la variante marcada como isCustomizeBase de cada familia, sin
+  // importar qué gorra esté equipada (mismo criterio que pies, ver arriba).
   function pickCarouselTargetHead(family) {
-    return family.find(h => h.id === activeHead) ?? family[0] ?? null;
+    return family.find(h => h.isCustomizeBase) ?? family[0] ?? null;
   }
 
   function handleOpenCustomizeHeadNew(item) {
@@ -964,9 +968,11 @@ export default function ShopPage() {
     return customizedOutfitItems.some(c => c.baseId === baseId);
   }
 
+  // Botón "🎨 Personalizar" del carrusel "Básicos" de Torso: SIEMPRE aplica
+  // sobre la variante marcada como isCustomizeBase de la sub-tab activa
+  // (camiseta/camisa), sin importar qué prenda esté equipada.
   function pickCarouselTargetOutfit(family) {
-    const activeCustom = customizedOutfitItems.find(c => c.id === activeOutfit);
-    return family.find(o => o.id === activeOutfit || o.id === activeCustom?.baseId) ?? family[0] ?? null;
+    return family.find(o => o.isCustomizeBase) ?? family[0] ?? null;
   }
 
   function handleOpenCustomizeOutfitNew(item) {
@@ -1005,13 +1011,11 @@ export default function ShopPage() {
     return customizedAccessoryItems.some(c => c.baseId === baseId);
   }
 
+  // Botón "🎨 Personalizar" de cada carrusel de accesorios: SIEMPRE aplica
+  // sobre la variante marcada como isCustomizeBase de esa familia, sin
+  // importar qué accesorio esté equipado.
   function pickAccessoryTarget(family) {
-    const activeOriginal = family.find(a => activeAccessories.has(a.id));
-    if (activeOriginal) return activeOriginal;
-    const activeCustom = customizedAccessoryItems.find(c =>
-      activeAccessories.has(c.id) && family.some(a => a.id === c.baseId)
-    );
-    return family.find(a => a.id === activeCustom?.baseId) ?? family[0] ?? null;
+    return family.find(a => a.isCustomizeBase) ?? family[0] ?? null;
   }
 
   function handleOpenCustomizeAccessoryNew(item) {
@@ -1888,7 +1892,11 @@ export default function ShopPage() {
                 )}
 
                 {/* Grid: ítems sueltos de cabeza (sombreros, halos…)
-                    con botón 🎨 individual, igual que FeetCard */}
+                    con botón 🎨 individual, igual que FeetCard. Los ítems
+                    con noCustomize (sombrero chino, gorro de fiesta, halo de
+                    luz) no reciben onCustomize, así que HeadCard no muestra
+                    el botón para ellos (ver HeadCard: solo lo pinta si
+                    head.src && onCustomize). */}
                 <div className="grid grid-cols-2 gap-3">
                   {restHead.map(head => (
                     <HeadCard
@@ -1899,8 +1907,8 @@ export default function ShopPage() {
                       canAfford={coins >= head.price}
                       onBuy={() => handleBuyHead(head)}
                       onEquip={() => handleEquipHead(head)}
-                      onCustomize={() => handleOpenCustomizeHeadNew(head)}
-                      isCustomized={hasAnyCustomizationOfHead(head.id)}
+                      onCustomize={head.noCustomize ? null : () => handleOpenCustomizeHeadNew(head)}
+                      isCustomized={!head.noCustomize && hasAnyCustomizationOfHead(head.id)}
                       previewTier={previewTier}
                     />
                   ))}
@@ -2059,20 +2067,15 @@ export default function ShopPage() {
               </div>
             )}
 
-            {/* Carrusel: Gafas de sol — elige unas */}
+            {/* Carrusel: Gafas de sol — elige unas. Sin botón de
+                personalización de color (a diferencia de cadenas/grillz/
+                corbatas/pajaritas): esta familia no admite recolor. */}
             {glassesAccessories.length > 0 && (
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
                     Gafas de sol · elige unas
                   </div>
-                  <button
-                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(glassesAccessories))}
-                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                  >
-                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                    Personalizar
-                  </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseGlasses, ...glassesAccessories].filter(Boolean).map(accessory => (

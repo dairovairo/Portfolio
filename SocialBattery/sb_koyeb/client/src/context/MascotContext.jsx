@@ -142,6 +142,9 @@ export const MASCOT_OUTFITS = [
     price: 50,
     isBase: false,
     scale: 0.985,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Básicos" de Camisetas (ver pickCarouselTargetOutfit en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'out_tshirt_3',
@@ -440,6 +443,9 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 65,
     isBase: false,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Básicos" de Camisas (ver pickCarouselTargetOutfit en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'out_shirt_9',
@@ -717,6 +723,9 @@ export const MASCOT_ACCESSORIES = [
     price: 80,
     isBase: false,
     isChain: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Cadenas (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'acc_grillz',
@@ -727,6 +736,9 @@ export const MASCOT_ACCESSORIES = [
     price: 150,
     isBase: false,
     isGrillz: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Grillz (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'acc_grillz_gold',
@@ -817,6 +829,9 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isTie: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Corbatas (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'acc_tie_brown',
@@ -947,6 +962,9 @@ export const MASCOT_ACCESSORIES = [
     price: 70,
     isBase: false,
     isBowTie: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Pajaritas (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'acc_bowtie_black',
@@ -1030,6 +1048,10 @@ export const MASCOT_FEET = [
     price: 70,
     isBase: false,
     isBasic: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Retro · colores" (ver pickCarouselTarget en ShopPage.jsx): al ser
+    // blanca, su color base no interfiere con el color que elija el usuario.
+    isCustomizeBase: true,
   },
   {
     id: 'feet_sneaker_1_black',
@@ -1084,9 +1106,9 @@ export const MASCOT_FEET = [
     // hacia la izquierda respecto al resto del calzado chunky.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
     offsetX: '14%',
-    offsetY: '8%',
+    offsetY: '7%',
     scale: 0.9,
   },
   {
@@ -1101,9 +1123,9 @@ export const MASCOT_FEET = [
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
     offsetX: '14%',
-    offsetY: '8%',
+    offsetY: '7%',
     scale: 0.9,
   },
   {
@@ -1152,9 +1174,9 @@ export const MASCOT_FEET = [
     // Movida un poco a la derecha, mismo ajuste que el resto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
     offsetX: '14%',
-    offsetY: '8%',
+    offsetY: '7%',
     scale: 0.9,
   },
   {
@@ -1230,6 +1252,10 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Chunky · colores" (ver pickCarouselTarget en ShopPage.jsx): al ser
+    // blanca, su color base no interfiere con el color que elija el usuario.
+    isCustomizeBase: true,
     // Reducida (algo menos que el resto de "grandes": esta partía de un
     // tamaño ya un poco más cercano al correcto).
     // Reducida otro 15% más (0.75 × 0.85 ≈ 0.64) y bajada un poco.
@@ -1251,9 +1277,9 @@ export const MASCOT_FEET = [
     // mismo ajuste que el resto de variantes de tamaño correcto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
     // Reducida un 10% adicional (1 → 0.9) junto con el resto del grupo chunky.
-    // Bajada un 5% → 8% junto con el resto del grupo chunky.
+    // Bajada un 5% → 8% junto con el resto del grupo chunky; subida 1% (8% → 7%).
     offsetX: '14%',
-    offsetY: '8%',
+    offsetY: '7%',
     scale: 0.9,
   },
   {
@@ -1362,6 +1388,9 @@ export const MASCOT_HEAD = [
     scale: 0.396,
     offsetY: '-35.2%',
     isBasic2: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Gorras" (ver pickCarouselTargetHead en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'head_cap_solid_yellow',
@@ -1489,6 +1518,9 @@ export const MASCOT_HEAD = [
     price: 50,
     isBase: false,
     isBasic: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Gorras lisas" (ver pickCarouselTargetHead en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'head_cap_purple',
@@ -1562,12 +1594,16 @@ export const MASCOT_HEAD = [
   },
   {
     id: 'head_conical',
-    name: 'Sombrero cónico de paja',
+    name: 'Sombrero chino',
     desc: 'Tejido artesanal de bambú, fresco y tradicional.',
     emoji: '👒',
     src: '/outfit-head-4.png',
     price: 60,
     isBase: false,
+    // Sin botón de personalización de color para esta prenda (ver
+    // restHead.map en ShopPage.jsx, que solo pasa onCustomize si
+    // !head.noCustomize).
+    noCustomize: true,
   },
   {
     id: 'head_halo',
@@ -1577,6 +1613,10 @@ export const MASCOT_HEAD = [
     src: '/outfit-head-5.png',
     price: 95,
     isBase: false,
+    // Sin botón de personalización de color para esta prenda (ver
+    // restHead.map en ShopPage.jsx, que solo pasa onCustomize si
+    // !head.noCustomize).
+    noCustomize: true,
     // El PNG no es cuadrado (anillo elíptico, ratio ancho:alto ≈ 990:537),
     // así que no usa scale/offsetY (pensado para overlays cuadrados como la
     // gorra). En su lugar define una caja explícita: flota un poco por
@@ -1598,6 +1638,10 @@ export const MASCOT_HEAD = [
     src: '/outfit-head-6.png',
     price: 55,
     isBase: false,
+    // Sin botón de personalización de color para esta prenda (ver
+    // restHead.map en ShopPage.jsx, que solo pasa onCustomize si
+    // !head.noCustomize).
+    noCustomize: true,
     // PNG aislado (sin alinear al lienzo estándar de las demás prendas de
     // cabeza), recortado y centrado en un lienzo cuadrado 1024×1024 con
     // fondo eliminado. El gorro queda en el centro vertical del lienzo, así
