@@ -299,7 +299,7 @@ export default function MascotDisplay({
         // del lienzo, salvo que la prenda defina `scale` (ver acc_glasses_gold
         // en MASCOT_ACCESSORIES), en cuyo caso se reduce y recentra con el
         // mismo cálculo cuadrado que usa la capa de cabeza.
-        if (!acc.isChain && !acc.isGrillz && !acc.isTie && !acc.isBowTie) {
+        if (!acc.isChain && !acc.isGrillz && !acc.isTie && !acc.isBowTie && !acc.isRinon) {
           if (acc.scale) {
             const pct = acc.scale * 100;
             const pos = (100 - pct) / 2;
@@ -427,6 +427,32 @@ export default function MascotDisplay({
                 width: '49.5%',
                 top: '51.4%',
                 height: '19.8%',
+                objectFit: 'contain',
+                objectPosition: 'center',
+              }}
+            />
+          );
+        }
+
+        // Riñonera — posicionada en la zona de la cadera/cintura.
+        // PNG 900×900 normalizado: la riñonera ocupa aprox. el 93% del ancho
+        // del lienzo y está centrada. Se escala y posiciona para quedar en
+        // la cadera de la mascota.
+        // Ajuste inicial: left=5%, width=90%, top=62%, height=35%.
+        if (acc.isRinon) {
+          return (
+            <ColorizedImage
+              key={acc.id}
+              src={acc.src}
+              zones={accZones}
+              alt=""
+              draggable={false}
+              className="absolute select-none pointer-events-none"
+              style={{
+                left: '5%',
+                width: '90%',
+                top: '62%',
+                height: '35%',
                 objectFit: 'contain',
                 objectPosition: 'center',
               }}

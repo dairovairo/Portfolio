@@ -695,6 +695,16 @@ export const MASCOT_ACCESSORIES = [
     isBowTie: true,
   },
   {
+    id: 'acc_rinon_none',
+    name: 'Sin riñonera',
+    desc: 'Sin riñonera puesta.',
+    emoji: '✨',
+    src: null,
+    price: 0,
+    isBase: true,
+    isRinon: true,
+  },
+  {
     // Reducidas un 3% respecto al overlay a tamaño completo del lienzo (ver
     // `scale` en MascotDisplay.jsx, capa de accesorios "planos").
     id: 'acc_glasses',
@@ -1003,6 +1013,122 @@ export const MASCOT_ACCESSORIES = [
     price: 70,
     isBase: false,
     isBowTie: true,
+  },
+  // ── Riñoneras ────────────────────────────────────────────────────────────────
+  // PNG normalizado a 900×900 (fondo negro eliminado por flood fill).
+  // Posicionamiento inicial: scale y offsetY a ajustar en vivo.
+  {
+    id: 'acc_rinon_blanca',
+    name: 'Riñonera blanca',
+    desc: 'Riñonera compacta en blanco limpio, combina con todo.',
+    emoji: '👜',
+    src: '/accessory-rinon-blanca.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Riñoneras (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
+  },
+  {
+    id: 'acc_rinon_negra',
+    name: 'Riñonera negra',
+    desc: 'Riñonera en negro clásico, estilo urbano.',
+    emoji: '👜',
+    src: '/accessory-rinon-negra.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_roja',
+    name: 'Riñonera roja',
+    desc: 'Riñonera en rojo intenso, un toque atrevido.',
+    emoji: '👜',
+    src: '/accessory-rinon-roja.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_rosa',
+    name: 'Riñonera rosa',
+    desc: 'Riñonera en rosa vibrante, look desenfadado.',
+    emoji: '👜',
+    src: '/accessory-rinon-rosa.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_azul',
+    name: 'Riñonera azul',
+    desc: 'Riñonera en azul marino, toque deportivo.',
+    emoji: '👜',
+    src: '/accessory-rinon-azul.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_morada',
+    name: 'Riñonera morada',
+    desc: 'Riñonera en morado intenso, personalidad propia.',
+    emoji: '👜',
+    src: '/accessory-rinon-morada.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_verde',
+    name: 'Riñonera verde',
+    desc: 'Riñonera en verde botella, estilo fresco.',
+    emoji: '👜',
+    src: '/accessory-rinon-verde.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_naranja',
+    name: 'Riñonera naranja',
+    desc: 'Riñonera en naranja brillante, energia al máximo.',
+    emoji: '👜',
+    src: '/accessory-rinon-naranja.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_amarilla',
+    name: 'Riñonera amarilla',
+    desc: 'Riñonera en amarillo vivo, imposible pasar desapercibida.',
+    emoji: '👜',
+    src: '/accessory-rinon-amarilla.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_marron',
+    name: 'Riñonera marrón',
+    desc: 'Riñonera en marrón cálido, look casual y versátil.',
+    emoji: '👜',
+    src: '/accessory-rinon-marron.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
+  },
+  {
+    id: 'acc_rinon_gris',
+    name: 'Riñonera gris',
+    desc: 'Riñonera en gris neutro, elegante y funcional.',
+    emoji: '👜',
+    src: '/accessory-rinon-gris.png',
+    price: 65,
+    isBase: false,
+    isRinon: true,
   },
 ];
 
@@ -1850,7 +1976,8 @@ function isSameAccessoryGroup(a, b) {
     (a.isGrillz && b.isGrillz) ||
     (a.isGlasses && b.isGlasses) ||
     (a.isTie && b.isTie) ||
-    (a.isBowTie && b.isBowTie)
+    (a.isBowTie && b.isBowTie) ||
+    (a.isRinon && b.isRinon)
   ));
 }
 
@@ -1860,6 +1987,7 @@ function accessoryLayerRank(accessory) {
   if (accessory.isGrillz) return 30;
   if (accessory.isTie) return 40;
   if (accessory.isBowTie) return 50;
+  if (accessory.isRinon) return 55;
   return 60;
 }
 
@@ -2027,11 +2155,12 @@ export function MascotProvider({ children }) {
       if (next.has(id)) {
         next.delete(id);
       } else {
-        // Cadenas, grillz, gafas de sol, corbatas y pajaritas son grupos de
-        // selección única: al activar uno, se desactivan automáticamente
-        // los demás del mismo grupo (no afecta a los accesorios de otros
-        // grupos, que siguen pudiendo combinarse libremente).
-        if (item?.isChain || item?.isGrillz || item?.isGlasses || item?.isTie || item?.isBowTie) {
+        // Cadenas, grillz, gafas de sol, corbatas, pajaritas y riñoneras
+        // son grupos de selección única: al activar uno, se desactivan
+        // automáticamente los demás del mismo grupo (no afecta a los
+        // accesorios de otros grupos, que siguen pudiendo combinarse
+        // libremente).
+        if (item?.isChain || item?.isGrillz || item?.isGlasses || item?.isTie || item?.isBowTie || item?.isRinon) {
           allAccessories.forEach(other => {
             if (other.id === id) return;
             if (isSameAccessoryGroup(item, other)) next.delete(other.id);
@@ -2299,6 +2428,7 @@ export function MascotProvider({ children }) {
       isGlasses: Boolean(baseItem.isGlasses),
       isTie: Boolean(baseItem.isTie),
       isBowTie: Boolean(baseItem.isBowTie),
+      isRinon: Boolean(baseItem.isRinon),
     };
     setAccessoryCustomizations(prev => {
       const next = { ...prev, [id]: entry };

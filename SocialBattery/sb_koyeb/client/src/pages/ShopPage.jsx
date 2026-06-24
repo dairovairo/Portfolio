@@ -1258,13 +1258,15 @@ export default function ShopPage() {
   const baseGlasses        = MASCOT_ACCESSORIES.find(a => a.isBase && a.isGlasses) ?? null;
   const baseTie            = MASCOT_ACCESSORIES.find(a => a.isBase && a.isTie) ?? null;
   const baseBowTie         = MASCOT_ACCESSORIES.find(a => a.isBase && a.isBowTie) ?? null;
+  const baseRinon          = MASCOT_ACCESSORIES.find(a => a.isBase && a.isRinon) ?? null;
   const chainAccessories   = MASCOT_ACCESSORIES.filter(a => a.isChain && !a.isBase);
   const grillzAccessories  = MASCOT_ACCESSORIES.filter(a => a.isGrillz && !a.isBase);
   const glassesAccessories = MASCOT_ACCESSORIES.filter(a => a.isGlasses && !a.isBase);
   const tieAccessories     = MASCOT_ACCESSORIES.filter(a => a.isTie && !a.isBase);
   const bowTieAccessories  = MASCOT_ACCESSORIES.filter(a => a.isBowTie && !a.isBase);
+  const rinonAccessories   = MASCOT_ACCESSORIES.filter(a => a.isRinon && !a.isBase);
   const restAccessories    = MASCOT_ACCESSORIES.filter(
-    a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie && !a.isBase
+    a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie && !a.isRinon && !a.isBase
   );
 
   // Una tarjeta "Sin X" de grupo se muestra como activa cuando ningún otro
@@ -1280,7 +1282,8 @@ export default function ShopPage() {
           (accessory.isGrillz && other.isGrillz) ||
           (accessory.isGlasses && other.isGlasses) ||
           (accessory.isTie && other.isTie) ||
-          (accessory.isBowTie && other.isBowTie)
+          (accessory.isBowTie && other.isBowTie) ||
+          (accessory.isRinon && other.isRinon)
         ) &&
         activeAccessories.has(other.id)
       );
@@ -2117,6 +2120,38 @@ export default function ShopPage() {
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseGlasses, ...glassesAccessories].filter(Boolean).map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Riñoneras — elige una */}
+            {rinonAccessories.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    Riñoneras · elige una
+                  </div>
+                  <button
+                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(rinonAccessories))}
+                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
+                  >
+                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
+                    Personalizar
+                  </button>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {[baseRinon, ...rinonAccessories].filter(Boolean).map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
                       accessory={accessory}
