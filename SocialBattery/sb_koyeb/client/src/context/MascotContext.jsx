@@ -1029,6 +1029,8 @@ export const MASCOT_ACCESSORIES = [
     // Ítem de partida fijo para personalizar cualquier color del carrusel
     // de Riñoneras (ver pickAccessoryTarget en ShopPage.jsx).
     isCustomizeBase: true,
+    // Subida un 10% respecto al top base del grupo.
+    rinonOffsetY: -10,
   },
   {
     id: 'acc_rinon_negra',
@@ -1039,6 +1041,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Subida un 10% respecto al top base del grupo.
+    rinonOffsetY: -10,
   },
   {
     id: 'acc_rinon_roja',
@@ -1099,6 +1103,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Subida un 10% respecto al top base del grupo.
+    rinonOffsetY: -10,
   },
   {
     id: 'acc_rinon_amarilla',

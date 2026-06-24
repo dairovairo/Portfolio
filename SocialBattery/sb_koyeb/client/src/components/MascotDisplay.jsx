@@ -438,8 +438,11 @@ export default function MascotDisplay({
         // PNG 900×900 normalizado: la riñonera ocupa aprox. el 93% del ancho
         // del lienzo y está centrada. Se escala y posiciona para quedar en
         // la cadera de la mascota.
-        // Ajuste inicial: left=5%, width=90%, top=62%, height=35%.
+        // Tamaño base: width=126%, height=49% (aumentado un 40% respecto al
+        // ajuste inicial de 90%/35%). left=-13% para centrar.
+        // top base=62%; las variantes con rinonOffsetY suman ese valor al top.
         if (acc.isRinon) {
+          const rinonTop = 62 + (acc.rinonOffsetY ?? 0);
           return (
             <ColorizedImage
               key={acc.id}
@@ -449,10 +452,10 @@ export default function MascotDisplay({
               draggable={false}
               className="absolute select-none pointer-events-none"
               style={{
-                left: '5%',
-                width: '90%',
-                top: '62%',
-                height: '35%',
+                left: '-13%',
+                width: '126%',
+                top: `${rinonTop}%`,
+                height: '49%',
                 objectFit: 'contain',
                 objectPosition: 'center',
               }}
