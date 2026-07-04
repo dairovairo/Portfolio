@@ -7,6 +7,15 @@ import { api } from '../lib/api';
 import ReminderBellButton, { DEFAULT_EVENT_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import LocationMapView from '../components/LocationMapView';
 import { generateEventStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+import { useMascot } from '../context/MascotContext';
+import { resolveMascotLayers } from '../lib/mascotRenderer';
+import { getBatteryColor, getEffectiveBatteryLevel } from '../lib/battery';
+
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function ensureAbsoluteUrl(url) {
@@ -137,6 +146,7 @@ export default function EventDetailPage() {
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { eventsWithUpdates, clearEventUpdateBadge, refreshJoinedCommunities } = useCommunityNotifications();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
 
   const [event, setEvent] = useState(null);
   const [updates, setUpdates] = useState([]);
@@ -204,10 +214,28 @@ export default function EventDetailPage() {
     if (sharingStory || !event) return;
     setSharingStory(true);
     try {
+      // Resolvemos la mascota del usuario que comparte (con su ropa, calzado,
+      // gorro, accesorios y actividad actuales) para incluirla como "firma"
+      // personal en la imagen del evento.
+      const level = profile ? getEffectiveBatteryLevel(profile) : 50;
+      const color = getBatteryColor(level);
+      let mascot = null;
+      try {
+        mascot = await resolveMascotLayers(getMascotTier(level), {
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
+      } catch (_) {
+        mascot = null; // si falla, se genera la historia sin la mascota
+      }
       const blob = await generateEventStoryBlob({
         event,
         attendeeCount: event.attendee_count || 0,
         likeCount: event.like_count || 0,
+        sharedBy: {
+          mascot,
+          username: profile?.display_name || profile?.username || '',
+          hex: color.hex,
+        },
       });
       const result = await shareOrDownloadBlob(blob, 'evento-sb.png', `${event.title} · SocialBattery`);
       if (result.method === 'download') {

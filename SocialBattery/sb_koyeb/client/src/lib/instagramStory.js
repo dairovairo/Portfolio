@@ -175,7 +175,7 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
 
 // ── Event Story ────────────────────────────────────────────────────────────────
 
-export async function generateEventStoryBlob({ event, attendeeCount, likeCount }) {
+export async function generateEventStoryBlob({ event, attendeeCount, likeCount, sharedBy }) {
   const W = 1080;
   const H = 1920;
 
@@ -357,6 +357,78 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount }
     ctx.fillStyle = 'rgba(148,163,184,0.80)';
     ctx.fillText(stat.label, bx + boxW / 2, statsY + 90);
     bx += boxW + gap;
+  }
+
+  // ── "Compartido por" — mascota del usuario que comparte ────────────────────
+  if (sharedBy) {
+    const panelH = 168;
+    const panelX = 80;
+    const panelW = W - 160;
+    const badgeTop = H - 140; // zona donde empieza el badge de URL
+    // Por defecto anclamos el panel cerca del pie de la imagen; si el
+    // contenido de arriba (título/estadísticas) es muy largo, lo bajamos
+    // lo justo para no solaparlo, pero nunca invadimos el badge de URL.
+    const bottomAnchoredY = badgeTop - 40 - panelH;
+    const maxPanelY = badgeTop - panelH - 24;
+    let panelY = Math.max(bottomAnchoredY, statsY + boxH + 40);
+    panelY = Math.min(panelY, maxPanelY);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(ctx, panelX, panelY, panelW, panelH, 30);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, panelX, panelY, panelW, panelH, 30);
+    ctx.stroke();
+    ctx.restore();
+
+    const avatarSize = 128;
+    const avatarX = panelX + 22;
+    const avatarY = panelY + (panelH - avatarSize) / 2;
+    const avatarCx = avatarX + avatarSize / 2;
+    const avatarCy = avatarY + avatarSize / 2;
+    const sharerHex = sharedBy.hex || '#38bdf8';
+
+    // Anillo de color detrás del avatar de la mascota
+    ctx.save();
+    ctx.shadowColor = sharerHex;
+    ctx.shadowBlur = 18;
+    ctx.strokeStyle = sharerHex;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(avatarCx, avatarCy, avatarSize / 2 + 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Fondo circular + mascota recortada en círculo (estilo avatar)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarCx, avatarCy, avatarSize / 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fill();
+    ctx.clip();
+    if (sharedBy.mascot) {
+      try {
+        await drawMascotOnCanvas(ctx, sharedBy.mascot, avatarX, avatarY, avatarSize, { glowColor: sharerHex });
+      } catch (_) {
+        // si falla, dejamos el fondo circular vacío
+      }
+    }
+    ctx.restore();
+
+    // Texto: "Compartido por" + nombre del usuario
+    const textX = avatarX + avatarSize + 30;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = 'rgba(203,213,225,0.75)';
+    ctx.font = '28px system-ui, sans-serif';
+    ctx.fillText('Compartido por', textX, panelY + panelH / 2 - 12);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 44px system-ui, sans-serif';
+    ctx.fillText(sharedBy.username || 'Alguien', textX, panelY + panelH / 2 + 42);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
   }
 
   // ── URL / CTA at bottom ───────────────────────────────────────────────────
