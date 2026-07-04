@@ -202,34 +202,7 @@ export default function UserProfilePage() {
               }
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="font-display font-bold text-white text-xl truncate">{user.display_name}</h2>
-                {/* Mascota del usuario, a la derecha de su nombre de perfil.
-                    Igual que en FriendCard.jsx: la base según su tier de
-                    batería se resuelve localmente, y la personalización
-                    (ropa/calzado/gorro/accesorios) llega ya horneada como
-                    overlay en user.mascot_preview_url. */}
-                <div className="relative flex-shrink-0" style={{ width: 36, height: 36 }}>
-                  <MascotDisplay
-                    tier={getMascotTier(user.battery_level ?? 50)}
-                    size={36}
-                    glowColor={color.hex}
-                    outfitSrc={null}
-                    feetSrc={null}
-                    headSrc={null}
-                    accessories={[]}
-                    activityLayers={[]}
-                  />
-                  {user.mascot_preview_url && (
-                    <img
-                      src={user.mascot_preview_url}
-                      alt=""
-                      draggable={false}
-                      className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-                    />
-                  )}
-                </div>
-              </div>
+              <h2 className="font-display font-bold text-white text-xl truncate">{user.display_name}</h2>
               <div className="text-sm text-slate-500 font-mono">@{user.username}</div>
               {user.bio && <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{user.bio}</p>}
               {user.interests && user.interests.length > 0 && (
@@ -250,6 +223,33 @@ export default function UserProfilePage() {
               )}
 
 
+            </div>
+
+            {/* Mascota del usuario — columna propia a la derecha del todo
+                (no pegada al nombre, para no apretar el truncado del texto).
+                Igual que en FriendCard.jsx: la base según su tier de
+                batería se resuelve localmente, y la personalización
+                (ropa/calzado/gorro/accesorios) llega ya horneada como
+                overlay en user.mascot_preview_url. */}
+            <div className="relative flex-shrink-0" style={{ width: 56, height: 56 }}>
+              <MascotDisplay
+                tier={getMascotTier(user.battery_level ?? 50)}
+                size={56}
+                glowColor={color.hex}
+                outfitSrc={null}
+                feetSrc={null}
+                headSrc={null}
+                accessories={[]}
+                activityLayers={[]}
+              />
+              {user.mascot_preview_url && (
+                <img
+                  src={user.mascot_preview_url}
+                  alt=""
+                  draggable={false}
+                  className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+                />
+              )}
             </div>
           </div>
 

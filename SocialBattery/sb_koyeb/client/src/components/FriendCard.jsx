@@ -77,10 +77,10 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
           mascota base, ya recoloreado y posicionado.
           Colocada a la derecha del nombre de perfil (antes iba a la
           izquierda, entre el avatar y el nombre). */}
-      <div className="relative flex-shrink-0" style={{ width: 40, height: 40 }}>
+      <div className="relative flex-shrink-0" style={{ width: 56, height: 56 }}>
         <MascotDisplay
           tier={tier}
-          size={40}
+          size={56}
           glowColor={color.hex}
           outfitSrc={null}
           feetSrc={null}
