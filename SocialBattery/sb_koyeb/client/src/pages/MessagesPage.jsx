@@ -67,9 +67,9 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
 }
 
 // ── DeletedBubble — rastro de mensaje eliminado para todos ────────────────────
-function DeletedBubble({ isMe }) {
+function DeletedBubble({ isMe, msgId }) {
   return (
-    <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div id={msgId ? `msg-${msgId}` : undefined} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       <div className="max-w-[78%] rounded-2xl px-4 py-2.5 border border-surface-border bg-surface-card/50">
         <p className="text-sm italic text-surface-muted flex items-center gap-1.5">
           <span className="text-base">🚫</span>
@@ -81,7 +81,7 @@ function DeletedBubble({ isMe }) {
 }
 
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isMe, onClose, onDeleteForMe, onDeleteForEveryone }) {
+function MessageContextMenu({ msg, isMe, onClose, onReply, onDeleteForMe, onDeleteForEveryone }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -103,6 +103,19 @@ function MessageContextMenu({ msg, isMe, onClose, onDeleteForMe, onDeleteForEver
         )}
 
         <div className="px-4 pb-4 space-y-1.5">
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onReply}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">↩️</span>
+              <div>
+                <div>Responder</div>
+                <div className="text-xs text-surface-muted font-normal">Cita este mensaje en tu respuesta</div>
+              </div>
+            </button>
+          )}
+
           <button
             onClick={onDeleteForMe}
             className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
@@ -174,6 +187,81 @@ function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
   );
 }
 
+// ── Reply preview helpers ──────────────────────────────────────────────────────
+
+function replyPreviewText(replyTo) {
+  if (!replyTo) return '';
+  if (replyTo.deleted_for_everyone) return '🚫 Mensaje eliminado';
+  if (replyTo.type === 'image') return '📷 Imagen';
+  if (replyTo.type === 'hangout_request') return `🤝 ${replyTo.content}`;
+  return replyTo.content;
+}
+
+// Aplica una actualización realtime a un mensaje y, además, refresca la cita
+// (reply_to) de cualquier otro mensaje ya cargado que estuviera respondiendo a ese
+// mismo mensaje — así, si se elimina el original, la cita pasa a decir
+// "Mensaje eliminado" también en las respuestas que ya estaban en pantalla.
+function applyMessageUpdate(list, updated) {
+  return list.map(msg => {
+    if (msg.id === updated.id) return { ...msg, ...updated };
+    if (msg.reply_to?.id === updated.id) {
+      return {
+        ...msg,
+        reply_to: {
+          ...msg.reply_to,
+          content: updated.content,
+          type: updated.type,
+          deleted_for_everyone: updated.deleted_for_everyone,
+        },
+      };
+    }
+    return msg;
+  });
+}
+
+// ── ReplyQuote — cita renderizada dentro de una burbuja de mensaje ────────────
+function ReplyQuote({ replyTo, onClick }) {
+  if (!replyTo) return null;
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onClick?.(replyTo.id); }}
+      className="w-full text-left flex flex-col gap-0.5 mb-1.5 px-2.5 py-1.5 rounded-lg bg-black/20 border-l-2 border-accent-primary/70 hover:bg-black/30 transition-colors active:scale-[0.99]"
+    >
+      <span className="text-[11px] font-display font-bold text-accent-glow leading-tight truncate">
+        {replyTo._quoteLabel}
+      </span>
+      <span className="text-xs opacity-80 leading-tight truncate">
+        {replyPreviewText(replyTo)}
+      </span>
+    </button>
+  );
+}
+
+// ── ReplyComposerPreview — barra sobre el input mientras se redacta la respuesta
+function ReplyComposerPreview({ replyingTo, label, onCancel }) {
+  return (
+    <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-xl px-3 py-2 mb-2 animate-slide-up">
+      <div className="w-1 self-stretch rounded-full bg-accent-primary flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-display font-bold text-accent-glow truncate">
+          Respondiendo a {label}
+        </div>
+        <div className="text-xs text-surface-muted truncate">
+          {replyPreviewText(replyingTo)}
+        </div>
+      </div>
+      <button
+        onClick={onCancel}
+        className="flex-shrink-0 w-7 h-7 rounded-full text-surface-muted hover:text-surface-text hover:bg-surface-hover flex items-center justify-center text-lg leading-none transition-colors"
+        title="Cancelar respuesta"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function OnlineDot({ lastSeenAt, className = '' }) {
@@ -186,7 +274,7 @@ function OnlineDot({ lastSeenAt, className = '' }) {
   );
 }
 
-function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle, onLongPress }) {
+function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
   const isPending = msg.hangout_status === 'pending';
   const isAccepted = msg.hangout_status === 'accepted';
   const isRejected = msg.hangout_status === 'rejected';
@@ -202,6 +290,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
 
   return (
     <div
+      id={`msg-${msg.id}`}
       className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -214,6 +303,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
         }`}
         style={bubbleStyle}
       >
+        <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">🤝</span>
           <span className="text-xs font-display font-bold text-accent-glow uppercase tracking-wide">Propuesta de quedada</span>
@@ -256,7 +346,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
 
@@ -269,6 +359,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress })
 
   return (
     <div
+      id={`msg-${msg.id}`}
       className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -279,6 +370,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress })
         className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''} select-none`}
         style={bubbleStyle}
       >
+        <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
         <p className="text-sm leading-relaxed break-words">{msg.content}</p>
         <div className="text-xs mt-1 opacity-60 flex items-center justify-end gap-1">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
@@ -289,7 +381,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress })
   );
 }
 
-function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }) {
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
   const [lightbox, setLightbox] = useState(false);
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
@@ -305,6 +397,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }
   return (
     <>
       <div
+        id={`msg-${msg.id}`}
         className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -315,6 +408,11 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }
           className={`max-w-[78%] rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
           style={bubbleStyle}
         >
+          {msg.reply_to && (
+            <div className="px-2 pt-2">
+              <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
+            </div>
+          )}
           <div className="relative">
             <img
               src={msg.content}
@@ -438,8 +536,11 @@ export default function MessagesPage() {
   const [respondingId, setRespondingId] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Context menu (delete message)
+  // Context menu (responder / eliminar mensaje)
   const [contextMenu, setContextMenu] = useState(null); // { msg }
+
+  // Mensaje al que se está respondiendo (preview sobre el input)
+  const [replyingTo, setReplyingTo] = useState(null); // msg | null
 
   // Header menu (clear chat)
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
@@ -458,6 +559,16 @@ export default function MessagesPage() {
 
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
+  }, []);
+
+  // Salta al mensaje original al tocar una cita (como en WhatsApp).
+  // Si el mensaje ya no está cargado en pantalla, no hace nada.
+  const scrollToMessage = useCallback((messageId) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ring-2', 'ring-accent-primary/70', 'rounded-2xl');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-accent-primary/70', 'rounded-2xl'), 1000);
   }, []);
 
   // Close header menu on outside click
@@ -552,7 +663,7 @@ export default function MessagesPage() {
           (updated.sender_id === profile.id && updated.receiver_id === friendId) ||
           (updated.sender_id === friendId && updated.receiver_id === profile.id);
         if (involved) {
-          setMessages(m => m.map(msg => msg.id === updated.id ? { ...msg, ...updated } : msg));
+          setMessages(m => applyMessageUpdate(m, updated));
         }
       })
       .on('postgres_changes', {
@@ -566,7 +677,7 @@ export default function MessagesPage() {
           (updated.sender_id === profile.id && updated.receiver_id === friendId) ||
           (updated.sender_id === friendId && updated.receiver_id === profile.id);
         if (involved) {
-          setMessages(m => m.map(msg => msg.id === updated.id ? { ...msg, ...updated } : msg));
+          setMessages(m => applyMessageUpdate(m, updated));
         }
       })
       // Friend profile changes (battery, online)
@@ -588,7 +699,9 @@ export default function MessagesPage() {
   async function sendText() {
     if (!input.trim() || sending) return;
     const content = input.trim();
+    const replyTarget = replyingTo;
     setInput('');
+    setReplyingTo(null);
     setSending(true);
 
     const optimistic = {
@@ -600,15 +713,27 @@ export default function MessagesPage() {
       created_at: new Date().toISOString(),
       read_at: null,
       delivered_at: null,
+      reply_to_id: replyTarget?.id || null,
+      reply_to: replyTarget ? {
+        id: replyTarget.id,
+        sender_id: replyTarget.sender_id,
+        content: replyTarget.content,
+        type: replyTarget.type,
+        deleted_for_everyone: replyTarget.deleted_for_everyone,
+      } : null,
     };
     setMessages(m => [...m, optimistic]);
 
     try {
-      const { message } = await api.post('/messages', { receiver_id: friendId, content, type: 'text' });
+      const { message } = await api.post('/messages', {
+        receiver_id: friendId, content, type: 'text',
+        ...(replyTarget?.id ? { reply_to_id: replyTarget.id } : {}),
+      });
       setMessages(m => m.map(msg => msg.id === optimistic.id ? message : msg));
     } catch (e) {
       setMessages(m => m.filter(msg => msg.id !== optimistic.id));
       setInput(content);
+      setReplyingTo(replyTarget);
       showToast('Error al enviar el mensaje', 'error');
     } finally {
       setSending(false);
@@ -617,13 +742,16 @@ export default function MessagesPage() {
   }
 
   async function sendHangout(content, hangoutTime) {
+    const replyTarget = replyingTo;
     setSending(true);
     try {
       const { message } = await api.post('/messages', {
         receiver_id: friendId, content, type: 'hangout_request', hangout_time: hangoutTime,
+        ...(replyTarget?.id ? { reply_to_id: replyTarget.id } : {}),
       });
       setMessages(m => [...m, message]);
       setShowHangoutForm(false);
+      setReplyingTo(null);
       showToast('¡Propuesta enviada! 🤝');
     } catch (e) {
       showToast('Error al enviar la propuesta', 'error');
@@ -636,7 +764,9 @@ export default function MessagesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    const replyTarget = replyingTo;
     setSendingImage(true);
+    setReplyingTo(null);
 
     const localUrl = URL.createObjectURL(file);
     const optimisticId = `opt-img-${Date.now()}`;
@@ -649,12 +779,21 @@ export default function MessagesPage() {
       created_at: new Date().toISOString(),
       read_at: null,
       delivered_at: null,
+      reply_to_id: replyTarget?.id || null,
+      reply_to: replyTarget ? {
+        id: replyTarget.id,
+        sender_id: replyTarget.sender_id,
+        content: replyTarget.content,
+        type: replyTarget.type,
+        deleted_for_everyone: replyTarget.deleted_for_everyone,
+      } : null,
     };
     setMessages(m => [...m, optimistic]);
 
     try {
       const formData = new FormData();
       formData.append('image', file);
+      if (replyTarget?.id) formData.append('reply_to_id', replyTarget.id);
       const { message } = await api.postForm(`/messages/${friendId}/image`, formData);
       URL.revokeObjectURL(localUrl);
       setMessages(m => m.map(msg => msg.id === optimisticId ? message : msg));
@@ -722,8 +861,18 @@ export default function MessagesPage() {
     // Hide messages deleted for me (deleted_for_self)
     if (Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(profile?.id)) return false;
     return true;
-  // Inject _readReceipts flag so bubbles can decide whether to show coloured tick
-  }).map(msg => ({ ...msg, _readReceipts: readReceipts, _tickColorRead: tickColorRead, _tickColorUnread: tickColorUnread, _tickColorSent: tickColorSent }));
+  // Inject _readReceipts flag so bubbles can decide whether to show coloured tick,
+  // and _quoteLabel on any quoted reply_to so ReplyQuote can show "Tú" or el nombre del amigo.
+  }).map(msg => ({
+    ...msg,
+    _readReceipts: readReceipts,
+    _tickColorRead: tickColorRead,
+    _tickColorUnread: tickColorUnread,
+    _tickColorSent: tickColorSent,
+    reply_to: msg.reply_to
+      ? { ...msg.reply_to, _quoteLabel: msg.reply_to.sender_id === profile?.id ? 'Tú' : (friend?.display_name || 'este usuario') }
+      : msg.reply_to,
+  }));
 
   const grouped = [];
   let lastDate = null;
@@ -753,12 +902,17 @@ export default function MessagesPage() {
         </div>
       )}
 
-      {/* Context menu (delete message) */}
+      {/* Context menu (responder / eliminar mensaje) */}
       {contextMenu && (
         <MessageContextMenu
           msg={contextMenu}
           isMe={contextMenu.sender_id === profile?.id}
           onClose={() => setContextMenu(null)}
+          onReply={() => {
+            setReplyingTo(contextMenu);
+            setContextMenu(null);
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }}
           onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
         />
@@ -877,7 +1031,7 @@ export default function MessagesPage() {
 
             // Deleted for everyone → placeholder visible para ambos
             if (msg.deleted_for_everyone) {
-              return <DeletedBubble key={item.key} isMe={isMe} />;
+              return <DeletedBubble key={item.key} isMe={isMe} msgId={msg.id} />;
             }
 
             if (msg.type === 'hangout_request') {
@@ -891,6 +1045,7 @@ export default function MessagesPage() {
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
                   onLongPress={setContextMenu}
+                  onQuoteClick={scrollToMessage}
                 />
               );
             }
@@ -904,6 +1059,7 @@ export default function MessagesPage() {
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
                   onLongPress={setContextMenu}
+                  onQuoteClick={scrollToMessage}
                 />
               );
             }
@@ -916,6 +1072,7 @@ export default function MessagesPage() {
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
                 onLongPress={setContextMenu}
+                onQuoteClick={scrollToMessage}
               />
             );
           })
@@ -926,6 +1083,13 @@ export default function MessagesPage() {
       {/* Input area */}
       <div className="flex-shrink-0 border-t border-surface-border bg-surface-bg/95 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-4 py-3 space-y-2">
+          {replyingTo && (
+            <ReplyComposerPreview
+              replyingTo={replyingTo}
+              label={replyingTo.sender_id === profile?.id ? 'ti mismo' : (friend?.display_name || 'este usuario')}
+              onCancel={() => setReplyingTo(null)}
+            />
+          )}
           {showHangoutForm ? (
             <HangoutForm
               onSend={sendHangout}

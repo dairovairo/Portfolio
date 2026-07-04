@@ -11,8 +11,31 @@ const _dmImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 const MESSAGE_FIELDS = `
   id, sender_id, receiver_id, content, type, hangout_status, hangout_time,
   read_at, delivered_at, deleted_for_self, deleted_for_everyone,
-  deleted_for_everyone_at, created_at
+  deleted_for_everyone_at, created_at, reply_to_id
 `;
+
+// Same fields plus an embedded preview of the message being replied to
+// (used wherever a message is returned to the client for rendering the quote).
+const MESSAGE_FIELDS_WITH_REPLY = `
+  ${MESSAGE_FIELDS},
+  reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone)
+`;
+
+// Verifies that `messageId` belongs to the 1:1 conversation between userA and userB.
+// Returns the message row or null if it doesn't exist / isn't part of that conversation.
+async function findReplyTarget(messageId, userA, userB) {
+  if (!messageId) return null;
+  const { data } = await supabase
+    .from('messages')
+    .select('id, sender_id, receiver_id')
+    .eq('id', messageId)
+    .or(
+      `and(sender_id.eq.${userA},receiver_id.eq.${userB}),` +
+      `and(sender_id.eq.${userB},receiver_id.eq.${userA})`
+    )
+    .maybeSingle();
+  return data || null;
+}
 
 // ── GET /api/messages/unread-count — lightweight unread badge count ───────────
 // Returns a single integer. Used by HomePage/BottomNav to show the badge.
@@ -107,7 +130,7 @@ router.get('/:friendId', requireAuth, async (req, res) => {
 
   let query = supabase
     .from('messages')
-    .select(MESSAGE_FIELDS)
+    .select(MESSAGE_FIELDS_WITH_REPLY)
     .or(
       `and(sender_id.eq.${userId},receiver_id.eq.${friendId}),` +
       `and(sender_id.eq.${friendId},receiver_id.eq.${userId})`
@@ -151,7 +174,7 @@ router.get('/:friendId', requireAuth, async (req, res) => {
 
 // ── POST /api/messages — send message ────────────────────────────────────────
 router.post('/', requireAuth, async (req, res) => {
-  const { receiver_id, content, type = 'text', hangout_time } = req.body;
+  const { receiver_id, content, type = 'text', hangout_time, reply_to_id } = req.body;
   const senderId = req.user.id;
 
   if (!receiver_id || !content?.trim()) {
@@ -187,10 +210,17 @@ router.post('/', requireAuth, async (req, res) => {
     if (hangout_time) insertData.hangout_time = hangout_time.trim();
   }
 
+  if (reply_to_id) {
+    const target = await findReplyTarget(reply_to_id, senderId, receiver_id);
+    if (target) insertData.reply_to_id = target.id;
+    // If the referenced message isn't part of this conversation, silently
+    // ignore it rather than failing the whole send.
+  }
+
   const { data, error } = await supabase
     .from('messages')
     .insert(insertData)
-    .select(MESSAGE_FIELDS)
+    .select(MESSAGE_FIELDS_WITH_REPLY)
     .single();
 
   if (error) return res.status(500).json({ error: 'Failed to send message' });
@@ -377,15 +407,22 @@ router.post('/:receiverId/image', requireAuth, (req, res, next) => {
       fallbackMaxLength: 8_000_000,
     });
 
+    const insertData = {
+      sender_id: senderId,
+      receiver_id: receiverId,
+      content: imageUrl,
+      type: 'image',
+    };
+
+    if (req.body.reply_to_id) {
+      const target = await findReplyTarget(req.body.reply_to_id, senderId, receiverId);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
     const { data, error } = await supabase
       .from('messages')
-      .insert({
-        sender_id: senderId,
-        receiver_id: receiverId,
-        content: imageUrl,
-        type: 'image',
-      })
-      .select(MESSAGE_FIELDS)
+      .insert(insertData)
+      .select(MESSAGE_FIELDS_WITH_REPLY)
       .single();
 
     if (error) return res.status(500).json({ error: 'Failed to save image message' });
