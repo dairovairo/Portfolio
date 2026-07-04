@@ -4,6 +4,7 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { notifyUsers } = require('../lib/webpush');
 
 // Multer instance for chat image uploads (8 MB max)
 const _dmImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
@@ -11,7 +12,7 @@ const _dmImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 const MESSAGE_FIELDS = `
   id, sender_id, receiver_id, content, type, hangout_status, hangout_time,
   read_at, delivered_at, deleted_for_self, deleted_for_everyone,
-  deleted_for_everyone_at, created_at, reply_to_id
+  deleted_for_everyone_at, created_at, reply_to_id, liked_by
 `;
 
 // Same fields plus an embedded preview of the message being replied to
@@ -35,6 +36,46 @@ async function findReplyTarget(messageId, userA, userB) {
     )
     .maybeSingle();
   return data || null;
+}
+
+// Notifies the author of a message that someone liked it — same pattern as
+// broadcastGroupMessage in routes/groups.js: a personal realtime channel for
+// instant in-app notification, plus web-push for when the app is backgrounded
+// or closed. Fire-and-forget; failures here must never break the like request.
+async function broadcastMessageLike({ messageId, authorId, likerId, messageType, messageContent }) {
+  try {
+    const { data: liker } = await supabase
+      .from('users')
+      .select('display_name, username')
+      .eq('id', likerId)
+      .single();
+
+    const likerName = liker?.display_name || (liker?.username ? `@${liker.username}` : 'Alguien');
+    const preview = messageType === 'image'
+      ? 'tu foto'
+      : messageType === 'hangout_request'
+        ? 'tu propuesta de quedada'
+        : `"${(messageContent || '').slice(0, 60)}"`;
+
+    const broadcastPayload = {
+      message_id: messageId,
+      liker_id:   likerId,
+      liker_name: likerName,
+    };
+
+    await supabase
+      .channel(`msg-like-notif-${authorId}`)
+      .send({ type: 'broadcast', event: 'message_liked', payload: broadcastPayload });
+
+    await notifyUsers(supabase, [authorId], likerId, {
+      title: likerName,
+      body:  `❤️ Le ha gustado ${preview}`,
+      url:   `/messages/${likerId}`,
+      tag:   `like-${messageId}`,
+    });
+  } catch (err) {
+    console.error('[MESSAGES] broadcastMessageLike error:', err);
+  }
 }
 
 // ── GET /api/messages/unread-count — lightweight unread badge count ───────────
@@ -342,6 +383,53 @@ router.patch('/message/:messageId', requireAuth, async (req, res) => {
     if (error) return res.status(500).json({ error: 'Failed to delete message' });
     return res.json({ message: data });
   }
+});
+
+// ── PATCH /api/messages/message/:messageId/like — alternar "me gusta" ─────────
+router.patch('/message/:messageId/like', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { messageId } = req.params;
+
+  const { data: msg, error: fetchErr } = await supabase
+    .from('messages')
+    .select('id, sender_id, receiver_id, type, content, deleted_for_everyone, liked_by')
+    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .eq('id', messageId)
+    .single();
+
+  if (fetchErr || !msg) return res.status(404).json({ error: 'Message not found' });
+  if (msg.deleted_for_everyone) {
+    return res.status(400).json({ error: 'No puedes reaccionar a un mensaje eliminado' });
+  }
+
+  const current = Array.isArray(msg.liked_by) ? msg.liked_by : [];
+  const alreadyLiked = current.includes(userId);
+  const nextLikedBy = alreadyLiked
+    ? current.filter(id => id !== userId)
+    : [...current, userId];
+
+  const { data, error } = await supabase
+    .from('messages')
+    .update({ liked_by: nextLikedBy })
+    .eq('id', messageId)
+    .select(MESSAGE_FIELDS)
+    .single();
+
+  if (error) return res.status(500).json({ error: 'Failed to update like' });
+
+  // Only notify when someone *other* than the message's own author likes it,
+  // and only on the like (not the unlike).
+  if (!alreadyLiked && userId !== msg.sender_id) {
+    broadcastMessageLike({
+      messageId,
+      authorId:       msg.sender_id,
+      likerId:        userId,
+      messageType:    msg.type,
+      messageContent: msg.content,
+    }).catch(() => {});
+  }
+
+  res.json({ message: data });
 });
 
 // ── POST /api/messages/chat/:friendId/clear — vaciar conversación ─────────────

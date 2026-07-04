@@ -155,6 +155,33 @@ export function useMessageNotifications(profile, settings) {
         .subscribe();
       channels.push(personalCh);
 
+      // ── 3b. Message likes — broadcast per-user channel ──────────────────────
+      // The server broadcasts to `msg-like-notif-{userId}` (service key, no RLS)
+      // whenever someone likes a message this user sent — same instant-notify
+      // pattern as new_group_message / new_pool below. Reuses the personal-chat
+      // mute toggle since a like happens inside a 1:1 conversation.
+      const likeCh = supabase
+        .channel(`msg-like-notif-${profile.id}`)
+        .on('broadcast', { event: 'message_liked' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications || s.mutePersonalChats) return;
+
+          const data = msg.payload;
+          if (!data?.liker_id) return;
+
+          const chatPath = `/messages/${data.liker_id}`;
+          if (!shouldNotify(locationRef.current, chatPath)) return;
+
+          fireNotification({
+            title: data.liker_name || 'Alguien',
+            body:  '❤️ Le ha gustado tu mensaje',
+            tag:   `like-${data.message_id}`,
+            navigateTo: chatPath,
+          });
+        })
+        .subscribe();
+      channels.push(likeCh);
+
       // ── 4. Group messages — broadcast per-user channel ──────────────────────
       // The server broadcasts to `group-msg-notif-{userId}` for every group
       // member using the service key (no RLS), exactly like the pools pattern.

@@ -73,15 +73,28 @@ function DeletedBubble({ isMe, msgId }) {
       <div className="max-w-[78%] rounded-2xl px-4 py-2.5 border border-surface-border bg-surface-card/50">
         <p className="text-sm italic text-surface-muted flex items-center gap-1.5">
           <span className="text-base">🚫</span>
-          {isMe ? 'Eliminaste este mensaje' : 'Mensaje eliminado'}
+          {isMe ? 'Eliminaste este mensaje' : 'Este mensaje ha sido eliminado'}
         </p>
       </div>
     </div>
   );
 }
 
+// ── LikeBadge — corazoncito flotante en la esquina de la burbuja ─────────────
+function LikeBadge({ liked, isMe }) {
+  if (!liked) return null;
+  return (
+    <span
+      className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} w-5 h-5 rounded-full bg-surface-bg border border-surface-border flex items-center justify-center text-[11px] shadow-md z-10 leading-none animate-scale-in`}
+      title="Le gusta este mensaje"
+    >
+      ❤️
+    </span>
+  );
+}
+
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isMe, onClose, onReply, onDeleteForMe, onDeleteForEveryone }) {
+function MessageContextMenu({ msg, isMe, isLiked, onClose, onReply, onToggleLike, onDeleteForMe, onDeleteForEveryone }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -103,6 +116,21 @@ function MessageContextMenu({ msg, isMe, onClose, onReply, onDeleteForMe, onDele
         )}
 
         <div className="px-4 pb-4 space-y-1.5">
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onToggleLike}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">❤️</span>
+              <div>
+                <div>{isLiked ? 'Quitar me gusta' : 'Me gusta'}</div>
+                <div className="text-xs text-surface-muted font-normal">
+                  {isLiked ? 'Deja de destacar este mensaje' : 'Destaca este mensaje con un corazón'}
+                </div>
+              </div>
+            </button>
+          )}
+
           {!msg.deleted_for_everyone && (
             <button
               onClick={onReply}
@@ -298,7 +326,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
       onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
     >
       <div
-        className={`max-w-[82%] rounded-2xl px-4 py-3 border ${
+        className={`relative max-w-[82%] rounded-2xl px-4 py-3 border ${
           isAccepted ? 'border-green-500/30' : isRejected ? 'border-slate-600/30' : 'border-accent-primary/30'
         }`}
         style={bubbleStyle}
@@ -341,6 +369,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
+        <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
       </div>
     </div>
   );
@@ -367,7 +396,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, o
       onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
     >
       <div
-        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''} select-none`}
+        className={`relative max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''} select-none`}
         style={bubbleStyle}
       >
         <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
@@ -376,6 +405,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, o
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
+        <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
       </div>
     </div>
   );
@@ -405,7 +435,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, 
         onContextMenu={e => { e.preventDefault(); if (!isOptimistic) onLongPress(msg); }}
       >
         <div
-          className={`max-w-[78%] rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
+          className={`relative max-w-[78%] rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
           style={bubbleStyle}
         >
           {msg.reply_to && (
@@ -430,6 +460,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, 
             {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
             {isMe && !isOptimistic && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
           </div>
+          <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
         </div>
       </div>
 
@@ -820,6 +851,16 @@ export default function MessagesPage() {
     }
   }
 
+  async function toggleLike(msg) {
+    setContextMenu(null);
+    try {
+      const { message: updated } = await api.patch(`/messages/message/${msg.id}/like`);
+      setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
+    } catch (e) {
+      showToast(e.message || 'Error al reaccionar', 'error');
+    }
+  }
+
   async function deleteMessage(msg, scope) {
     setContextMenu(null);
     try {
@@ -907,12 +948,14 @@ export default function MessagesPage() {
         <MessageContextMenu
           msg={contextMenu}
           isMe={contextMenu.sender_id === profile?.id}
+          isLiked={Array.isArray(contextMenu.liked_by) && contextMenu.liked_by.includes(profile?.id)}
           onClose={() => setContextMenu(null)}
           onReply={() => {
             setReplyingTo(contextMenu);
             setContextMenu(null);
             setTimeout(() => inputRef.current?.focus(), 50);
           }}
+          onToggleLike={() => toggleLike(contextMenu)}
           onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
         />
