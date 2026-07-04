@@ -5,10 +5,11 @@
  */
 
 import { getBatteryColor } from './battery';
+import { drawMascotOnCanvas } from './mascotRenderer';
 
 // ── Battery Story ──────────────────────────────────────────────────────────────
 
-export async function generateBatteryStoryBlob({ level, label, hex, username, updatedAt }) {
+export async function generateBatteryStoryBlob({ level, label, hex, username, updatedAt, mascot }) {
   const W = 1080;
   const H = 1920;
 
@@ -35,14 +36,19 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
     }
   }
 
-  // Ambient glow behind battery
   const cx = W / 2;
-  const batteryY = 580; // center Y of the battery body
-  const glow = ctx.createRadialGradient(cx, batteryY, 0, cx, batteryY, 520);
-  glow.addColorStop(0, `${hex}28`);
+  const arenaY = 650; // centro vertical del "escenario" de la mascota
+
+  // Ambient glow, más rico y amplio, detrás del escenario de la mascota
+  const glow = ctx.createRadialGradient(cx, arenaY, 0, cx, arenaY, 660);
+  glow.addColorStop(0, `${hex}38`);
+  glow.addColorStop(0.45, `${hex}18`);
   glow.addColorStop(1, 'transparent');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
+
+  // Destellos decorativos (estrellitas + puntos de brillo)
+  drawSparkles(ctx, W, H, hex);
 
   // ── App branding (bigger) ──────────────────────────────────────────────────
   ctx.textAlign = 'center';
@@ -61,111 +67,85 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
   ctx.font = 'bold 36px system-ui, sans-serif';
   ctx.fillText('🔋 SocialBattery', W / 2, pillY + pillH / 2);
 
-  // ── Battery shape ──────────────────────────────────────────────────────────
-  const bW = 520;   // body width
-  const bH = 280;   // body height
-  const bR = 40;    // body corner radius
-  const bX = (W - bW) / 2;
-  const bY = batteryY - bH / 2;
+  // ── Escenario circular con la mascota y el anillo de nivel ──────────────────
+  const ringOuterR = 330;
+  const ringThickness = 24;
+  const mascotBoxSize = 560;
 
-  // Nub (positive terminal) on the right
-  const nubW = 32, nubH = 90;
-  const nubX = bX + bW;
-  const nubY = batteryY - nubH / 2;
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  roundRect(ctx, nubX, nubY, nubW, nubH, 10);
-  ctx.fill();
-
-  // Battery body outline (glass-like)
-  ctx.fillStyle = 'rgba(255,255,255,0.06)';
-  roundRect(ctx, bX, bY, bW, bH, bR);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 4;
-  roundRect(ctx, bX, bY, bW, bH, bR);
+  // Anillo de fondo (translúcido, marca el 100%)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.lineWidth = ringThickness;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, arenaY, ringOuterR, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.restore();
 
-  // Fill level inside battery
-  const padding = 14;
-  const fillMaxW = bW - padding * 2;
-  const fillW = Math.max(0, fillMaxW * (level / 100));
-  const fillX = bX + padding;
-  const fillY = bY + padding;
-  const fillH = bH - padding * 2;
-  const fillR = bR - 6;
-
-  if (fillW > 0) {
-    // Gradient fill
-    const fillGrad = ctx.createLinearGradient(fillX, 0, fillX + fillMaxW, 0);
-    fillGrad.addColorStop(0, `${hex}cc`);
-    fillGrad.addColorStop(1, hex);
-    ctx.fillStyle = fillGrad;
-    // Clip fill to battery body inner area
+  // Anillo de progreso — representa visualmente el nivel de batería
+  const pct = Math.max(0, Math.min(100, level)) / 100;
+  if (pct > 0) {
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + Math.PI * 2 * pct;
     ctx.save();
-    roundRect(ctx, fillX, fillY, fillMaxW, fillH, fillR);
-    ctx.clip();
-    // Draw fill rect (possibly partial)
-    const clippedFillR = fillW >= fillMaxW ? fillR : Math.min(fillR, fillW / 2);
-    roundRect(ctx, fillX, fillY, fillW, fillH, clippedFillR);
-    ctx.fill();
-
-    // Shine highlight on top of fill
-    const shine = ctx.createLinearGradient(0, fillY, 0, fillY + fillH * 0.5);
-    shine.addColorStop(0, 'rgba(255,255,255,0.22)');
-    shine.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = shine;
-    roundRect(ctx, fillX, fillY, fillW, fillH * 0.5, clippedFillR);
-    ctx.fill();
-    ctx.restore();
-
-    // Inner glow on fill edges
     ctx.shadowColor = hex;
-    ctx.shadowBlur = 28;
-    ctx.strokeStyle = `${hex}80`;
-    ctx.lineWidth = 2;
-    ctx.save();
-    roundRect(ctx, fillX, fillY, fillMaxW, fillH, fillR);
-    ctx.clip();
-    roundRect(ctx, fillX, fillY, fillW, fillH, clippedFillR);
+    ctx.shadowBlur = 32;
+    ctx.strokeStyle = hex;
+    ctx.lineWidth = ringThickness;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, arenaY, ringOuterR, startAngle, endAngle);
     ctx.stroke();
     ctx.restore();
-    ctx.shadowBlur = 0;
   }
 
-  // Segment dividers inside battery (subtle)
-  const segments = 4;
-  for (let i = 1; i < segments; i++) {
-    const sx = bX + padding + (fillMaxW / segments) * i;
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(sx, bY + padding + 4);
-    ctx.lineTo(sx, bY + bH - padding - 4);
-    ctx.stroke();
+  // Fondo tipo "cristal" detrás de la mascota, dentro del anillo
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, arenaY, ringOuterR - ringThickness - 8, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+
+  // La mascota, con su ropa/calzado/gorro/accesorios/actividad equipados
+  if (mascot) {
+    try {
+      await drawMascotOnCanvas(
+        ctx, mascot,
+        cx - mascotBoxSize / 2, arenaY - mascotBoxSize / 2, mascotBoxSize,
+        { glowColor: hex }
+      );
+    } catch (_) {
+      // Si algo falla al dibujar la mascota, seguimos sin ella.
+    }
   }
 
-  // ── Percentage number ──────────────────────────────────────────────────────
+  // ── Porcentaje ────────────────────────────────────────────────────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const percentageY = arenaY + ringOuterR + 100;
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 220px system-ui, sans-serif';
+  ctx.font = 'bold 130px system-ui, sans-serif';
   ctx.shadowColor = hex;
-  ctx.shadowBlur = 50;
-  ctx.fillText(`${level}%`, cx, batteryY + bH / 2 + 200);
+  ctx.shadowBlur = 44;
+  ctx.fillText(`${level}%`, cx, percentageY);
   ctx.shadowBlur = 0;
 
   // ── Status label pill ──────────────────────────────────────────────────────
-  const labelY2 = batteryY + bH / 2 + 380;
-  ctx.font = 'bold 48px system-ui, sans-serif';
+  const labelY2 = percentageY + 85;
+  const labelH = 76;
+  ctx.font = 'bold 46px system-ui, sans-serif';
   const labelW = ctx.measureText(label).width + 72;
-  const labelH = 80;
   const labelX = (W - labelW) / 2;
   ctx.fillStyle = `${hex}22`;
-  roundRect(ctx, labelX, labelY2, labelW, labelH, 40);
+  roundRect(ctx, labelX, labelY2, labelW, labelH, 38);
   ctx.fill();
   ctx.strokeStyle = `${hex}66`;
   ctx.lineWidth = 2.5;
-  roundRect(ctx, labelX, labelY2, labelW, labelH, 40);
+  roundRect(ctx, labelX, labelY2, labelW, labelH, 38);
   ctx.stroke();
   ctx.fillStyle = hex;
   ctx.textBaseline = 'middle';
@@ -173,9 +153,9 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
 
   // ── Username ───────────────────────────────────────────────────────────────
   ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  ctx.font = 'bold 52px system-ui, sans-serif';
+  ctx.font = 'bold 50px system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.fillText(username || 'Mi batería social', W / 2, labelY2 + labelH + 90);
+  ctx.fillText(username || 'Mi batería social', W / 2, labelY2 + labelH + 84);
 
   // ── Date ──────────────────────────────────────────────────────────────────
   if (updatedAt) {
@@ -183,8 +163,8 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
       weekday: 'long', day: 'numeric', month: 'long',
     });
     ctx.fillStyle = 'rgba(148,163,184,0.65)';
-    ctx.font = '36px system-ui, sans-serif';
-    ctx.fillText(dateStr, W / 2, labelY2 + labelH + 170);
+    ctx.font = '34px system-ui, sans-serif';
+    ctx.fillText(dateStr, W / 2, labelY2 + labelH + 158);
   }
 
   // ── URL / CTA at bottom ───────────────────────────────────────────────────
@@ -450,6 +430,57 @@ function drawUrlBadge(ctx, W, H) {
   ctx.fillStyle = 'rgba(226,232,240,0.85)';
   ctx.fillText(label, W / 2, badgeY + badgeH / 2);
   ctx.restore();
+}
+
+/**
+ * Dibuja destellos decorativos (puntitos de brillo + estrellitas "✦")
+ * repartidos por las esquinas del lienzo, coloreados con el hex del nivel
+ * de batería actual, para dar un toque más vistoso/festivo a la historia
+ * sin interferir con el contenido central (mascota, porcentaje, texto).
+ */
+function drawSparkles(ctx, W, H, hex) {
+  const dots = [
+    { x: 90, y: 250, r: 3, a: 0.55 },
+    { x: 970, y: 230, r: 2.4, a: 0.45 },
+    { x: 60, y: 470, r: 2, a: 0.35 },
+    { x: 1010, y: 500, r: 2.6, a: 0.4 },
+    { x: 70, y: 1420, r: 2.4, a: 0.4 },
+    { x: 990, y: 1460, r: 3, a: 0.5 },
+    { x: 130, y: 1620, r: 2, a: 0.3 },
+    { x: 940, y: 1600, r: 2.2, a: 0.35 },
+  ];
+  ctx.save();
+  for (const d of dots) {
+    ctx.beginPath();
+    ctx.fillStyle = hexToRgba(hex, d.a);
+    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const stars = [
+    { x: 150, y: 340, size: 22, a: 0.5 },
+    { x: 930, y: 360, size: 16, a: 0.4 },
+    { x: 110, y: 1520, size: 18, a: 0.4 },
+    { x: 960, y: 1540, size: 24, a: 0.5 },
+  ];
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const s of stars) {
+    ctx.font = `${s.size}px system-ui, sans-serif`;
+    ctx.fillStyle = hexToRgba(hex, s.a);
+    ctx.fillText('✦', s.x, s.y);
+  }
+  ctx.restore();
+}
+
+function hexToRgba(hex, alpha) {
+  const clean = (hex || '#ffffff').replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  const bigint = parseInt(full, 16) || 0xffffff;
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function roundRect(ctx, x, y, w, h, r) {

@@ -14,6 +14,7 @@ import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatter
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
 import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { useMascot } from '../context/MascotContext';
 import MascotDisplay from '../components/MascotDisplay';
 
@@ -321,7 +322,7 @@ export default function HomePage() {
   const { addToast } = useToast();
   const { isLight } = useTheme();
   const navigate = useNavigate();
-  const { getMascotLayers } = useMascot();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
   const [friends, setFriends] = useState([]);
@@ -420,12 +421,24 @@ export default function HomePage() {
     setSharingStory(true);
     try {
       const color = getBatteryColor(profileBatteryLevel);
+      // Resolvemos la mascota tal y como está equipada ahora mismo (ropa,
+      // calzado, gorro, accesorios y actividad), con sus colores
+      // personalizados ya aplicados, para "hornearla" dentro de la imagen.
+      let mascot = null;
+      try {
+        mascot = await resolveMascotLayers(getMascotTier(profileBatteryLevel), {
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
+      } catch (_) {
+        mascot = null; // si falla, se genera la historia sin la mascota
+      }
       const blob = await generateBatteryStoryBlob({
         level: profileBatteryLevel,
         label: color.label,
         hex: color.hex,
         username: profile?.display_name || profile?.username || '',
         updatedAt: profile?.battery_updated_at,
+        mascot,
       });
       const result = await shareOrDownloadBlob(blob, 'mi-bateria-social.png', 'Mi batería social · SocialBattery');
       if (result.method === 'download') {
