@@ -178,6 +178,7 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
 export async function generateEventStoryBlob({ event, attendeeCount, likeCount, sharedBy }) {
   const W = 1080;
   const H = 1920;
+  const S = 1.2; // todos los elementos de esta historia son un 20% más grandes
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -238,33 +239,38 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
     ctx.fillRect(0, 0, W, H);
   }
 
-  // ── App branding (bigger pill at top) ──────────────────────────────────────
+  // Márgenes laterales (un poco más ajustados para dar más protagonismo a
+  // las tarjetas, ahora que todo el contenido es más grande)
+  const sideMargin = 64;
+  const cardW = W - sideMargin * 2;
+
+  // ── App branding (pill at top) ──────────────────────────────────────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const pillW = 380, pillH = 80, pillX = (W - pillW) / 2, pillY = 130;
+  const pillW = Math.round(380 * S), pillH = Math.round(80 * S);
+  const pillX = (W - pillW) / 2, pillY = 120;
   ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
+  roundRect(ctx, pillX, pillY, pillW, pillH, Math.round(40 * S));
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.20)';
   ctx.lineWidth = 2;
-  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
+  roundRect(ctx, pillX, pillY, pillW, pillH, Math.round(40 * S));
   ctx.stroke();
   ctx.fillStyle = '#e2e8f0';
-  ctx.font = 'bold 36px system-ui, sans-serif';
+  ctx.font = `bold ${Math.round(36 * S)}px system-ui, sans-serif`;
   ctx.fillText('🔋 SocialBattery', W / 2, pillY + pillH / 2);
 
   // ── Cover image card (non-blurred, sharp) ─────────────────────────────────
-  let contentY = 320;
+  const cardH = Math.round(500 * S);
+  const cardY = 250;
   if (coverImg) {
-    const cardH = 500;
-    const cardY = 270;
     ctx.save();
-    roundRect(ctx, 80, cardY, W - 160, cardH, 36);
+    roundRect(ctx, sideMargin, cardY, cardW, cardH, Math.round(36 * S));
     ctx.clip();
-    const scaleCard = Math.max((W - 160) / coverImg.width, cardH / coverImg.height);
+    const scaleCard = Math.max(cardW / coverImg.width, cardH / coverImg.height);
     const cW = coverImg.width * scaleCard;
     const cH = coverImg.height * scaleCard;
-    const cX = 80 + ((W - 160) - cW) / 2;
+    const cX = sideMargin + (cardW - cW) / 2;
     const cY = cardY + (cardH - cH) / 2;
     ctx.drawImage(coverImg, cX, cY, cW, cH);
     // Very subtle bottom gradient on the card for separation
@@ -272,119 +278,164 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
     cardFade.addColorStop(0, 'rgba(8,15,31,0)');
     cardFade.addColorStop(1, 'rgba(8,15,31,0.4)');
     ctx.fillStyle = cardFade;
-    ctx.fillRect(80, cardY, W - 160, cardH);
+    ctx.fillRect(sideMargin, cardY, cardW, cardH);
     ctx.restore();
-    contentY = cardY + cardH + 56;
+  }
+
+  // ── Medidas de cada sección, para poder centrar el bloque completo ─────────
+  const hasOrg = Boolean(event.organization || event.community_name);
+  const hasStartDate = Boolean(event.event_date);
+  const hasEndDate = Boolean(event.ends_at);
+  const hasLocation = Boolean(event.location);
+
+  const titleFontSize = event.title.length > 30 ? Math.round(56 * S) : Math.round(68 * S);
+  const titleLineH = titleFontSize + Math.round(16 * S);
+  const titleLines = Math.ceil(event.title.length / 22);
+  const gapAfterTitle = Math.round(36 * S);
+
+  const orgPillH = Math.round(60 * S);
+  const gapAfterOrg = Math.round(36 * S);
+
+  const dateRowH = Math.round(80 * S);
+  const locationRowH = Math.round(76 * S);
+
+  const gapBeforeStats = Math.round(24 * S);
+  const boxW = Math.round(310 * S), boxH = Math.round(140 * S), boxGap = Math.round(36 * S);
+
+  const gapBeforePanel = Math.round(40 * S);
+  const panelH = Math.round(168 * S);
+
+  let blockH = titleLines * titleLineH + gapAfterTitle;
+  if (hasOrg) blockH += orgPillH + gapAfterOrg;
+  if (hasStartDate) blockH += dateRowH;
+  if (hasLocation) blockH += locationRowH;
+  blockH += gapBeforeStats + boxH;
+  if (sharedBy) blockH += gapBeforePanel + panelH;
+
+  // ── Posición vertical del bloque (se centra en el espacio disponible) ──────
+  const blockTopMin = coverImg ? (cardY + cardH + Math.round(56 * S)) : 350;
+  const badgeTop = H - Math.round(140 * S);
+  const blockBottomMax = badgeTop - Math.round(40 * S);
+  const availableSpace = blockBottomMax - blockTopMin;
+
+  let contentY = blockTopMin;
+  if (blockH < availableSpace) {
+    contentY = blockTopMin + (availableSpace - blockH) / 2;
   }
 
   // ── Title ──────────────────────────────────────────────────────────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#ffffff';
-  const titleFontSize = event.title.length > 30 ? 56 : 68;
-  const titleLineH = titleFontSize + 16;
   ctx.font = `bold ${titleFontSize}px system-ui, sans-serif`;
   ctx.shadowColor = 'rgba(0,0,0,0.7)';
-  ctx.shadowBlur = 24;
-  wrapText(ctx, event.title, W / 2, contentY, W - 160, titleLineH);
+  ctx.shadowBlur = Math.round(24 * S);
+  wrapText(ctx, event.title, W / 2, contentY, cardW, titleLineH);
   ctx.shadowBlur = 0;
 
-  const titleLines = Math.ceil(event.title.length / 26);
-  let y = contentY + titleLines * titleLineH + 36;
+  let y = contentY + titleLines * titleLineH + gapAfterTitle;
 
   // ── Organization pill ─────────────────────────────────────────────────────
-  if (event.organization || event.community_name) {
+  if (hasOrg) {
     const orgText = event.organization || event.community_name;
-    ctx.font = '36px system-ui, sans-serif';
-    const orgPillW = ctx.measureText(orgText).width + 52;
-    const orgPillH = 60;
+    ctx.font = `${Math.round(36 * S)}px system-ui, sans-serif`;
+    const orgPillW = ctx.measureText(orgText).width + Math.round(52 * S);
     const orgPillX = (W - orgPillW) / 2;
     ctx.fillStyle = 'rgba(251,191,36,0.18)';
-    roundRect(ctx, orgPillX, y, orgPillW, orgPillH, 30);
+    roundRect(ctx, orgPillX, y, orgPillW, orgPillH, Math.round(30 * S));
     ctx.fill();
     ctx.strokeStyle = 'rgba(251,191,36,0.45)';
     ctx.lineWidth = 2;
-    roundRect(ctx, orgPillX, y, orgPillW, orgPillH, 30);
+    roundRect(ctx, orgPillX, y, orgPillW, orgPillH, Math.round(30 * S));
     ctx.stroke();
     ctx.fillStyle = '#fbbf24';
     ctx.textBaseline = 'middle';
     ctx.fillText(orgText, W / 2, y + orgPillH / 2);
-    y += orgPillH + 36;
+    y += orgPillH + gapAfterOrg;
   }
 
   // ── Dates ──────────────────────────────────────────────────────────────────
-  const startDate = event.event_date
+  const startDate = hasStartDate
     ? new Date(event.event_date).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : null;
-  const endDate = event.ends_at
+  const endDate = hasEndDate
     ? new Date(event.ends_at).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : null;
 
   if (startDate) {
     ctx.fillStyle = 'rgba(203,213,225,0.90)';
     ctx.textBaseline = 'middle';
-    const dFont = endDate ? '30px' : '36px';
-    ctx.font = `${dFont} system-ui, sans-serif`;
+    const dFont = endDate ? Math.round(30 * S) : Math.round(36 * S);
+    ctx.font = `${dFont}px system-ui, sans-serif`;
     const dStr = endDate ? `📅 ${startDate}   →   ${endDate}` : `📅 ${startDate}`;
-    ctx.fillText(dStr, W / 2, y + 28);
-    y += 80;
+    ctx.fillText(dStr, W / 2, y + Math.round(28 * S));
+    y += dateRowH;
+  }
+
+  // ── Location ───────────────────────────────────────────────────────────────
+  if (hasLocation) {
+    ctx.fillStyle = 'rgba(203,213,225,0.85)';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${Math.round(32 * S)}px system-ui, sans-serif`;
+    ctx.fillText(`📍 ${event.location}`, W / 2, y + Math.round(26 * S));
+    y += locationRowH;
   }
 
   // ── Stats boxes ───────────────────────────────────────────────────────────
-  const statsY = y + 24;
+  const statsY = y + gapBeforeStats;
   const statsData = [
     { value: attendeeCount || event.attendee_count || 0, label: 'planificaciones', icon: '📅' },
     { value: likeCount || event.like_count || 0, label: 'likes', icon: '♥' },
   ];
-  const boxW = 310, boxH = 140, gap = 36;
-  const totalBoxW = statsData.length * boxW + (statsData.length - 1) * gap;
+  const totalBoxW = statsData.length * boxW + (statsData.length - 1) * boxGap;
   let bx = (W - totalBoxW) / 2;
 
   for (const stat of statsData) {
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    roundRect(ctx, bx, statsY, boxW, boxH, 26);
+    roundRect(ctx, bx, statsY, boxW, boxH, Math.round(26 * S));
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.lineWidth = 1.5;
-    roundRect(ctx, bx, statsY, boxW, boxH, 26);
+    roundRect(ctx, bx, statsY, boxW, boxH, Math.round(26 * S));
     ctx.stroke();
-    ctx.font = 'bold 54px system-ui, sans-serif';
+    ctx.font = `bold ${Math.round(54 * S)}px system-ui, sans-serif`;
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(`${stat.icon} ${stat.value}`, bx + boxW / 2, statsY + 20);
-    ctx.font = '27px system-ui, sans-serif';
+    ctx.fillText(`${stat.icon} ${stat.value}`, bx + boxW / 2, statsY + Math.round(20 * S));
+    ctx.font = `${Math.round(27 * S)}px system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(148,163,184,0.80)';
-    ctx.fillText(stat.label, bx + boxW / 2, statsY + 90);
-    bx += boxW + gap;
+    ctx.fillText(stat.label, bx + boxW / 2, statsY + Math.round(90 * S));
+    bx += boxW + boxGap;
   }
 
   // ── "Compartido por" — mascota del usuario que comparte ────────────────────
   if (sharedBy) {
-    const panelH = 168;
-    const panelX = 80;
-    const panelW = W - 160;
-    const badgeTop = H - 140; // zona donde empieza el badge de URL
-    // Por defecto anclamos el panel cerca del pie de la imagen; si el
-    // contenido de arriba (título/estadísticas) es muy largo, lo bajamos
-    // lo justo para no solaparlo, pero nunca invadimos el badge de URL.
-    const bottomAnchoredY = badgeTop - 40 - panelH;
-    const maxPanelY = badgeTop - panelH - 24;
-    let panelY = Math.max(bottomAnchoredY, statsY + boxH + 40);
-    panelY = Math.min(panelY, maxPanelY);
+    const statsBottom = statsY + boxH;
+    const panelX = sideMargin;
+    const panelW = cardW;
+    const maxPanelY = badgeTop - panelH - Math.round(24 * S);
+
+    let panelY = statsBottom + gapBeforePanel;
+    if (panelY > maxPanelY) {
+      // Solo lo compactamos hasta el límite del badge si sigue habiendo
+      // hueco suficiente respecto a las estadísticas; si no, priorizamos
+      // no solapar con ellas antes que con el badge inferior.
+      panelY = Math.max(statsBottom + Math.round(12 * S), maxPanelY);
+    }
 
     ctx.save();
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    roundRect(ctx, panelX, panelY, panelW, panelH, 30);
+    roundRect(ctx, panelX, panelY, panelW, panelH, Math.round(30 * S));
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.16)';
     ctx.lineWidth = 1.5;
-    roundRect(ctx, panelX, panelY, panelW, panelH, 30);
+    roundRect(ctx, panelX, panelY, panelW, panelH, Math.round(30 * S));
     ctx.stroke();
     ctx.restore();
 
-    const avatarSize = 128;
-    const avatarX = panelX + 22;
+    const avatarSize = Math.round(128 * S);
+    const avatarX = panelX + Math.round(22 * S);
     const avatarY = panelY + (panelH - avatarSize) / 2;
     const avatarCx = avatarX + avatarSize / 2;
     const avatarCy = avatarY + avatarSize / 2;
@@ -393,11 +444,11 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
     // Anillo de color detrás del avatar de la mascota
     ctx.save();
     ctx.shadowColor = sharerHex;
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = Math.round(18 * S);
     ctx.strokeStyle = sharerHex;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = Math.round(4 * S);
     ctx.beginPath();
-    ctx.arc(avatarCx, avatarCy, avatarSize / 2 + 6, 0, Math.PI * 2);
+    ctx.arc(avatarCx, avatarCy, avatarSize / 2 + Math.round(6 * S), 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
@@ -418,25 +469,26 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
     ctx.restore();
 
     // Texto: "Compartido por" + nombre del usuario
-    const textX = avatarX + avatarSize + 30;
+    const textX = avatarX + avatarSize + Math.round(30 * S);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = 'rgba(203,213,225,0.75)';
-    ctx.font = '28px system-ui, sans-serif';
-    ctx.fillText('Compartido por', textX, panelY + panelH / 2 - 12);
+    ctx.font = `${Math.round(28 * S)}px system-ui, sans-serif`;
+    ctx.fillText('Compartido por', textX, panelY + panelH / 2 - Math.round(12 * S));
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 44px system-ui, sans-serif';
-    ctx.fillText(sharedBy.username || 'Alguien', textX, panelY + panelH / 2 + 42);
+    ctx.font = `bold ${Math.round(44 * S)}px system-ui, sans-serif`;
+    ctx.fillText(sharedBy.username || 'Alguien', textX, panelY + panelH / 2 + Math.round(42 * S));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
   }
 
   // ── URL / CTA at bottom ───────────────────────────────────────────────────
-  drawUrlBadge(ctx, W, H);
+  drawUrlBadge(ctx, W, H, S);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
+// ── Share / Download ──────────────────────────────────────────────────────────
 // ── Share / Download ──────────────────────────────────────────────────────────
 
 export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 'SocialBattery') {
@@ -473,29 +525,29 @@ export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 
  * Draws a clean URL badge at the bottom of the story canvas.
  * Visible enough to read, styled as a pill with the app URL.
  */
-function drawUrlBadge(ctx, W, H) {
+function drawUrlBadge(ctx, W, H, scale = 1) {
   const APP_URL = 'portfolio-nmc3.onrender.com';
   const label = '🔋 ' + APP_URL;
 
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 32px system-ui, sans-serif';
+  ctx.font = `bold ${Math.round(32 * scale)}px system-ui, sans-serif`;
 
-  const badgeW = ctx.measureText(label).width + 64;
-  const badgeH = 72;
+  const badgeW = ctx.measureText(label).width + Math.round(64 * scale);
+  const badgeH = Math.round(72 * scale);
   const badgeX = (W - badgeW) / 2;
-  const badgeY = H - 140;
+  const badgeY = H - Math.round(140 * scale);
 
   // Pill background
   ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 36);
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, Math.round(36 * scale));
   ctx.fill();
 
   // Pill border
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
   ctx.lineWidth = 1.5;
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 36);
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, Math.round(36 * scale));
   ctx.stroke();
 
   // Text
