@@ -2588,6 +2588,11 @@ export function MascotProvider({ children }) {
 
   return (
     <MascotContext.Provider value={{
+      // Expuesto para MascotPreviewSync.jsx: evita que sincronice el
+      // overlay con el servidor con los valores por defecto, antes de que
+      // dé tiempo a leer el skin real desde localStorage (ver efecto de
+      // hidratación más arriba).
+      skinHydrated,
       unlocked,
       unlockedActivities,
       unlockedAccessories,

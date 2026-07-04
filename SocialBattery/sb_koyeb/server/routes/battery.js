@@ -101,7 +101,7 @@ router.get('/friends', requireAuth, async (req, res) => {
 
   const { data: friends, error } = await supabase
     .from('users')
-    .select('id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at')
+    .select('id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url')
     .in('id', friendIds)
     .order('battery_level', { ascending: false });
 

@@ -23,6 +23,7 @@ import ShopPage from './pages/ShopPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 import { TutorialProvider } from './context/TutorialContext';
 import { MascotProvider } from './context/MascotContext';
+import MascotPreviewSync from './components/MascotPreviewSync';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
@@ -66,7 +67,12 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
+    <>
+      {/* Sin JSX propio — sube en segundo plano el retrato de la mascota
+          equipada para que se vea personalizada en la tarjeta de amigo de
+          los demás (ver FriendCard.jsx). */}
+      <MascotPreviewSync />
+      <Routes>
       <Route path="/"                         element={<HomePage />} />
       <Route path="/auth"                     element={<Navigate to="/" replace />} />
       <Route path="/friends"                  element={<FriendsPage />} />
@@ -83,7 +89,8 @@ function AppRoutes() {
       <Route path="/community/event/:eventId"  element={<EventDetailPage />} />
       <Route path="/community/:communityId"   element={<CommunityDetailPage />} />
       <Route path="*"                         element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

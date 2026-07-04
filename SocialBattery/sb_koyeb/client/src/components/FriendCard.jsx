@@ -1,9 +1,19 @@
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { isOnline } from '../hooks/usePresence';
 import { useSettings } from '../context/SettingsContext';
+import MascotDisplay from './MascotDisplay';
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 export default function FriendCard({ friend, online: onlineProp, onClick }) {
   const color = getBatteryColor(friend.battery_level ?? 50);
+  const tier = getMascotTier(friend.battery_level ?? 50);
   const { showLastSeen } = useSettings();
   // If caller passes online prop (reactive), use it; otherwise fall back to local check
   const online = onlineProp !== undefined ? onlineProp : isOnline(friend.last_seen_at);
@@ -31,6 +41,37 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
         </div>
         {/* Online dot */}
         <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
+      </div>
+
+      {/* Mascota — refleja el nivel de batería del amigo. La base (color/
+          tier) se resuelve siempre localmente a partir de su battery_level,
+          pero la ropa/calzado/gorro/accesorios/actividad NO viven aquí: son
+          personalización local de cada usuario. Para poder mostrarla, cada
+          cliente "hornea" su propio equipado en un PNG (ver
+          lib/mascotRenderer.js → renderMascotOverlayBlob y
+          components/MascotPreviewSync.jsx) que se sube al servidor
+          (users.mascot_preview_url) y llega aquí como
+          friend.mascot_preview_url — simplemente se superpone encima de la
+          mascota base, ya recoloreado y posicionado. */}
+      <div className="relative flex-shrink-0" style={{ width: 40, height: 40 }}>
+        <MascotDisplay
+          tier={tier}
+          size={40}
+          glowColor={color.hex}
+          outfitSrc={null}
+          feetSrc={null}
+          headSrc={null}
+          accessories={[]}
+          activityLayers={[]}
+        />
+        {friend.mascot_preview_url && (
+          <img
+            src={friend.mascot_preview_url}
+            alt=""
+            draggable={false}
+            className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+          />
+        )}
       </div>
 
       {/* Info */}

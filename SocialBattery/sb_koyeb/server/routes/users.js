@@ -6,12 +6,21 @@ const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 
 const upload = createImageUpload({ maxSizeMb: 2 });
+const uploadMascotPreview = createImageUpload({ maxSizeMb: 2 });
 
 function uploadAvatar(req, res, next) {
   upload.single('avatar')(req, res, err => {
     if (!err) return next();
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return res.status(status).json({ error: err.message || 'No se pudo subir la imagen' });
+  });
+}
+
+function uploadMascotPreviewFile(req, res, next) {
+  uploadMascotPreview.single('mascot')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la mascota' });
   });
 }
 
@@ -34,6 +43,37 @@ router.post('/avatar', requireAuth, uploadAvatar, async (req, res) => {
     res.json({ url });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'No se pudo subir la imagen' });
+  }
+});
+
+// POST /api/users/mascot-preview — sube el "retrato" de la mascota equipada
+// (ropa/calzado/gorro/accesorios/actividad, ya recoloreados y horneados en
+// un unico PNG por el cliente — ver lib/mascotRenderer.js ->
+// renderMascotOverlayBlob) para que aparezca en la tarjeta de amigo de los
+// demas (ver FriendCard.jsx). Si no se adjunta archivo (mascota base, sin
+// nada equipado) se interpreta como "sin personalizacion" y se limpia la
+// URL guardada.
+router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req, res) => {
+  try {
+    let url = null;
+    if (req.file) {
+      url = await storeImage({
+        file: req.file,
+        objectName: `mascot-previews/${req.user.id}`,
+        fallbackMaxLength: 3000000,
+      });
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update({ mascot_preview_url: url })
+      .eq('id', req.user.id);
+
+    if (error) throw error;
+
+    res.json({ url });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'No se pudo guardar la mascota' });
   }
 });
 

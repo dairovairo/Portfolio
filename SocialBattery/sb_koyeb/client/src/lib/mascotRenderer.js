@@ -138,7 +138,12 @@ function drawContain(ctx, img, x, y, w, h, alignX = 'center', alignY = 'center')
  * (equivalente al drop-shadow de glowColor en MascotDisplay).
  */
 export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, options = {}) {
-  if (!mascot || !mascot.base) return;
+  // Antes exigía `mascot.base` para dibujar cualquier cosa. Ahora `base`
+  // puede venir explícitamente a `null` (ver renderMascotOverlayBlob más
+  // abajo, que dibuja SOLO las capas de ropa/calzado/gorro/accesorios/
+  // actividad, sin la mascota de fondo), así que solo se descarta si no hay
+  // objeto `mascot` en absoluto.
+  if (!mascot) return;
   const { glowColor } = options;
 
   const srcs = [
@@ -300,4 +305,48 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
       drawContain(ctx, img, boxX, boxY, boxSize, boxSize);
     }
   }
+}
+
+// ── Overlay para la tarjeta de amigos ──────────────────────────────────────────
+
+/**
+ * renderMascotOverlayBlob — genera un PNG cuadrado y transparente con SOLO
+ * las capas equipadas por encima de la mascota base (calzado, torso, gorro,
+ * accesorios y actividad, todas ya recoloreadas si el usuario personalizó
+ * algún ítem), sin la propia mascota de fondo.
+ *
+ * Se sube al servidor (ver users.mascot_preview_url / POST
+ * /api/users/mascot-preview) para que los amigos puedan verla en su
+ * tarjeta del menú principal: FriendCard superpone este PNG sobre la
+ * mascota base del TIER de cada amigo (que depende de la batería de cada
+ * uno, no de quien mira), así que aquí no importa qué tier se use para
+ * resolver las capas — todos los offsets/escalas son porcentuales y no
+ * dependen del tier, solo la propia imagen base (que se descarta).
+ *
+ * Devuelve `null` si no hay ninguna capa equipada (mascota base sin
+ * personalizar): en ese caso no hace falta generar ni subir nada.
+ */
+export async function renderMascotOverlayBlob(mascotApi, size = 256) {
+  const resolved = await resolveMascotLayers('mid', mascotApi);
+
+  const hasAnyLayer = Boolean(
+    resolved.outfit ||
+    resolved.feet ||
+    resolved.head ||
+    (resolved.accessories && resolved.accessories.length) ||
+    (resolved.activityLayers && resolved.activityLayers.length)
+  );
+  if (!hasAnyLayer) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // `base: null` a propósito — ver comentario de la función.
+  await drawMascotOnCanvas(ctx, { ...resolved, base: null }, 0, 0, size);
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/png');
+  });
 }
