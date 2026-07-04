@@ -208,7 +208,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select(`
-      id, username, display_name, bio, avatar_url, interests, show_interests, show_public_stats, show_badges,
+      id, username, display_name, bio, avatar_url, mascot_preview_url, interests, show_interests, show_public_stats, show_badges,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)

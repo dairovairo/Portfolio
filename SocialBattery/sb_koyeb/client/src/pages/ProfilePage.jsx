@@ -11,7 +11,16 @@ import { BatteryLineChart, BatteryHeatmap } from '../components/BatteryChart';
 import BatterySlider from '../components/BatterySlider';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import BottomNav from '../components/BottomNav';
+import MascotDisplay from '../components/MascotDisplay';
 import { ALL_INTERESTS } from './OnboardingPage';
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 // ── Public Stats ──────────────────────────────────────────────────────────────
 function formatMemberSince(isoDate) {
@@ -242,31 +251,46 @@ export default function ProfilePage() {
           <div className="px-5 pb-5 -mt-10">
             {/* Avatar + edit avatar */}
             <div className="flex items-end justify-between mb-3">
-              <div className="relative">
-                <div
-                  className="w-20 h-20 rounded-2xl border-4 flex items-center justify-center text-2xl font-display font-bold overflow-hidden"
-                  style={{ borderColor: 'var(--sb-card)', background: `${color.hex}20` }}
-                >
-                  {avatarSrc ? (
-                    <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span style={{ color: color.hex }}>{avatarInitial}</span>
-                  )}
-                  {uploadingAvatar && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-2xl">
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    </div>
-                  )}
+              <div className="flex items-end gap-3">
+                <div className="relative">
+                  <div
+                    className="w-20 h-20 rounded-2xl border-4 flex items-center justify-center text-2xl font-display font-bold overflow-hidden"
+                    style={{ borderColor: 'var(--sb-card)', background: `${color.hex}20` }}
+                  >
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span style={{ color: color.hex }}>{avatarInitial}</span>
+                    )}
+                    {uploadingAvatar && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-2xl">
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="absolute -bottom-1.5 -right-1.5 bg-accent-primary text-white w-7 h-7
+                      rounded-full flex items-center justify-center text-xs border-2 border-surface-card
+                      hover:bg-accent-primary/80 transition-all"
+                  >
+                    📷
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                 </div>
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="absolute -bottom-1.5 -right-1.5 bg-accent-primary text-white w-7 h-7
-                    rounded-full flex items-center justify-center text-xs border-2 border-surface-card
-                    hover:bg-accent-primary/80 transition-all"
-                >
-                  📷
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+
+                {/* Mascota propia — a la derecha de la foto de perfil. Al ser
+                    tu propio dispositivo, MascotDisplay lee directamente del
+                    contexto (useMascot) tu equipado real (ropa/calzado/gorro/
+                    accesorios/actividad), sin necesidad de overrides ni de
+                    mascot_preview_url. */}
+                <div className="flex-shrink-0" style={{ width: 64, height: 64 }}>
+                  <MascotDisplay
+                    tier={getMascotTier(profile?.battery_level ?? 50)}
+                    size={64}
+                    glowColor={color.hex}
+                  />
+                </div>
               </div>
 
               {/* Edit button */}

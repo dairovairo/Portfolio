@@ -43,37 +43,6 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
         <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
       </div>
 
-      {/* Mascota — refleja el nivel de batería del amigo. La base (color/
-          tier) se resuelve siempre localmente a partir de su battery_level,
-          pero la ropa/calzado/gorro/accesorios/actividad NO viven aquí: son
-          personalización local de cada usuario. Para poder mostrarla, cada
-          cliente "hornea" su propio equipado en un PNG (ver
-          lib/mascotRenderer.js → renderMascotOverlayBlob y
-          components/MascotPreviewSync.jsx) que se sube al servidor
-          (users.mascot_preview_url) y llega aquí como
-          friend.mascot_preview_url — simplemente se superpone encima de la
-          mascota base, ya recoloreado y posicionado. */}
-      <div className="relative flex-shrink-0" style={{ width: 40, height: 40 }}>
-        <MascotDisplay
-          tier={tier}
-          size={40}
-          glowColor={color.hex}
-          outfitSrc={null}
-          feetSrc={null}
-          headSrc={null}
-          accessories={[]}
-          activityLayers={[]}
-        />
-        {friend.mascot_preview_url && (
-          <img
-            src={friend.mascot_preview_url}
-            alt=""
-            draggable={false}
-            className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-          />
-        )}
-      </div>
-
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -93,6 +62,39 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
           <div className="text-xs text-surface-muted mt-1">
             Última actualización: {formatRelativeTime(friend.battery_updated_at)}
           </div>
+        )}
+      </div>
+
+      {/* Mascota — refleja el nivel de batería del amigo. La base (color/
+          tier) se resuelve siempre localmente a partir de su battery_level,
+          pero la ropa/calzado/gorro/accesorios/actividad NO viven aquí: son
+          personalización local de cada usuario. Para poder mostrarla, cada
+          cliente "hornea" su propio equipado en un PNG (ver
+          lib/mascotRenderer.js → renderMascotOverlayBlob y
+          components/MascotPreviewSync.jsx) que se sube al servidor
+          (users.mascot_preview_url) y llega aquí como
+          friend.mascot_preview_url — simplemente se superpone encima de la
+          mascota base, ya recoloreado y posicionado.
+          Colocada a la derecha del nombre de perfil (antes iba a la
+          izquierda, entre el avatar y el nombre). */}
+      <div className="relative flex-shrink-0" style={{ width: 40, height: 40 }}>
+        <MascotDisplay
+          tier={tier}
+          size={40}
+          glowColor={color.hex}
+          outfitSrc={null}
+          feetSrc={null}
+          headSrc={null}
+          accessories={[]}
+          activityLayers={[]}
+        />
+        {friend.mascot_preview_url && (
+          <img
+            src={friend.mascot_preview_url}
+            alt=""
+            draggable={false}
+            className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+          />
         )}
       </div>
 
