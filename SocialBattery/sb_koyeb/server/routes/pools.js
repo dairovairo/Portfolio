@@ -307,7 +307,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url),
         pool_participants(
           joined_at, reminder_minutes_before,
-          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url)
         )
       `)
       .eq('id', req.params.id)
@@ -333,6 +333,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         avatar_url: user?.avatar_url,
         battery_level: user?.battery_level,
         mascot_preview_url: user?.mascot_preview_url,
+        last_seen_at: user?.last_seen_at,
         joined_at: p.joined_at,
       };
     }).filter(p => p.id);

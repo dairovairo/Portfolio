@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
-import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 import MascotDisplay from '../components/MascotDisplay';
@@ -362,12 +362,6 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                           <div className="text-[11px] text-slate-600 font-mono mt-0.5">Sin identidad activa</div>
                         )}
                       </div>
-
-                      {member.last_seen_at && (
-                        <div className="text-[11px] text-surface-muted/70 font-mono mt-2">
-                          {formatRelativeTime(member.last_seen_at)}
-                        </div>
-                      )}
                     </div>
 
                     {/* Insignia: a la izquierda del % de batería y de la
@@ -379,7 +373,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       </div>
                     )}
 
-                    <div className="flex-shrink-0 flex flex-col items-center gap-1.5">
+                    <div className="flex-shrink-0 flex flex-col items-center gap-1.5" style={{ width: 38 }}>
                       <div className="font-display font-bold tabular-nums text-sm" style={{ color: color.hex }}>
                         {member.battery_level ?? '—'}%
                       </div>

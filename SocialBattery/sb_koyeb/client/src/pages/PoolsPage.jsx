@@ -4,8 +4,9 @@ import BottomNav from '../components/BottomNav';
 import TutorialOverlay from '../components/TutorialOverlay';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+import { isOnline } from '../hooks/usePresence';
 import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 import MascotDisplay from '../components/MascotDisplay';
@@ -361,7 +362,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
                   <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-bg/50 transition-colors">
                     <div className="relative flex-shrink-0">
                       <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
                         style={{ borderColor: batteryColor?.hex, background: `${batteryColor?.hex}15` }}
                       >
                         {p.avatar_url
@@ -369,12 +370,16 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
                           : (p.username?.[0] || '?').toUpperCase()
                         }
                       </div>
-                      {/* Mascota — mismo offset que en el panel de integrantes
-                          del grupo (GroupChatPage.jsx): -0.25rem base + 6% a
-                          la derecha / 8% hacia abajo sobre el tamaño del avatar. */}
-                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', right: 'calc(-0.25rem - 6%)' }}>
-                        <MiniMascot user={p} size={28} />
+                      {/* Mascota — izquierda-abajo del avatar, mismo patrón
+                          que en el panel de integrantes del grupo
+                          (GroupChatPage.jsx). */}
+                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', left: 'calc(-0.25rem - 6%)' }}>
+                        <MiniMascot user={p} size={32} />
                       </div>
+                      {/* Punto de en línea — derecha-abajo, mismo patrón que FriendCard.jsx / GroupChatPage.jsx */}
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${isOnline(p.last_seen_at) ? 'bg-green-400' : 'bg-slate-600'}`}
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-display font-semibold text-surface-text truncate flex items-center gap-1.5">
@@ -385,21 +390,22 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
                           </span>
                         )}
                       </div>
-                      {p.battery_level != null && (
-                        <span className="text-xs font-mono" style={{ color: batteryColor?.hex }}>
-                          🔋 {p.battery_level}%
-                        </span>
-                      )}
                     </div>
-                    {/* Insignia — a la izquierda de la hora de apuntado,
-                        centrada verticalmente (la fila ya usa items-center). */}
+                    {/* Insignia — a la izquierda del % de batería, centrada
+                        verticalmente (la fila ya usa items-center). */}
                     {identity && (
                       <IdentityBadge identity={identity} size="panel" showName align="right" popoverPlacement={isFirst ? 'bottom' : 'top'} />
                     )}
-                    {p.joined_at && (
-                      <span className="text-xs text-slate-600 font-mono flex-shrink-0">
-                        {formatRelativeTime(p.joined_at)}
-                      </span>
+                    {/* % de batería — ancho fijo para que no desplace la
+                        insignia al pasar de 1 a 2 dígitos (mismo motivo que
+                        en el panel de integrantes del grupo). */}
+                    {p.battery_level != null && (
+                      <div
+                        className="font-display font-bold tabular-nums text-sm text-center flex-shrink-0"
+                        style={{ color: batteryColor?.hex, width: 38 }}
+                      >
+                        {p.battery_level}%
+                      </div>
                     )}
                   </div>
                 );
@@ -412,7 +418,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
             <div className="mt-3 space-y-1.5">
               {Array.from({ length: Math.min(pool.spots_left, 3) }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-2 rounded-xl border border-dashed border-surface-border/50 opacity-40">
-                  <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
                     <span className="text-slate-600 text-xs">?</span>
                   </div>
                   <span className="text-xs text-slate-600 font-mono">Plaza libre</span>
