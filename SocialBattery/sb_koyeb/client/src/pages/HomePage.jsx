@@ -440,6 +440,7 @@ export default function HomePage() {
         username: profile?.username || '',
         updatedAt: profile?.battery_updated_at,
         mascot,
+        mascotName: profile?.mascot_name || 'Volty',
       });
       const result = await shareOrDownloadBlob(blob, 'mi-bateria-social.png', 'Mi batería social · SocialBattery');
       if (result.method === 'download') {

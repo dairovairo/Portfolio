@@ -9,7 +9,7 @@ import { drawMascotOnCanvas } from './mascotRenderer';
 
 // ── Battery Story ──────────────────────────────────────────────────────────────
 
-export async function generateBatteryStoryBlob({ level, label, hex, username, updatedAt, mascot }) {
+export async function generateBatteryStoryBlob({ level, label, hex, username, updatedAt, mascot, mascotName }) {
   const W = 1080;
   const H = 1920;
 
@@ -122,6 +122,14 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
       // Si algo falla al dibujar la mascota, seguimos sin ella.
     }
   }
+
+  // ── Nombre de la mascota — pequeño, justo debajo de la mascota, dentro
+  // del anillo (por defecto "Volty" si el usuario no le puso otro nombre). ──
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.font = '600 30px system-ui, sans-serif';
+  ctx.fillText(mascotName || 'Volty', cx, arenaY + mascotBoxSize / 2 + 26);
 
   // ── Porcentaje ────────────────────────────────────────────────────────────
   ctx.textAlign = 'center';

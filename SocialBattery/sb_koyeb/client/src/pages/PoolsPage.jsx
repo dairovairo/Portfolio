@@ -362,7 +362,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
                   <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-bg/50 transition-colors">
                     <div className="relative flex-shrink-0">
                       <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
                         style={{ borderColor: batteryColor?.hex, background: `${batteryColor?.hex}15` }}
                       >
                         {p.avatar_url
@@ -374,7 +374,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
                           que en el panel de integrantes del grupo
                           (GroupChatPage.jsx). */}
                       <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', left: 'calc(-0.25rem - 6%)' }}>
-                        <MiniMascot user={p} size={32} />
+                        <MiniMascot user={p} size={35} />
                       </div>
                       {/* Punto de en línea — derecha-abajo, mismo patrón que FriendCard.jsx / GroupChatPage.jsx */}
                       <span
@@ -418,7 +418,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
             <div className="mt-3 space-y-1.5">
               {Array.from({ length: Math.min(pool.spots_left, 3) }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-2 rounded-xl border border-dashed border-surface-border/50 opacity-40">
-                  <div className="w-9 h-9 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
                     <span className="text-slate-600 text-xs">?</span>
                   </div>
                   <span className="text-xs text-slate-600 font-mono">Plaza libre</span>
