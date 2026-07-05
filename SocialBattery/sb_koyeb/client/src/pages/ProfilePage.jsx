@@ -41,10 +41,10 @@ function StatsGrid({ stats }) {
   if (!stats) return null;
   const items = [
     { icon: '👥', label: 'Amigos',           value: stats.friends_count },
-    { icon: '🗓️', label: 'Planes creados',   value: stats.pools_created },
+    { icon: '📅', label: 'Planes creados',   value: stats.pools_created },
     { icon: '🚀', label: 'Planes unidos',    value: stats.pools_joined },
     { icon: '🔋', label: 'Updates batería',  value: stats.battery_updates },
-    { icon: '⏱️', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
+    { icon: '⏰', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
   ];
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
@@ -113,7 +113,7 @@ export default function ProfilePage() {
   const [allBadges, setAllBadges] = useState([]);
   const [earnedBadgesMap, setEarnedBadgesMap] = useState({});
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [historyView, setHistoryView] = useState('line');
+  const [historyView, setHistoryView] = useState('heatmap');
   const [stats, setStats] = useState(null);
 
   // Edit state

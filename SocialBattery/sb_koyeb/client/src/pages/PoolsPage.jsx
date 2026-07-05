@@ -732,7 +732,7 @@ function CreatePoolModal({ onClose, onCreate }) {
                 Portada <span className="text-slate-600">(opcional)</span>
               </label>
               {coverPreview ? (
-                <div className="relative w-full h-24 overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                <div className="relative w-full h-[77px] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
                   <img src={coverPreview} alt="" className="h-full w-full object-cover" />
                   <button
                     type="button"
@@ -746,7 +746,7 @@ function CreatePoolModal({ onClose, onCreate }) {
                 <button
                   type="button"
                   onClick={() => coverInputRef.current?.click()}
-                  className="w-full h-24 rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 flex flex-col items-center justify-center gap-1 text-accent-glow hover:bg-accent-primary/10 transition-all"
+                  className="w-full h-[77px] rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 flex flex-col items-center justify-center gap-1 text-accent-glow hover:bg-accent-primary/10 transition-all"
                 >
                   <span className="text-lg">📷</span>
                   <span className="text-[11px] font-display font-semibold leading-tight">Añadir foto</span>
