@@ -948,7 +948,7 @@ export default function MessagesPage() {
   }
 
   async function toggleBlock() {
-    const name = friend?.display_name || 'este usuario';
+    const name = friend?.username || 'este usuario';
     setBlockActionLoading(true);
     try {
       if (blockedByMe) {
@@ -985,7 +985,7 @@ export default function MessagesPage() {
     _tickColorUnread: tickColorUnread,
     _tickColorSent: tickColorSent,
     reply_to: msg.reply_to
-      ? { ...msg.reply_to, _quoteLabel: msg.reply_to.sender_id === profile?.id ? 'Tú' : (friend?.display_name || 'este usuario') }
+      ? { ...msg.reply_to, _quoteLabel: msg.reply_to.sender_id === profile?.id ? 'Tú' : (friend?.username || 'este usuario') }
       : msg.reply_to,
   }));
 
@@ -1038,7 +1038,7 @@ export default function MessagesPage() {
       {/* Clear chat confirm */}
       {showClearConfirm && (
         <ClearChatModal
-          friendName={friend?.display_name || 'esta persona'}
+          friendName={friend?.username || 'esta persona'}
           onConfirm={clearChat}
           onCancel={() => setShowClearConfirm(false)}
           loading={clearingChat}
@@ -1048,7 +1048,7 @@ export default function MessagesPage() {
       {/* Block / unblock confirm */}
       {showBlockConfirm && (
         <BlockUserModal
-          friendName={friend?.display_name || 'este usuario'}
+          friendName={friend?.username || 'este usuario'}
           isBlocked={blockedByMe}
           onConfirm={toggleBlock}
           onCancel={() => setShowBlockConfirm(false)}
@@ -1073,14 +1073,14 @@ export default function MessagesPage() {
                   >
                     {friend.avatar_url
                       ? <img src={friend.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                      : friend.display_name?.[0]?.toUpperCase()
+                      : friend.username?.[0]?.toUpperCase()
                     }
                   </div>
                   <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-bg ${friendOnline ? 'bg-green-400' : 'bg-slate-600'}`} />
                 </div>
               </button>
               <button onClick={() => navigate(`/user/${friend.id}`)} className="flex-1 text-left">
-                <div className="font-display font-semibold text-surface-text text-sm">{friend.display_name}</div>
+                <div className="font-display font-semibold text-surface-text text-sm">{friend.username}</div>
                 <div className="text-xs flex items-center gap-1.5">
                   <span className="font-mono" style={{ color: friendColor?.hex }}>
                     🔋 {friend.battery_level}%{friend.battery_is_estimated ? ' ⚡' : ''}
@@ -1153,7 +1153,7 @@ export default function MessagesPage() {
             </p>
             {friend && !clearedAt && (
               <p className="text-xs text-slate-600">
-                {friend.display_name} tiene la batería al {friend.battery_level}%
+                {friend.username} tiene la batería al {friend.battery_level}%
               </p>
             )}
           </div>
@@ -1222,7 +1222,7 @@ export default function MessagesPage() {
           {replyingTo && (
             <ReplyComposerPreview
               replyingTo={replyingTo}
-              label={replyingTo.sender_id === profile?.id ? 'ti mismo' : (friend?.display_name || 'este usuario')}
+              label={replyingTo.sender_id === profile?.id ? 'ti mismo' : (friend?.username || 'este usuario')}
               onCancel={() => setReplyingTo(null)}
             />
           )}

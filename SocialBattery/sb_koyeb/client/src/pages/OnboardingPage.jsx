@@ -56,7 +56,6 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState(0);
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [interests, setInterests] = useState([]);
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -126,7 +125,6 @@ export default function OnboardingPage() {
 
         const profilePayload = {
           username: username.trim().toLowerCase(),
-          display_name: displayName.trim() || username.trim(),
           bio: bio.trim() || null,
           avatar_url: avatarUrl || null,
           initial_battery: 50,
@@ -198,7 +196,7 @@ export default function OnboardingPage() {
             <div className="text-center mb-6">
               <div className="text-5xl mb-3">👤</div>
               <h2 className="font-display text-2xl font-bold text-surface-text">¿Cómo te llaman?</h2>
-              <p className="text-surface-muted text-sm mt-1">Elige tu usuario único y nombre visible</p>
+              <p className="text-surface-muted text-sm mt-1">Elige tu nombre de usuario único</p>
             </div>
 
             <div className="space-y-4">
@@ -221,23 +219,6 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <p className="text-surface-muted/60 text-xs mt-1">Letras, números y _ · Permanente</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                  Nombre visible (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  placeholder="Tu nombre o apodo"
-                  maxLength={20}
-                  className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3
-                    text-surface-text text-sm placeholder-surface-muted focus:outline-none focus:border-accent-primary
-                    transition-colors"
-                />
-                <p className="text-surface-muted/60 text-xs mt-1">Puede tener espacios · Máx. 20 caracteres</p>
               </div>
 
               <div>
@@ -337,7 +318,7 @@ export default function OnboardingPage() {
                   ) : (
                     <div className="flex flex-col items-center gap-1">
                       <span className="text-3xl">
-                        {(displayName || username)?.[0]?.toUpperCase() || '?'}
+                        {username?.[0]?.toUpperCase() || '?'}
                       </span>
                     </div>
                   )}

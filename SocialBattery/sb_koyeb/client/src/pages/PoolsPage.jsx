@@ -139,11 +139,11 @@ function AvatarStack({ participants = [], total = 0, size = 'sm' }) {
             key={p.id}
             className={`${dim} rounded-full border-2 border-surface-card flex items-center justify-center font-display font-bold bg-accent-primary/20 text-accent-glow flex-shrink-0`}
             style={{ zIndex: shown.length - i }}
-            title={p.display_name}
+            title={p.username}
           >
             {p.avatar_url
               ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-              : (p.display_name?.[0] || '?').toUpperCase()
+              : (p.username?.[0] || '?').toUpperCase()
             }
           </div>
         ))}
@@ -255,12 +255,12 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
                     >
                       {p.avatar_url
                         ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                        : (p.display_name?.[0] || '?').toUpperCase()
+                        : (p.username?.[0] || '?').toUpperCase()
                       }
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-display font-semibold text-surface-text truncate flex items-center gap-1.5">
-                        {p.display_name}
+                        {p.username}
                         {isFirst && (
                           <span className="text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-full">
                             Organiza
@@ -417,7 +417,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
         <div className="flex items-center gap-2 text-xs text-surface-muted">
           <span>👤</span>
           <span>
-            {pool.creator?.display_name || pool.creator?.username}
+            {pool.creator?.username}
             {pool.is_creator ? ' (tú)' : ''}
           </span>
         </div>
@@ -493,7 +493,7 @@ function FriendPicker({ selected, onChange, label = 'Amigos' }) {
   }, []);
 
   const filtered = friends.filter(f =>
-    !search || f.display_name?.toLowerCase().includes(search.toLowerCase())
+    !search || f.username?.toLowerCase().includes(search.toLowerCase())
   );
 
   function toggle(id) {
@@ -533,11 +533,11 @@ function FriendPicker({ selected, onChange, label = 'Amigos' }) {
               <div className="w-7 h-7 rounded-full bg-accent-primary/20 flex items-center justify-center text-xs font-display font-bold text-accent-glow flex-shrink-0">
                 {f.avatar_url
                   ? <img src={f.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                  : (f.display_name?.[0] || '?').toUpperCase()
+                  : (f.username?.[0] || '?').toUpperCase()
                 }
               </div>
               <span className="flex-1 text-sm font-display font-semibold text-surface-text truncate">
-                {f.display_name || f.username}
+                {f.username}
               </span>
               {isSelected && <span className="text-accent-glow text-sm flex-shrink-0">✓</span>}
             </button>

@@ -198,12 +198,11 @@ export default function UserProfilePage() {
             >
               {user.avatar_url
                 ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                : user.display_name?.[0]?.toUpperCase()
+                : user.username?.[0]?.toUpperCase()
               }
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="font-display font-bold text-white text-xl truncate">{user.display_name}</h2>
-              <div className="text-sm text-slate-500 font-mono">@{user.username}</div>
+              <h2 className="font-display font-bold text-white text-xl truncate">@{user.username}</h2>
               {user.bio && <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{user.bio}</p>}
               {user.interests && user.interests.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">

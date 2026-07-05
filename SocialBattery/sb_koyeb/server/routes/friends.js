@@ -69,7 +69,7 @@ router.get('/requests', requireAuth, async (req, res) => {
     .from('friendships')
     .select(`
       id, created_at,
-      requester:requester_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+      requester:requester_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .eq('addressee_id', req.user.id)
     .eq('status', 'pending')
@@ -91,8 +91,8 @@ router.get('/', requireAuth, async (req, res) => {
     .from('friendships')
     .select(`
       id,
-      requester:requester_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
-      addressee:addressee_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+      requester:requester_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
+      addressee:addressee_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .eq('status', 'accepted')
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);

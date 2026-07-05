@@ -140,10 +140,10 @@ export function useMessageNotifications(profile, settings) {
           try {
             const { data } = await supabase
               .from('users')
-              .select('display_name, username')
+              .select('username')
               .eq('id', msg.sender_id)
               .single();
-            if (data) senderName = data.display_name || `@${data.username}`;
+            if (data) senderName = `@${data.username}`;
           } catch {}
 
           const body = msg.type === 'hangout_request'
@@ -302,7 +302,7 @@ export function useMessageNotifications(profile, settings) {
             // Skip if the user is already on the home feed
             if (!document.hidden && locationRef.current === '/') return;
 
-            const name  = updated.display_name || `@${updated.username}` || 'Un amigo';
+            const name  = `@${updated.username}` || 'Un amigo';
             const level = updated.battery_level;
             const emoji = level >= 70 ? '⚡' : level >= 40 ? '🔋' : '🪫';
 

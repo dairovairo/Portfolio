@@ -123,7 +123,7 @@ router.get('/search', requireAuth, async (req, res) => {
 
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, display_name, avatar_url, bio, battery_level, battery_is_estimated, battery_updated_at, last_seen_at')
+    .select('id, username, avatar_url, bio, battery_level, battery_is_estimated, battery_updated_at, last_seen_at')
     .ilike('username', `%${q}%`)
     .neq('id', req.user.id)
     .limit(10);
@@ -208,7 +208,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select(`
-      id, username, display_name, bio, avatar_url, mascot_preview_url, interests, show_interests, show_public_stats, show_badges,
+      id, username, bio, avatar_url, mascot_preview_url, interests, show_interests, show_public_stats, show_badges,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)
@@ -232,9 +232,8 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { display_name, avatar_url, bio, interests, show_interests, show_public_stats, show_badges } = req.body;
+  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges } = req.body;
   const updates = {};
-  if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 20);
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
   if (interests !== undefined) updates.interests = Array.isArray(interests) ? interests : [];

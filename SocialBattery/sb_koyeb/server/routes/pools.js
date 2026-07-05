@@ -167,7 +167,7 @@ function buildParticipantPreview(rawParticipants) {
       const user = applyBatteryExpiry(p.user);
       return {
         id: user?.id,
-        display_name: user?.display_name,
+        username: user?.username,
         avatar_url: user?.avatar_url,
         battery_level: user?.battery_level,
       };
@@ -188,10 +188,10 @@ router.get('/', requireAuth, async (req, res) => {
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
-        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
+        creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
           joined_at, reminder_minutes_before,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
         )
       `)
       .order('scheduled_at', { ascending: true })
@@ -304,10 +304,10 @@ router.get('/:id', requireAuth, async (req, res) => {
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
-        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
+        creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
           joined_at, reminder_minutes_before,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
         )
       `)
       .eq('id', req.params.id)
@@ -329,7 +329,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       const user = applyBatteryExpiry(p.user);
       return {
         id: user?.id,
-        display_name: user?.display_name,
+        username: user?.username,
         avatar_url: user?.avatar_url,
         battery_level: user?.battery_level,
         joined_at: p.joined_at,
@@ -440,7 +440,7 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, status, created_at, cover_image_url,
-        creator:creator_id(id, username, display_name, avatar_url)
+        creator:creator_id(id, username, avatar_url)
       `)
       .single();
 
@@ -464,7 +464,7 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
     const newBadgeId = await checkOrganizerBadgeForUser(userId).catch(() => null);
 
     // ── Push + Realtime broadcast (fire-and-forget) ──────────────────────────
-    const creatorName = pool.creator?.display_name || pool.creator?.username || 'Un amigo';
+    const creatorName = pool.creator?.username || 'Un amigo';
     const activityLabel = pool.activity.trim();
     const notifPayload = {
       title: `🎉 ${creatorName} propone una quedada`,
@@ -538,7 +538,7 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
         participant_count: 1,
         participants_preview: [{
           id: userId,
-          display_name: pool.creator?.display_name,
+          username: pool.creator?.username,
           avatar_url: pool.creator?.avatar_url,
         }],
         has_joined: true,
@@ -817,7 +817,7 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .from('pool_messages')
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('pool_id', poolId)
       .order('created_at', { ascending: true })
@@ -901,7 +901,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       .insert({ pool_id: poolId, sender_id: userId, content: content.trim(), type })
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
 
@@ -915,7 +915,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       },
     });
 
-    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    const senderName = data.sender?.username || 'Alguien';
     broadcastPoolChatMessage({
       poolId,
       senderId: userId,
@@ -970,7 +970,7 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       })
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
 
@@ -983,7 +983,7 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       },
     });
 
-    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    const senderName = data.sender?.username || 'Alguien';
     broadcastPoolChatMessage({
       poolId,
       senderId: userId,

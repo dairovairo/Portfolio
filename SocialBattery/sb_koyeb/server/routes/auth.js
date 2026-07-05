@@ -6,7 +6,7 @@ const { expireUserBatteryIfNeeded } = require('../lib/batteryExpiry');
 
 // POST /api/auth/profile — called after Supabase signup to create public profile
 router.post('/profile', requireAuth, async (req, res) => {
-  const { username, display_name, bio, avatar_url, initial_battery, interests } = req.body;
+  const { username, bio, avatar_url, initial_battery, interests } = req.body;
   const userId = req.user.id;
 
   if (!username || username.trim().length < 3) {
@@ -33,7 +33,11 @@ router.post('/profile', requireAuth, async (req, res) => {
     .upsert({
       id: userId,
       username: username.trim().toLowerCase(),
-      display_name: (display_name || username).trim().slice(0, 16),
+      // display_name ya no es un campo editable: el usuario solo tiene
+      // nombre de usuario. Se guarda igual al username para no romper la
+      // restricción NOT NULL de la columna ni el resto de queries que
+      // todavía la seleccionan (siempre coincide con el username).
+      display_name: username.trim().slice(0, 16),
       bio: bio ? bio.trim().slice(0, 160) : null,
       avatar_url: avatar_url || null,
       battery_level: batteryLevel,

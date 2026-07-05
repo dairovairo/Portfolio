@@ -270,7 +270,7 @@ function chooseAssignments(candidates, memberIds, scopeId = 'circle') {
 async function computeBadgesForMembers(memberIds, options = {}) {
   const { data: members, error: membersError } = await supabase
     .from('users')
-    .select('id, username, display_name, avatar_url, battery_level')
+    .select('id, username, avatar_url, battery_level')
     .in('id', memberIds);
   if (membersError) throw membersError;
 

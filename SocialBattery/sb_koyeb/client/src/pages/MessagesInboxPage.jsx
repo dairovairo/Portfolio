@@ -46,13 +46,13 @@ function ConversationRow({ conv, onClick, showOnline }) {
     <button onClick={onClick} className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left">
       <div className="relative flex-shrink-0">
         <div className="w-12 h-12 rounded-full flex items-center justify-center font-display font-bold border-2 text-lg" style={{ borderColor: color.hex, background: `${color.hex}15` }}>
-          {partner.avatar_url ? <img src={partner.avatar_url} alt="" className="w-full h-full rounded-full object-cover" /> : partner.display_name?.[0]?.toUpperCase()}
+          {partner.avatar_url ? <img src={partner.avatar_url} alt="" className="w-full h-full rounded-full object-cover" /> : partner.username?.[0]?.toUpperCase()}
         </div>
         <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-0.5">
-          <span className="font-display font-semibold text-surface-text text-sm truncate">{partner.display_name}</span>
+          <span className="font-display font-semibold text-surface-text text-sm truncate">{partner.username}</span>
           <div className="flex items-center gap-2 flex-shrink-0">
             {lastMessage && <span className="text-xs text-slate-600 font-mono">{formatRelativeTime(lastMessage.created_at)}</span>}
             {unread > 0 && <span className="bg-accent-primary text-surface-text text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">{unread > 9 ? '9+' : unread}</span>}
@@ -79,10 +79,10 @@ function FriendPickerRow({ user, isSelected, onToggle }) {
         {isSelected ? '✓' : ''}
       </div>
       <div className="w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-sm border-2 flex-shrink-0" style={{ borderColor: color.hex, background: `${color.hex}15` }}>
-        {user.avatar_url ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" /> : user.display_name?.[0]?.toUpperCase()}
+        {user.avatar_url ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" /> : user.username?.[0]?.toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="font-display font-semibold text-surface-text text-sm truncate">{user.display_name || user.username}</div>
+        <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
         <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
       </div>
       <span className="text-xs font-mono flex-shrink-0" style={{ color: color.hex }}>🔋 {user.battery_level ?? '?'}%</span>
@@ -346,7 +346,6 @@ export default function MessagesInboxPage() {
   const q = search.toLowerCase().trim();
   const filteredConversations = q
     ? conversations.filter(c =>
-        c.partner.display_name?.toLowerCase().includes(q) ||
         c.partner.username?.toLowerCase().includes(q)
       )
     : conversations;

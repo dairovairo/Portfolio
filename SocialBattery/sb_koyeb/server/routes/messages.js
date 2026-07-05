@@ -64,11 +64,11 @@ async function broadcastMessageLike({ messageId, authorId, likerId, messageType,
   try {
     const { data: liker } = await supabase
       .from('users')
-      .select('display_name, username')
+      .select('username')
       .eq('id', likerId)
       .single();
 
-    const likerName = liker?.display_name || (liker?.username ? `@${liker.username}` : 'Alguien');
+    const likerName = liker?.username ? `@${liker.username}` : 'Alguien';
     const preview = messageType === 'image'
       ? 'tu foto'
       : messageType === 'hangout_request'
@@ -122,8 +122,8 @@ router.get('/', requireAuth, async (req, res) => {
   const { data: friendships, error: fErr } = await supabase
     .from('friendships')
     .select(`
-      requester:requester_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
-      addressee:addressee_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+      requester:requester_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
+      addressee:addressee_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .eq('status', 'accepted')
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
@@ -141,8 +141,8 @@ router.get('/', requireAuth, async (req, res) => {
     .select(`
       id, content, type, hangout_status, created_at, read_at, delivered_at,
       deleted_for_everyone, deleted_for_self,
-      sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
-      receiver:receiver_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+      sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
+      receiver:receiver_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
     .order('created_at', { ascending: false })

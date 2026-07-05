@@ -20,7 +20,7 @@ function Avatar({ user, size = 'md', online = false }) {
     >
       {user.avatar_url
         ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-        : (user.display_name || user.username)?.[0]?.toUpperCase()
+        : user.username?.[0]?.toUpperCase()
       }
       <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
     </div>
@@ -56,7 +56,7 @@ function FriendRow({ friend, onMessage, onRemove, myBattery, online, showLastSee
       <div className="flex-1 min-w-0">
         <button onClick={() => navigate(`/user/${friend.id}`)} className="text-left w-full">
           <div className="flex items-center gap-2">
-            <span className="font-display font-semibold text-surface-text text-sm truncate">{friend.display_name || friend.username}</span>
+            <span className="font-display font-semibold text-surface-text text-sm truncate">{friend.username}</span>
             {diff <= 15 && <span className="text-xs bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-md font-mono flex-shrink-0">~tuyo</span>}
           </div>
           <OnlineLabel friend={friend} showLastSeen={showLastSeen} />
@@ -90,7 +90,7 @@ function UserRow({ user, action, onAction, loading, onSelect, isSelected }) {
       )}
       <div className="flex-1 min-w-0">
         <button onClick={() => navigate(`/user/${user.id}`)} className="text-left">
-          <div className="font-display font-semibold text-surface-text text-sm truncate">{user.display_name || user.username}</div>
+          <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
           <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
         </button>
       </div>
@@ -501,7 +501,7 @@ export default function FriendsPage() {
                       <Avatar user={req.requester} size="sm" online={showOnline && isOnline(req.requester.last_seen_at)} />
                     </button>
                     <div className="flex-1 min-w-0">
-                      <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.display_name || req.requester.username}</div>
+                      <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.username}</div>
                       <div className="text-xs text-surface-muted font-mono">@{req.requester.username}</div>
                     </div>
                     <BatteryBadge level={req.requester.battery_level} />

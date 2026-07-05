@@ -36,7 +36,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
           {friend.avatar_url ? (
             <img src={friend.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
           ) : (
-            (friend.display_name || friend.username)?.[0]?.toUpperCase()
+            friend.username?.[0]?.toUpperCase()
           )}
         </div>
         {/* Online dot */}
@@ -47,7 +47,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-display font-semibold text-surface-text truncate">
-            {friend.display_name || friend.username}
+            {friend.username}
           </span>
           {friend.battery_is_estimated && (
             <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-mono flex-shrink-0">

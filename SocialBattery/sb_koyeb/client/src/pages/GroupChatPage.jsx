@@ -62,7 +62,7 @@ function Avatar({ user, size = 'sm' }) {
     >
       {user?.avatar_url
         ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-        : (user?.display_name || user?.username)?.[0]?.toUpperCase() || '?'
+        : user?.username?.[0]?.toUpperCase() || '?'
       }
     </div>
   );
@@ -89,19 +89,25 @@ function BadgeDescriptionPopover({ badge, align = 'left' }) {
 // Insignia pulsable: al tocarla muestra su descripción en un cuadrito
 // de texto (en vez de depender del "title" nativo, que no funciona bien
 // en móvil). `size` = 'tile' (icono cuadrado grande), 'inline' (emoji
-// pequeño junto a los mensajes) o 'chip' (mini insignia junto al nombre
-// de usuario, en la lista de integrantes del grupo).
-function IdentityBadge({ identity, size = 'tile', align = 'left' }) {
+// pequeño junto a los mensajes), 'chip' (mini insignia junto al nombre
+// de usuario) o 'panel' (insignia grande y centrada, con su nombre
+// debajo, usada en el panel de integrantes del grupo).
+function IdentityBadge({ identity, size = 'tile', align = 'left', showName = false }) {
   const [open, setOpen] = useState(false);
 
   const buttonClass = {
     tile: 'w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl',
     inline: 'block leading-none text-lg mb-1.5 bg-transparent border-0 p-0',
     chip: 'w-5 h-5 rounded-md bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-xs leading-none flex-shrink-0',
+    panel: 'w-14 h-14 rounded-2xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-3xl',
   }[size];
 
+  const wrapperClass = size === 'panel'
+    ? 'relative flex-shrink-0 flex flex-col items-center gap-1'
+    : 'relative flex-shrink-0 inline-block';
+
   return (
-    <div className="relative flex-shrink-0 inline-block">
+    <div className={wrapperClass}>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
@@ -109,6 +115,11 @@ function IdentityBadge({ identity, size = 'tile', align = 'left' }) {
       >
         {identity.badge.emoji}
       </button>
+      {showName && (
+        <span className="text-[10px] text-accent-glow font-display font-semibold text-center leading-tight max-w-[64px] truncate">
+          {identity.badge.name}
+        </span>
+      )}
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
@@ -142,8 +153,7 @@ function AddMemberModal({ group, onClose, onAdded }) {
 
   const eligible = friends.filter(f =>
     !memberIds.has(f.id) &&
-    (f.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-     f.username?.toLowerCase().includes(search.toLowerCase()))
+    f.username?.toLowerCase().includes(search.toLowerCase())
   );
 
   async function handleAdd(friend) {
@@ -201,12 +211,12 @@ function AddMemberModal({ group, onClose, onAdded }) {
                   >
                     {friend.avatar_url
                       ? <img src={friend.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                      : (friend.display_name || friend.username)?.[0]?.toUpperCase()
+                      : friend.username?.[0]?.toUpperCase()
                     }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-display font-semibold text-surface-text text-sm truncate">{friend.display_name || friend.username}</div>
-                    <div className="text-xs text-surface-muted font-mono">@{friend.username} · 🔋 {friend.battery_level ?? '—'}%</div>
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">@{friend.username}</div>
+                    <div className="text-xs text-surface-muted font-mono">🔋 {friend.battery_level ?? '—'}%</div>
                   </div>
                   <button
                     onClick={() => handleAdd(friend)}
@@ -313,21 +323,25 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
               return (
                 <div key={member.id} className="bg-surface-card border border-surface-border rounded-2xl p-3">
                   <div className="flex items-start gap-3">
-                    <button
-                      onClick={() => onOpenUser(member.id)}
-                      className="flex-shrink-0 flex flex-col items-center gap-1"
-                    >
-                      <Avatar user={member} size="md" />
-                      <MiniMascot user={member} size={32} />
-                    </button>
+                    <div className="flex-shrink-0 flex flex-col items-center gap-2">
+                      <button
+                        onClick={() => onOpenUser(member.id)}
+                        className="flex flex-col items-center gap-1"
+                      >
+                        <Avatar user={member} size="md" />
+                        <MiniMascot user={member} size={32} />
+                      </button>
+                      {identity && (
+                        <IdentityBadge identity={identity} size="panel" showName />
+                      )}
+                    </div>
 
                     <div className="flex-1 min-w-0">
                       <div onClick={() => onOpenUser(member.id)} className="text-left w-full cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <span className="font-display font-semibold text-surface-text text-sm truncate">
-                            {member.display_name || member.username}
+                            @{member.username}
                           </span>
-                          {identity && <IdentityBadge identity={identity} size="chip" />}
                           {isMe && (
                             <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
                               Tú
@@ -339,12 +353,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-surface-muted font-mono truncate">@{member.username}</div>
-                        {identity ? (
-                          <div className="text-[11px] text-accent-glow font-display font-semibold truncate mt-0.5">
-                            {identity.badge.name}
-                          </div>
-                        ) : (
+                        {!identity && (
                           <div className="text-[11px] text-slate-600 font-mono mt-0.5">Sin identidad activa</div>
                         )}
                       </div>
@@ -365,7 +374,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       )}
                       {canRemove && (
                         <button
-                          onClick={() => setConfirmAction({ type: 'remove', memberId: member.id, memberName: member.display_name || member.username })}
+                          onClick={() => setConfirmAction({ type: 'remove', memberId: member.id, memberName: member.username })}
                           className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg font-display font-semibold hover:bg-red-500/20 transition-colors"
                         >
                           Expulsar
@@ -441,7 +450,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
         <div className="min-w-0">
           {!isMe && (
             <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
-              {msg.sender?.display_name || msg.sender?.username}
+              {msg.sender?.username}
             </div>
           )}
           <div
@@ -475,7 +484,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
           <div className="min-w-0">
             {!isMe && (
               <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
-                {msg.sender?.display_name || msg.sender?.username}
+                {msg.sender?.username}
               </div>
             )}
             <div
@@ -719,7 +728,7 @@ export default function GroupChatPage() {
         if (payload.new?.sender_id === profile.id) return;
         const { data } = await supabase
           .from('group_messages')
-          .select(`id, group_id, sender_id, content, type, created_at, sender:sender_id(id, username, display_name, avatar_url, battery_level)`)
+          .select(`id, group_id, sender_id, content, type, created_at, sender:sender_id(id, username, avatar_url, battery_level)`)
           .eq('id', payload.new.id)
           .single();
         if (data) {
@@ -762,7 +771,7 @@ export default function GroupChatPage() {
       const newMembers = [...prev.members, friend];
       return { ...prev, members: newMembers, member_count: newMembers.length };
     });
-    showToast(`${friend.display_name || friend.username} añadido al grupo`);
+    showToast(`${friend.username} añadido al grupo`);
   }
 
   async function handleLeaveGroup() {
@@ -809,7 +818,7 @@ export default function GroupChatPage() {
     const optimistic = {
       id: `opt-${Date.now()}`,
       sender_id: profile.id,
-      sender: { id: profile.id, display_name: profile.display_name, avatar_url: profile.avatar_url },
+      sender: { id: profile.id, username: profile.username, avatar_url: profile.avatar_url },
       content,
       type: 'text',
       created_at: new Date().toISOString(),
@@ -840,7 +849,7 @@ export default function GroupChatPage() {
     const optimistic = {
       id: optimisticId,
       sender_id: profile.id,
-      sender: { id: profile.id, display_name: profile.display_name, avatar_url: profile.avatar_url },
+      sender: { id: profile.id, username: profile.username, avatar_url: profile.avatar_url },
       content: localUrl,
       type: 'image',
       created_at: new Date().toISOString(),

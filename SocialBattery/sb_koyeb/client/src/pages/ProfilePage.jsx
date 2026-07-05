@@ -118,7 +118,6 @@ export default function ProfilePage() {
 
   // Edit state
   const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [bio, setBio] = useState(profile?.bio || '');
   const [editInterests, setEditInterests] = useState(profile?.interests || []);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -154,7 +153,6 @@ export default function ProfilePage() {
 
   async function saveProfile() {
     if (
-      displayName.trim() === profile?.display_name &&
       bio.trim() === (profile?.bio || '') &&
       JSON.stringify(editInterests) === JSON.stringify(profile?.interests || [])
     ) { setEditing(false); return; }
@@ -162,7 +160,6 @@ export default function ProfilePage() {
     setSavingProfile(true);
     try {
       await api.patch('/users/me', {
-        display_name: displayName.trim(),
         bio: bio.trim() || null,
         interests: editInterests,
       });
@@ -213,7 +210,7 @@ export default function ProfilePage() {
   const color = getBatteryColor(profile?.battery_level ?? 50);
 
   const avatarSrc = avatarPreview || profile?.avatar_url;
-  const avatarInitial = (profile?.display_name || profile?.username)?.[0]?.toUpperCase();
+  const avatarInitial = profile?.username?.[0]?.toUpperCase();
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
@@ -296,7 +293,7 @@ export default function ProfilePage() {
               {/* Edit button */}
               {!editing && (
                 <button
-                  onClick={() => { setDisplayName(profile?.display_name || ''); setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setEditing(true); }}
+                  onClick={() => { setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setEditing(true); }}
                   className="bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5
                     text-xs font-display font-semibold text-surface-text hover:text-accent-glow transition-all flex items-center gap-1.5"
                 >
@@ -310,25 +307,15 @@ export default function ProfilePage() {
             {editing ? (
               <div className="space-y-3 animate-slide-down">
                 <div>
-                  <label className="block text-xs font-mono text-surface-muted mb-1 uppercase tracking-widest">Nombre</label>
-                  <input
-                    value={displayName}
-                    onChange={e => setDisplayName(e.target.value)}
-                    maxLength={16}
-                    onKeyDown={e => { if (e.key === 'Enter') saveProfile(); if (e.key === 'Escape') setEditing(false); }}
-                    className="w-full bg-surface-bg border border-accent-primary rounded-xl px-3 py-2
-                      text-surface-text text-sm focus:outline-none"
-                    autoFocus
-                  />
-                </div>
-                <div>
                   <label className="block text-xs font-mono text-surface-muted mb-1 uppercase tracking-widest">Bio</label>
                   <textarea
                     value={bio}
                     onChange={e => setBio(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') setEditing(false); }}
                     maxLength={160}
                     rows={2}
                     placeholder="Cuéntanos algo sobre ti..."
+                    autoFocus
                     className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2
                       text-surface-text text-sm focus:outline-none focus:border-accent-primary
                       transition-colors resize-none"
@@ -376,9 +363,8 @@ export default function ProfilePage() {
             ) : (
               <>
                 <h2 className="font-display font-bold text-surface-text text-xl leading-tight">
-                  {profile?.display_name}
+                  @{profile?.username}
                 </h2>
-                <div className="text-sm text-surface-muted font-mono">@{profile?.username}</div>
                 {profile?.bio && (
                   <p className="text-sm text-surface-muted mt-2 leading-relaxed">{profile.bio}</p>
                 )}

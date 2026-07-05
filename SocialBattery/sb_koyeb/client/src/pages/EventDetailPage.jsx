@@ -120,7 +120,7 @@ function UpdateBubble({ update, isOwn, onDelete }) {
         <div className="px-4 py-3">
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="text-xs font-display font-semibold text-accent-glow">
-              📣 {update.creator?.display_name || update.creator?.username || 'Organizador'}
+              📣 {update.creator?.username || 'Organizador'}
             </span>
             <span className="text-[10px] font-mono text-surface-muted flex-shrink-0">
               {formatRelative(update.created_at)}
@@ -237,7 +237,7 @@ export default function EventDetailPage() {
         likeCount: event.like_count || 0,
         sharedBy: {
           mascot,
-          username: profile?.display_name || profile?.username || '',
+          username: profile?.username || '',
           hex: color.hex,
         },
       });

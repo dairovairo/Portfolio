@@ -72,9 +72,9 @@ router.get('/', requireAuth, async (req, res) => {
       .select(`
         group:group_id(
           id, name, created_at,
-          owner:owner_id(id, username, display_name, avatar_url),
+          owner:owner_id(id, username, avatar_url),
           friend_group_members(
-            user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+            user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
           )
         )
       `)
@@ -217,10 +217,10 @@ router.get('/:id', requireAuth, async (req, res) => {
       .from('friend_groups')
       .select(`
         id, name, created_at,
-        owner:owner_id(id, username, display_name, avatar_url),
+        owner:owner_id(id, username, avatar_url),
         friend_group_members(
           joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url)
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url)
         )
       `)
       .eq('id', req.params.id)
@@ -366,7 +366,7 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .from('group_messages')
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('group_id', req.params.id)
       .order('created_at', { ascending: true })
@@ -450,7 +450,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
 
@@ -464,7 +464,7 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       },
     });
 
-    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    const senderName = data.sender?.username || 'Alguien';
     broadcastGroupMessage({
       groupId:    req.params.id,
       senderId:   userId,
@@ -520,7 +520,7 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       })
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
 
@@ -534,7 +534,7 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       },
     });
 
-    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    const senderName = data.sender?.username || 'Alguien';
     broadcastGroupMessage({
       groupId:    groupId,
       senderId:   userId,

@@ -67,12 +67,6 @@ function communityErrorMessage(err, fallback) {
   return fallback;
 }
 
-function fallbackDisplayName(user) {
-  const fromMetadata = user.user_metadata?.display_name || user.user_metadata?.name;
-  const fromEmail = user.email?.split('@')[0];
-  return (fromMetadata || fromEmail || 'Usuario').trim().slice(0, 16) || 'Usuario';
-}
-
 function fallbackUsername(user) {
   const idPart = user.id.replace(/-/g, '').slice(0, 12);
   return `user_${idPart}`;
@@ -93,7 +87,7 @@ async function ensurePublicProfile(user) {
     .insert({
       id: user.id,
       username: fallbackUsername(user),
-      display_name: fallbackDisplayName(user),
+      display_name: fallbackUsername(user),
     });
 
   if (!insertError) return;
@@ -186,7 +180,7 @@ async function enrichEvents(db, events = [], currentUserId = null) {
 
   return eventList.map(ev => ({
     ...ev,
-    creator_name: ev.creator?.display_name || ev.creator?.username || 'Alguien',
+    creator_name: ev.creator?.username || 'Alguien',
     community_name: ev.community?.name || null,
     organization: ev.organization || ev.community?.organization || null,
     attendee_count: attendeeCountByEvent[ev.id] || 0,
@@ -228,7 +222,7 @@ router.get('/events', requireAuth, async (req, res) => {
       .select(`
         id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
         url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan,
-        creator:users!community_events_creator_id_fkey(display_name, username),
+        creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
       .or(`ends_at.gte.${now},and(ends_at.is.null,event_date.gte.${now})`)
@@ -560,7 +554,7 @@ router.get('/communities', requireAuth, async (req, res) => {
       .from('communities')
       .select(`
         id, name, description, category, organization, creator_id, created_at,
-        creator:users!communities_creator_id_fkey(display_name, username)
+        creator:users!communities_creator_id_fkey(username)
       `)
       .order('created_at', { ascending: false });
 
@@ -592,7 +586,7 @@ router.get('/communities', requireAuth, async (req, res) => {
 
       return {
         ...comm,
-        creator_name: comm.creator?.display_name || comm.creator?.username || 'Alguien',
+        creator_name: comm.creator?.username || 'Alguien',
         member_count: members.length,
         member_ids: members.map(m => m.user_id),
         admin_ids: members.filter(m => m.role === 'admin').map(m => m.user_id),
@@ -619,7 +613,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
       .from('communities')
       .select(`
         id, name, description, category, organization, creator_id, created_at,
-        creator:users!communities_creator_id_fkey(display_name, username)
+        creator:users!communities_creator_id_fkey(username)
       `)
       .eq('id', id)
       .single();
@@ -637,7 +631,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
       .select(`
         id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
-        creator:users!community_events_creator_id_fkey(display_name, username),
+        creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
       .eq('community_id', id)
@@ -651,7 +645,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     res.json({
       community: {
         ...community,
-        creator_name: community.creator?.display_name || community.creator?.username || 'Alguien',
+        creator_name: community.creator?.username || 'Alguien',
         member_count: count || 0,
         member_ids: (members || []).map(m => m.user_id),
         admin_ids: (members || []).filter(m => m.role === 'admin').map(m => m.user_id),
@@ -816,7 +810,7 @@ router.get('/events/:id', requireAuth, async (req, res) => {
       .select(`
         id, title, description, category, event_date, ends_at, location, lat, lng, organization,
         cover_image_url, url, price, additional_info, max_attendees, creator_id, community_id, created_at,
-        creator:users!community_events_creator_id_fkey(display_name, username),
+        creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
       .eq('id', id)
@@ -841,7 +835,7 @@ router.get('/events/:id/updates', requireAuth, async (req, res) => {
       .from('event_updates')
       .select(`
         id, content, image_url, created_at, creator_id,
-        creator:users!event_updates_creator_id_fkey(display_name, username, avatar_url)
+        creator:users!event_updates_creator_id_fkey(username, avatar_url)
       `)
       .eq('event_id', id)
       .order('created_at', { ascending: true });
@@ -911,7 +905,7 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
       })
       .select(`
         id, content, image_url, created_at, creator_id,
-        creator:users!event_updates_creator_id_fkey(display_name, username, avatar_url)
+        creator:users!event_updates_creator_id_fkey(username, avatar_url)
       `)
       .single();
 

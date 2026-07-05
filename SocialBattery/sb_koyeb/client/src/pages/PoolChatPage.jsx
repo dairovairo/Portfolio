@@ -39,7 +39,7 @@ function Avatar({ user, size = 'sm' }) {
     >
       {user?.avatar_url
         ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-        : (user?.display_name || user?.username)?.[0]?.toUpperCase() || '?'
+        : user?.username?.[0]?.toUpperCase() || '?'
       }
     </div>
   );
@@ -81,7 +81,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
       <div className="max-w-[75%]">
         {!isMe && (
           <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
-            {msg.sender?.display_name || msg.sender?.username}
+            {msg.sender?.username}
           </div>
         )}
         <div
@@ -110,7 +110,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
         <div className="max-w-[75%]">
           {!isMe && (
             <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
-              {msg.sender?.display_name || msg.sender?.username}
+              {msg.sender?.username}
             </div>
           )}
           <div
@@ -266,7 +266,7 @@ export default function PoolChatPage() {
         if (payload.new?.sender_id === profile.id) return;
         const { data } = await supabase
           .from('pool_messages')
-          .select(`id, pool_id, sender_id, content, type, created_at, sender:sender_id(id, username, display_name, avatar_url, battery_level)`)
+          .select(`id, pool_id, sender_id, content, type, created_at, sender:sender_id(id, username, avatar_url, battery_level)`)
           .eq('id', payload.new.id)
           .single();
         if (data) {
@@ -300,7 +300,7 @@ export default function PoolChatPage() {
     const optimistic = {
       id: `opt-${Date.now()}`,
       sender_id: profile.id,
-      sender: { id: profile.id, display_name: profile.display_name, avatar_url: profile.avatar_url },
+      sender: { id: profile.id, username: profile.username, avatar_url: profile.avatar_url },
       content,
       type: 'text',
       created_at: new Date().toISOString(),
@@ -331,7 +331,7 @@ export default function PoolChatPage() {
     const optimistic = {
       id: optimisticId,
       sender_id: profile.id,
-      sender: { id: profile.id, display_name: profile.display_name, avatar_url: profile.avatar_url },
+      sender: { id: profile.id, username: profile.username, avatar_url: profile.avatar_url },
       content: localUrl,
       type: 'image',
       created_at: new Date().toISOString(),

@@ -36,7 +36,7 @@ function Avatar({ user, size = 'sm', online = false }) {
     >
       {user.avatar_url
         ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-        : (user.display_name || user.username)?.[0]?.toUpperCase()
+        : user.username?.[0]?.toUpperCase()
       }
       <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
     </div>
@@ -128,7 +128,7 @@ function SearchModal({ friends, onClose, onToast }) {
                 </button>
                 <div className="flex-1 min-w-0">
                   <button onClick={() => navigate(`/user/${user.id}`)} className="text-left">
-                    <div className="font-display font-semibold text-surface-text text-sm truncate">{user.display_name || user.username}</div>
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
                     <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
                   </button>
                 </div>
@@ -207,7 +207,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
                 <Avatar user={req.requester} online={showOnline && isOnline(req.requester.last_seen_at)} />
               </button>
               <div className="flex-1 min-w-0">
-                <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.display_name || req.requester.username}</div>
+                <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.username}</div>
                 <div className="text-xs text-surface-muted font-mono">@{req.requester.username}</div>
               </div>
               <BatteryBadge level={req.requester.battery_level} />
@@ -292,7 +292,7 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
                       </div>
                       <Avatar user={f} />
                       <div className="flex-1 min-w-0">
-                        <div className="font-display font-semibold text-surface-text text-sm truncate">{f.display_name || f.username}</div>
+                        <div className="font-display font-semibold text-surface-text text-sm truncate">{f.username}</div>
                         <div className="text-xs text-surface-muted font-mono">@{f.username}</div>
                       </div>
                       <BatteryBadge level={f.battery_level} isEstimated={f.battery_is_estimated} />
@@ -437,7 +437,7 @@ export default function HomePage() {
         level: profileBatteryLevel,
         label: color.label,
         hex: color.hex,
-        username: profile?.display_name || profile?.username || '',
+        username: profile?.username || '',
         updatedAt: profile?.battery_updated_at,
         mascot,
       });
@@ -550,7 +550,7 @@ export default function HomePage() {
             >
               {profile?.avatar_url
                 ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover rounded-full" />
-                : (profile?.display_name?.[0] || '?').toUpperCase()
+                : (profile?.username?.[0] || '?').toUpperCase()
               }
             </button>
           </div>
