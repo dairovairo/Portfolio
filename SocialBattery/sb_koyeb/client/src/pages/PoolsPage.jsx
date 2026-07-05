@@ -193,6 +193,11 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
 
         {/* Header — fijo */}
         <div className="flex-shrink-0 px-5 py-3 border-b border-surface-border">
+          {pool.cover_image_url && (
+            <div className="-mt-1 mb-3 aspect-[16/9] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+              <img src={pool.cover_image_url} alt="" className="h-full w-full object-cover" />
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-2xl">{getActivityEmoji(pool.activity)}</span>
             <div className="flex-1 min-w-0">
@@ -361,6 +366,11 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
       onClick={() => onOpenDetail(pool)}
     >
       {hasUnreadChat && <UnreadChatDot className="-top-1 -right-1" />}
+      {pool.cover_image_url && (
+        <div className="mb-3 aspect-[16/9] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+          <img src={pool.cover_image_url} alt="" className="h-full w-full object-cover" />
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
         <div className="text-3xl flex-shrink-0 mt-0.5">{emoji}</div>
@@ -382,11 +392,6 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
             {pool.has_joined && !pool.is_creator && (
               <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
                 ✓ Unido
-              </span>
-            )}
-            {pool.is_creator && (
-              <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
-                Tuyo
               </span>
             )}
           </div>
@@ -546,9 +551,34 @@ function FriendPicker({ selected, onChange, label = 'Amigos' }) {
   );
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = event => resolve(event.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildPoolFormData(form) {
+  const formData = new FormData();
+  Object.entries(form).forEach(([key, value]) => {
+    if (key === 'cover_file') return;
+    if (value === undefined || value === null || value === '') return;
+    if (Array.isArray(value)) {
+      if (value.length) formData.append(key, JSON.stringify(value));
+      return;
+    }
+    formData.append(key, String(value));
+  });
+  if (form.cover_file) formData.append('cover', form.cover_file);
+  return formData;
+}
+
 // ── Create Pool Modal ─────────────────────────────────────────────────────────
 function CreatePoolModal({ onClose, onCreate }) {
   const minDate = formatInputDateTime(new Date(Date.now() + 30 * 60 * 1000));
+  const coverInputRef = useRef(null);
   const [form, setForm] = useState({
     activity: '',
     description: '',
@@ -560,6 +590,8 @@ function CreatePoolModal({ onClose, onCreate }) {
     group_id: null,
     invited_user_ids: [],
   });
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState('');
   const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -577,6 +609,25 @@ function CreatePoolModal({ onClose, onCreate }) {
 
   function toggleGroup(id) {
     setForm(f => ({ ...f, group_id: f.group_id === id ? null : id }));
+  }
+
+  async function handleCoverChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setError('La foto no puede superar 3MB');
+      e.target.value = '';
+      return;
+    }
+    setCoverFile(file);
+    setCoverPreview(await readFileAsDataUrl(file));
+    setError('');
+  }
+
+  function clearCover() {
+    setCoverFile(null);
+    setCoverPreview('');
+    if (coverInputRef.current) coverInputRef.current.value = '';
   }
 
   const hasPrivateTarget = !form.is_public && (form.group_id || form.invited_user_ids.length > 0);
@@ -601,6 +652,7 @@ function CreatePoolModal({ onClose, onCreate }) {
         scheduled_at: new Date(form.scheduled_at).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
         max_people: form.max_people !== null && form.max_people !== '' ? parseInt(form.max_people) : null,
+        cover_file: coverFile,
       });
       onClose();
     } catch (e) {
@@ -653,29 +705,60 @@ function CreatePoolModal({ onClose, onCreate }) {
               <input type="datetime-local" value={form.ends_at} min={form.scheduled_at || minDate} onChange={e => set('ends_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
-            <div className="col-span-2">
+            <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Límite de personas</label>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.max_people === null}
-                    onChange={e => set('max_people', e.target.checked ? null : 4)}
-                    className="w-4 h-4 rounded border-surface-border accent-accent-primary"
-                  />
-                  <span className="text-sm text-surface-muted">Sin límite</span>
-                </label>
-                {form.max_people !== null && (
-                  <input
-                    type="number"
-                    value={form.max_people}
-                    min={2}
-                    max={50}
-                    onChange={e => set('max_people', parseInt(e.target.value) || 2)}
-                    className="w-24 bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-                  />
-                )}
-              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none mb-2">
+                <input
+                  type="checkbox"
+                  checked={form.max_people === null}
+                  onChange={e => set('max_people', e.target.checked ? null : 4)}
+                  className="w-4 h-4 rounded border-surface-border accent-accent-primary"
+                />
+                <span className="text-sm text-surface-muted">Sin límite</span>
+              </label>
+              {form.max_people !== null && (
+                <input
+                  type="number"
+                  value={form.max_people}
+                  min={2}
+                  max={50}
+                  onChange={e => set('max_people', parseInt(e.target.value) || 2)}
+                  className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                />
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">
+                Portada <span className="text-slate-600">(opcional)</span>
+              </label>
+              {coverPreview ? (
+                <div className="relative w-full h-24 overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                  <img src={coverPreview} alt="" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={clearCover}
+                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-xs flex items-center justify-center hover:bg-black/80 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => coverInputRef.current?.click()}
+                  className="w-full h-24 rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 flex flex-col items-center justify-center gap-1 text-accent-glow hover:bg-accent-primary/10 transition-all"
+                >
+                  <span className="text-lg">📷</span>
+                  <span className="text-[11px] font-display font-semibold leading-tight">Añadir foto</span>
+                </button>
+              )}
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleCoverChange}
+              />
             </div>
           </div>
 
@@ -878,8 +961,8 @@ export default function PoolsPage() {
     return () => supabase.removeChannel(channel);
   }, [profile?.id, tab, scheduleFetchPools]);
 
-  async function handleCreate(formData) {
-    await api.post('/pools', formData);
+  async function handleCreate(formValues) {
+    await api.postForm('/pools', buildPoolFormData(formValues));
     showToast('¡Plan creado! 🎉');
     setTab('myplans');
     fetchPools('myplans');

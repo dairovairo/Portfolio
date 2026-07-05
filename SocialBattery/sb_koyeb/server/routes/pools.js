@@ -14,6 +14,17 @@ const {
 // Multer instance for pool chat image uploads (8 MB max) — same pattern as groups
 const _poolImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 
+// Multer instance for pool cover/banner uploads (3 MB max) — same pattern as community events
+const poolCoverUpload = createImageUpload({ maxSizeMb: 3 });
+
+function uploadPoolCover(req, res, next) {
+  poolCoverUpload.single('cover')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
+  });
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Returns accepted friend IDs for a given user */
@@ -176,7 +187,7 @@ router.get('/', requireAuth, async (req, res) => {
       .from('hangout_pools')
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
-        max_people, is_public, group_id, status, created_at, creator_id,
+        max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
           joined_at, reminder_minutes_before,
@@ -292,7 +303,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       .from('hangout_pools')
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
-        max_people, is_public, group_id, status, created_at, creator_id,
+        max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
         creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
           joined_at, reminder_minutes_before,
@@ -348,7 +359,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // ── POST /api/pools — create a new pool ─────────────────────────────────────
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
   const userId = req.user.id;
   const {
     activity, description, location_hint, scheduled_at, ends_at,
@@ -356,6 +367,15 @@ router.post('/', requireAuth, async (req, res) => {
     group_id = null,
     invited_user_ids = [],   // NEW: individual friend invites for private pools
   } = req.body;
+
+  // req.body arrives as multipart/form-data (strings only) when a cover photo
+  // is attached, or as JSON otherwise — normalize both shapes here.
+  const isPublic = is_public === true || is_public === 'true';
+  let invitedIds = invited_user_ids;
+  if (typeof invitedIds === 'string') {
+    try { invitedIds = JSON.parse(invitedIds); } catch { invitedIds = []; }
+  }
+  if (!Array.isArray(invitedIds)) invitedIds = [];
 
   if (!activity?.trim()) return res.status(400).json({ error: 'activity is required' });
   if (!scheduled_at) return res.status(400).json({ error: 'scheduled_at is required' });
@@ -388,11 +408,20 @@ router.post('/', requireAuth, async (req, res) => {
   if (maxPeople !== null && (Number.isNaN(maxPeople) || maxPeople < 2 || maxPeople > 50)) {
     return res.status(400).json({ error: 'max_people must be between 2 and 50, or null for no limit' });
   }
-  if (!is_public && !group_id && (!invited_user_ids || invited_user_ids.length === 0)) {
+  if (!isPublic && !group_id && (!invitedIds || invitedIds.length === 0)) {
     return res.status(400).json({ error: 'Un pool privado necesita al menos un grupo o un amigo invitado' });
   }
 
   try {
+    let coverImageUrl = null;
+    if (req.file) {
+      coverImageUrl = await storeImage({
+        file: req.file,
+        objectName: `pool-covers/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 4500000,
+      });
+    }
+
     const { data: pool, error } = await supabase
       .from('hangout_pools')
       .insert({
@@ -403,13 +432,14 @@ router.post('/', requireAuth, async (req, res) => {
         scheduled_at: startDate.toISOString(),
         ends_at: endDateIso,
         max_people: maxPeople,
-        is_public: Boolean(is_public),
+        is_public: isPublic,
         group_id: group_id || null,
+        cover_image_url: coverImageUrl,
         status: 'open',
       })
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
-        max_people, is_public, status, created_at,
+        max_people, is_public, status, created_at, cover_image_url,
         creator:creator_id(id, username, display_name, avatar_url)
       `)
       .single();
@@ -422,8 +452,8 @@ router.post('/', requireAuth, async (req, res) => {
       .insert({ pool_id: pool.id, user_id: userId });
 
     // Insert individual invitees (deduplicated, excluding creator)
-    if (!is_public && invited_user_ids?.length) {
-      const uniqueInvites = [...new Set(invited_user_ids)]
+    if (!isPublic && invitedIds?.length) {
+      const uniqueInvites = [...new Set(invitedIds)]
         .filter(id => id !== userId)
         .map(uid => ({ pool_id: pool.id, user_id: uid }));
       if (uniqueInvites.length) {
@@ -453,7 +483,7 @@ router.post('/', requireAuth, async (req, res) => {
         location_hint: pool.location_hint || null,
         creator_name:  creatorName,
         creator_id:    userId,
-        is_public:     Boolean(is_public),
+        is_public:     isPublic,
       };
       await Promise.allSettled(
         recipientIds.map(recipientId =>
@@ -468,7 +498,7 @@ router.post('/', requireAuth, async (req, res) => {
       );
     }
 
-    if (is_public) {
+    if (isPublic) {
       // Notify all accepted friends of the creator
       getFriendIds(userId).then(async friendIds => {
         await Promise.all([
@@ -489,8 +519,8 @@ router.post('/', requireAuth, async (req, res) => {
             .neq('user_id', userId);
           (groupMembers || []).forEach(m => recipientIds.add(m.user_id));
         }
-        if (invited_user_ids?.length) {
-          invited_user_ids.forEach(id => { if (id !== userId) recipientIds.add(id); });
+        if (invitedIds?.length) {
+          invitedIds.forEach(id => { if (id !== userId) recipientIds.add(id); });
         }
         if (recipientIds.size) {
           await Promise.all([
