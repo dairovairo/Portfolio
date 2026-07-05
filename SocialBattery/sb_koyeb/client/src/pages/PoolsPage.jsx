@@ -150,6 +150,7 @@ function AvatarStack({ participants = [], total = 0, size = 'sm' }) {
 
 // ── Participants sheet (bottom drawer) ────────────────────────────────────────
 function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, joining, leaving, reminderSaving }) {
+  const navigate = useNavigate();
   // Fetch full participant list
   const [participants, setParticipants] = useState(pool.participants_preview || []);
   const [loading, setLoading] = useState(false);
@@ -185,6 +186,13 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
               <h3 className="font-display font-bold text-surface-text truncate">{pool.activity}</h3>
               <p className="text-xs text-surface-muted font-mono">{formatPoolDateRange(pool)}</p>
             </div>
+            <button
+              onClick={() => navigate(`/pools/${pool.id}/chat`)}
+              title="Abrir chat de la quedada"
+              className="flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
+            >
+              <span>💬</span> Chat
+            </button>
             <StatusBadge status={pool.status} />
           </div>
           {pool.description && (

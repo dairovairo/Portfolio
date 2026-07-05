@@ -216,6 +216,39 @@ export function useMessageNotifications(profile, settings) {
         .subscribe();
       channels.push(groupMsgBroadcastCh);
 
+      // ── 4b. Pool chat messages — broadcast per-user channel ──────────────────
+      // El servidor emite un broadcast a `pool-chat-notif-{userId}` para cada
+      // apuntado a la quedada usando la service key (sin RLS), mismo patrón
+      // que los mensajes de grupo.
+      const poolMsgBroadcastCh = supabase
+        .channel(`pool-chat-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_pool_message' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications) return;
+
+          const data = msg.payload;
+          if (!data?.pool_id) return;
+          if (data.sender_id === profile.id) return;
+
+          const chatPath = `/pools/${data.pool_id}/chat`;
+          if (!shouldNotify(locationRef.current, chatPath)) return;
+
+          const activityLabel = data.activity || 'la quedada';
+          const senderName = data.sender_name || 'Alguien';
+          const body = data.type === 'image'
+            ? `${senderName}: 📷 Imagen`
+            : `${senderName}: ${data.content?.slice(0, 80) || '📩 Nuevo mensaje'}`;
+
+          fireNotification({
+            title:      `💬 ${activityLabel}`,
+            body,
+            tag:        `pool-chat-${data.pool_id}`,
+            navigateTo: chatPath,
+          });
+        })
+        .subscribe();
+      channels.push(poolMsgBroadcastCh);
+
       // ── 5. Battery changes ──────────────────────────────────────────────────
       // Listen to updates on the users table and filter by preloaded friend IDs.
       // We cache battery_updated_at per friend so we only notify when the battery

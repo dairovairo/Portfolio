@@ -5,10 +5,14 @@ const { requireAuth } = require('../middleware/auth');
 const { checkOrganizerBadgeForUser } = require('../jobs/badges');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
 const { notifyUsers } = require('../lib/webpush');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const {
   DEFAULT_POOL_REMINDER_MINUTES,
   parseReminderMinutes,
 } = require('../lib/reminderLeadTime');
+
+// Multer instance for pool chat image uploads (8 MB max) — same pattern as groups
+const _poolImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -88,6 +92,60 @@ async function canAccessPool(pool, userId, friendIds) {
     .eq('user_id', userId)
     .maybeSingle();
   return !!invite;
+}
+
+/**
+ * Broadcasts a new pool chat message to every participant's personal channel
+ * (service key, bypasses RLS) so anyone with the app open gets an instant
+ * in-app notification, plus a web-push for those who have the app closed.
+ * Same pattern as broadcastGroupMessage in routes/groups.js.
+ */
+async function broadcastPoolChatMessage({ poolId, senderId, senderName, content, type }) {
+  try {
+    const [{ data: pool }, { data: participants }] = await Promise.all([
+      supabase.from('hangout_pools').select('activity').eq('id', poolId).single(),
+      supabase
+        .from('pool_participants')
+        .select('user_id')
+        .eq('pool_id', poolId)
+        .neq('user_id', senderId),
+    ]);
+
+    const activityLabel = pool?.activity || 'la quedada';
+    const recipientIds = (participants || []).map(p => p.user_id);
+    if (!recipientIds.length) return;
+
+    const broadcastPayload = {
+      pool_id:   poolId,
+      activity:  activityLabel,
+      sender_id: senderId,
+      sender_name: senderName,
+      content,
+      type,
+    };
+
+    await Promise.allSettled(
+      recipientIds.map(recipientId =>
+        supabase
+          .channel(`pool-chat-notif-${recipientId}`)
+          .send({
+            type: 'broadcast',
+            event: 'new_pool_message',
+            payload: broadcastPayload,
+          })
+      )
+    );
+
+    const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
+    await notifyUsers(supabase, recipientIds, senderId, {
+      title: `💬 ${activityLabel}`,
+      body: `${senderName}: ${previewText}`,
+      url: `/pools/${poolId}/chat`,
+      tag: `pool-chat-${poolId}`,
+    });
+  } catch (err) {
+    console.error('[POOLS] broadcastPoolChatMessage error:', err);
+  }
 }
 
 /** Builds participant preview (up to 6) for the feed */
@@ -705,6 +763,207 @@ router.delete('/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[POOLS] DELETE /:id', err);
     res.status(500).json({ error: 'Failed to cancel pool' });
+  }
+});
+
+// ── GET /api/pools/:id/messages — chat de la quedada ─────────────────────────
+router.get('/:id/messages', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const limit = parseInt(req.query.limit) || 60;
+
+  try {
+    // Solo los apuntados a la quedada pueden ver el chat
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para ver el chat' });
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .eq('pool_id', poolId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (error) throw error;
+
+    // Fecha en la que este usuario vació el chat (solo afecta a su propia vista)
+    const { data: clearData } = await supabase
+      .from('pool_conversation_clears')
+      .select('cleared_at')
+      .eq('user_id', userId)
+      .eq('pool_id', poolId)
+      .maybeSingle();
+
+    res.json({
+      messages: (data || []).map(message => ({
+        ...message,
+        sender: applyBatteryExpiry(message.sender),
+      })),
+      cleared_at: clearData?.cleared_at || null,
+    });
+  } catch (err) {
+    console.error('[POOLS] GET /:id/messages', err);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── POST /api/pools/:id/clear — vaciar chat de la quedada (solo para mí) ─────
+router.post('/:id/clear', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para vaciar el chat' });
+
+    const clearedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('pool_conversation_clears')
+      .upsert(
+        { user_id: userId, pool_id: poolId, cleared_at: clearedAt },
+        { onConflict: 'user_id,pool_id' }
+      );
+
+    if (error) throw error;
+    res.json({ success: true, cleared_at: clearedAt });
+  } catch (err) {
+    console.error('[POOLS] POST /:id/clear', err);
+    res.status(500).json({ error: 'Failed to clear chat' });
+  }
+});
+
+// ── POST /api/pools/:id/messages — enviar mensaje de texto al chat ──────────
+router.post('/:id/messages', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const { content, type = 'text' } = req.body;
+
+  if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
+  if (!['text'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para escribir en el chat' });
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .insert({ pool_id: poolId, sender_id: userId, content: content.trim(), type })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    // Responde ya mismo, y difunde en segundo plano (fire-and-forget)
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
+
+    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    broadcastPoolChatMessage({
+      poolId,
+      senderId: userId,
+      senderName,
+      content: data.content,
+      type: data.type,
+    }).catch(() => {});
+  } catch (err) {
+    console.error('[POOLS] POST /:id/messages', err);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── POST /api/pools/:id/messages/image — enviar una imagen al chat ──────────
+router.post('/:id/messages/image', requireAuth, (req, res, next) => {
+  _poolImageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Se requiere una imagen' });
+  }
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para escribir en el chat' });
+
+    const imageUrl = await storeImage({
+      file: req.file,
+      bucket: 'chat-images',
+      objectName: `pool/${poolId}/${Date.now()}`,
+      fallbackMaxLength: 8_000_000,
+    });
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .insert({
+        pool_id: poolId,
+        sender_id: userId,
+        content: imageUrl,
+        type: 'image',
+      })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
+
+    const senderName = data.sender?.display_name || data.sender?.username || 'Alguien';
+    broadcastPoolChatMessage({
+      poolId,
+      senderId: userId,
+      senderName,
+      content: data.content,
+      type: 'image',
+    }).catch(() => {});
+  } catch (e) {
+    console.error('[POOLS] image upload error:', e);
+    return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
   }
 });
 
