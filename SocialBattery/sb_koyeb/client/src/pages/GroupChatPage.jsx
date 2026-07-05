@@ -71,10 +71,13 @@ function Avatar({ user, size = 'sm' }) {
 // Cuadrito de texto con nombre + descripción de la insignia.
 // `align` controla si se pega al borde izquierdo o derecho del icono
 // para no salirse de la pantalla según de qué lado esté la insignia.
-function BadgeDescriptionPopover({ badge, align = 'left' }) {
+// `placement` controla si se abre hacia arriba ('top', por defecto) o hacia
+// abajo ('bottom') del icono — necesario para el primer usuario de una lista
+// con scroll, donde abrir hacia arriba lo corta contra el borde superior.
+function BadgeDescriptionPopover({ badge, align = 'left', placement = 'top' }) {
   return (
     <div
-      className={`absolute z-50 bottom-full mb-2 ${align === 'right' ? 'right-0' : 'left-0'} w-52 max-w-[70vw] bg-surface-card border border-surface-border rounded-xl p-3 shadow-2xl text-left animate-fade-in`}
+      className={`absolute z-50 ${placement === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'} ${align === 'right' ? 'right-0' : 'left-0'} w-52 max-w-[70vw] bg-surface-card border border-surface-border rounded-xl p-3 shadow-2xl text-left animate-fade-in`}
       onClick={e => e.stopPropagation()}
     >
       <div className="flex items-center gap-2 mb-1">
@@ -92,7 +95,7 @@ function BadgeDescriptionPopover({ badge, align = 'left' }) {
 // pequeño junto a los mensajes), 'chip' (mini insignia junto al nombre
 // de usuario) o 'panel' (insignia junto al nombre con su nombre debajo,
 // usada en el panel de integrantes del grupo).
-function IdentityBadge({ identity, size = 'tile', align = 'left', showName = false }) {
+function IdentityBadge({ identity, size = 'tile', align = 'left', showName = false, popoverPlacement = 'top' }) {
   const [open, setOpen] = useState(false);
 
   const buttonClass = {
@@ -124,7 +127,7 @@ function IdentityBadge({ identity, size = 'tile', align = 'left', showName = fal
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <BadgeDescriptionPopover badge={identity.badge} align={align} />
+          <BadgeDescriptionPopover badge={identity.badge} align={align} placement={popoverPlacement} />
         </>
       )}
     </div>
@@ -313,13 +316,14 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
           </div>
 
           <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
-            {members.map(member => {
+            {members.map((member, index) => {
               const memberIdentities = identitiesByUser[member.id] || [];
               const identity = memberIdentities[0] || null;
               const isOwnerMember = group?.owner?.id === member.id;
               const isMe = currentUserId === member.id;
               const color = getBatteryColor(member.battery_level ?? 50);
               const canRemove = isOwner && !isOwnerMember;
+              const isFirst = index === 0;
 
               return (
                 <div key={member.id} className="bg-surface-card border border-surface-border rounded-2xl p-3">
@@ -329,10 +333,10 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       className="relative flex-shrink-0"
                     >
                       <Avatar user={member} size="md" />
-                      {/* Offset base de -0.25rem + 3% a la derecha / 4% hacia
-                          abajo (porcentaje sobre el tamaño del avatar, que es
-                          el contenedor relative de 44x44px). */}
-                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 4%)', right: 'calc(-0.25rem - 3%)' }}>
+                      {/* Offset base de -0.25rem + 6% a la derecha / 8% hacia
+                          abajo (aplicado dos veces, 3%/4% cada vez, sobre el
+                          tamaño del avatar, contenedor relative de 44x44px). */}
+                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', right: 'calc(-0.25rem - 6%)' }}>
                         <MiniMascot user={member} size={35} />
                       </div>
                     </button>
@@ -366,6 +370,15 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       )}
                     </div>
 
+                    {/* Insignia: a la izquierda del % de batería y del botón
+                        Expulsar, centrada respecto a la altura total del
+                        panel mediante self-center. */}
+                    {identity && (
+                      <div className="flex-shrink-0 self-center">
+                        <IdentityBadge identity={identity} size="panel" showName popoverPlacement={isFirst ? 'bottom' : 'top'} />
+                      </div>
+                    )}
+
                     <div className="flex-shrink-0 flex flex-col items-end gap-2">
                       <div className="font-display font-bold tabular-nums text-sm" style={{ color: color.hex }}>
                         {member.battery_level ?? '—'}%
@@ -382,15 +395,6 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                         </button>
                       )}
                     </div>
-
-                    {/* Insignia: a la derecha de todos los campos de la fila
-                        (avatar/mascota, nombre, batería), centrada respecto
-                        a la altura total del panel mediante self-center. */}
-                    {identity && (
-                      <div className="flex-shrink-0 self-center">
-                        <IdentityBadge identity={identity} size="panel" showName />
-                      </div>
-                    )}
                   </div>
                 </div>
               );
