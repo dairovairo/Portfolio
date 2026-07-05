@@ -50,22 +50,12 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, av
   // Destellos decorativos (estrellitas + puntos de brillo)
   drawSparkles(ctx, W, H, hex);
 
-  // ── App branding (bigger) ──────────────────────────────────────────────────
+  // ── Nombre de usuario — centrado, encima del círculo de batería ─────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-
-  // Battery emoji + name, bigger pill
-  const pillW = 380, pillH = 80, pillX = (W - pillW) / 2, pillY = 130;
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.lineWidth = 2;
-  roundRect(ctx, pillX, pillY, pillW, pillH, 40);
-  ctx.stroke();
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = 'bold 36px system-ui, sans-serif';
-  ctx.fillText('🔋 SocialBattery', W / 2, pillY + pillH / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 58px system-ui, sans-serif';
+  ctx.fillText(username || 'Mi batería social', cx, 190);
 
   // ── Escenario circular con la foto de perfil y el anillo de nivel ───────────
   const ringOuterR = 320;
@@ -114,13 +104,6 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, av
   // La foto de perfil, recortada en círculo, dentro del escenario.
   await drawProfilePhotoOnCanvas(ctx, avatarUrl, cx, arenaY, photoR, username, hex);
 
-  // ── Nombre de usuario — dentro del círculo, justo debajo de la foto ─────────
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(255,255,255,0.82)';
-  ctx.font = '600 30px system-ui, sans-serif';
-  ctx.fillText(username || 'Mi batería social', cx, arenaY + photoR + 22);
-
   // ── Insignia de la mascota (su foto junto a su nombre) superpuesta sobre
   // el borde inferior-derecho del círculo principal. ──────────────────────────
   const badgeAngle = Math.PI / 4; // 45°: esquina inferior-derecha del círculo
@@ -156,6 +139,10 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, av
   ctx.fillStyle = hex;
   ctx.textBaseline = 'middle';
   ctx.fillText(label, W / 2, labelY2 + labelH / 2);
+
+  // ── Logo de la app — el mismo icono + nombre de la esquina superior
+  // izquierda del menú principal, colocado debajo del estado de batería ──────
+  drawAppLogo(ctx, cx, labelY2 + labelH + 90);
 
   // ── URL / CTA at bottom ───────────────────────────────────────────────────
   drawUrlBadge(ctx, W, H);
@@ -544,6 +531,41 @@ function drawUrlBadge(ctx, W, H, scale = 1) {
   ctx.fillStyle = 'rgba(226,232,240,0.85)';
   ctx.fillText(label, W / 2, badgeY + badgeH / 2);
   ctx.restore();
+}
+
+/**
+ * Dibuja el logo real de la app (🔋 + "SocialBattery"), tal como aparece en
+ * la esquina superior izquierda del menú principal: el emoji de batería
+ * seguido del nombre en negrita, sin píldora/fondo alrededor.
+ */
+function drawAppLogo(ctx, cx, y) {
+  ctx.save();
+  const emoji = '🔋';
+  const name = 'SocialBattery';
+  const emojiFont = '32px system-ui, sans-serif';
+  const nameFont = '800 34px "Syne", system-ui, sans-serif';
+  const gap = 10;
+
+  ctx.font = emojiFont;
+  const emojiW = ctx.measureText(emoji).width;
+  ctx.font = nameFont;
+  const nameW = ctx.measureText(name).width;
+  const totalW = emojiW + gap + nameW;
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const startX = cx - totalW / 2;
+
+  ctx.font = emojiFont;
+  ctx.fillText(emoji, startX, y);
+
+  ctx.font = nameFont;
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText(name, startX + emojiW + gap, y);
+  ctx.restore();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 }
 
 /**
