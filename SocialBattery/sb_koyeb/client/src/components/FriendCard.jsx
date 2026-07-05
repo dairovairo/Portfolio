@@ -21,7 +21,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-full bg-surface-card hover:bg-surface-hover border border-surface-border rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 text-left group"
+      className="w-full bg-surface-card hover:bg-surface-hover border border-surface-border rounded-2xl p-[18px] flex items-center gap-4 transition-all duration-200 text-left group"
     >
       {/* Avatar */}
       <div className="relative flex-shrink-0">
@@ -74,25 +74,30 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
           mascota base, ya recoloreado y posicionado.
           Colocada a la derecha del nombre de perfil (antes iba a la
           izquierda, entre el avatar y el nombre). */}
-      <div className="relative flex-shrink-0" style={{ width: 56, height: 56 }}>
-        <MascotDisplay
-          tier={tier}
-          size={56}
-          glowColor={color.hex}
-          outfitSrc={null}
-          feetSrc={null}
-          headSrc={null}
-          accessories={[]}
-          activityLayers={[]}
-        />
-        {friend.mascot_preview_url && (
-          <img
-            src={friend.mascot_preview_url}
-            alt=""
-            draggable={false}
-            className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+      <div className="relative flex-shrink-0 flex flex-col items-center" style={{ width: 56 }}>
+        <div className="relative" style={{ width: 56, height: 56 }}>
+          <MascotDisplay
+            tier={tier}
+            size={56}
+            glowColor={color.hex}
+            outfitSrc={null}
+            feetSrc={null}
+            headSrc={null}
+            accessories={[]}
+            activityLayers={[]}
           />
-        )}
+          {friend.mascot_preview_url && (
+            <img
+              src={friend.mascot_preview_url}
+              alt=""
+              draggable={false}
+              className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+            />
+          )}
+        </div>
+        <span className="text-[9px] font-display font-semibold text-surface-muted mt-0.5 max-w-[56px] truncate">
+          {friend.mascot_name || 'Volty'}
+        </span>
       </div>
 
       {/* Battery level */}
