@@ -9,7 +9,7 @@ import { drawMascotOnCanvas } from './mascotRenderer';
 
 // ── Battery Story ──────────────────────────────────────────────────────────────
 
-export async function generateBatteryStoryBlob({ level, label, hex, username, updatedAt, mascot, mascotName }) {
+export async function generateBatteryStoryBlob({ level, label, hex, username, avatarUrl, mascot, mascotName }) {
   const W = 1080;
   const H = 1920;
 
@@ -37,7 +37,7 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
   }
 
   const cx = W / 2;
-  const arenaY = 650; // centro vertical del "escenario" de la mascota
+  const arenaY = 660; // centro vertical del "escenario" de la foto de perfil
 
   // Ambient glow, más rico y amplio, detrás del escenario de la mascota
   const glow = ctx.createRadialGradient(cx, arenaY, 0, cx, arenaY, 660);
@@ -67,10 +67,11 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
   ctx.font = 'bold 36px system-ui, sans-serif';
   ctx.fillText('🔋 SocialBattery', W / 2, pillY + pillH / 2);
 
-  // ── Escenario circular con la mascota y el anillo de nivel ──────────────────
-  const ringOuterR = 330;
-  const ringThickness = 24;
-  const mascotBoxSize = 560;
+  // ── Escenario circular con la foto de perfil y el anillo de nivel ───────────
+  const ringOuterR = 320;
+  const ringThickness = 22;
+  const photoR = 256;   // radio de la foto de perfil dentro del círculo
+  const badgeR = 95;    // radio de la mini-foto de la mascota (insignia superpuesta)
 
   // Anillo de fondo (translúcido, marca el 100%)
   ctx.save();
@@ -110,31 +111,28 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
   ctx.stroke();
   ctx.restore();
 
-  // La mascota, con su ropa/calzado/gorro/accesorios/actividad equipados
-  if (mascot) {
-    try {
-      await drawMascotOnCanvas(
-        ctx, mascot,
-        cx - mascotBoxSize / 2, arenaY - mascotBoxSize / 2, mascotBoxSize,
-        { glowColor: hex }
-      );
-    } catch (_) {
-      // Si algo falla al dibujar la mascota, seguimos sin ella.
-    }
-  }
+  // La foto de perfil, recortada en círculo, dentro del escenario.
+  await drawProfilePhotoOnCanvas(ctx, avatarUrl, cx, arenaY, photoR, username, hex);
 
-  // ── Nombre de la mascota — pequeño, justo debajo de la mascota, dentro
-  // del anillo (por defecto "Volty" si el usuario no le puso otro nombre). ──
+  // ── Nombre de usuario — dentro del círculo, justo debajo de la foto ─────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.fillStyle = 'rgba(255,255,255,0.82)';
   ctx.font = '600 30px system-ui, sans-serif';
-  ctx.fillText(mascotName || 'Volty', cx, arenaY + mascotBoxSize / 2 + 26);
+  ctx.fillText(username || 'Mi batería social', cx, arenaY + photoR + 22);
+
+  // ── Insignia de la mascota (su foto junto a su nombre) superpuesta sobre
+  // el borde inferior-derecho del círculo principal. ──────────────────────────
+  const badgeAngle = Math.PI / 4; // 45°: esquina inferior-derecha del círculo
+  const badgeCx = cx + ringOuterR * Math.cos(badgeAngle);
+  const badgeCy = arenaY + ringOuterR * Math.sin(badgeAngle);
+  await drawMascotBadgeOnCanvas(ctx, mascot, badgeCx, badgeCy, badgeR, hex);
+  drawMascotNameTag(ctx, mascotName || 'Volty', badgeCx, badgeCy + badgeR - 10, hex);
 
   // ── Porcentaje ────────────────────────────────────────────────────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const percentageY = arenaY + ringOuterR + 100;
+  const percentageY = badgeCy + badgeR + 150;
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 130px system-ui, sans-serif';
   ctx.shadowColor = hex;
@@ -158,22 +156,6 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, up
   ctx.fillStyle = hex;
   ctx.textBaseline = 'middle';
   ctx.fillText(label, W / 2, labelY2 + labelH / 2);
-
-  // ── Username ───────────────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  ctx.font = 'bold 50px system-ui, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(username || 'Mi batería social', W / 2, labelY2 + labelH + 84);
-
-  // ── Date ──────────────────────────────────────────────────────────────────
-  if (updatedAt) {
-    const dateStr = new Date(updatedAt).toLocaleDateString('es-ES', {
-      weekday: 'long', day: 'numeric', month: 'long',
-    });
-    ctx.fillStyle = 'rgba(148,163,184,0.65)';
-    ctx.font = '34px system-ui, sans-serif';
-    ctx.fillText(dateStr, W / 2, labelY2 + labelH + 158);
-  }
 
   // ── URL / CTA at bottom ───────────────────────────────────────────────────
   drawUrlBadge(ctx, W, H);
@@ -613,6 +595,99 @@ function hexToRgba(hex, alpha) {
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// ── Foto de perfil dentro del círculo principal ─────────────────────────────
+/**
+ * Dibuja la foto de perfil del usuario recortada en círculo, escalada tipo
+ * "cover" (llena todo el círculo, recortando bordes si hace falta). Si no
+ * hay foto de perfil (o falla la carga), dibuja un círculo de respaldo con
+ * la inicial del nombre de usuario, para que el diseño nunca quede vacío.
+ */
+async function drawProfilePhotoOnCanvas(ctx, avatarUrl, cx, cy, r, username, hex) {
+  let img = null;
+  if (avatarUrl) {
+    try { img = await loadImage(avatarUrl); } catch (_) { img = null; }
+  }
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+
+  if (img) {
+    const scale = Math.max((r * 2) / img.width, (r * 2) / img.height);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+  } else {
+    const grad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+    grad.addColorStop(0, hex);
+    grad.addColorStop(1, '#1e293b');
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${Math.round(r * 0.85)}px system-ui, sans-serif`;
+    ctx.fillText((username || '?').trim().charAt(0).toUpperCase(), cx, cy + r * 0.06);
+  }
+  ctx.restore();
+}
+
+// ── Insignia circular de la mascota, superpuesta al círculo principal ──────
+/**
+ * Dibuja un pequeño "sticker" circular con la mascota equipada dentro, con
+ * un borde/resplandor del color de nivel de batería — pensado para
+ * superponerse al borde del círculo principal (ver badgeCx/badgeCy en
+ * generateBatteryStoryBlob).
+ */
+async function drawMascotBadgeOnCanvas(ctx, mascot, cx, cy, r, hex) {
+  ctx.save();
+  ctx.shadowColor = hex;
+  ctx.shadowBlur = 20;
+  ctx.strokeStyle = hex;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(8,15,31,0.94)';
+  ctx.fill();
+  ctx.clip();
+  if (mascot) {
+    try {
+      await drawMascotOnCanvas(ctx, mascot, cx - r, cy - r, r * 2, { glowColor: hex });
+    } catch (_) {
+      // Si algo falla al dibujar la mascota, dejamos el fondo circular vacío.
+    }
+  }
+  ctx.restore();
+}
+
+/** Etiqueta ("pill") con el nombre de la mascota, unida justo debajo de su insignia. */
+function drawMascotNameTag(ctx, name, cx, topY, hex) {
+  const label = name || 'Volty';
+  ctx.font = 'bold 28px system-ui, sans-serif';
+  const w = ctx.measureText(label).width + 44;
+  const h = 46;
+  const x = cx - w / 2;
+  ctx.fillStyle = 'rgba(8,15,31,0.94)';
+  roundRect(ctx, x, topY, w, h, h / 2);
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba(hex, 0.6);
+  ctx.lineWidth = 2;
+  roundRect(ctx, x, topY, w, h, h / 2);
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, cx, topY + h / 2);
 }
 
 function roundRect(ctx, x, y, w, h, r) {

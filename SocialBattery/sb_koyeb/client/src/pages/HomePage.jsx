@@ -438,7 +438,7 @@ export default function HomePage() {
         label: color.label,
         hex: color.hex,
         username: profile?.username || '',
-        updatedAt: profile?.battery_updated_at,
+        avatarUrl: profile?.avatar_url || null,
         mascot,
         mascotName: profile?.mascot_name || 'Volty',
       });
