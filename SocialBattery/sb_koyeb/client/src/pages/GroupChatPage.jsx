@@ -5,6 +5,7 @@ import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+import { isOnline } from '../hooks/usePresence';
 import MascotDisplay from '../components/MascotDisplay';
 
 // ── Mark group as read in localStorage ───────────────────────────────────────
@@ -333,28 +334,27 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       className="relative flex-shrink-0"
                     >
                       <Avatar user={member} size="md" />
-                      {/* Offset base de -0.25rem + 6% a la derecha / 8% hacia
-                          abajo (aplicado dos veces, 3%/4% cada vez, sobre el
-                          tamaño del avatar, contenedor relative de 44x44px). */}
-                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', right: 'calc(-0.25rem - 6%)' }}>
+                      {/* Mascota — izquierda-abajo del avatar (offset base de
+                          -0.25rem + 6%/8%, igual que antes pero en espejo
+                          hacia la izquierda). */}
+                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', left: 'calc(-0.25rem - 6%)' }}>
                         <MiniMascot user={member} size={35} />
                       </div>
+                      {/* Punto de en línea — derecha-abajo, mismo patrón que FriendCard.jsx */}
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${isOnline(member.last_seen_at) ? 'bg-green-400' : 'bg-slate-600'}`}
+                      />
                     </button>
 
                     <div className="flex-1 min-w-0">
                       <div onClick={() => onOpenUser(member.id)} className="text-left w-full cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <span className="font-display font-semibold text-surface-text text-sm truncate">
-                            {member.username}
+                            {isMe ? 'Tú' : member.username}
                           </span>
-                          {isMe && (
-                            <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
-                              Tú
-                            </span>
-                          )}
                           {isOwnerMember && (
                             <span className="text-[11px] text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded-md flex-shrink-0">
-                              Administrador
+                              Admin
                             </span>
                           )}
                         </div>
@@ -370,16 +370,16 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       )}
                     </div>
 
-                    {/* Insignia: a la izquierda del % de batería y del botón
-                        Expulsar, centrada respecto a la altura total del
-                        panel mediante self-center. */}
+                    {/* Insignia: a la izquierda del % de batería y de la
+                        x de expulsión, centrada respecto a la altura total
+                        del panel mediante self-center. */}
                     {identity && (
                       <div className="flex-shrink-0 self-center">
                         <IdentityBadge identity={identity} size="panel" showName align="right" popoverPlacement={isFirst ? 'bottom' : 'top'} />
                       </div>
                     )}
 
-                    <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                    <div className="flex-shrink-0 flex flex-col items-center gap-1.5">
                       <div className="font-display font-bold tabular-nums text-sm" style={{ color: color.hex }}>
                         {member.battery_level ?? '—'}%
                       </div>
@@ -389,9 +389,11 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       {canRemove && (
                         <button
                           onClick={() => setConfirmAction({ type: 'remove', memberId: member.id, memberName: member.username })}
-                          className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg font-display font-semibold hover:bg-red-500/20 transition-colors"
+                          className="w-5 h-5 flex items-center justify-center rounded-full bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-bold leading-none"
+                          aria-label="Expulsar"
+                          title="Expulsar"
                         >
-                          Expulsar
+                          ✕
                         </button>
                       )}
                     </div>
