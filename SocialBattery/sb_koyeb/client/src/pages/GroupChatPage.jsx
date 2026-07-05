@@ -54,7 +54,7 @@ function MiniMascot({ user, size = 32 }) {
 
 function Avatar({ user, size = 'sm' }) {
   const color = getBatteryColor(user?.battery_level ?? 50);
-  const sz = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-sm';
+  const sz = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-11 h-11 text-sm';
   return (
     <div
       className={`${sz} rounded-full flex items-center justify-center font-display font-bold border-2 flex-shrink-0`}
@@ -90,8 +90,8 @@ function BadgeDescriptionPopover({ badge, align = 'left' }) {
 // de texto (en vez de depender del "title" nativo, que no funciona bien
 // en móvil). `size` = 'tile' (icono cuadrado grande), 'inline' (emoji
 // pequeño junto a los mensajes), 'chip' (mini insignia junto al nombre
-// de usuario) o 'panel' (insignia grande y centrada, con su nombre
-// debajo, usada en el panel de integrantes del grupo).
+// de usuario) o 'panel' (insignia junto al nombre con su nombre debajo,
+// usada en el panel de integrantes del grupo).
 function IdentityBadge({ identity, size = 'tile', align = 'left', showName = false }) {
   const [open, setOpen] = useState(false);
 
@@ -99,11 +99,11 @@ function IdentityBadge({ identity, size = 'tile', align = 'left', showName = fal
     tile: 'w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl',
     inline: 'block leading-none text-lg mb-1.5 bg-transparent border-0 p-0',
     chip: 'w-5 h-5 rounded-md bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-xs leading-none flex-shrink-0',
-    panel: 'w-14 h-14 rounded-2xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-3xl',
+    panel: 'w-9 h-9 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-xl',
   }[size];
 
   const wrapperClass = size === 'panel'
-    ? 'relative flex-shrink-0 flex flex-col items-center gap-1'
+    ? 'relative flex-shrink-0 flex flex-col items-center gap-0.5'
     : 'relative flex-shrink-0 inline-block';
 
   return (
@@ -116,7 +116,7 @@ function IdentityBadge({ identity, size = 'tile', align = 'left', showName = fal
         {identity.badge.emoji}
       </button>
       {showName && (
-        <span className="text-[10px] text-accent-glow font-display font-semibold text-center leading-tight max-w-[64px] truncate">
+        <span className="text-[9px] text-accent-glow font-display font-semibold text-center leading-tight max-w-[56px] truncate">
           {identity.badge.name}
         </span>
       )}
@@ -323,18 +323,15 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
               return (
                 <div key={member.id} className="bg-surface-card border border-surface-border rounded-2xl p-3">
                   <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 flex flex-col items-center gap-2">
-                      <button
-                        onClick={() => onOpenUser(member.id)}
-                        className="flex flex-col items-center gap-1"
-                      >
-                        <Avatar user={member} size="md" />
-                        <MiniMascot user={member} size={32} />
-                      </button>
-                      {identity && (
-                        <IdentityBadge identity={identity} size="panel" showName />
-                      )}
-                    </div>
+                    <button
+                      onClick={() => onOpenUser(member.id)}
+                      className="relative flex-shrink-0"
+                    >
+                      <Avatar user={member} size="md" />
+                      <div className="absolute -bottom-1 -right-1">
+                        <MiniMascot user={member} size={35} />
+                      </div>
+                    </button>
 
                     <div className="flex-1 min-w-0">
                       <div onClick={() => onOpenUser(member.id)} className="text-left w-full cursor-pointer">
@@ -342,6 +339,9 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                           <span className="font-display font-semibold text-surface-text text-sm truncate">
                             @{member.username}
                           </span>
+                          {identity && (
+                            <IdentityBadge identity={identity} size="panel" showName />
+                          )}
                           {isMe && (
                             <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
                               Tú
