@@ -99,7 +99,8 @@ function IdentityBadge({ identity, size = 'tile', align = 'left', showName = fal
     tile: 'w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl',
     inline: 'block leading-none text-lg mb-1.5 bg-transparent border-0 p-0',
     chip: 'w-5 h-5 rounded-md bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-xs leading-none flex-shrink-0',
-    panel: 'w-9 h-9 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-xl',
+    // +10% sobre el tamaño base (w-9 h-9 / text-xl) del panel de integrantes.
+    panel: 'w-[2.475rem] h-[2.475rem] rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-[1.375rem]',
   }[size];
 
   const wrapperClass = size === 'panel'
@@ -328,7 +329,10 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       className="relative flex-shrink-0"
                     >
                       <Avatar user={member} size="md" />
-                      <div className="absolute -bottom-1 -right-1">
+                      {/* Offset base de -0.25rem + 3% a la derecha / 4% hacia
+                          abajo (porcentaje sobre el tamaño del avatar, que es
+                          el contenedor relative de 44x44px). */}
+                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 4%)', right: 'calc(-0.25rem - 3%)' }}>
                         <MiniMascot user={member} size={35} />
                       </div>
                     </button>
@@ -339,9 +343,6 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                           <span className="font-display font-semibold text-surface-text text-sm truncate">
                             @{member.username}
                           </span>
-                          {identity && (
-                            <IdentityBadge identity={identity} size="panel" showName />
-                          )}
                           {isMe && (
                             <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
                               Tú
@@ -381,6 +382,15 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                         </button>
                       )}
                     </div>
+
+                    {/* Insignia: a la derecha de todos los campos de la fila
+                        (avatar/mascota, nombre, batería), centrada respecto
+                        a la altura total del panel mediante self-center. */}
+                    {identity && (
+                      <div className="flex-shrink-0 self-center">
+                        <IdentityBadge identity={identity} size="panel" showName />
+                      </div>
+                    )}
                   </div>
                 </div>
               );
