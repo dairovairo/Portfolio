@@ -526,10 +526,14 @@ export default function GroupChatPage() {
 
   const [group, setGroup] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [clearedAt, setClearedAt] = useState(null);
   const [badgeData, setBadgeData] = useState({ badges: [], assignments: [] });
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearingChat, setClearingChat] = useState(false);
   const [loadingIdentities, setLoadingIdentities] = useState(true);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
@@ -540,6 +544,7 @@ export default function GroupChatPage() {
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const photoInputRef = useRef(null);
+  const headerMenuRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -549,6 +554,19 @@ export default function GroupChatPage() {
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
   }, []);
+
+  // Cierra el menú de opciones (⋯) al hacer click fuera — mismo patrón que
+  // en MessagesPage.jsx.
+  useEffect(() => {
+    function handleClick(e) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target)) {
+        setShowHeaderMenu(false);
+      }
+    }
+    if (showHeaderMenu) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showHeaderMenu]);
+
 
   useEffect(() => {
     async function load() {
@@ -566,6 +584,7 @@ export default function GroupChatPage() {
         ]);
         setGroup(groupResult.group);
         setMessages(messagesResult.messages || []);
+        setClearedAt(messagesResult.cleared_at || null);
         setBadgeData({
           badges: badgesResult.badges || [],
           assignments: badgesResult.assignments || [],
@@ -628,6 +647,20 @@ export default function GroupChatPage() {
   function handleClearGroupWallpaper() {
     setGroupWallpaper(groupId, null);
     setGroupWallpaperState(null);
+  }
+
+  async function clearChat() {
+    setClearingChat(true);
+    try {
+      await api.post(`/groups/${groupId}/clear`);
+      setClearedAt(new Date().toISOString());
+      setShowClearConfirm(false);
+      showToast('Chat vaciado');
+    } catch (e) {
+      showToast('Error al vaciar el chat', 'error');
+    } finally {
+      setClearingChat(false);
+    }
   }
 
   function handleMemberAdded(friend) {
@@ -738,9 +771,14 @@ export default function GroupChatPage() {
     }
   }
 
+  const visibleMessages = messages.filter(msg => {
+    if (clearedAt && new Date(msg.created_at) <= new Date(clearedAt)) return false;
+    return true;
+  });
+
   const grouped = [];
   let lastDate = null;
-  messages.forEach(msg => {
+  visibleMessages.forEach(msg => {
     const d = new Date(msg.created_at).toDateString();
     if (d !== lastDate) {
       grouped.push({ type: 'date', date: d, key: `date-${d}` });
@@ -788,25 +826,36 @@ export default function GroupChatPage() {
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
           ) : null}
 
-          {/* Wallpaper button */}
+          {/* Menú de opciones (⋯) — mismo patrón que en el chat individual
+              (MessagesPage.jsx). Sustituye a los botones sueltos de fondo
+              (🖼️) e info (ℹ️): el nombre del grupo ya abre el panel de
+              información al pincharlo, así que ese botón sobraba. */}
           {group && (
-            <button
-              onClick={() => setShowWallpaperModal(true)}
-              className={`text-surface-muted hover:text-surface-text text-base p-1.5 transition-colors rounded-lg ${groupWallpaper ? 'text-accent-glow' : ''}`}
-              title="Fondo del grupo"
-            >
-              🖼️
-            </button>
-          )}
-
-          {group && (
-            <button
-              onClick={() => setShowGroupInfo(open => !open)}
-              className="text-surface-muted hover:text-surface-text text-lg p-1 transition-colors"
-              title="Info del grupo"
-            >
-              ℹ️
-            </button>
+            <div className="relative flex-shrink-0" ref={headerMenuRef}>
+              <button
+                onClick={() => setShowHeaderMenu(v => !v)}
+                className="w-9 h-9 rounded-xl text-surface-muted hover:text-surface-text hover:bg-surface-card border border-transparent hover:border-surface-border transition-all flex items-center justify-center text-xl font-bold"
+                title="Opciones"
+              >
+                ⋯
+              </button>
+              {showHeaderMenu && (
+                <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[180px] py-1.5 overflow-hidden">
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); setShowWallpaperModal(true); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
+                  >
+                    <span>🖼️</span> Fondo del grupo{groupWallpaper ? ' (activo)' : ''}
+                  </button>
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+                  >
+                    <span>🧹</span> Vaciar chat
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </nav>
@@ -839,10 +888,12 @@ export default function GroupChatPage() {
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
             Cargando mensajes...
           </div>
-        ) : messages.length === 0 ? (
+        ) : visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <div className="text-4xl">👥</div>
-            <p className="text-slate-500 text-sm">¡El chat está vacío! Sé el primero en escribir.</p>
+            <p className="text-slate-500 text-sm">
+              {clearedAt ? 'Chat vaciado. ¡Sé el primero en escribir!' : '¡El chat está vacío! Sé el primero en escribir.'}
+            </p>
           </div>
         ) : (
           grouped.map(item => {
@@ -924,6 +975,17 @@ export default function GroupChatPage() {
           onSet={handleSetGroupWallpaper}
           onClear={handleClearGroupWallpaper}
           onClose={() => setShowWallpaperModal(false)}
+        />
+      )}
+
+      {/* Clear chat confirm */}
+      {showClearConfirm && (
+        <ConfirmModal
+          title="Vaciar chat"
+          message="Los mensajes desaparecerán solo para ti. El resto de miembros seguirá viendo el historial completo."
+          confirmLabel={clearingChat ? 'Vaciando…' : 'Vaciar'}
+          onConfirm={clearChat}
+          onCancel={() => setShowClearConfirm(false)}
         />
       )}
 

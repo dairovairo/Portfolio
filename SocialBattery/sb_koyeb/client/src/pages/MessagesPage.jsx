@@ -215,6 +215,51 @@ function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
   );
 }
 
+// ── BlockUserModal ──────────────────────────────────────────────────────────────
+function BlockUserModal({ friendName, isBlocked, onConfirm, onCancel, loading }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-surface-card border border-surface-border rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="text-center mb-5">
+          <div className="text-4xl mb-3">{isBlocked ? '🔓' : '🚫'}</div>
+          <h3 className="font-display font-bold text-surface-text text-lg mb-2">
+            {isBlocked ? 'Desbloquear' : 'Bloquear'} a {friendName}
+          </h3>
+          <p className="text-surface-muted text-sm leading-relaxed">
+            {isBlocked ? (
+              <><span className="text-surface-text font-medium">{friendName}</span> podrá volver a enviarte mensajes.</>
+            ) : (
+              <>No podrá enviarte más mensajes. Podrás desbloquear a{' '}
+                <span className="text-surface-text font-medium">{friendName}</span> cuando quieras.</>
+            )}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 py-3 rounded-2xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text border border-surface-border hover:bg-surface-hover transition-all disabled:opacity-40"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className={`flex-1 py-3 rounded-2xl text-sm font-display font-semibold transition-all disabled:opacity-40 ${
+              isBlocked
+                ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30 hover:bg-accent-primary/30'
+                : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+            }`}
+          >
+            {loading ? (isBlocked ? 'Desbloqueando…' : 'Bloqueando…') : (isBlocked ? 'Desbloquear' : 'Bloquear')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Reply preview helpers ──────────────────────────────────────────────────────
 
 function replyPreviewText(replyTo) {
@@ -578,6 +623,12 @@ export default function MessagesPage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearingChat, setClearingChat] = useState(false);
 
+  // Bloquear / desbloquear usuario
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [blockedByThem, setBlockedByThem] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [blockActionLoading, setBlockActionLoading] = useState(false);
+
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const headerMenuRef = useRef(null);
@@ -616,13 +667,15 @@ export default function MessagesPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [{ user }, { messages: msgs, cleared_at }] = await Promise.all([
+        const [{ user }, { messages: msgs, cleared_at, blocked_by_me, blocked_by_them }] = await Promise.all([
           api.get(`/users/${friendId}`),
           api.get(`/messages/${friendId}`),
         ]);
         setFriend(user);
         setMessages(msgs || []);
         setClearedAt(cleared_at || null);
+        setBlockedByMe(!!blocked_by_me);
+        setBlockedByThem(!!blocked_by_them);
         if (readReceipts) api.patch(`/messages/${friendId}/read`).catch(() => {});
       } catch (e) {
         console.error(e);
@@ -894,6 +947,27 @@ export default function MessagesPage() {
     }
   }
 
+  async function toggleBlock() {
+    const name = friend?.display_name || 'este usuario';
+    setBlockActionLoading(true);
+    try {
+      if (blockedByMe) {
+        await api.post(`/messages/chat/${friendId}/unblock`);
+        setBlockedByMe(false);
+        showToast(`Has desbloqueado a ${name}`);
+      } else {
+        await api.post(`/messages/chat/${friendId}/block`);
+        setBlockedByMe(true);
+        showToast(`Has bloqueado a ${name}`);
+      }
+      setShowBlockConfirm(false);
+    } catch (e) {
+      showToast(e.message || 'Error al actualizar el bloqueo', 'error');
+    } finally {
+      setBlockActionLoading(false);
+    }
+  }
+
   // ── Filter & group messages ───────────────────────────────────────────────────
 
   const visibleMessages = messages.filter(msg => {
@@ -971,6 +1045,17 @@ export default function MessagesPage() {
         />
       )}
 
+      {/* Block / unblock confirm */}
+      {showBlockConfirm && (
+        <BlockUserModal
+          friendName={friend?.display_name || 'este usuario'}
+          isBlocked={blockedByMe}
+          onConfirm={toggleBlock}
+          onCancel={() => setShowBlockConfirm(false)}
+          loading={blockActionLoading}
+        />
+      )}
+
       {/* Nav */}
       <nav className="border-b border-surface-border bg-surface-bg/90 backdrop-blur-xl z-10 flex-shrink-0">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
@@ -1024,13 +1109,21 @@ export default function MessagesPage() {
               ⋯
             </button>
             {showHeaderMenu && (
-              <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[180px] py-1.5 overflow-hidden">
+              <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[200px] py-1.5 overflow-hidden">
                 <button
                   onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                   className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
                 >
                   <span>🧹</span> Vaciar conversación
                 </button>
+                {friend && (
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); setShowBlockConfirm(true); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+                  >
+                    <span>{blockedByMe ? '🔓' : '🚫'}</span> {blockedByMe ? 'Desbloquear' : 'Bloquear'}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1133,7 +1226,23 @@ export default function MessagesPage() {
               onCancel={() => setReplyingTo(null)}
             />
           )}
-          {showHangoutForm ? (
+          {(blockedByMe || blockedByThem) ? (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-surface-card border border-surface-border">
+              <span className="text-surface-muted text-sm">
+                {blockedByMe
+                  ? 'Has bloqueado a esta persona. No podéis enviaros mensajes.'
+                  : 'No puedes enviar mensajes a esta persona.'}
+              </span>
+              {blockedByMe && (
+                <button
+                  onClick={() => setShowBlockConfirm(true)}
+                  className="flex-shrink-0 text-accent-primary text-sm font-display font-semibold hover:underline"
+                >
+                  Desbloquear
+                </button>
+              )}
+            </div>
+          ) : showHangoutForm ? (
             <HangoutForm
               onSend={sendHangout}
               onCancel={() => setShowHangoutForm(false)}

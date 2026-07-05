@@ -38,6 +38,24 @@ async function findReplyTarget(messageId, userA, userB) {
   return data || null;
 }
 
+// Checks the blocking relationship between two users in both directions.
+// Used before sending a message/image and when loading a conversation, so
+// the client knows whether to disable the composer.
+async function getBlockStatus(userA, userB) {
+  const { data } = await supabase
+    .from('blocked_users')
+    .select('blocker_id, blocked_id')
+    .or(
+      `and(blocker_id.eq.${userA},blocked_id.eq.${userB}),` +
+      `and(blocker_id.eq.${userB},blocked_id.eq.${userA})`
+    );
+  const rows = data || [];
+  return {
+    aBlockedB: rows.some(r => r.blocker_id === userA && r.blocked_id === userB),
+    bBlockedA: rows.some(r => r.blocker_id === userB && r.blocked_id === userA),
+  };
+}
+
 // Notifies the author of a message that someone liked it — same pattern as
 // broadcastGroupMessage in routes/groups.js: a personal realtime channel for
 // instant in-app notification, plus web-push for when the app is backgrounded
@@ -210,7 +228,14 @@ router.get('/:friendId', requireAuth, async (req, res) => {
     .eq('partner_id', friendId)
     .maybeSingle();
 
-  res.json({ messages: data, cleared_at: clearData?.cleared_at || null });
+  const { aBlockedB: blockedByMe, bBlockedA: blockedByThem } = await getBlockStatus(userId, friendId);
+
+  res.json({
+    messages: data,
+    cleared_at: clearData?.cleared_at || null,
+    blocked_by_me: blockedByMe,
+    blocked_by_them: blockedByThem,
+  });
 });
 
 // ── POST /api/messages — send message ────────────────────────────────────────
@@ -237,6 +262,14 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (!friendship) {
     return res.status(403).json({ error: 'Solo puedes enviar mensajes a amigos' });
+  }
+
+  const { aBlockedB, bBlockedA } = await getBlockStatus(senderId, receiver_id);
+  if (aBlockedB) {
+    return res.status(403).json({ error: 'Has bloqueado a este usuario. Desbloquéalo para enviarle mensajes.' });
+  }
+  if (bBlockedA) {
+    return res.status(403).json({ error: 'No puedes enviar mensajes a este usuario.' });
   }
 
   const insertData = {
@@ -448,6 +481,43 @@ router.post('/chat/:friendId/clear', requireAuth, async (req, res) => {
   res.json({ success: true, cleared_at: new Date().toISOString() });
 });
 
+// ── POST /api/messages/chat/:friendId/block — bloquear a un usuario ───────────
+// Impide que el usuario bloqueado envíe mensajes, y también impide que quien
+// bloquea le envíe mensajes a él (conversación cerrada en ambos sentidos).
+router.post('/chat/:friendId/block', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.params;
+
+  if (friendId === userId) {
+    return res.status(400).json({ error: 'No puedes bloquearte a ti mismo' });
+  }
+
+  const { error } = await supabase
+    .from('blocked_users')
+    .upsert(
+      { blocker_id: userId, blocked_id: friendId },
+      { onConflict: 'blocker_id,blocked_id' }
+    );
+
+  if (error) return res.status(500).json({ error: 'Failed to block user' });
+  res.json({ success: true, blocked: true });
+});
+
+// ── POST /api/messages/chat/:friendId/unblock — desbloquear a un usuario ──────
+router.post('/chat/:friendId/unblock', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.params;
+
+  const { error } = await supabase
+    .from('blocked_users')
+    .delete()
+    .eq('blocker_id', userId)
+    .eq('blocked_id', friendId);
+
+  if (error) return res.status(500).json({ error: 'Failed to unblock user' });
+  res.json({ success: true, blocked: false });
+});
+
 // ── PATCH /api/messages/heartbeat ────────────────────────────────────────────
 router.patch('/heartbeat', requireAuth, async (req, res) => {
   await supabase
@@ -485,6 +555,14 @@ router.post('/:receiverId/image', requireAuth, (req, res, next) => {
 
   if (!friendship) {
     return res.status(403).json({ error: 'Solo puedes enviar mensajes a amigos' });
+  }
+
+  const { aBlockedB, bBlockedA } = await getBlockStatus(senderId, receiverId);
+  if (aBlockedB) {
+    return res.status(403).json({ error: 'Has bloqueado a este usuario. Desbloquéalo para enviarle mensajes.' });
+  }
+  if (bBlockedA) {
+    return res.status(403).json({ error: 'No puedes enviar mensajes a este usuario.' });
   }
 
   try {

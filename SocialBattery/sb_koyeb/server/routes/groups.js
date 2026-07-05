@@ -373,15 +373,56 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .limit(limit);
 
     if (error) throw error;
+
+    // Fecha en la que este usuario vació el chat (solo afecta a su propia vista)
+    const { data: clearData } = await supabase
+      .from('group_conversation_clears')
+      .select('cleared_at')
+      .eq('user_id', userId)
+      .eq('group_id', req.params.id)
+      .maybeSingle();
+
     res.json({
       messages: (data || []).map(message => ({
         ...message,
         sender: applyBatteryExpiry(message.sender),
       })),
+      cleared_at: clearData?.cleared_at || null,
     });
   } catch (err) {
     console.error('[GROUPS] GET /:id/messages', err);
     res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── POST /api/groups/:id/clear — vaciar chat de grupo (solo para mí) ─────────
+router.post('/:id/clear', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Check membership
+    const { data: membership } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('group_id', req.params.id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Not a member' });
+
+    const clearedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('group_conversation_clears')
+      .upsert(
+        { user_id: userId, group_id: req.params.id, cleared_at: clearedAt },
+        { onConflict: 'user_id,group_id' }
+      );
+
+    if (error) throw error;
+    res.json({ success: true, cleared_at: clearedAt });
+  } catch (err) {
+    console.error('[GROUPS] POST /:id/clear', err);
+    res.status(500).json({ error: 'Failed to clear chat' });
   }
 });
 
