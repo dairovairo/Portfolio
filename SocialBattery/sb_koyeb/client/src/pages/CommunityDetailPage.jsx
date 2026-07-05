@@ -16,19 +16,23 @@ function normalizeText(value = '') {
 
 function getEventEmoji(category = '') {
   const c = normalizeText(category);
-  if (/musica|concierto|concert/.test(c)) return '🎵';
-  if (/deporte|sport|futbol|tenis|running/.test(c)) return '⚽';
-  if (/arte|art|exposicion|museo/.test(c)) return '🎨';
-  if (/tecnologia|tech|hacking|codigo/.test(c)) return '💻';
+  // Se añade el selector de variación U+FE0F a cada emoji para forzar su
+  // presentación a color (el CSS global usa font-variant-emoji: text para
+  // dar un estilo mono a los iconos por defecto; sin este selector solo los
+  // emojis que ya lo llevaban incorporado, como el de Comida, salían a color).
+  if (/musica|concierto|concert/.test(c)) return '🎵️';
+  if (/deporte|sport|futbol|tenis|running/.test(c)) return '⚽️';
+  if (/arte|art|exposicion|museo/.test(c)) return '🎨️';
+  if (/tecnologia|tech|hacking|codigo/.test(c)) return '💻️';
   if (/comida|food|gastro|cocina|cena/.test(c)) return '🍽️';
-  if (/fiesta|party|celebracion/.test(c)) return '🎉';
-  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿';
-  if (/cine|film|pelicula|movie/.test(c)) return '🎬';
-  if (/juego|gaming|videojuego/.test(c)) return '🎮';
-  if (/yoga|meditacion|bienestar|wellness/.test(c)) return '🧘';
-  if (/fotografia|photo/.test(c)) return '📷';
-  if (/lectura|libro|book|literatura/.test(c)) return '📚';
-  return '🌐';
+  if (/fiesta|party|celebracion/.test(c)) return '🎉️';
+  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿️';
+  if (/cine|film|pelicula|movie/.test(c)) return '🎬️';
+  if (/juego|gaming|videojuego/.test(c)) return '🎮️';
+  if (/yoga|meditacion|bienestar|wellness/.test(c)) return '🧘️';
+  if (/fotografia|photo/.test(c)) return '📷️';
+  if (/lectura|libro|book|literatura/.test(c)) return '📚️';
+  return '🌐️';
 }
 
 function getCommunityEmoji(category = '') {
