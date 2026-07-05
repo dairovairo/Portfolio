@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 import { api } from '../lib/api';
 import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
@@ -179,6 +180,7 @@ export default function PoolChatPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { myBubbleStyle, otherBubbleStyle } = useSettings();
+  const { clearPoolChatBadge } = usePoolChatNotifications();
 
   const [pool, setPool] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -236,6 +238,12 @@ export default function PoolChatPage() {
     }
     load();
   }, [poolId]);
+
+  // Al entrar en el chat de esta quedada, se considera leída: se limpia su badge
+  // en el botón "Chat", en la tarjeta de la quedada y en el dock "Quedadas".
+  useEffect(() => {
+    clearPoolChatBadge(poolId);
+  }, [poolId, clearPoolChatBadge]);
 
   useEffect(() => {
     if (!loading) setTimeout(() => scrollToBottom(false), 50);

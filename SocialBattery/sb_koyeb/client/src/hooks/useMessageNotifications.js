@@ -223,14 +223,19 @@ export function useMessageNotifications(profile, settings) {
       const poolMsgBroadcastCh = supabase
         .channel(`pool-chat-notif-${profile.id}`)
         .on('broadcast', { event: 'new_pool_message' }, (msg) => {
-          const s = settingsRef.current;
-          if (s.muteAllNotifications) return;
-
           const data = msg.payload;
           if (!data?.pool_id) return;
           if (data.sender_id === profile.id) return;
 
           const chatPath = `/pools/${data.pool_id}/chat`;
+
+          // Emite un evento global para que el badge de "Quedadas" (dock,
+          // panel de la quedada y botón de chat) se actualice al instante,
+          // independientemente de si las notificaciones push están silenciadas.
+          window.dispatchEvent(new CustomEvent('sb-pool-message', { detail: data }));
+
+          const s = settingsRef.current;
+          if (s.muteAllNotifications) return;
           if (!shouldNotify(locationRef.current, chatPath)) return;
 
           const activityLabel = data.activity || 'la quedada';

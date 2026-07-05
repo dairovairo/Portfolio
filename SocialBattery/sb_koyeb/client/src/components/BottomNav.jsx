@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
+import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 
 const NAV_ITEMS = [
   { path: '/',                icon: '🏠', label: 'Inicio' },
@@ -13,6 +14,7 @@ export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { eventBadgeCount, planningUpdateCount } = useCommunityNotifications();
+  const { poolChatBadgeCount } = usePoolChatNotifications();
   const communityBadge = eventBadgeCount + planningUpdateCount;
 
   return (
@@ -27,7 +29,8 @@ export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
           const badge =
             item.path === '/' ? pendingCount :
             item.path === '/messages/inbox' ? unreadCount :
-            item.path === '/community' ? communityBadge : 0;
+            item.path === '/community' ? communityBadge :
+            item.path === '/pools' ? poolChatBadgeCount : 0;
 
           return (
             <button

@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
+import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 function getActivityEmoji(activity = '') {
@@ -83,6 +84,16 @@ function StatusBadge({ status }) {
   );
 }
 
+// ── Punto de "mensaje sin leer" (chat de la quedada) ──────────────────────────
+function UnreadChatDot({ className = '' }) {
+  return (
+    <span className={`absolute flex h-3 w-3 ${className}`}>
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-surface-card" />
+    </span>
+  );
+}
+
 // ── Pool capacity bar ─────────────────────────────────────────────────────────
 function CapacityBar({ current, max }) {
   if (max === null || max === undefined) {
@@ -151,6 +162,8 @@ function AvatarStack({ participants = [], total = 0, size = 'sm' }) {
 // ── Participants sheet (bottom drawer) ────────────────────────────────────────
 function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, joining, leaving, reminderSaving }) {
   const navigate = useNavigate();
+  const { hasUnreadPoolChat } = usePoolChatNotifications();
+  const hasUnreadChat = hasUnreadPoolChat(pool.id);
   // Fetch full participant list
   const [participants, setParticipants] = useState(pool.participants_preview || []);
   const [loading, setLoading] = useState(false);
@@ -189,11 +202,11 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
             <button
               onClick={() => navigate(`/pools/${pool.id}/chat`)}
               title="Abrir chat de la quedada"
-              className="flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
+              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors transform scale-[1.15] origin-left"
             >
               <span>💬</span> Chat
+              {hasUnreadChat && <UnreadChatDot className="-top-1 -right-1" />}
             </button>
-            <StatusBadge status={pool.status} />
           </div>
           {pool.description && (
             <p className="text-sm text-surface-muted mt-2 leading-relaxed">{pool.description}</p>
@@ -335,16 +348,19 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
   const emoji = getActivityEmoji(pool.activity);
   const canJoin = pool.status === 'open' && !pool.has_joined;
   const isPast = new Date(pool.scheduled_at) <= new Date();
+  const { hasUnreadPoolChat } = usePoolChatNotifications();
+  const hasUnreadChat = hasUnreadPoolChat(pool.id);
 
   return (
     <div
-      className={`bg-surface-card border rounded-2xl p-4 transition-all duration-200 cursor-pointer ${
+      className={`relative bg-surface-card border rounded-2xl p-4 transition-all duration-200 cursor-pointer ${
         pool.status === 'cancelled' ? 'border-red-500/20 opacity-60' :
         pool.has_joined ? 'border-accent-primary/30 shadow-sm shadow-accent-primary/10' :
         'border-surface-border hover:border-surface-border/60'
       }`}
       onClick={() => onOpenDetail(pool)}
     >
+      {hasUnreadChat && <UnreadChatDot className="-top-1 -right-1" />}
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
         <div className="text-3xl flex-shrink-0 mt-0.5">{emoji}</div>

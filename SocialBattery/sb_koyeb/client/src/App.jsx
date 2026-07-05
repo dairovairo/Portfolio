@@ -22,6 +22,7 @@ import EventDetailPage from './pages/EventDetailPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ShopPage from './pages/ShopPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
+import { PoolChatNotificationsProvider } from './context/PoolChatNotificationsContext';
 import { TutorialProvider } from './context/TutorialContext';
 import { MascotProvider } from './context/MascotContext';
 import MascotPreviewSync from './components/MascotPreviewSync';
@@ -106,7 +107,9 @@ export default function App() {
               <TutorialProvider>
                 <MascotProvider>
                 <CommunityNotificationsProvider>
+                <PoolChatNotificationsProvider>
                   <AppRoutes />
+                </PoolChatNotificationsProvider>
                 </CommunityNotificationsProvider>
                 </MascotProvider>
               </TutorialProvider>
