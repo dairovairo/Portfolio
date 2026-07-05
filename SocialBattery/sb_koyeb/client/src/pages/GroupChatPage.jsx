@@ -29,15 +29,14 @@ function Avatar({ user, size = 'sm' }) {
   );
 }
 
-function IdentityPill({ badge }) {
+function IdentityBadge({ identity }) {
   return (
-    <span
-      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-accent-primary/20 bg-accent-primary/10 px-2 py-1 text-xs font-display font-semibold text-accent-glow"
-      title={badge.description}
+    <div
+      className="flex-shrink-0 w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl"
+      title={`${identity.badge.name} · ${identity.badge.description}`}
     >
-      <span className="flex-shrink-0">{badge.emoji}</span>
-      <span className="truncate">{badge.name}</span>
-    </span>
+      {identity.badge.emoji}
+    </div>
   );
 }
 
@@ -226,6 +225,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
           <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
             {members.map(member => {
               const memberIdentities = identitiesByUser[member.id] || [];
+              const identity = memberIdentities[0] || null;
               const isOwnerMember = group?.owner?.id === member.id;
               const isMe = currentUserId === member.id;
               const color = getBatteryColor(member.battery_level ?? 50);
@@ -237,6 +237,8 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                     <button onClick={() => onOpenUser(member.id)} className="flex-shrink-0">
                       <Avatar user={member} size="md" />
                     </button>
+
+                    {identity && <IdentityBadge identity={identity} />}
 
                     <div className="flex-1 min-w-0">
                       <button onClick={() => onOpenUser(member.id)} className="text-left w-full">
@@ -256,17 +258,14 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                           )}
                         </div>
                         <div className="text-xs text-surface-muted font-mono truncate">@{member.username}</div>
-                      </button>
-
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {memberIdentities.length > 0 ? (
-                          memberIdentities.map(identity => (
-                            <IdentityPill key={identity.badgeId} badge={identity.badge} />
-                          ))
+                        {identity ? (
+                          <div className="text-[11px] text-accent-glow font-display font-semibold truncate mt-0.5">
+                            {identity.badge.name}
+                          </div>
                         ) : (
-                          <span className="text-xs text-slate-600 font-mono">Sin identidad activa</span>
+                          <div className="text-[11px] text-slate-600 font-mono mt-0.5">Sin identidad activa</div>
                         )}
-                      </div>
+                      </button>
 
                       {member.last_seen_at && (
                         <div className="text-[11px] text-surface-muted/70 font-mono mt-2">
@@ -351,67 +350,87 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   return (
-    <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
       {!isMe && <Avatar user={msg.sender} />}
-      <div className="max-w-[75%]">
-        {!isMe && (
-          <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
-            {msg.sender?.display_name || msg.sender?.username}
-          </div>
-        )}
-        <div
-          className={`rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
-          style={bubbleStyle}
-        >
-          <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
-          <div className="text-xs mt-1 opacity-60">
-            {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
-  const [lightbox, setLightbox] = useState(false);
-  const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
-  const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
-
-  return (
-    <>
-      <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!isMe && <Avatar user={msg.sender} />}
-        <div className="max-w-[75%]">
+      <div className="flex items-end gap-1.5 max-w-[75%]">
+        <div className="min-w-0">
           {!isMe && (
             <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
               {msg.sender?.display_name || msg.sender?.username}
             </div>
           )}
           <div
-            className={`rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
+            className={`rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
             style={bubbleStyle}
           >
-            <div className="relative">
-              <img
-                src={msg.content}
-                alt="Imagen"
-                className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
-                onClick={() => { if (!isOptimistic) setLightbox(true); }}
-              />
-              {isOptimistic && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
-            <div className="text-xs px-3 pb-2 pt-1 opacity-60">
+            <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
+            <div className="text-xs mt-1 opacity-60">
               {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
             </div>
           </div>
+        </div>
+        {identity && (
+          <span
+            className="flex-shrink-0 text-lg leading-none mb-1.5"
+            title={`${identity.badge.name} · ${identity.badge.description}`}
+          >
+            {identity.badge.emoji}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
+  const [lightbox, setLightbox] = useState(false);
+  const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
+  const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
+
+  return (
+    <>
+      <div className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
+        {!isMe && <Avatar user={msg.sender} />}
+        <div className="flex items-end gap-1.5 max-w-[75%]">
+          <div className="min-w-0">
+            {!isMe && (
+              <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
+                {msg.sender?.display_name || msg.sender?.username}
+              </div>
+            )}
+            <div
+              className={`rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
+              style={bubbleStyle}
+            >
+              <div className="relative">
+                <img
+                  src={msg.content}
+                  alt="Imagen"
+                  className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
+                  onClick={() => { if (!isOptimistic) setLightbox(true); }}
+                />
+                {isOptimistic && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+              <div className="text-xs px-3 pb-2 pt-1 opacity-60">
+                {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          </div>
+          {identity && (
+            <span
+              className="flex-shrink-0 text-lg leading-none mb-1.5"
+              title={`${identity.badge.name} · ${identity.badge.description}`}
+            >
+              {identity.badge.emoji}
+            </span>
+          )}
         </div>
       </div>
 
@@ -776,6 +795,11 @@ export default function GroupChatPage() {
     return true;
   });
 
+  const identityByUserId = badgeData.assignments.reduce((acc, a) => {
+    acc[a.userId] = a;
+    return acc;
+  }, {});
+
   const grouped = [];
   let lastDate = null;
   visibleMessages.forEach(msg => {
@@ -909,6 +933,7 @@ export default function GroupChatPage() {
                   isMe={isMe}
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
+                  identity={identityByUserId[msg.sender_id || msg.sender?.id]}
                 />
               );
             }
@@ -920,6 +945,7 @@ export default function GroupChatPage() {
                 isMe={isMe}
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
+                identity={identityByUserId[msg.sender_id || msg.sender?.id]}
               />
             );
           })

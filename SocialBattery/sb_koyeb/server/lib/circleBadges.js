@@ -43,10 +43,20 @@ const CIRCLE_BADGES = [
     description: 'Quien tiene mas bateria social por la manana.',
     category: 'circle',
   },
+  {
+    id: 'tapado',
+    name: 'Tapado',
+    emoji: '🫥',
+    description: 'Sin insignia... el mas normal de tus colegas.',
+    category: 'circle',
+    exclusive: false,   // a diferencia del resto, esta la pueden tener varias personas a la vez
+  },
 ];
 
+const TAPADO_BADGE_ID = 'tapado';
+
 const BADGE_BY_ID = Object.fromEntries(CIRCLE_BADGES.map(badge => [badge.id, badge]));
-const MAX_IDENTITIES_PER_USER = 2;
+const MAX_IDENTITIES_PER_USER = 1;
 
 async function getCircleMemberIds(userId) {
   const { data: friendships, error } = await supabase
@@ -190,17 +200,23 @@ function pushLoneWolfCandidates(candidates, statsList) {
 /**
  * Asigna insignias con las siguientes reglas:
  * - Una insignia solo puede tenerla UNA persona (exclusiva por grupo)
- * - Una persona puede tener como maximo dos identidades activas
+ * - Una persona puede tener como maximo UNA identidad activa a la vez
  * - Si varias personas empatan en puntuacion para una insignia,
- *   tiene prioridad quien lleve menos identidades activas
+ *   tiene prioridad quien no tenga ya una identidad activa
+ * - "Tapado" es la excepcion: no compite por puntuacion, sino que se
+ *   asigna automaticamente a cualquier miembro que no haya ganado
+ *   ninguna otra insignia. A diferencia del resto, la pueden tener
+ *   varias personas del grupo a la vez.
  */
-function chooseAssignments(candidates, scopeId = 'circle') {
+function chooseAssignments(candidates, memberIds, scopeId = 'circle') {
   const assignments = [];
   const assignedBadges = new Set();
   const userBadgeCount = {};
 
-  // Procesamos cada insignia en el orden definido en CIRCLE_BADGES
-  for (const badgeDef of CIRCLE_BADGES) {
+  const competitiveBadges = CIRCLE_BADGES.filter(badge => badge.id !== TAPADO_BADGE_ID);
+
+  // Procesamos cada insignia competitiva en el orden definido en CIRCLE_BADGES
+  for (const badgeDef of competitiveBadges) {
     const badgeId = badgeDef.id;
     const badgeCandidates = candidates.filter(c =>
       c.badgeId === badgeId &&
@@ -224,6 +240,25 @@ function chooseAssignments(candidates, scopeId = 'circle') {
     assignedBadges.add(badgeId);
     userBadgeCount[winner.userId] = (userBadgeCount[winner.userId] || 0) + 1;
   }
+
+  // "Tapado": red de seguridad para quien no haya ganado ninguna insignia
+  // competitiva. No exclusiva — todos los que apliquen la reciben a la vez.
+  const wonUserIds = new Set(assignments.map(a => a.userId));
+  const tapadoBadge = BADGE_BY_ID[TAPADO_BADGE_ID];
+  memberIds.forEach(userId => {
+    if (wonUserIds.has(userId)) return;
+    assignments.push({
+      badgeId: TAPADO_BADGE_ID,
+      userId,
+      score: 0,
+      sortScore: 0,
+      strength: 0,
+      rank: 1,
+      reason: 'Sin insignia en este grupo... el mas normal de tus colegas.',
+      badge: tapadoBadge,
+      earned_at: new Date().toISOString(),
+    });
+  });
 
   return assignments;
 }
@@ -371,7 +406,7 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     stats => `${scoreText(stats.average, '%')} de media por la manana (${stats.morningCount} registros)`
   );
 
-  const assignments = chooseAssignments(candidates, options.scopeId || options.groupId || memberIds.join('|'));
+  const assignments = chooseAssignments(candidates, memberIds, options.scopeId || options.groupId || memberIds.join('|'));
   const membersById = Object.fromEntries((members || []).map(member => [member.id, member]));
 
   return {
