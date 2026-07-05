@@ -45,6 +45,47 @@ function Avatar({ user, size = 'sm' }) {
   );
 }
 
+// Cuadrito de texto con nombre + descripción de la insignia (mismo
+// componente que en GroupChatPage.jsx). `align` controla si se pega al
+// borde izquierdo o derecho del icono para no salirse de la pantalla.
+function BadgeDescriptionPopover({ badge, align = 'left' }) {
+  return (
+    <div
+      className={`absolute z-50 bottom-full mb-2 ${align === 'right' ? 'right-0' : 'left-0'} w-52 max-w-[70vw] bg-surface-card border border-surface-border rounded-xl p-3 shadow-2xl text-left animate-fade-in`}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-lg leading-none">{badge.emoji}</span>
+        <span className="font-display font-bold text-surface-text text-sm">{badge.name}</span>
+      </div>
+      <p className="text-xs text-surface-muted leading-relaxed">{badge.description}</p>
+    </div>
+  );
+}
+
+// Insignia pulsable junto a los mensajes (mismo componente y criterio que
+// en GroupChatPage.jsx, size="inline"): al tocarla muestra su descripción.
+function IdentityBadge({ identity, align = 'left' }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative flex-shrink-0 inline-block">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        className="block leading-none text-lg mb-1.5 bg-transparent border-0 p-0"
+      >
+        {identity.badge.emoji}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <BadgeDescriptionPopover badge={identity.badge} align={align} />
+        </>
+      )}
+    </div>
+  );
+}
+
 function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
@@ -73,32 +114,37 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   return (
     <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       {!isMe && <Avatar user={msg.sender} />}
-      <div className="max-w-[75%]">
-        {!isMe && (
-          <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
-            {msg.sender?.username}
-          </div>
-        )}
-        <div
-          className={`rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
-          style={bubbleStyle}
-        >
-          <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
-          <div className="text-xs mt-1 opacity-60">
-            {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+      <div className="flex items-end gap-1.5 max-w-[75%]">
+        <div className="min-w-0">
+          {!isMe && (
+            <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
+              {msg.sender?.username}
+            </div>
+          )}
+          <div
+            className={`rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
+            style={bubbleStyle}
+          >
+            <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
+            <div className="text-xs mt-1 opacity-60">
+              {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+            </div>
           </div>
         </div>
+        {identity && (
+          <IdentityBadge identity={identity} align={isMe ? 'right' : 'left'} />
+        )}
       </div>
     </div>
   );
 }
 
-function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
   const [lightbox, setLightbox] = useState(false);
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
@@ -107,33 +153,38 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle }) {
     <>
       <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
         {!isMe && <Avatar user={msg.sender} />}
-        <div className="max-w-[75%]">
-          {!isMe && (
-            <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
-              {msg.sender?.username}
-            </div>
-          )}
-          <div
-            className={`rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
-            style={bubbleStyle}
-          >
-            <div className="relative">
-              <img
-                src={msg.content}
-                alt="Imagen"
-                className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
-                onClick={() => { if (!isOptimistic) setLightbox(true); }}
-              />
-              {isOptimistic && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
-            <div className="text-xs px-3 pb-2 pt-1 opacity-60">
-              {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+        <div className="flex items-end gap-1.5 max-w-[75%]">
+          <div className="min-w-0">
+            {!isMe && (
+              <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
+                {msg.sender?.username}
+              </div>
+            )}
+            <div
+              className={`rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
+              style={bubbleStyle}
+            >
+              <div className="relative">
+                <img
+                  src={msg.content}
+                  alt="Imagen"
+                  className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
+                  onClick={() => { if (!isOptimistic) setLightbox(true); }}
+                />
+                {isOptimistic && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+              <div className="text-xs px-3 pb-2 pt-1 opacity-60">
+                {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              </div>
             </div>
           </div>
+          {identity && (
+            <IdentityBadge identity={identity} align={isMe ? 'right' : 'left'} />
+          )}
         </div>
       </div>
 
@@ -186,6 +237,7 @@ export default function PoolChatPage() {
   const [messages, setMessages] = useState([]);
   const [clearedAt, setClearedAt] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [badgeData, setBadgeData] = useState({ assignments: [] });
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
@@ -222,13 +274,18 @@ export default function PoolChatPage() {
     async function load() {
       try {
         setLoading(true);
-        const [poolResult, messagesResult] = await Promise.all([
+        const [poolResult, messagesResult, badgesResult] = await Promise.all([
           api.get(`/pools/${poolId}`),
           api.get(`/pools/${poolId}/messages`),
+          api.get(`/badges/pool/${poolId}`).catch(error => {
+            console.error('[POOL BADGES]', error);
+            return { assignments: [] };
+          }),
         ]);
         setPool(poolResult.pool);
         setMessages(messagesResult.messages || []);
         setClearedAt(messagesResult.cleared_at || null);
+        setBadgeData({ assignments: badgesResult.assignments || [] });
       } catch (e) {
         console.error(e);
         showToast('Error al cargar el chat', 'error');
@@ -369,6 +426,11 @@ export default function PoolChatPage() {
     grouped.push({ type: 'msg', msg, key: msg.id });
   });
 
+  const identityByUserId = badgeData.assignments.reduce((acc, assignment) => {
+    if (!acc[assignment.userId]) acc[assignment.userId] = assignment;
+    return acc;
+  }, {});
+
   return (
     <div className="min-h-screen bg-surface-bg flex flex-col">
       {toast && (
@@ -395,6 +457,7 @@ export default function PoolChatPage() {
               </div>
               <div className="text-xs text-surface-muted font-mono">
                 💬 Chat de la quedada · {pool.participant_count} apuntados
+                {badgeData.assignments.length > 0 && ` · ${badgeData.assignments.length} identidades`}
               </div>
             </div>
           ) : loading ? (
@@ -446,6 +509,7 @@ export default function PoolChatPage() {
             if (item.type === 'date') return <DateDivider key={item.key} date={item.date} />;
             const msg = item.msg;
             const isMe = msg.sender_id === profile?.id || msg.sender?.id === profile?.id;
+            const identity = identityByUserId[msg.sender_id || msg.sender?.id] || null;
 
             if (msg.type === 'image') {
               return (
@@ -455,6 +519,7 @@ export default function PoolChatPage() {
                   isMe={isMe}
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
+                  identity={identity}
                 />
               );
             }
@@ -466,6 +531,7 @@ export default function PoolChatPage() {
                 isMe={isMe}
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
+                identity={identity}
               />
             );
           })

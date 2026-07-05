@@ -304,10 +304,10 @@ router.get('/:id', requireAuth, async (req, res) => {
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
-        creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
+        creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url),
         pool_participants(
           joined_at, reminder_minutes_before,
-          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)
         )
       `)
       .eq('id', req.params.id)
@@ -332,6 +332,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         username: user?.username,
         avatar_url: user?.avatar_url,
         battery_level: user?.battery_level,
+        mascot_preview_url: user?.mascot_preview_url,
         joined_at: p.joined_at,
       };
     }).filter(p => p.id);

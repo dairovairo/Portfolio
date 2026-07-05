@@ -8,6 +8,7 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
+import MascotDisplay from '../components/MascotDisplay';
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 function getActivityEmoji(activity = '') {
@@ -159,6 +160,101 @@ function AvatarStack({ participants = [], total = 0, size = 'sm' }) {
   );
 }
 
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx / FriendCard.jsx / GroupChatPage.jsx): 0-33 → low, 34-66 →
+// mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
+
+// Mascota en miniatura — mismo criterio que en el panel de integrantes del
+// grupo (GroupChatPage.jsx): capa base según tier de batería + overlay
+// "horneado" (mascot_preview_url) con la personalización del usuario.
+function MiniMascot({ user, size = 32 }) {
+  const color = getBatteryColor(user?.battery_level ?? 50);
+  const tier = getMascotTier(user?.battery_level ?? 50);
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <MascotDisplay
+        tier={tier}
+        size={size}
+        glowColor={color.hex}
+        outfitSrc={null}
+        feetSrc={null}
+        headSrc={null}
+        accessories={[]}
+        activityLayers={[]}
+      />
+      {user?.mascot_preview_url && (
+        <img
+          src={user.mascot_preview_url}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+        />
+      )}
+    </div>
+  );
+}
+
+// Cuadrito de texto con nombre + descripción de la insignia (mismo
+// componente que en GroupChatPage.jsx). `placement` controla si se abre
+// hacia arriba ('top', por defecto) o hacia abajo ('bottom') del icono —
+// necesario para el primer apuntado de la lista, donde abrir hacia arriba
+// lo corta contra el borde superior del panel con scroll.
+function BadgeDescriptionPopover({ badge, align = 'left', placement = 'top' }) {
+  return (
+    <div
+      className={`absolute z-50 ${placement === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'} ${align === 'right' ? 'right-0' : 'left-0'} w-52 max-w-[70vw] bg-surface-card border border-surface-border rounded-xl p-3 shadow-2xl text-left animate-fade-in`}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-lg leading-none">{badge.emoji}</span>
+        <span className="font-display font-bold text-surface-text text-sm">{badge.name}</span>
+      </div>
+      <p className="text-xs text-surface-muted leading-relaxed">{badge.description}</p>
+    </div>
+  );
+}
+
+// Insignia pulsable (mismo componente que en GroupChatPage.jsx): al
+// tocarla muestra su descripción en un cuadrito de texto. `size` = 'panel'
+// es el único tamaño usado aquí, con el nombre debajo del icono.
+function IdentityBadge({ identity, size = 'panel', align = 'left', showName = false, popoverPlacement = 'top' }) {
+  const [open, setOpen] = useState(false);
+
+  const buttonClass = {
+    // +10% sobre el tamaño base (w-9 h-9 / text-xl), igual que en el panel
+    // de integrantes del grupo.
+    panel: 'w-[2.475rem] h-[2.475rem] rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-[1.375rem]',
+  }[size];
+
+  return (
+    <div className="relative flex-shrink-0 flex flex-col items-center gap-0.5">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        className={buttonClass}
+      >
+        {identity.badge.emoji}
+      </button>
+      {showName && (
+        <span className="text-[9px] text-accent-glow font-display font-semibold text-center leading-tight max-w-[56px] truncate">
+          {identity.badge.name}
+        </span>
+      )}
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <BadgeDescriptionPopover badge={identity.badge} align={align} placement={popoverPlacement} />
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Participants sheet (bottom drawer) ────────────────────────────────────────
 function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, joining, leaving, reminderSaving }) {
   const navigate = useNavigate();
@@ -167,14 +263,27 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
   // Fetch full participant list
   const [participants, setParticipants] = useState(pool.participants_preview || []);
   const [loading, setLoading] = useState(false);
+  const [badgeData, setBadgeData] = useState({ assignments: [] });
 
   useEffect(() => {
     setLoading(true);
-    api.get(`/pools/${pool.id}`)
-      .then(({ pool: full }) => setParticipants(full.participants || []))
+    Promise.all([
+      api.get(`/pools/${pool.id}`),
+      api.get(`/badges/pool/${pool.id}`).catch(() => ({ assignments: [] })),
+    ])
+      .then(([{ pool: full }, badges]) => {
+        setParticipants(full.participants || []);
+        setBadgeData({ assignments: badges.assignments || [] });
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [pool.id]);
+
+  const identitiesByUser = badgeData.assignments.reduce((acc, assignment) => {
+    if (!acc[assignment.userId]) acc[assignment.userId] = [];
+    acc[assignment.userId].push(assignment);
+    return acc;
+  }, {});
 
   const isPast = new Date(pool.scheduled_at) <= new Date();
   const canJoin = pool.status === 'open' && !pool.has_joined && !isPast && pool.status !== 'cancelled';
@@ -247,16 +356,25 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
               {participants.map((p, idx) => {
                 const batteryColor = getBatteryColor(p.battery_level ?? 50);
                 const isFirst = idx === 0;
+                const identity = (identitiesByUser[p.id] || [])[0] || null;
                 return (
                   <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-bg/50 transition-colors">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
-                      style={{ borderColor: batteryColor?.hex, background: `${batteryColor?.hex}15` }}
-                    >
-                      {p.avatar_url
-                        ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                        : (p.username?.[0] || '?').toUpperCase()
-                      }
+                    <div className="relative flex-shrink-0">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
+                        style={{ borderColor: batteryColor?.hex, background: `${batteryColor?.hex}15` }}
+                      >
+                        {p.avatar_url
+                          ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                          : (p.username?.[0] || '?').toUpperCase()
+                        }
+                      </div>
+                      {/* Mascota — mismo offset que en el panel de integrantes
+                          del grupo (GroupChatPage.jsx): -0.25rem base + 6% a
+                          la derecha / 8% hacia abajo sobre el tamaño del avatar. */}
+                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', right: 'calc(-0.25rem - 6%)' }}>
+                        <MiniMascot user={p} size={28} />
+                      </div>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-display font-semibold text-surface-text truncate flex items-center gap-1.5">
@@ -273,6 +391,11 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
                         </span>
                       )}
                     </div>
+                    {/* Insignia — a la izquierda de la hora de apuntado,
+                        centrada verticalmente (la fila ya usa items-center). */}
+                    {identity && (
+                      <IdentityBadge identity={identity} size="panel" showName align="right" popoverPlacement={isFirst ? 'bottom' : 'top'} />
+                    )}
                     {p.joined_at && (
                       <span className="text-xs text-slate-600 font-mono flex-shrink-0">
                         {formatRelativeTime(p.joined_at)}

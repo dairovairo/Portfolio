@@ -84,6 +84,26 @@ async function getGroupMemberIds(groupId) {
   return (data || []).map(row => row.user_id);
 }
 
+// Apuntados de una quedada concreta (participantes + quien la creó).
+async function getPoolParticipantIds(poolId) {
+  const { data: pool, error: poolError } = await supabase
+    .from('hangout_pools')
+    .select('creator_id')
+    .eq('id', poolId)
+    .maybeSingle();
+  if (poolError) throw poolError;
+
+  const { data, error } = await supabase
+    .from('pool_participants')
+    .select('user_id')
+    .eq('pool_id', poolId);
+  if (error) throw error;
+
+  const ids = new Set((data || []).map(row => row.user_id));
+  if (pool?.creator_id) ids.add(pool.creator_id);
+  return [...ids];
+}
+
 function createStats(memberIds) {
   return Object.fromEntries(memberIds.map(userId => [userId, {
     userId,
@@ -452,6 +472,34 @@ async function computeGroupBadges(groupId) {
 }
 
 /**
+ * Calcula las insignias para los apuntados de una quedada (pool) concreta.
+ * Mismo criterio que computeGroupBadges (misma competición, misma
+ * persistencia permanente en user_badges) pero el conjunto de miembros es
+ * el de los apuntados a esa quedada en vez de los de un grupo privado, y
+ * las estadísticas se calculan a nivel de círculo (sin restringir por
+ * group_id) ya que una quedada no agrupa varias quedadas propias.
+ */
+async function computePoolBadges(poolId) {
+  const memberIds = await getPoolParticipantIds(poolId);
+  if (!memberIds.length) return { badges: CIRCLE_BADGES, members: [], assignments: [], stats: {} };
+
+  const result = await computeBadgesForMembers(memberIds, { scopeId: `pool:${poolId}` });
+
+  if (result.assignments.length) {
+    const rows = result.assignments.map(a => ({
+      user_id: a.userId,
+      badge_id: a.badgeId,
+      earned_at: a.earned_at,
+    }));
+    await supabase
+      .from('user_badges')
+      .upsert(rows, { onConflict: 'user_id,badge_id', ignoreDuplicates: true });
+  }
+
+  return result;
+}
+
+/**
  * Calcula las insignias para el círculo completo de amigos aceptados del usuario.
  * Mantenido por compatibilidad con rutas existentes.
  */
@@ -464,4 +512,5 @@ module.exports = {
   CIRCLE_BADGES,
   computeCircleBadges,
   computeGroupBadges,
+  computePoolBadges,
 };
