@@ -5,10 +5,49 @@ import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+import MascotDisplay from '../components/MascotDisplay';
 
 // ── Mark group as read in localStorage ───────────────────────────────────────
 function markGroupRead(groupId) {
   localStorage.setItem(`grp_read_${groupId}`, new Date().toISOString());
+}
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx / FriendCard.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
+
+// Mascota en miniatura — misma lógica que FriendCard: capa base según tier
+// de batería + overlay "horneado" (mascot_preview_url) con la personalización
+// del usuario (ropa/calzado/gorro/accesorios), si la tiene.
+function MiniMascot({ user, size = 32 }) {
+  const color = getBatteryColor(user?.battery_level ?? 50);
+  const tier = getMascotTier(user?.battery_level ?? 50);
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <MascotDisplay
+        tier={tier}
+        size={size}
+        glowColor={color.hex}
+        outfitSrc={null}
+        feetSrc={null}
+        headSrc={null}
+        accessories={[]}
+        activityLayers={[]}
+      />
+      {user?.mascot_preview_url && (
+        <img
+          src={user.mascot_preview_url}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+        />
+      )}
+    </div>
+  );
 }
 
 // ── Subcomponents ─────────────────────────────────────────────────────────────
@@ -49,21 +88,24 @@ function BadgeDescriptionPopover({ badge, align = 'left' }) {
 
 // Insignia pulsable: al tocarla muestra su descripción en un cuadrito
 // de texto (en vez de depender del "title" nativo, que no funciona bien
-// en móvil). `size` = 'tile' (icono cuadrado, junto a los miembros del
-// grupo) o 'inline' (emoji pequeño, junto a los mensajes).
+// en móvil). `size` = 'tile' (icono cuadrado grande), 'inline' (emoji
+// pequeño junto a los mensajes) o 'chip' (mini insignia junto al nombre
+// de usuario, en la lista de integrantes del grupo).
 function IdentityBadge({ identity, size = 'tile', align = 'left' }) {
   const [open, setOpen] = useState(false);
 
+  const buttonClass = {
+    tile: 'w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl',
+    inline: 'block leading-none text-lg mb-1.5 bg-transparent border-0 p-0',
+    chip: 'w-5 h-5 rounded-md bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-xs leading-none flex-shrink-0',
+  }[size];
+
   return (
-    <div className="relative flex-shrink-0">
+    <div className="relative flex-shrink-0 inline-block">
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
-        className={
-          size === 'tile'
-            ? 'w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl'
-            : 'block leading-none text-lg mb-1.5 bg-transparent border-0 p-0'
-        }
+        className={buttonClass}
       >
         {identity.badge.emoji}
       </button>
@@ -271,18 +313,21 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
               return (
                 <div key={member.id} className="bg-surface-card border border-surface-border rounded-2xl p-3">
                   <div className="flex items-start gap-3">
-                    <button onClick={() => onOpenUser(member.id)} className="flex-shrink-0">
+                    <button
+                      onClick={() => onOpenUser(member.id)}
+                      className="flex-shrink-0 flex flex-col items-center gap-1"
+                    >
                       <Avatar user={member} size="md" />
+                      <MiniMascot user={member} size={32} />
                     </button>
 
-                    {identity && <IdentityBadge identity={identity} size="tile" />}
-
                     <div className="flex-1 min-w-0">
-                      <button onClick={() => onOpenUser(member.id)} className="text-left w-full">
+                      <div onClick={() => onOpenUser(member.id)} className="text-left w-full cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <span className="font-display font-semibold text-surface-text text-sm truncate">
                             {member.display_name || member.username}
                           </span>
+                          {identity && <IdentityBadge identity={identity} size="chip" />}
                           {isMe && (
                             <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
                               Tú
@@ -302,7 +347,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                         ) : (
                           <div className="text-[11px] text-slate-600 font-mono mt-0.5">Sin identidad activa</div>
                         )}
-                      </button>
+                      </div>
 
                       {member.last_seen_at && (
                         <div className="text-[11px] text-surface-muted/70 font-mono mt-2">

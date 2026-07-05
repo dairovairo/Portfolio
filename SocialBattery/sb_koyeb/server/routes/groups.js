@@ -220,7 +220,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         owner:owner_id(id, username, display_name, avatar_url),
         friend_group_members(
           joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url)
         )
       `)
       .eq('id', req.params.id)
