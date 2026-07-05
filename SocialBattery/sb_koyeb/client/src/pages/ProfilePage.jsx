@@ -120,6 +120,7 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState(profile?.bio || '');
   const [editInterests, setEditInterests] = useState(profile?.interests || []);
+  const [mascotName, setMascotName] = useState(profile?.mascot_name || 'Volty');
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Avatar upload
@@ -152,9 +153,11 @@ export default function ProfilePage() {
   }, []);
 
   async function saveProfile() {
+    const trimmedMascotName = mascotName.trim().slice(0, 20) || 'Volty';
     if (
       bio.trim() === (profile?.bio || '') &&
-      JSON.stringify(editInterests) === JSON.stringify(profile?.interests || [])
+      JSON.stringify(editInterests) === JSON.stringify(profile?.interests || []) &&
+      trimmedMascotName === (profile?.mascot_name || 'Volty')
     ) { setEditing(false); return; }
 
     setSavingProfile(true);
@@ -162,6 +165,7 @@ export default function ProfilePage() {
       await api.patch('/users/me', {
         bio: bio.trim() || null,
         interests: editInterests,
+        mascot_name: trimmedMascotName,
       });
       await refreshProfile();
       setEditing(false);
@@ -276,24 +280,44 @@ export default function ProfilePage() {
                   <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                 </div>
 
-                {/* Mascota propia — a la derecha de la foto de perfil. Al ser
-                    tu propio dispositivo, MascotDisplay lee directamente del
-                    contexto (useMascot) tu equipado real (ropa/calzado/gorro/
-                    accesorios/actividad), sin necesidad de overrides ni de
-                    mascot_preview_url. */}
-                <div className="flex-shrink-0" style={{ width: 64, height: 64 }}>
-                  <MascotDisplay
-                    tier={getMascotTier(profile?.battery_level ?? 50)}
-                    size={64}
-                    glowColor={color.hex}
-                  />
+                {/* Mascota propia + nombre — a la derecha de la foto de perfil.
+                    Al ser tu propio dispositivo, MascotDisplay lee
+                    directamente del contexto (useMascot) tu equipado real
+                    (ropa/calzado/gorro/accesorios/actividad), sin necesidad de
+                    overrides ni de mascot_preview_url. Se sube ligeramente
+                    (marginTop negativo) para dejar hueco al nombre debajo sin
+                    que la fila quede descuadrada. */}
+                <div className="flex-shrink-0 flex flex-col items-center" style={{ width: 64 }}>
+                  <div style={{ width: 64, height: 64, marginTop: '-10px' }}>
+                    <MascotDisplay
+                      tier={getMascotTier(profile?.battery_level ?? 50)}
+                      size={64}
+                      glowColor={color.hex}
+                    />
+                  </div>
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={mascotName}
+                      onChange={e => setMascotName(e.target.value.slice(0, 20))}
+                      placeholder="Volty"
+                      maxLength={20}
+                      className="w-16 mt-0.5 bg-surface-bg border border-surface-border rounded-md px-1 py-0.5
+                        text-[10px] font-display font-semibold text-surface-text text-center
+                        focus:outline-none focus:border-accent-primary transition-colors"
+                    />
+                  ) : (
+                    <span className="text-[10px] font-display font-semibold text-surface-muted mt-1 max-w-[64px] truncate">
+                      {profile?.mascot_name || 'Volty'}
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Edit button */}
               {!editing && (
                 <button
-                  onClick={() => { setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setEditing(true); }}
+                  onClick={() => { setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setMascotName(profile?.mascot_name || 'Volty'); setEditing(true); }}
                   className="bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5
                     text-xs font-display font-semibold text-surface-text hover:text-accent-glow transition-all flex items-center gap-1.5"
                 >

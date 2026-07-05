@@ -208,7 +208,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select(`
-      id, username, bio, avatar_url, mascot_preview_url, interests, show_interests, show_public_stats, show_badges,
+      id, username, bio, avatar_url, mascot_preview_url, mascot_name, interests, show_interests, show_public_stats, show_badges,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)
@@ -232,11 +232,12 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges } = req.body;
+  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, mascot_name } = req.body;
   const updates = {};
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
   if (interests !== undefined) updates.interests = Array.isArray(interests) ? interests : [];
+  if (mascot_name !== undefined) updates.mascot_name = (mascot_name && mascot_name.trim()) ? mascot_name.trim().slice(0, 20) : 'Volty';
   if (show_interests !== undefined) updates.show_interests = Boolean(show_interests);
   if (show_public_stats !== undefined) updates.show_public_stats = Boolean(show_public_stats);
   if (show_badges !== undefined) updates.show_badges = Boolean(show_badges);
