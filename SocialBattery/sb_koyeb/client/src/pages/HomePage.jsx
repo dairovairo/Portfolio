@@ -17,6 +17,7 @@ import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramS
 import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { useMascot } from '../context/MascotContext';
 import MascotDisplay from '../components/MascotDisplay';
+import { claimDailyBatteryReward, DAILY_BATTERY_REWARD, CURRENCY_NAME_PLURAL } from '../lib/currency';
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
 function getMascotTier(level) {
@@ -466,6 +467,11 @@ export default function HomePage() {
         addToast(`¡Batería actualizada! +${earned.length} insignia${earned.length > 1 ? 's' : ''} 🏅`, 'success');
       } else {
         addToast('¡Batería actualizada!', 'success');
+      }
+
+      const reward = claimDailyBatteryReward(profile?.id);
+      if (reward.claimed) {
+        addToast(`⚡ +${DAILY_BATTERY_REWARD} ${CURRENCY_NAME_PLURAL} · recompensa diaria`, 'success');
       }
     } catch (err) {
       addToast('Error al actualizar', 'error');

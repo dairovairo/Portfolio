@@ -1851,7 +1851,7 @@ export const MASCOT_ACTIVITIES = [
     id: 'none',
     name: 'Sin actividad',
     desc: 'Solo la mascota, sin elemento de actividad.',
-    emoji: '⚡',
+    emoji: '🥳',
     layers: [],
     price: 0,
     isBase: true,

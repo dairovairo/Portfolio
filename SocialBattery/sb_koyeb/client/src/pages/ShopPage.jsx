@@ -8,32 +8,7 @@ import MyCustomizationsModal from '../components/MyCustomizationsModal';
 import HeadCustomizationsModal from '../components/HeadCustomizationsModal';
 import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
 import { getEffectiveBatteryLevel } from '../lib/battery';
-
-// Monedas iniciales de un usuario nuevo (antes de comprar nada). A partir de
-// aquí, el saldo se persiste en localStorage por usuario — ver
-// COINS_STORAGE_KEY — para que no se regenere cada vez que se entra a la
-// tienda o se reabre la app.
-const COINS = 340;
-const COINS_STORAGE_KEY = 'sb-shop-coins';
-
-function loadCoins(userId) {
-  if (!userId) return COINS;
-  try {
-    const raw = localStorage.getItem(`${COINS_STORAGE_KEY}_${userId}`);
-    if (raw === null) return COINS;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : COINS;
-  } catch {
-    return COINS;
-  }
-}
-
-function saveCoins(userId, value) {
-  if (!userId) return;
-  try {
-    localStorage.setItem(`${COINS_STORAGE_KEY}_${userId}`, String(value));
-  } catch {}
-}
+import { loadVolts, saveVolts, CURRENCY_SYMBOL, DAILY_BATTERY_REWARD } from '../lib/currency';
 
 function getMascotTier(level) {
   if (level <= 33) return 'low';
@@ -157,7 +132,7 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
               }`}
           >
-            🪙 {price}
+            ⚡ {price}
           </button>
         )}
       </div>
@@ -297,7 +272,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
               }`}
           >
-            🪙 {accessory.price}
+            ⚡ {accessory.price}
           </button>
         )}
       </div>
@@ -386,7 +361,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
               }`}
           >
-            🪙 {accessory.price}
+            ⚡ {accessory.price}
           </button>
         )}
       </div>
@@ -529,7 +504,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
               }`}
           >
-            🪙 {outfit.price}
+            ⚡ {outfit.price}
           </button>
         )}
       </div>
@@ -613,7 +588,7 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, 
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
               }`}
           >
-            🪙 {feet.price}
+            ⚡ {feet.price}
           </button>
         )}
       </div>
@@ -822,7 +797,7 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, 
                 : 'bg-surface-hover text-surface-muted cursor-not-allowed border border-surface-border'
               }`}
           >
-            🪙 {head.price}
+            ⚡ {head.price}
           </button>
         )}
       </div>
@@ -849,7 +824,7 @@ export default function ShopPage() {
   const [tab, setTab]                   = useState('activities');
   const [outfitMainTab, setOutfitMainTab] = useState('torso'); // 'pies' | 'torso' | 'cabeza'
   const [outfitSubTab, setOutfitSubTab] = useState('camiseta'); // 'camiseta' | 'camisa'
-  const [coins, setCoins]       = useState(() => loadCoins(profile?.id));
+  const [coins, setCoins]       = useState(() => loadVolts(profile?.id));
   const [toast, setToast]       = useState(null);
 
   // Releer el saldo guardado en cuanto se conoce el usuario (profile.id
@@ -857,12 +832,12 @@ export default function ShopPage() {
   // Supabase), y guardarlo en cada cambio posterior. Mismo patrón que el
   // "skin" persistente en MascotContext.
   useEffect(() => {
-    if (profile?.id) setCoins(loadCoins(profile.id));
+    if (profile?.id) setCoins(loadVolts(profile.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
 
   useEffect(() => {
-    if (profile?.id) saveCoins(profile.id, coins);
+    if (profile?.id) saveVolts(profile.id, coins);
   }, [coins, profile?.id]);
 
   // Ítem de calzado que se está personalizando en el editor de color (null
@@ -1464,8 +1439,8 @@ export default function ShopPage() {
             <span className="text-xl" style={{ fontVariantEmoji: 'emoji' }}>🛒</span>
             <span className="font-display font-bold text-surface-text">Tienda de la mascota</span>
           </div>
-          <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border rounded-xl px-3 py-1.5">
-            <span className="text-sm">🪙</span>
+          <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border rounded-xl px-3 py-1.5" title="Volts">
+            <span className="text-sm">⚡</span>
             <span className="font-mono font-bold text-accent-glow text-sm">{coins}</span>
           </div>
         </div>
@@ -1503,7 +1478,7 @@ export default function ShopPage() {
             <div className="flex flex-col gap-0.5 flex-1 min-w-0">
               <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
               <div className="text-[10px] text-surface-muted/60 mt-0.5 leading-tight">
-                Ganas 🪙 actualizando<br />tu batería cada día.
+                Gana ⚡ {DAILY_BATTERY_REWARD} Volts al actualizar<br />tu batería cada día.
               </div>
             </div>
             <div className="flex flex-col gap-1.5 shrink-0">
@@ -1531,7 +1506,7 @@ export default function ShopPage() {
       <div className="max-w-lg mx-auto w-full px-4 py-3">
         <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-1">
           {[
-            { key: 'activities',  label: 'Actividades', emoji: '⚡' },
+            { key: 'activities',  label: 'Actividades', emoji: '🥳' },
             { key: 'outfit',      label: 'Outfit',      emoji: '👕' },
             { key: 'accessories', label: 'Accesorios',  emoji: '😎' },
           ].map(t => (
