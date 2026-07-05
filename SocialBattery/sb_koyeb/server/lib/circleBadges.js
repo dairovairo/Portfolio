@@ -45,7 +45,7 @@ const CIRCLE_BADGES = [
   },
   {
     id: 'tapado',
-    name: 'Tapado',
+    name: 'Average Joe/Jane',
     emoji: '🫥',
     description: 'Sin insignia... el mas normal de tus colegas.',
     category: 'circle',

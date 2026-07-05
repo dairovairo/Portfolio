@@ -29,13 +29,50 @@ function Avatar({ user, size = 'sm' }) {
   );
 }
 
-function IdentityBadge({ identity }) {
+// Cuadrito de texto con nombre + descripción de la insignia.
+// `align` controla si se pega al borde izquierdo o derecho del icono
+// para no salirse de la pantalla según de qué lado esté la insignia.
+function BadgeDescriptionPopover({ badge, align = 'left' }) {
   return (
     <div
-      className="flex-shrink-0 w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl"
-      title={`${identity.badge.name} · ${identity.badge.description}`}
+      className={`absolute z-50 bottom-full mb-2 ${align === 'right' ? 'right-0' : 'left-0'} w-52 max-w-[70vw] bg-surface-card border border-surface-border rounded-xl p-3 shadow-2xl text-left animate-fade-in`}
+      onClick={e => e.stopPropagation()}
     >
-      {identity.badge.emoji}
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-lg leading-none">{badge.emoji}</span>
+        <span className="font-display font-bold text-surface-text text-sm">{badge.name}</span>
+      </div>
+      <p className="text-xs text-surface-muted leading-relaxed">{badge.description}</p>
+    </div>
+  );
+}
+
+// Insignia pulsable: al tocarla muestra su descripción en un cuadrito
+// de texto (en vez de depender del "title" nativo, que no funciona bien
+// en móvil). `size` = 'tile' (icono cuadrado, junto a los miembros del
+// grupo) o 'inline' (emoji pequeño, junto a los mensajes).
+function IdentityBadge({ identity, size = 'tile', align = 'left' }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative flex-shrink-0">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        className={
+          size === 'tile'
+            ? 'w-11 h-11 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl'
+            : 'block leading-none text-lg mb-1.5 bg-transparent border-0 p-0'
+        }
+      >
+        {identity.badge.emoji}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <BadgeDescriptionPopover badge={identity.badge} align={align} />
+        </>
+      )}
     </div>
   );
 }
@@ -238,7 +275,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       <Avatar user={member} size="md" />
                     </button>
 
-                    {identity && <IdentityBadge identity={identity} />}
+                    {identity && <IdentityBadge identity={identity} size="tile" />}
 
                     <div className="flex-1 min-w-0">
                       <button onClick={() => onOpenUser(member.id)} className="text-left w-full">
@@ -373,12 +410,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
           </div>
         </div>
         {identity && (
-          <span
-            className="flex-shrink-0 text-lg leading-none mb-1.5"
-            title={`${identity.badge.name} · ${identity.badge.description}`}
-          >
-            {identity.badge.emoji}
-          </span>
+          <IdentityBadge identity={identity} size="inline" align={isMe ? 'right' : 'left'} />
         )}
       </div>
     </div>
@@ -424,12 +456,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
             </div>
           </div>
           {identity && (
-            <span
-              className="flex-shrink-0 text-lg leading-none mb-1.5"
-              title={`${identity.badge.name} · ${identity.badge.description}`}
-            >
-              {identity.badge.emoji}
-            </span>
+            <IdentityBadge identity={identity} size="inline" align={isMe ? 'right' : 'left'} />
           )}
         </div>
       </div>
