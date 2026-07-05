@@ -183,7 +183,7 @@ export default function UserProfilePage() {
           <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-white transition-colors p-1">
             ←
           </button>
-          <h1 className="font-display font-bold text-white flex-1">@{user.username}</h1>
+          <h1 className="font-display font-bold text-white flex-1">{user.username}</h1>
         </div>
       </nav>
 
@@ -202,7 +202,7 @@ export default function UserProfilePage() {
               }
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="font-display font-bold text-white text-xl truncate">@{user.username}</h2>
+              <h2 className="font-display font-bold text-white text-xl truncate">{user.username}</h2>
               {user.bio && <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{user.bio}</p>}
               {user.interests && user.interests.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">

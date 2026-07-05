@@ -55,9 +55,6 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
             </span>
           )}
         </div>
-        <div className="text-xs text-surface-muted font-mono mt-0.5">
-          @{friend.username}
-        </div>
         {showLastSeen && (
           <div className="text-xs text-surface-muted mt-1">
             Última actualización: {formatRelativeTime(friend.battery_updated_at)}

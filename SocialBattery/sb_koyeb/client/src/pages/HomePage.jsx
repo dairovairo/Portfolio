@@ -84,7 +84,7 @@ function SearchModal({ friends, onClose, onToast }) {
     try {
       await api.post('/friends/request', { addressee_id: user.id });
       setSent(s => new Set([...s, user.id]));
-      onToast(`Solicitud enviada a @${user.username} 🤝`);
+      onToast(`Solicitud enviada a ${user.username} 🤝`);
     } catch (e) { onToast(e.message, 'error'); }
     finally { setActionLoading(l => ({ ...l, [user.id]: false })); }
   }
@@ -110,7 +110,7 @@ function SearchModal({ friends, onClose, onToast }) {
         <div className="overflow-y-auto flex-1 space-y-2">
           {loading && <div className="text-center text-surface-muted text-sm py-6 animate-pulse">Buscando...</div>}
           {!loading && query.length >= 2 && results.length === 0 && (
-            <div className="text-center text-surface-muted text-sm py-8">Sin resultados para "@{query}"</div>
+            <div className="text-center text-surface-muted text-sm py-8">Sin resultados para "{query}"</div>
           )}
           {!loading && query.length < 2 && (
             <div className="text-center text-surface-muted text-sm py-8">
@@ -129,7 +129,7 @@ function SearchModal({ friends, onClose, onToast }) {
                 <div className="flex-1 min-w-0">
                   <button onClick={() => navigate(`/user/${user.id}`)} className="text-left">
                     <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
-                    <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
+                    <div className="text-xs text-surface-muted font-mono">{user.username}</div>
                   </button>
                 </div>
                 <BatteryBadge level={user.battery_level} isEstimated={user.battery_is_estimated} />
@@ -175,7 +175,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
     try {
       await api.patch(`/friends/request/${requestId}`, { status });
       setRequests(r => r.filter(req => req.id !== requestId));
-      if (status === 'accepted') { onToast(`¡Ahora eres amigo de @${username}! 🎉`); onAccepted?.(); }
+      if (status === 'accepted') { onToast(`¡Ahora eres amigo de ${username}! 🎉`); onAccepted?.(); }
       else onToast('Solicitud rechazada');
     } catch (e) { onToast(e.message, 'error'); }
     finally { setActionLoading(l => ({ ...l, [requestId]: false })); }
@@ -208,7 +208,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
               </button>
               <div className="flex-1 min-w-0">
                 <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.username}</div>
-                <div className="text-xs text-surface-muted font-mono">@{req.requester.username}</div>
+                <div className="text-xs text-surface-muted font-mono">{req.requester.username}</div>
               </div>
               <BatteryBadge level={req.requester.battery_level} />
               <div className="flex gap-1.5 flex-shrink-0">
@@ -293,7 +293,7 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
                       <Avatar user={f} />
                       <div className="flex-1 min-w-0">
                         <div className="font-display font-semibold text-surface-text text-sm truncate">{f.username}</div>
-                        <div className="text-xs text-surface-muted font-mono">@{f.username}</div>
+                        <div className="text-xs text-surface-muted font-mono">{f.username}</div>
                       </div>
                       <BatteryBadge level={f.battery_level} isEstimated={f.battery_is_estimated} />
                     </div>

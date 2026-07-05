@@ -83,7 +83,7 @@ function FriendPickerRow({ user, isSelected, onToggle }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
-        <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
+        <div className="text-xs text-surface-muted font-mono">{user.username}</div>
       </div>
       <span className="text-xs font-mono flex-shrink-0" style={{ color: color.hex }}>🔋 {user.battery_level ?? '?'}%</span>
     </button>

@@ -363,7 +363,7 @@ export default function ProfilePage() {
             ) : (
               <>
                 <h2 className="font-display font-bold text-surface-text text-xl leading-tight">
-                  @{profile?.username}
+                  {profile?.username}
                 </h2>
                 {profile?.bio && (
                   <p className="text-sm text-surface-muted mt-2 leading-relaxed">{profile.bio}</p>

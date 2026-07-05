@@ -219,7 +219,7 @@ function AddMemberModal({ group, onClose, onAdded }) {
                     }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-display font-semibold text-surface-text text-sm truncate">@{friend.username}</div>
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{friend.username}</div>
                     <div className="text-xs text-surface-muted font-mono">🔋 {friend.battery_level ?? '—'}%</div>
                   </div>
                   <button
@@ -345,7 +345,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                       <div onClick={() => onOpenUser(member.id)} className="text-left w-full cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <span className="font-display font-semibold text-surface-text text-sm truncate">
-                            @{member.username}
+                            {member.username}
                           </span>
                           {isMe && (
                             <span className="text-[11px] text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-md flex-shrink-0">
@@ -375,7 +375,7 @@ function GroupInfoPanel({ group, assignments, loading, currentUserId, onOpenUser
                         panel mediante self-center. */}
                     {identity && (
                       <div className="flex-shrink-0 self-center">
-                        <IdentityBadge identity={identity} size="panel" showName popoverPlacement={isFirst ? 'bottom' : 'top'} />
+                        <IdentityBadge identity={identity} size="panel" showName align="right" popoverPlacement={isFirst ? 'bottom' : 'top'} />
                       </div>
                     )}
 

@@ -360,7 +360,7 @@ export default function OnboardingPage() {
           <div className="text-center animate-scale-in">
             <div className="text-7xl mb-6">🎉</div>
             <h2 className="font-display text-3xl font-bold text-surface-text mb-2">
-              ¡Todo listo, <span className="text-accent-glow">@{username}</span>!
+              ¡Todo listo, <span className="text-accent-glow">{username}</span>!
             </h2>
             <p className="text-surface-muted text-sm mb-8">
               Tu perfil está creado. Ahora añade amigos y empieza a sincronizar energías.

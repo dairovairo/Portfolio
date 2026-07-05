@@ -60,7 +60,7 @@ function BadgeCard({ badge, assignments, currentUserId }) {
             {isMine
               ? 'Tu identidad'
               : holders.length === 1
-              ? `@${holders[0].user?.username || 'usuario'}`
+              ? `${holders[0].user?.username || 'usuario'}`
               : `${holders.length} colegas`}
           </div>
           <div className="text-[11px] text-surface-muted/75 leading-tight relative z-10">

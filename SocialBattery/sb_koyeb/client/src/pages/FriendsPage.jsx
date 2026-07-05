@@ -91,7 +91,7 @@ function UserRow({ user, action, onAction, loading, onSelect, isSelected }) {
       <div className="flex-1 min-w-0">
         <button onClick={() => navigate(`/user/${user.id}`)} className="text-left">
           <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
-          <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
+          <div className="text-xs text-surface-muted font-mono">{user.username}</div>
         </button>
       </div>
       <BatteryBadge level={user.battery_level} isEstimated={user.battery_is_estimated} />
@@ -318,7 +318,7 @@ export default function FriendsPage() {
     try {
       await api.post('/friends/request', { addressee_id: user.id });
       setSentRequests(s => new Set([...s, user.id]));
-      showToast(`Solicitud enviada a @${user.username} 🤝`);
+      showToast(`Solicitud enviada a ${user.username} 🤝`);
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -331,7 +331,7 @@ export default function FriendsPage() {
     try {
       await api.patch(`/friends/request/${requestId}`, { status });
       setRequests(r => r.filter(req => req.id !== requestId));
-      if (status === 'accepted') { showToast(`¡Ahora eres amigo de @${requesterName}! 🎉`); fetchFriends(); }
+      if (status === 'accepted') { showToast(`¡Ahora eres amigo de ${requesterName}! 🎉`); fetchFriends(); }
       else showToast('Solicitud rechazada');
     } catch (e) {
       showToast(e.message, 'error');
@@ -341,11 +341,11 @@ export default function FriendsPage() {
   }
 
   async function removeFriend(friend) {
-    if (!confirm(`¿Eliminar a @${friend.username} de tus amigos?`)) return;
+    if (!confirm(`¿Eliminar a ${friend.username} de tus amigos?`)) return;
     try {
       await api.delete(`/friends/${friend.id}`);
       setFriends(f => f.filter(fr => fr.id !== friend.id));
-      showToast(`@${friend.username} eliminado de amigos`);
+      showToast(`${friend.username} eliminado de amigos`);
     } catch (e) { showToast(e.message, 'error'); }
   }
 
@@ -502,7 +502,7 @@ export default function FriendsPage() {
                     </button>
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.username}</div>
-                      <div className="text-xs text-surface-muted font-mono">@{req.requester.username}</div>
+                      <div className="text-xs text-surface-muted font-mono">{req.requester.username}</div>
                     </div>
                     <BatteryBadge level={req.requester.battery_level} />
                     <div className="flex gap-1.5 flex-shrink-0">
@@ -539,7 +539,7 @@ export default function FriendsPage() {
 
             {searchQuery.length >= 2 && !loadingSearch && (
               searchResults.length === 0 ? (
-                <div className="text-center text-surface-muted text-sm py-8">No se encontraron usuarios con "@{searchQuery}"</div>
+                <div className="text-center text-surface-muted text-sm py-8">No se encontraron usuarios con "{searchQuery}"</div>
               ) : (
                 <div className="space-y-2">
                   {searchResults.map(user => {
