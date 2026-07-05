@@ -140,12 +140,9 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, av
   ctx.textBaseline = 'middle';
   ctx.fillText(label, W / 2, labelY2 + labelH / 2);
 
-  // ── Logo de la app — el mismo icono + nombre de la esquina superior
-  // izquierda del menú principal, colocado debajo del estado de batería ──────
-  drawAppLogo(ctx, cx, labelY2 + labelH + 90);
-
-  // ── URL / CTA at bottom ───────────────────────────────────────────────────
-  drawUrlBadge(ctx, W, H);
+  // ── Logo de la app — el icono real de batería a línea + nombre, colocado
+  // debajo del estado de batería (p. ej. "moderado") ──────────────────────────
+  drawAppLogo(ctx, cx, labelY2 + labelH + 200);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
@@ -534,34 +531,87 @@ function drawUrlBadge(ctx, W, H, scale = 1) {
 }
 
 /**
- * Dibuja el logo real de la app (🔋 + "SocialBattery"), tal como aparece en
- * la esquina superior izquierda del menú principal: el emoji de batería
- * seguido del nombre en negrita, sin píldora/fondo alrededor.
+ * Dibuja el icono REAL de la app: la batería a línea (trazo) con su terminal
+ * y el rayo central, tal cual el icono oficial (desktop/assets/icon.svg /
+ * icons/icon-192.png). Se dibuja a partir de las mismas coordenadas que ese
+ * icono, aplicando UNA SOLA escala (misma en X e Y), así que nunca sale
+ * achatado ni deformado hacia los lados, sea cual sea el tamaño pedido.
+ *
+ * `width` es el ancho visual deseado del cuerpo de la batería + terminal
+ * (el icono original mide 156 unidades de ancho visual sobre un lienzo de
+ * 256×256). Devuelve el alto visual resultante, por si se necesita para
+ * maquetar el resto del logo.
+ */
+function drawBatteryLogoMark(ctx, cx, cy, width) {
+  const S = width / 156; // 156 = ancho visual original (cuerpo 130 + terminal 26)
+  const originX = cx - 132 * S; // 132 = centro X visual del icono original
+  const originY = cy - 128 * S; // 128 = centro Y visual del icono original
+  const px = x => originX + x * S;
+  const py = y => originY + y * S;
+
+  ctx.save();
+
+  // Cuerpo de la batería — dibujado A LÍNEA (contorno), como el icono real
+  const bodyX = px(54), bodyY = py(72), bodyW = 130 * S, bodyH = 112 * S, bodyR = 24 * S;
+  ctx.fillStyle = '#15151e';
+  roundRect(ctx, bodyX, bodyY, bodyW, bodyH, bodyR);
+  ctx.fill();
+  ctx.strokeStyle = '#8b5cf6';
+  ctx.lineWidth = 12 * S;
+  roundRect(ctx, bodyX, bodyY, bodyW, bodyH, bodyR);
+  ctx.stroke();
+
+  // Terminal (+) de la batería
+  roundRect(ctx, px(192), py(108), 18 * S, 40 * S, 8 * S);
+  ctx.fillStyle = '#8b5cf6';
+  ctx.fill();
+
+  // Nivel de carga interior
+  roundRect(ctx, px(75), py(94), 88 * S, 68 * S, 14 * S);
+  ctx.fillStyle = '#22c55e';
+  ctx.fill();
+
+  // Rayo central
+  ctx.beginPath();
+  ctx.moveTo(px(126), py(42));
+  ctx.lineTo(px(92), py(122));
+  ctx.lineTo(px(127), py(122));
+  ctx.lineTo(px(110), py(214));
+  ctx.lineTo(px(167), py(96));
+  ctx.lineTo(px(130), py(96));
+  ctx.lineTo(px(157), py(42));
+  ctx.closePath();
+  ctx.fillStyle = '#f8fafc';
+  ctx.fill();
+
+  ctx.restore();
+  return 172 * S; // alto visual resultante
+}
+
+/**
+ * Dibuja el logo real de la app (icono de batería a línea + "SocialBattery"),
+ * más grande y sin distorsión, colocado debajo del estado de batería.
  */
 function drawAppLogo(ctx, cx, y) {
   ctx.save();
-  const emoji = '🔋';
+  const iconW = 108; // ancho del icono, notablemente más grande que antes
   const name = 'SocialBattery';
-  const emojiFont = '32px system-ui, sans-serif';
-  const nameFont = '800 34px "Syne", system-ui, sans-serif';
-  const gap = 10;
+  const nameFont = '800 46px "Syne", system-ui, sans-serif';
+  const gap = 20;
 
-  ctx.font = emojiFont;
-  const emojiW = ctx.measureText(emoji).width;
   ctx.font = nameFont;
   const nameW = ctx.measureText(name).width;
-  const totalW = emojiW + gap + nameW;
+  const totalW = iconW + gap + nameW;
+  const startX = cx - totalW / 2;
+  const iconCx = startX + iconW / 2;
+
+  drawBatteryLogoMark(ctx, iconCx, y, iconW);
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const startX = cx - totalW / 2;
-
-  ctx.font = emojiFont;
-  ctx.fillText(emoji, startX, y);
-
-  ctx.font = nameFont;
   ctx.fillStyle = '#e2e8f0';
-  ctx.fillText(name, startX + emojiW + gap, y);
+  ctx.font = nameFont;
+  ctx.fillText(name, startX + iconW + gap, y);
   ctx.restore();
 
   ctx.textAlign = 'center';
