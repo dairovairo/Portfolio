@@ -66,7 +66,7 @@ export default function ResetPasswordPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-4">
-            <span className="text-4xl">🔋</span>
+            <img src="/logo-icon.png" alt="SocialBattery" className="h-9 w-auto" />
             <h1 className="font-display text-3xl font-800 text-surface-text tracking-tight">
               SocialBattery
             </h1>

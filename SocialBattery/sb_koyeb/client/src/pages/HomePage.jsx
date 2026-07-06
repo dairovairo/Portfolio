@@ -413,9 +413,26 @@ export default function HomePage() {
         event: 'INSERT', schema: 'public', table: 'friendships',
         filter: `addressee_id=eq.${profile.id}`,
       }, () => fetchPending())
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'friendships',
+        filter: `addressee_id=eq.${profile.id}`,
+      }, (payload) => {
+        // Cubre el caso en el que la solicitud se acepta desde otra pantalla
+        // (p. ej. la página de Amigos) o desde otro dispositivo: en cuanto
+        // cambia a "accepted" refrescamos al instante, sin recargar la página.
+        if (payload.new?.status === 'accepted') { fetchFriends(); fetchPending(); }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'friendships',
+        filter: `requester_id=eq.${profile.id}`,
+      }, (payload) => {
+        // La otra persona aceptó una solicitud que enviamos nosotros — que
+        // aparezca en "Amigos" al instante, sin esperar a un refresco manual.
+        if (payload.new?.status === 'accepted') fetchFriends();
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
-  }, [profile?.id, fetchPending]);
+  }, [profile?.id, fetchFriends, fetchPending]);
 
   async function shareBatteryStory() {
     if (sharingStory) return;

@@ -34,7 +34,7 @@ function AppRoutes() {
     return (
       <div className="min-h-screen bg-surface-bg flex items-center justify-center">
         <div className="text-center">
-          <div className="text-4xl mb-4 animate-pulse-slow">🔋</div>
+          <img src="/logo-icon.png" alt="SocialBattery" className="h-9 w-auto mx-auto mb-4 animate-pulse-slow" />
           <div className="text-surface-muted font-mono text-sm">Cargando...</div>
         </div>
       </div>

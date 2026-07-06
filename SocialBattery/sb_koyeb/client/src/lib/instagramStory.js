@@ -210,15 +210,9 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
   const sideMargin = 64;
   const cardW = W - sideMargin * 2;
 
-  // ── App branding (logo at top) ──────────────────────────────────────────────
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const pillY = 120;
-  await drawAppLogo(ctx, W / 2, pillY + Math.round(40 * S), Math.round(60 * S));
-
   // ── Cover image card (non-blurred, sharp) ─────────────────────────────────
   const cardH = Math.round(500 * S);
-  const cardY = 250;
+  const cardY = 100;
   if (coverImg) {
     ctx.save();
     roundRect(ctx, sideMargin, cardY, cardW, cardH, Math.round(36 * S));
@@ -268,10 +262,15 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
   blockH += gapBeforeStats + boxH;
   if (sharedBy) blockH += gapBeforePanel + panelH;
 
+  // ── Logo de la app — ahora se dibuja debajo de todos los campos, así que
+  // reservamos su hueco en la parte inferior del lienzo ──────────────────────
+  const logoHeight = 90;
+  const logoBottomMargin = Math.round(70 * S);
+  const logoCenterY = H - logoBottomMargin - logoHeight / 2;
+
   // ── Posición vertical del bloque (se centra en el espacio disponible) ──────
-  const blockTopMin = coverImg ? (cardY + cardH + Math.round(56 * S)) : 350;
-  const badgeTop = H - Math.round(140 * S);
-  const blockBottomMax = badgeTop - Math.round(40 * S);
+  const blockTopMin = coverImg ? (cardY + cardH + Math.round(56 * S)) : 200;
+  const blockBottomMax = (logoCenterY - logoHeight / 2) - Math.round(40 * S);
   const availableSpace = blockBottomMax - blockTopMin;
 
   let contentY = blockTopMin;
@@ -370,7 +369,7 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
     const statsBottom = statsY + boxH;
     const panelX = sideMargin;
     const panelW = cardW;
-    const maxPanelY = badgeTop - panelH - Math.round(24 * S);
+    const maxPanelY = blockBottomMax + Math.round(40 * S) - panelH - Math.round(24 * S);
 
     let panelY = statsBottom + gapBeforePanel;
     if (panelY > maxPanelY) {
@@ -438,8 +437,8 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
     ctx.textBaseline = 'middle';
   }
 
-  // ── URL / CTA at bottom ───────────────────────────────────────────────────
-  drawUrlBadge(ctx, W, H, S);
+  // ── Logo de la app, debajo de todos los campos ─────────────────────────────
+  await drawAppLogo(ctx, W / 2, logoCenterY, logoHeight);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
@@ -477,41 +476,6 @@ export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 
 
 // ── Canvas helpers ────────────────────────────────────────────────────────────
 
-/**
- * Draws a clean URL badge at the bottom of the story canvas.
- * Visible enough to read, styled as a pill with the app URL.
- */
-function drawUrlBadge(ctx, W, H, scale = 1) {
-  const APP_URL = 'portfolio-nmc3.onrender.com';
-  const label = '🔋 ' + APP_URL;
-
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `bold ${Math.round(32 * scale)}px system-ui, sans-serif`;
-
-  const badgeW = ctx.measureText(label).width + Math.round(64 * scale);
-  const badgeH = Math.round(72 * scale);
-  const badgeX = (W - badgeW) / 2;
-  const badgeY = H - Math.round(140 * scale);
-
-  // Pill background
-  ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, Math.round(36 * scale));
-  ctx.fill();
-
-  // Pill border
-  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, Math.round(36 * scale));
-  ctx.stroke();
-
-  // Text
-  ctx.fillStyle = 'rgba(226,232,240,0.85)';
-  ctx.fillText(label, W / 2, badgeY + badgeH / 2);
-  ctx.restore();
-}
-
 // Cache del logo de la app para no recargar la imagen en cada historia generada.
 let _appLogoImagePromise = null;
 function getAppLogoImage() {
@@ -527,7 +491,7 @@ function getAppLogoImage() {
  * centrado horizontalmente en cx a la altura y, con altura objetivo
  * targetHeight (el ancho se calcula manteniendo la proporción original).
  */
-async function drawAppLogo(ctx, cx, y, targetHeight = 72) {
+async function drawAppLogo(ctx, cx, y, targetHeight = 90) {
   const img = await getAppLogoImage();
   const scale = targetHeight / img.height;
   const w = img.width * scale;

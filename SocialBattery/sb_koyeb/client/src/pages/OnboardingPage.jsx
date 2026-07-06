@@ -166,7 +166,7 @@ export default function OnboardingPage() {
       case 'welcome':
         return (
           <div className="text-center animate-scale-in">
-            <div className="text-7xl mb-6 animate-pulse-slow">🔋</div>
+            <img src="/logo-icon.png" alt="SocialBattery" className="h-16 w-auto mx-auto mb-6 animate-pulse-slow" />
             <h1 className="font-display text-3xl font-bold text-surface-text mb-3">
               Bienvenido a<br />
               <span className="text-accent-glow">SocialBattery</span>
