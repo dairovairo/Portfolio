@@ -198,7 +198,7 @@ export default function ItemColorEditorPage({
   const mascotOverrides = buildMascotOverrides();
 
   return (
-    <div className="fixed inset-0 z-50 bg-surface-bg flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-surface-bg flex flex-col">
 
       {/* Header */}
       <nav className="sticky top-0 bg-surface-bg/90 backdrop-blur-xl border-b border-surface-border flex-shrink-0 z-10">

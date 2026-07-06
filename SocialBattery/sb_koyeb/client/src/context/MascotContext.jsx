@@ -170,9 +170,6 @@ export const MASCOT_OUTFITS = [
     price: 50,
     isBase: false,
     scale: 0.985,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // "Básicos" de Camisetas (ver pickCarouselTargetOutfit en ShopPage.jsx).
-    isCustomizeBase: true,
   },
   {
     id: 'out_tshirt_3',
@@ -257,6 +254,9 @@ export const MASCOT_OUTFITS = [
     price: 50,
     isBase: false,
     scale: 0.985,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Básicos" de Camisetas (ver pickCarouselTargetOutfit en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'out_tshirt_10',
@@ -417,6 +417,9 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 70,
     isBase: false,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Básicos" de Camisas (ver pickCarouselTargetOutfit en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'out_shirt_4',
@@ -471,9 +474,6 @@ export const MASCOT_OUTFITS = [
     isBasic: true,
     price: 65,
     isBase: false,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // "Básicos" de Camisas (ver pickCarouselTargetOutfit en ShopPage.jsx).
-    isCustomizeBase: true,
   },
   {
     id: 'out_shirt_9',
@@ -857,6 +857,9 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isTie: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Corbatas (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'acc_tie_white',
@@ -867,9 +870,6 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isTie: true,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // de Corbatas (ver pickAccessoryTarget en ShopPage.jsx).
-    isCustomizeBase: true,
   },
   {
     id: 'acc_tie_brown',
@@ -990,6 +990,9 @@ export const MASCOT_ACCESSORIES = [
     price: 70,
     isBase: false,
     isBowTie: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Pajaritas (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'acc_bowtie_white',
@@ -1000,9 +1003,6 @@ export const MASCOT_ACCESSORIES = [
     price: 70,
     isBase: false,
     isBowTie: true,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // de Pajaritas (ver pickAccessoryTarget en ShopPage.jsx).
-    isCustomizeBase: true,
   },
   {
     id: 'acc_bowtie_black',
@@ -1026,9 +1026,6 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // de Riñoneras (ver pickAccessoryTarget en ShopPage.jsx).
-    isCustomizeBase: true,
     // Subida un 10% respecto al top base del grupo.
     rinonOffsetY: -10,
   },
@@ -1135,6 +1132,9 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // de Riñoneras (ver pickAccessoryTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
 ];
 
@@ -1412,10 +1412,6 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // "Chunky · colores" (ver pickCarouselTarget en ShopPage.jsx): al ser
-    // blanca, su color base no interfiere con el color que elija el usuario.
-    isCustomizeBase: true,
     // Reducida (algo menos que el resto de "grandes": esta partía de un
     // tamaño ya un poco más cercano al correcto).
     // Reducida otro 15% más (0.75 × 0.85 ≈ 0.64) y bajada un poco.
@@ -1433,6 +1429,9 @@ export const MASCOT_FEET = [
     price: 75,
     isBase: false,
     isBasic2: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Chunky · colores" (ver pickCarouselTarget en ShopPage.jsx).
+    isCustomizeBase: true,
     // Igual que verde salvia/azul/rosa/negra: movida un poco a la derecha,
     // mismo ajuste que el resto de variantes de tamaño correcto del grupo.
     // Incrementada de 2% → 4% → 6% → 9% → 12% → 13% → 14% por petición de ajuste fino.
@@ -1548,9 +1547,6 @@ export const MASCOT_HEAD = [
     scale: 0.396,
     offsetY: '-35.2%',
     isBasic2: true,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // "Gorras" (ver pickCarouselTargetHead en ShopPage.jsx).
-    isCustomizeBase: true,
   },
   {
     id: 'head_cap_solid_yellow',
@@ -1579,6 +1575,9 @@ export const MASCOT_HEAD = [
     scale: 0.396,
     offsetY: '-35.2%',
     isBasic2: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Gorras" (ver pickCarouselTargetHead en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'head_cap2_green',
@@ -1678,9 +1677,6 @@ export const MASCOT_HEAD = [
     price: 50,
     isBase: false,
     isBasic: true,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // "Gorras lisas" (ver pickCarouselTargetHead en ShopPage.jsx).
-    isCustomizeBase: true,
   },
   {
     id: 'head_cap_purple',
@@ -1701,6 +1697,9 @@ export const MASCOT_HEAD = [
     price: 50,
     isBase: false,
     isBasic: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Gorras lisas" (ver pickCarouselTargetHead en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'head_cap_blue',
