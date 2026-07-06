@@ -537,15 +537,15 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
         ) : (
           <>
             {(pool.participants_preview || []).slice(0, PARTICIPANT_MASCOTS_VISIBLE).map(p => (
-              <div key={p.id} className="flex flex-col items-center flex-shrink-0" style={{ width: 40 }} title={p.username}>
-                <MiniMascot user={p} size={34} />
-                <span className="text-[9px] font-display font-semibold text-surface-muted mt-0.5 max-w-[40px] truncate">
+              <div key={p.id} className="flex flex-col items-center flex-shrink-0" style={{ width: 46 }} title={p.username}>
+                <MiniMascot user={p} size={39} />
+                <span className="text-[9px] font-display font-semibold text-surface-muted mt-0.5 max-w-[46px] truncate">
                   {p.mascot_name || 'Volty'}
                 </span>
               </div>
             ))}
             {pool.participant_count > PARTICIPANT_MASCOTS_VISIBLE && (
-              <div className="flex flex-col items-center justify-center flex-shrink-0" style={{ width: 34, height: 34 }}>
+              <div className="flex flex-col items-center justify-center flex-shrink-0" style={{ width: 39, height: 39 }}>
                 <div className="w-full h-full rounded-full bg-surface-bg border border-surface-border text-surface-muted flex items-center justify-center text-[11px] font-mono">
                   +{pool.participant_count - PARTICIPANT_MASCOTS_VISIBLE}
                 </div>
