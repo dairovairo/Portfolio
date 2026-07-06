@@ -10,6 +10,7 @@ import { isOnline } from '../hooks/usePresence';
 import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 import MascotDisplay from '../components/MascotDisplay';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 function getActivityEmoji(activity = '') {
@@ -964,6 +965,8 @@ function buildPoolFormData(form) {
 function CreatePoolModal({ onClose, onCreate }) {
   const minDate = formatInputDateTime(new Date(Date.now() + 30 * 60 * 1000));
   const coverInputRef = useRef(null);
+  const coverCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
   const [form, setForm] = useState({
     activity: '',
     description: '',
@@ -1013,6 +1016,7 @@ function CreatePoolModal({ onClose, onCreate }) {
     setCoverFile(null);
     setCoverPreview('');
     if (coverInputRef.current) coverInputRef.current.value = '';
+    if (coverCameraRef.current) coverCameraRef.current.value = '';
   }
 
   const hasPrivateTarget = !form.is_public && (form.group_id || form.invited_user_ids.length > 0);
@@ -1130,7 +1134,7 @@ function CreatePoolModal({ onClose, onCreate }) {
               ) : (
                 <button
                   type="button"
-                  onClick={() => coverInputRef.current?.click()}
+                  onClick={() => setShowPhotoMenu(true)}
                   className="w-full h-[77px] rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 flex flex-col items-center justify-center gap-1 text-accent-glow hover:bg-accent-primary/10 transition-all"
                 >
                   <span className="text-lg">📷</span>
@@ -1143,6 +1147,20 @@ function CreatePoolModal({ onClose, onCreate }) {
                 accept="image/*"
                 className="hidden"
                 onChange={handleCoverChange}
+              />
+              <input
+                ref={coverCameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleCoverChange}
+              />
+              <PhotoSourceMenu
+                open={showPhotoMenu}
+                onClose={() => setShowPhotoMenu(false)}
+                onCamera={() => coverCameraRef.current?.click()}
+                onGallery={() => coverInputRef.current?.click()}
               />
             </div>
           </div>

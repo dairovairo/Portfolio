@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
 import LogoWordmark from '../components/LogoWordmark';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 // ── Categorías compartidas con Comunidades y Eventos ─────────────────────────
 // U+FE0F (️) after each emoji forces full-color emoji presentation on all platforms
@@ -64,6 +65,8 @@ export default function OnboardingPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
+  const cameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   function handleAvatarChange(e) {
     const file = e.target.files[0];
@@ -305,7 +308,7 @@ export default function OnboardingPage() {
             <div className="flex flex-col items-center gap-4">
               {/* Avatar preview */}
               <button
-                onClick={() => fileRef.current?.click()}
+                onClick={() => setShowPhotoMenu(true)}
                 className="relative group"
               >
                 <div
@@ -331,10 +334,17 @@ export default function OnboardingPage() {
                 </div>
               </button>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <input ref={cameraRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
+              <PhotoSourceMenu
+                open={showPhotoMenu}
+                onClose={() => setShowPhotoMenu(false)}
+                onCamera={() => cameraRef.current?.click()}
+                onGallery={() => fileRef.current?.click()}
+              />
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => fileRef.current?.click()}
+                  onClick={() => setShowPhotoMenu(true)}
                   className="bg-accent-primary/15 text-accent-glow border border-accent-primary/30
                     rounded-xl px-4 py-2 text-sm font-display font-semibold hover:bg-accent-primary/25 transition-all"
                 >

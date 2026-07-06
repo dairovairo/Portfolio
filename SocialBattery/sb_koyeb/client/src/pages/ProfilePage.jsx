@@ -10,6 +10,7 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { BatteryLineChart, BatteryHeatmap } from '../components/BatteryChart';
 import BatterySlider from '../components/BatterySlider';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
 import { ALL_INTERESTS } from './OnboardingPage';
@@ -108,6 +109,8 @@ export default function ProfilePage() {
   const { permission, subscribed, requestPermission } = usePush();
   const navigate = useNavigate();
   const fileRef = useRef(null);
+  const cameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   const [history, setHistory] = useState([]);
   const [allBadges, setAllBadges] = useState([]);
@@ -270,7 +273,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <button
-                    onClick={() => fileRef.current?.click()}
+                    onClick={() => setShowPhotoMenu(true)}
                     className="absolute -bottom-1.5 -right-1.5 bg-accent-primary text-white w-7 h-7
                       rounded-full flex items-center justify-center text-xs border-2 border-surface-card
                       hover:bg-accent-primary/80 transition-all"
@@ -278,6 +281,13 @@ export default function ProfilePage() {
                     📷
                   </button>
                   <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                  <input ref={cameraRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
+                  <PhotoSourceMenu
+                    open={showPhotoMenu}
+                    onClose={() => setShowPhotoMenu(false)}
+                    onCamera={() => cameraRef.current?.click()}
+                    onGallery={() => fileRef.current?.click()}
+                  />
                 </div>
 
                 {/* Mascota propia + nombre — a la derecha de la foto de perfil.

@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
 import TutorialOverlay from '../components/TutorialOverlay';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -526,6 +527,8 @@ function CreateEventModal({ onClose, onCreate }) {
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
   const coverInputRef = useRef(null);
+  const coverCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   const [form, setForm] = useState({
     title: '',
@@ -577,6 +580,7 @@ function CreateEventModal({ onClose, onCreate }) {
     setCoverFile(null);
     setCoverPreview('');
     if (coverInputRef.current) coverInputRef.current.value = '';
+    if (coverCameraRef.current) coverCameraRef.current.value = '';
   }
 
   async function handleSubmit() {
@@ -805,7 +809,7 @@ function CreateEventModal({ onClose, onCreate }) {
             ) : (
               <button
                 type="button"
-                onClick={() => coverInputRef.current?.click()}
+                onClick={() => setShowPhotoMenu(true)}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
                 Elegir foto de la galería
@@ -817,6 +821,20 @@ function CreateEventModal({ onClose, onCreate }) {
               accept="image/*"
               className="hidden"
               onChange={handleCoverChange}
+            />
+            <input
+              ref={coverCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => coverCameraRef.current?.click()}
+              onGallery={() => coverInputRef.current?.click()}
             />
           </div>
 
