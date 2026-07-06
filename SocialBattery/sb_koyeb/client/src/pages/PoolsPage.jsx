@@ -235,11 +235,6 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
   const [participants, setParticipants] = useState(pool.participants_preview || []);
   const [loading, setLoading] = useState(false);
   const [badgeData, setBadgeData] = useState({ assignments: [] });
-  const [showInvite, setShowInvite] = useState(false);
-  // Botón "Invitar" / "Solicitar invitación" — solo en quedadas privadas,
-  // y solo para el creador o para miembros ya apuntados.
-  const isPrivate = pool.is_public === false;
-  const showInviteButton = isPrivate && (pool.is_creator || pool.has_joined);
 
   useEffect(() => {
     setLoading(true);
@@ -406,19 +401,6 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
               )}
             </div>
           )}
-
-          {/* Botón flotante — Invitar (creador) / Solicitar invitación (miembro) —
-              abajo a la derecha del panel, solo en quedadas privadas. */}
-          {showInviteButton && (
-            <div className="sticky bottom-2 flex justify-end pointer-events-none">
-              <button
-                onClick={() => setShowInvite(true)}
-                className="pointer-events-auto flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-bold shadow-lg shadow-black/30 transition-all"
-              >
-                {pool.is_creator ? '➕ Invitar' : '🙋 Solicitar invitación'}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Botones — siempre visibles, pegados al fondo */}
@@ -461,14 +443,6 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
           </button>
         </div>
       </div>
-
-      {showInvite && (
-        <PoolInviteModal
-          pool={pool}
-          onClose={() => setShowInvite(false)}
-          onToast={onToast}
-        />
-      )}
     </div>
   );
 }
@@ -708,14 +682,23 @@ function PoolInviteModal({ pool, onClose, onToast }) {
 }
 
 // ── Pool Card ──────────────────────────────────────────────────────────────────
-function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leaving }) {
+function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, joining, leaving }) {
   const emoji = getActivityEmoji(pool.activity);
   const canJoin = pool.status === 'open' && !pool.has_joined;
   const isPast = new Date(pool.scheduled_at) <= new Date();
   const { hasUnreadPoolChat } = usePoolChatNotifications();
   const hasUnreadChat = hasUnreadPoolChat(pool.id);
+  const [showInvite, setShowInvite] = useState(false);
+  // Botón "Invitar" / "Solicitar invitación" — solo en quedadas privadas,
+  // y solo para el creador o para miembros ya apuntados. Vive en el panel
+  // (la tarjeta del listado), no en la ventana de detalle que se abre al
+  // clicarla — así se puede invitar/solicitar sin tener que abrir la quedada.
+  const isPrivate = pool.is_public === false;
+  const showInviteButton = isPrivate && (pool.is_creator || pool.has_joined)
+    && !isPast && pool.status !== 'cancelled' && pool.status !== 'closed';
 
   return (
+    <>
     <div
       className={`relative bg-surface-card border rounded-2xl p-4 transition-all duration-200 cursor-pointer ${
         pool.status === 'cancelled' ? 'border-red-500/20 opacity-60' :
@@ -751,6 +734,11 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
             {pool.has_joined && !pool.is_creator && (
               <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
                 ✓ Unido
+              </span>
+            )}
+            {pool.is_invited && (
+              <span className="text-xs bg-pink-500/20 text-pink-400 border border-pink-500/30 px-1.5 py-0.5 rounded-full font-mono">
+                📩 Invitado
               </span>
             )}
           </div>
@@ -850,7 +838,29 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
           )}
         </div>
       )}
+
+      {/* Invitar (creador) / Solicitar invitación (miembro) — solo quedadas
+          privadas. Antes vivía en la ventana de detalle; ahora está aquí, en
+          el panel del listado, para no tener que abrir la quedada primero. */}
+      {showInviteButton && (
+        <div className="mt-2" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => setShowInvite(true)}
+            className="w-full py-2 rounded-xl bg-accent-primary/15 hover:bg-accent-primary/25 text-accent-glow text-sm font-display font-semibold border border-accent-primary/25 transition-all"
+          >
+            {pool.is_creator ? '➕ Invitar' : '🙋 Solicitar invitación'}
+          </button>
+        </div>
+      )}
     </div>
+    {showInvite && (
+      <PoolInviteModal
+        pool={pool}
+        onClose={() => setShowInvite(false)}
+        onToast={onToast}
+      />
+    )}
+    </>
   );
 }
 
@@ -1413,6 +1423,7 @@ export default function PoolsPage() {
     onLeave: handleLeave,
     onCancel: handleCancel,
     onOpenDetail: setDetailPool,
+    onToast: showToast,
     joining,
     leaving,
   };
@@ -1420,6 +1431,10 @@ export default function PoolsPage() {
   const activePools = sortByDate(pools.filter(isActive));
   const pastPools   = pools.filter(p => !isActive(p));
   const myplansEmpty = myCreated.length === 0 && myJoined.length === 0;
+  // Nº de quedadas a las que te han invitado y aún no te has unido — badge
+  // en el tab "Activos" (el mismo dato alimenta el badge del dock inferior,
+  // ver PoolInviteNotificationsContext).
+  const invitedActiveCount = pools.filter(p => p.is_invited).length;
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
@@ -1451,13 +1466,18 @@ export default function PoolsPage() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex-1 text-xs font-display font-semibold py-2 rounded-lg transition-all ${
+              className={`relative flex-1 text-xs font-display font-semibold py-2 rounded-lg transition-all ${
                 tab === key
                   ? 'bg-accent-primary text-surface-text shadow-sm'
                   : 'text-slate-400 hover:text-surface-text'
               }`}
             >
               {label}
+              {key === 'active' && invitedActiveCount > 0 && (
+                <span className="absolute -top-1.5 -right-1 bg-pink-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none">
+                  {invitedActiveCount > 9 ? '9+' : invitedActiveCount}
+                </span>
+              )}
             </button>
           ))}
         </div>

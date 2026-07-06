@@ -23,6 +23,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import ShopPage from './pages/ShopPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 import { PoolChatNotificationsProvider } from './context/PoolChatNotificationsContext';
+import { PoolInviteNotificationsProvider } from './context/PoolInviteNotificationsContext';
 import { TutorialProvider } from './context/TutorialContext';
 import { MascotProvider } from './context/MascotContext';
 import MascotPreviewSync from './components/MascotPreviewSync';
@@ -108,7 +109,9 @@ export default function App() {
                 <MascotProvider>
                 <CommunityNotificationsProvider>
                 <PoolChatNotificationsProvider>
+                <PoolInviteNotificationsProvider>
                   <AppRoutes />
+                </PoolInviteNotificationsProvider>
                 </PoolChatNotificationsProvider>
                 </CommunityNotificationsProvider>
                 </MascotProvider>

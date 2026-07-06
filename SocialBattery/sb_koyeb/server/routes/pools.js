@@ -185,6 +185,15 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const friendIds = await getFriendIds(userId);
 
+    // IDs de quedadas privadas donde el usuario ha sido invitado explícitamente
+    // (pool_invitees) — se usa tanto para el filtro de visibilidad ('active')
+    // como para el flag is_invited del badge de "te han invitado" en el cliente.
+    const { data: myInvites } = await supabase
+      .from('pool_invitees')
+      .select('pool_id')
+      .eq('user_id', userId);
+    const myInvitedIds = new Set((myInvites || []).map(i => i.pool_id));
+
     let query = supabase
       .from('hangout_pools')
       .select(`
@@ -242,11 +251,7 @@ router.get('/', requireAuth, async (req, res) => {
       }
 
       // Via explicit invite
-      const { data: invites } = await supabase
-        .from('pool_invitees')
-        .select('pool_id')
-        .eq('user_id', userId);
-      (invites || []).forEach(i => privatePoolIds.add(i.pool_id));
+      myInvitedIds.forEach(id => privatePoolIds.add(id));
 
       // Build OR filter
       // - own pools
@@ -282,6 +287,9 @@ router.get('/', requireAuth, async (req, res) => {
         participants_preview: buildParticipantPreview(participants),
         has_joined: hasJoined,
         is_creator: isCreator,
+        // Invitado explícitamente (pool_invitees) y aún sin unirse — dispara
+        // el badge "te han invitado" en el tab Activos y en el dock inferior.
+        is_invited: myInvitedIds.has(pool.id) && !isCreator && !hasJoined,
         spots_left: pool.max_people !== null ? pool.max_people - participantCount : null,
         current_user_reminder_minutes_before: hasJoined
           ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
@@ -293,6 +301,44 @@ router.get('/', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[POOLS] GET /', err);
     res.status(500).json({ error: 'Failed to fetch pools' });
+  }
+});
+
+// ── GET /api/pools/invites/count — nº de invitaciones pendientes (badge) ────
+// Cuenta las quedadas privadas donde el usuario ha sido invitado
+// (pool_invitees) pero aún no se ha unido y la quedada sigue abierta/futura.
+// Usado por PoolInviteNotificationsContext para el badge del dock inferior
+// y del tab "Activos" cuando la página de Quedadas no está montada.
+router.get('/invites/count', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data: invites } = await supabase
+      .from('pool_invitees')
+      .select('pool_id')
+      .eq('user_id', userId);
+    const poolIds = [...new Set((invites || []).map(i => i.pool_id))];
+    if (!poolIds.length) return res.json({ count: 0 });
+
+    const { data: joined } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('user_id', userId)
+      .in('pool_id', poolIds);
+    const joinedIds = new Set((joined || []).map(j => j.pool_id));
+    const pendingIds = poolIds.filter(id => !joinedIds.has(id));
+    if (!pendingIds.length) return res.json({ count: 0 });
+
+    const { count } = await supabase
+      .from('hangout_pools')
+      .select('*', { count: 'exact', head: true })
+      .in('id', pendingIds)
+      .in('status', ['open', 'full'])
+      .gt('scheduled_at', new Date().toISOString());
+
+    res.json({ count: count || 0 });
+  } catch (err) {
+    console.error('[POOLS] GET /invites/count', err);
+    res.status(500).json({ error: 'Failed to fetch invite count' });
   }
 });
 
