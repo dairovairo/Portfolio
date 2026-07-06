@@ -345,6 +345,24 @@ export function useMessageNotifications(profile, settings) {
             navigateTo: '/pools',
           });
         })
+        .on('broadcast', { event: 'pool_join_request' }, (msg) => {
+          // Un miembro de una quedada privada propone invitar a un amigo —
+          // solo llega al creador (mismo canal personal que new_pool).
+          const s = settingsRef.current;
+          if (s.muteAllNotifications || s.muteNewPools) return;
+
+          const req = msg.payload;
+          if (!req?.pool_id) return;
+
+          if (!document.hidden && locationRef.current === '/pools') return;
+
+          fireNotification({
+            title: '🙋 Nueva solicitud de invitación',
+            body: `${req.requester_name} propone invitar a ${req.target_name} a "${req.activity}"`,
+            tag: `pool-join-request-${req.pool_id}`,
+            navigateTo: '/pools',
+          });
+        })
         .subscribe();
       channels.push(poolBroadcastCh);
 

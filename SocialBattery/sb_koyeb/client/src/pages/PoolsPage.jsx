@@ -227,7 +227,7 @@ function IdentityBadge({ identity, size = 'panel', align = 'left', showName = fa
 }
 
 // ── Participants sheet (bottom drawer) ────────────────────────────────────────
-function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, joining, leaving, reminderSaving }) {
+function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, onToast, joining, leaving, reminderSaving }) {
   const navigate = useNavigate();
   const { hasUnreadPoolChat } = usePoolChatNotifications();
   const hasUnreadChat = hasUnreadPoolChat(pool.id);
@@ -235,6 +235,11 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
   const [participants, setParticipants] = useState(pool.participants_preview || []);
   const [loading, setLoading] = useState(false);
   const [badgeData, setBadgeData] = useState({ assignments: [] });
+  const [showInvite, setShowInvite] = useState(false);
+  // Botón "Invitar" / "Solicitar invitación" — solo en quedadas privadas,
+  // y solo para el creador o para miembros ya apuntados.
+  const isPrivate = pool.is_public === false;
+  const showInviteButton = isPrivate && (pool.is_creator || pool.has_joined);
 
   useEffect(() => {
     setLoading(true);
@@ -401,6 +406,19 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
               )}
             </div>
           )}
+
+          {/* Botón flotante — Invitar (creador) / Solicitar invitación (miembro) —
+              abajo a la derecha del panel, solo en quedadas privadas. */}
+          {showInviteButton && (
+            <div className="sticky bottom-2 flex justify-end pointer-events-none">
+              <button
+                onClick={() => setShowInvite(true)}
+                className="pointer-events-auto flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-bold shadow-lg shadow-black/30 transition-all"
+              >
+                {pool.is_creator ? '➕ Invitar' : '🙋 Solicitar invitación'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Botones — siempre visibles, pegados al fondo */}
@@ -438,6 +456,248 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, j
           <button
             onClick={onClose}
             className="w-full mt-2 py-2 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+
+      {showInvite && (
+        <PoolInviteModal
+          pool={pool}
+          onClose={() => setShowInvite(false)}
+          onToast={onToast}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Invitar / Solicitar invitación (quedadas privadas) ──────────────────────
+function PoolInviteModal({ pool, onClose, onToast }) {
+  const isCreator = pool.is_creator;
+
+  const [friends, setFriends] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [invitedIds, setInvitedIds] = useState([]);
+  const [participantIds, setParticipantIds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [actingId, setActingId] = useState(null);     // amigo al que se está invitando/solicitando
+  const [decidingId, setDecidingId] = useState(null);  // solicitud que se está aceptando/rechazando
+
+  const loadData = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api.get('/friends'),
+      api.get(`/pools/${pool.id}/join-requests`),
+    ])
+      .then(([friendsRes, requestsRes]) => {
+        setFriends(friendsRes.friends || []);
+        setRequests(requestsRes.requests || []);
+        setInvitedIds(requestsRes.invited_user_ids || []);
+        setParticipantIds(requestsRes.participant_user_ids || []);
+      })
+      .catch(() => onToast?.('No se pudieron cargar los datos', 'error'))
+      .finally(() => setLoading(false));
+  }, [pool.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const pendingRequests = requests.filter(r => r.status === 'pending');
+  const myPendingIds = !isCreator
+    ? requests.filter(r => r.status === 'pending').map(r => r.requested_user?.id)
+    : [];
+  const myRejectedIds = !isCreator
+    ? requests.filter(r => r.status === 'rejected').map(r => r.requested_user?.id)
+    : [];
+
+  async function handleInvite(friendId) {
+    setActingId(friendId);
+    try {
+      await api.post(`/pools/${pool.id}/invite`, { user_id: friendId });
+      onToast?.('Invitación enviada 🤝');
+      setInvitedIds(prev => [...prev, friendId]);
+    } catch (e) {
+      onToast?.(e.message || 'No se pudo invitar', 'error');
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function handleRequestInvite(friendId) {
+    setActingId(friendId);
+    try {
+      await api.post(`/pools/${pool.id}/request-invite`, { user_id: friendId });
+      onToast?.('Solicitud enviada 🙋');
+      loadData();
+    } catch (e) {
+      onToast?.(e.message || 'No se pudo enviar la solicitud', 'error');
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function handleDecision(requestId, status) {
+    setDecidingId(requestId);
+    try {
+      await api.patch(`/pools/${pool.id}/join-requests/${requestId}`, { status });
+      onToast?.(status === 'accepted' ? 'Solicitud aceptada 🤝' : 'Solicitud rechazada');
+      loadData();
+    } catch (e) {
+      onToast?.(e.message || 'No se pudo actualizar la solicitud', 'error');
+    } finally {
+      setDecidingId(null);
+    }
+  }
+
+  const filteredFriends = friends.filter(f =>
+    !search || f.username?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl flex flex-col max-h-[85vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-1 flex-shrink-0" />
+
+        <div className="flex-shrink-0 px-5 py-3 border-b border-surface-border flex items-center gap-2">
+          <span className="text-xl">{isCreator ? '➕' : '🙋'}</span>
+          <h3 className="font-display font-bold text-surface-text flex-1">
+            {isCreator ? 'Invitar a la quedada' : 'Solicitar invitación'}
+          </h3>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0 space-y-5">
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-12 bg-surface-bg rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <>
+              {isCreator && (
+                <div>
+                  <h4 className="text-sm font-display font-bold text-surface-text mb-2">
+                    Solicitudes de invitación{pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}
+                  </h4>
+                  {pendingRequests.length === 0 ? (
+                    <p className="text-xs text-surface-muted bg-surface-bg border border-surface-border rounded-xl p-3 text-center">
+                      Sin solicitudes pendientes
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {pendingRequests.map(r => (
+                        <div key={r.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-surface-border bg-surface-bg">
+                          <div className="w-9 h-9 rounded-full bg-accent-primary/20 flex items-center justify-center text-xs font-display font-bold text-accent-glow flex-shrink-0 overflow-hidden">
+                            {r.requested_user?.avatar_url
+                              ? <img src={r.requested_user.avatar_url} alt="" className="w-full h-full object-cover" />
+                              : (r.requested_user?.username?.[0] || '?').toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-display font-semibold text-surface-text truncate">
+                              {r.requested_user?.username}
+                            </p>
+                            <p className="text-xs text-surface-muted truncate">
+                              Propuesto por {r.requested_by_user?.username}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDecision(r.id, 'rejected')}
+                            disabled={decidingId === r.id}
+                            className="text-xs font-display font-semibold w-8 h-8 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-red-500/20 hover:text-red-400 transition-colors disabled:opacity-50 flex-shrink-0"
+                          >
+                            ✕
+                          </button>
+                          <button
+                            onClick={() => handleDecision(r.id, 'accepted')}
+                            disabled={decidingId === r.id}
+                            className="text-xs font-display font-semibold w-8 h-8 rounded-lg bg-accent-primary/20 text-accent-glow hover:bg-accent-primary/30 transition-colors disabled:opacity-50 flex-shrink-0"
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <h4 className="text-sm font-display font-bold text-surface-text mb-2">
+                  {isCreator ? 'Añadir amigos' : 'Tus amigos'}
+                </h4>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar amigo..."
+                  className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors mb-2"
+                />
+                {friends.length === 0 ? (
+                  <p className="text-xs text-surface-muted bg-surface-bg border border-surface-border rounded-xl p-3 text-center">
+                    No tienes amigos aún
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {filteredFriends.map(f => {
+                      const isParticipant = participantIds.includes(f.id);
+                      const isInvited = invitedIds.includes(f.id);
+                      const isPendingByMe = !isCreator && myPendingIds.includes(f.id);
+                      const wasRejected = !isCreator && !isPendingByMe && myRejectedIds.includes(f.id);
+                      const disabled = isParticipant || isInvited || isPendingByMe || actingId === f.id;
+
+                      let statusLabel = null;
+                      if (isParticipant) statusLabel = 'Ya apuntado';
+                      else if (isInvited) statusLabel = 'Ya invitado';
+                      else if (isPendingByMe) statusLabel = 'Solicitud enviada';
+
+                      return (
+                        <div key={f.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-surface-border bg-surface-bg">
+                          <div className="w-8 h-8 rounded-full bg-accent-primary/20 flex items-center justify-center text-xs font-display font-bold text-accent-glow flex-shrink-0 overflow-hidden">
+                            {f.avatar_url
+                              ? <img src={f.avatar_url} alt="" className="w-full h-full object-cover" />
+                              : (f.username?.[0] || '?').toUpperCase()}
+                          </div>
+                          <span className="flex-1 text-sm font-display font-semibold text-surface-text truncate">
+                            {f.username}
+                          </span>
+                          {statusLabel ? (
+                            <span className="text-xs font-mono text-surface-muted flex-shrink-0">{statusLabel}</span>
+                          ) : (
+                            <button
+                              onClick={() => isCreator ? handleInvite(f.id) : handleRequestInvite(f.id)}
+                              disabled={disabled}
+                              className="text-xs font-display font-semibold px-3 py-1.5 rounded-lg bg-accent-primary/20 text-accent-glow hover:bg-accent-primary/30 transition-colors disabled:opacity-50 flex-shrink-0"
+                            >
+                              {actingId === f.id
+                                ? '...'
+                                : isCreator
+                                  ? 'Añadir'
+                                  : wasRejected ? 'Solicitar de nuevo' : 'Solicitar'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {filteredFriends.length === 0 && (
+                      <p className="text-xs text-surface-muted text-center py-2">Sin resultados</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex-shrink-0 border-t border-surface-border px-5 py-3">
+          <button
+            onClick={onClose}
+            className="w-full py-2 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
           >
             Cerrar
           </button>
@@ -1323,6 +1583,7 @@ export default function PoolsPage() {
           onJoin={handleJoin}
           onLeave={handleLeave}
           onReminderChange={handlePoolReminderChange}
+          onToast={showToast}
           joining={joining}
           leaving={leaving}
           reminderSaving={reminderSaving}
