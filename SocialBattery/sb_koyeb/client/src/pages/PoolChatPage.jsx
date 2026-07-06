@@ -6,6 +6,7 @@ import { usePoolChatNotifications } from '../context/PoolChatNotificationsContex
 import { api } from '../lib/api';
 import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 // ── Activity emoji mapping — mismo criterio que PoolsPage.jsx ────────────────
 function getActivityEmoji(activity = '') {
@@ -248,6 +249,8 @@ export default function PoolChatPage() {
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const photoInputRef = useRef(null);
+  const photoCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
   const headerMenuRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
@@ -544,7 +547,7 @@ export default function PoolChatPage() {
         <div className="max-w-lg mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => photoInputRef.current?.click()}
+              onClick={() => setShowPhotoMenu(true)}
               title="Enviar foto"
               disabled={sendingImage}
               className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all disabled:opacity-40"
@@ -559,6 +562,20 @@ export default function PoolChatPage() {
               accept="image/*"
               className="hidden"
               onChange={handlePhotoSelect}
+            />
+            <input
+              ref={photoCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhotoSelect}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => photoCameraRef.current?.click()}
+              onGallery={() => photoInputRef.current?.click()}
             />
             <input
               ref={inputRef}

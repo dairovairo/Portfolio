@@ -7,6 +7,7 @@ import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 import MascotDisplay from '../components/MascotDisplay';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 // ── Mark group as read in localStorage ───────────────────────────────────────
 function markGroupRead(groupId) {
@@ -654,6 +655,8 @@ export default function GroupChatPage() {
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const photoInputRef = useRef(null);
+  const photoCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
   const headerMenuRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
@@ -1049,7 +1052,7 @@ export default function GroupChatPage() {
         <div className="max-w-lg mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => photoInputRef.current?.click()}
+              onClick={() => setShowPhotoMenu(true)}
               title="Enviar foto"
               disabled={sendingImage}
               className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all disabled:opacity-40"
@@ -1064,6 +1067,20 @@ export default function GroupChatPage() {
               accept="image/*"
               className="hidden"
               onChange={handleGroupPhotoSelect}
+            />
+            <input
+              ref={photoCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleGroupPhotoSelect}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => photoCameraRef.current?.click()}
+              onGallery={() => photoInputRef.current?.click()}
             />
             <input
               ref={inputRef}

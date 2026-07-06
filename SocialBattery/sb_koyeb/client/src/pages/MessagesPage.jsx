@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -633,6 +634,8 @@ export default function MessagesPage() {
   const inputRef = useRef(null);
   const headerMenuRef = useRef(null);
   const photoInputRef = useRef(null);
+  const photoCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -1258,7 +1261,7 @@ export default function MessagesPage() {
                 🤝
               </button>
               <button
-                onClick={() => photoInputRef.current?.click()}
+                onClick={() => setShowPhotoMenu(true)}
                 title="Enviar foto"
                 disabled={sendingImage}
                 className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all disabled:opacity-40"
@@ -1273,6 +1276,20 @@ export default function MessagesPage() {
                 accept="image/*"
                 className="hidden"
                 onChange={handlePhotoSelect}
+              />
+              <input
+                ref={photoCameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+              <PhotoSourceMenu
+                open={showPhotoMenu}
+                onClose={() => setShowPhotoMenu(false)}
+                onCamera={() => photoCameraRef.current?.click()}
+                onGallery={() => photoInputRef.current?.click()}
               />
               <input
                 ref={inputRef}
