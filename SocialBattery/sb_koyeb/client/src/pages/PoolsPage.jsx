@@ -127,39 +127,9 @@ function CapacityBar({ current, max }) {
   );
 }
 
-// ── Avatar stack ──────────────────────────────────────────────────────────────
-function AvatarStack({ participants = [], total = 0, size = 'sm' }) {
-  const shown = participants.slice(0, 4);
-  const extra = total - shown.length;
-  const dim = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-8 h-8 text-xs';
-
-  return (
-    <div className="flex items-center">
-      <div className="flex -space-x-1.5">
-        {shown.map((p, i) => (
-          <div
-            key={p.id}
-            className={`${dim} rounded-full border-2 border-surface-card flex items-center justify-center font-display font-bold bg-accent-primary/20 text-accent-glow flex-shrink-0`}
-            style={{ zIndex: shown.length - i }}
-            title={p.username}
-          >
-            {p.avatar_url
-              ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-              : (p.username?.[0] || '?').toUpperCase()
-            }
-          </div>
-        ))}
-        {extra > 0 && (
-          <div
-            className={`${dim} rounded-full border-2 border-surface-card bg-surface-bg text-surface-muted flex items-center justify-center font-mono flex-shrink-0`}
-          >
-            +{extra}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// Nº de mascotas de participantes que se muestran en el panel de la
+// quedada antes de agrupar el resto en un "+N" (ver PoolCard más abajo).
+const PARTICIPANT_MASCOTS_VISIBLE = 5;
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx / FriendCard.jsx / GroupChatPage.jsx): 0-33 → low, 34-66 →
@@ -555,20 +525,34 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, joining, leav
       {/* Capacity */}
       <CapacityBar current={pool.participant_count} max={pool.max_people} />
 
-      {/* Participants preview — always visible */}
+      {/* Participantes — mascotas con nombre debajo. Sustituye al contador
+          de texto ("X personas apuntadas") y al botón "Ver": todo el panel
+          ya es pulsable, así que basta con tocarlo para ver el detalle. */}
       <div
-        className="mt-3 flex items-center gap-2"
+        className="mt-3 flex items-start gap-2 flex-wrap"
         onClick={e => { e.stopPropagation(); onOpenDetail(pool); }}
       >
-        <AvatarStack participants={pool.participants_preview || []} total={pool.participant_count} />
-        <span className="text-xs text-surface-muted">
-          {pool.participant_count === 0
-            ? 'Sin participantes aún'
-            : pool.participant_count === 1
-            ? '1 persona apuntada'
-            : `${pool.participant_count} personas apuntadas`}
-        </span>
-        <span className="ml-auto text-xs text-accent-glow font-mono">Ver →</span>
+        {pool.participant_count === 0 ? (
+          <span className="text-xs text-surface-muted">Sin participantes aún</span>
+        ) : (
+          <>
+            {(pool.participants_preview || []).slice(0, PARTICIPANT_MASCOTS_VISIBLE).map(p => (
+              <div key={p.id} className="flex flex-col items-center flex-shrink-0" style={{ width: 40 }} title={p.username}>
+                <MiniMascot user={p} size={34} />
+                <span className="text-[9px] font-display font-semibold text-surface-muted mt-0.5 max-w-[40px] truncate">
+                  {p.mascot_name || 'Volty'}
+                </span>
+              </div>
+            ))}
+            {pool.participant_count > PARTICIPANT_MASCOTS_VISIBLE && (
+              <div className="flex flex-col items-center justify-center flex-shrink-0" style={{ width: 34, height: 34 }}>
+                <div className="w-full h-full rounded-full bg-surface-bg border border-surface-border text-surface-muted flex items-center justify-center text-[11px] font-mono">
+                  +{pool.participant_count - PARTICIPANT_MASCOTS_VISIBLE}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Actions — stop propagation so clicks don't open the sheet */}

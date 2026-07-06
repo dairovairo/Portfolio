@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
+import LogoWordmark from '../components/LogoWordmark';
 
 // ── Categorías compartidas con Comunidades y Eventos ─────────────────────────
 // U+FE0F (️) after each emoji forces full-color emoji presentation on all platforms
@@ -169,7 +170,7 @@ export default function OnboardingPage() {
             <img src="/logo-icon.png" alt="SocialBattery" className="h-16 w-auto mx-auto mb-6 animate-pulse-slow" />
             <h1 className="font-display text-3xl font-bold text-surface-text mb-3">
               Bienvenido a<br />
-              <span className="text-accent-glow">SocialBattery</span>
+              <span className="text-accent-glow"><LogoWordmark /></span>
             </h1>
             <p className="text-surface-muted text-sm leading-relaxed mb-8 max-w-xs mx-auto">
               Comparte tu nivel de energía social del día y queda con personas

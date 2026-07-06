@@ -17,6 +17,7 @@ import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramS
 import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { useMascot } from '../context/MascotContext';
 import MascotDisplay from '../components/MascotDisplay';
+import LogoWordmark from '../components/LogoWordmark';
 import { claimDailyBatteryReward, DAILY_BATTERY_REWARD, CURRENCY_NAME_PLURAL } from '../lib/currency';
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
@@ -544,7 +545,9 @@ export default function HomePage() {
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/logo-icon.png" alt="SocialBattery" className="h-6 w-auto" />
-            <span className="font-display font-bold text-surface-text">SocialBattery</span>
+            <span className="font-display font-bold text-surface-text">
+              <LogoWordmark />
+            </span>
           </div>
           <div className="flex items-center gap-1">
             <button

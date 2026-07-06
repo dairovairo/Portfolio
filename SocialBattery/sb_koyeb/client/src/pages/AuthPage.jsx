@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import LogoWordmark from '../components/LogoWordmark';
 
 export default function AuthPage() {
   const { signIn, signUp } = useAuth();
@@ -94,7 +95,7 @@ export default function AuthPage() {
           <div className="inline-flex items-center gap-2 mb-4">
             <img src="/logo-icon.png" alt="SocialBattery" className="h-9 w-auto" />
             <h1 className="font-display text-3xl font-800 text-surface-text tracking-tight">
-              SocialBattery
+              <LogoWordmark />
             </h1>
           </div>
           <p className="text-surface-muted text-sm font-body">

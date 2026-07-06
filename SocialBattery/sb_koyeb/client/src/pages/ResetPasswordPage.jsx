@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import LogoWordmark from '../components/LogoWordmark';
 
 export default function ResetPasswordPage() {
   const { updatePassword, signOut } = useAuth();
@@ -68,7 +69,7 @@ export default function ResetPasswordPage() {
           <div className="inline-flex items-center gap-2 mb-4">
             <img src="/logo-icon.png" alt="SocialBattery" className="h-9 w-auto" />
             <h1 className="font-display text-3xl font-800 text-surface-text tracking-tight">
-              SocialBattery
+              <LogoWordmark />
             </h1>
           </div>
         </div>

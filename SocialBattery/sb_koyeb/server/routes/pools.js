@@ -170,6 +170,8 @@ function buildParticipantPreview(rawParticipants) {
         username: user?.username,
         avatar_url: user?.avatar_url,
         battery_level: user?.battery_level,
+        mascot_preview_url: user?.mascot_preview_url,
+        mascot_name: user?.mascot_name,
       };
     })
     .filter(p => p.id);
@@ -191,7 +193,7 @@ router.get('/', requireAuth, async (req, res) => {
         creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
           joined_at, reminder_minutes_before,
-          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url, mascot_name)
         )
       `)
       .order('scheduled_at', { ascending: true })
@@ -442,7 +444,7 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
         max_people, is_public, status, created_at, cover_image_url,
-        creator:creator_id(id, username, avatar_url)
+        creator:creator_id(id, username, avatar_url, battery_level, mascot_preview_url, mascot_name)
       `)
       .single();
 
@@ -542,6 +544,9 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
           id: userId,
           username: pool.creator?.username,
           avatar_url: pool.creator?.avatar_url,
+          battery_level: pool.creator?.battery_level,
+          mascot_preview_url: pool.creator?.mascot_preview_url,
+          mascot_name: pool.creator?.mascot_name,
         }],
         has_joined: true,
         is_creator: true,
