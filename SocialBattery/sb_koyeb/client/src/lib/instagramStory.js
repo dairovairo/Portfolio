@@ -18,12 +18,8 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, av
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  // Background gradient
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#080f1f');
-  bg.addColorStop(0.5, '#0f1e35');
-  bg.addColorStop(1, '#080f1f');
-  ctx.fillStyle = bg;
+  // Fondo — mismo color que el fondo del tema oscuro de la app
+  ctx.fillStyle = '#0a0a0f';
   ctx.fillRect(0, 0, W, H);
 
   // Subtle dot grid
@@ -142,7 +138,7 @@ export async function generateBatteryStoryBlob({ level, label, hex, username, av
 
   // ── Logo de la app — el icono real de batería a línea + nombre, colocado
   // debajo del estado de batería (p. ej. "moderado") ──────────────────────────
-  drawAppLogo(ctx, cx, labelY2 + labelH + 200);
+  await drawAppLogo(ctx, cx, labelY2 + labelH + 200);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
@@ -197,19 +193,15 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
 
     // Dark overlay so text reads well
     const overlay = ctx.createLinearGradient(0, 0, 0, H);
-    overlay.addColorStop(0,   'rgba(8,15,31,0.65)');
-    overlay.addColorStop(0.4, 'rgba(8,15,31,0.55)');
-    overlay.addColorStop(0.7, 'rgba(8,15,31,0.70)');
-    overlay.addColorStop(1,   'rgba(8,15,31,0.85)');
+    overlay.addColorStop(0,   'rgba(10,10,15,0.65)');
+    overlay.addColorStop(0.4, 'rgba(10,10,15,0.55)');
+    overlay.addColorStop(0.7, 'rgba(10,10,15,0.70)');
+    overlay.addColorStop(1,   'rgba(10,10,15,0.85)');
     ctx.fillStyle = overlay;
     ctx.fillRect(0, 0, W, H);
   } else {
-    // No image — solid dark gradient
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, '#080f1f');
-    bg.addColorStop(0.6, '#0f1e35');
-    bg.addColorStop(1, '#080f1f');
-    ctx.fillStyle = bg;
+    // Sin imagen de portada — mismo color que el fondo del tema oscuro de la app
+    ctx.fillStyle = '#0a0a0f';
     ctx.fillRect(0, 0, W, H);
   }
 
@@ -218,21 +210,11 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
   const sideMargin = 64;
   const cardW = W - sideMargin * 2;
 
-  // ── App branding (pill at top) ──────────────────────────────────────────────
+  // ── App branding (logo at top) ──────────────────────────────────────────────
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const pillW = Math.round(380 * S), pillH = Math.round(80 * S);
-  const pillX = (W - pillW) / 2, pillY = 120;
-  ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  roundRect(ctx, pillX, pillY, pillW, pillH, Math.round(40 * S));
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
-  ctx.lineWidth = 2;
-  roundRect(ctx, pillX, pillY, pillW, pillH, Math.round(40 * S));
-  ctx.stroke();
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = `bold ${Math.round(36 * S)}px system-ui, sans-serif`;
-  ctx.fillText('🔋 SocialBattery', W / 2, pillY + pillH / 2);
+  const pillY = 120;
+  await drawAppLogo(ctx, W / 2, pillY + Math.round(40 * S), Math.round(60 * S));
 
   // ── Cover image card (non-blurred, sharp) ─────────────────────────────────
   const cardH = Math.round(500 * S);
@@ -249,8 +231,8 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
     ctx.drawImage(coverImg, cX, cY, cW, cH);
     // Very subtle bottom gradient on the card for separation
     const cardFade = ctx.createLinearGradient(0, cardY + cardH * 0.6, 0, cardY + cardH);
-    cardFade.addColorStop(0, 'rgba(8,15,31,0)');
-    cardFade.addColorStop(1, 'rgba(8,15,31,0.4)');
+    cardFade.addColorStop(0, 'rgba(10,10,15,0)');
+    cardFade.addColorStop(1, 'rgba(10,10,15,0.4)');
     ctx.fillStyle = cardFade;
     ctx.fillRect(sideMargin, cardY, cardW, cardH);
     ctx.restore();
@@ -530,92 +512,27 @@ function drawUrlBadge(ctx, W, H, scale = 1) {
   ctx.restore();
 }
 
-/**
- * Dibuja el icono REAL de la app: la batería a línea (trazo) con su terminal
- * y el rayo central, tal cual el icono oficial (desktop/assets/icon.svg /
- * icons/icon-192.png). Se dibuja a partir de las mismas coordenadas que ese
- * icono, aplicando UNA SOLA escala (misma en X e Y), así que nunca sale
- * achatado ni deformado hacia los lados, sea cual sea el tamaño pedido.
- *
- * `width` es el ancho visual deseado del cuerpo de la batería + terminal
- * (el icono original mide 156 unidades de ancho visual sobre un lienzo de
- * 256×256). Devuelve el alto visual resultante, por si se necesita para
- * maquetar el resto del logo.
- */
-function drawBatteryLogoMark(ctx, cx, cy, width) {
-  const S = width / 156; // 156 = ancho visual original (cuerpo 130 + terminal 26)
-  const originX = cx - 132 * S; // 132 = centro X visual del icono original
-  const originY = cy - 128 * S; // 128 = centro Y visual del icono original
-  const px = x => originX + x * S;
-  const py = y => originY + y * S;
-
-  ctx.save();
-
-  // Cuerpo de la batería — dibujado A LÍNEA (contorno), como el icono real
-  const bodyX = px(54), bodyY = py(72), bodyW = 130 * S, bodyH = 112 * S, bodyR = 24 * S;
-  ctx.fillStyle = '#15151e';
-  roundRect(ctx, bodyX, bodyY, bodyW, bodyH, bodyR);
-  ctx.fill();
-  ctx.strokeStyle = '#8b5cf6';
-  ctx.lineWidth = 12 * S;
-  roundRect(ctx, bodyX, bodyY, bodyW, bodyH, bodyR);
-  ctx.stroke();
-
-  // Terminal (+) de la batería
-  roundRect(ctx, px(192), py(108), 18 * S, 40 * S, 8 * S);
-  ctx.fillStyle = '#8b5cf6';
-  ctx.fill();
-
-  // Nivel de carga interior
-  roundRect(ctx, px(75), py(94), 88 * S, 68 * S, 14 * S);
-  ctx.fillStyle = '#22c55e';
-  ctx.fill();
-
-  // Rayo central
-  ctx.beginPath();
-  ctx.moveTo(px(126), py(42));
-  ctx.lineTo(px(92), py(122));
-  ctx.lineTo(px(127), py(122));
-  ctx.lineTo(px(110), py(214));
-  ctx.lineTo(px(167), py(96));
-  ctx.lineTo(px(130), py(96));
-  ctx.lineTo(px(157), py(42));
-  ctx.closePath();
-  ctx.fillStyle = '#f8fafc';
-  ctx.fill();
-
-  ctx.restore();
-  return 172 * S; // alto visual resultante
+// Cache del logo de la app para no recargar la imagen en cada historia generada.
+let _appLogoImagePromise = null;
+function getAppLogoImage() {
+  if (!_appLogoImagePromise) {
+    _appLogoImagePromise = loadImage('/logo-full.png');
+  }
+  return _appLogoImagePromise;
 }
 
 /**
- * Dibuja el logo real de la app (icono de batería a línea + "SocialBattery"),
- * más grande y sin distorsión, colocado debajo del estado de batería.
+ * Dibuja el logo real de la app (icono + wordmark "SocialBattery"), el
+ * mismo que aparece en la esquina superior izquierda del menú principal,
+ * centrado horizontalmente en cx a la altura y, con altura objetivo
+ * targetHeight (el ancho se calcula manteniendo la proporción original).
  */
-function drawAppLogo(ctx, cx, y) {
-  ctx.save();
-  const iconW = 108; // ancho del icono, notablemente más grande que antes
-  const name = 'SocialBattery';
-  const nameFont = '800 46px "Syne", system-ui, sans-serif';
-  const gap = 20;
-
-  ctx.font = nameFont;
-  const nameW = ctx.measureText(name).width;
-  const totalW = iconW + gap + nameW;
-  const startX = cx - totalW / 2;
-  const iconCx = startX + iconW / 2;
-
-  drawBatteryLogoMark(ctx, iconCx, y, iconW);
-
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = nameFont;
-  ctx.fillText(name, startX + iconW + gap, y);
-  ctx.restore();
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+async function drawAppLogo(ctx, cx, y, targetHeight = 72) {
+  const img = await getAppLogoImage();
+  const scale = targetHeight / img.height;
+  const w = img.width * scale;
+  const h = img.height * scale;
+  ctx.drawImage(img, cx - w / 2, y - h / 2, w, h);
 }
 
 /**
@@ -729,7 +646,7 @@ async function drawMascotBadgeOnCanvas(ctx, mascot, cx, cy, r, hex) {
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(8,15,31,0.94)';
+  ctx.fillStyle = 'rgba(10,10,15,0.94)';
   ctx.fill();
   ctx.clip();
   if (mascot) {
@@ -749,7 +666,7 @@ function drawMascotNameTag(ctx, name, cx, topY, hex) {
   const w = ctx.measureText(label).width + 44;
   const h = 46;
   const x = cx - w / 2;
-  ctx.fillStyle = 'rgba(8,15,31,0.94)';
+  ctx.fillStyle = 'rgba(10,10,15,0.94)';
   roundRect(ctx, x, topY, w, h, h / 2);
   ctx.fill();
   ctx.strokeStyle = hexToRgba(hex, 0.6);

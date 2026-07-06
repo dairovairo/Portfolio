@@ -472,7 +472,7 @@ export default function EventDetailPage() {
                 onClick={handleShareStory}
                 disabled={sharingStory}
                 title="Compartir evento"
-                className="flex items-center justify-center w-9 h-9 rounded-xl border border-surface-border text-surface-muted hover:border-pink-500/40 hover:text-pink-300 hover:bg-pink-500/5 transition-all disabled:opacity-50"
+                className="flex items-center justify-center w-9 h-9 rounded-xl border border-pink-500/40 text-pink-300 bg-pink-500/5 transition-all disabled:opacity-50"
               >
                 {sharingStory
                   ? <span className="animate-spin text-xs">⏳</span>

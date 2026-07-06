@@ -526,7 +526,7 @@ export default function HomePage() {
       <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/90 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xl">🔋</span>
+            <img src="/logo-icon.png" alt="SocialBattery" className="h-6 w-auto" />
             <span className="font-display font-bold text-surface-text">SocialBattery</span>
           </div>
           <div className="flex items-center gap-1">
@@ -632,7 +632,7 @@ export default function HomePage() {
             onClick={shareBatteryStory}
             disabled={sharingStory}
             title="Compartir mi batería"
-            className="mt-2 w-full py-2.5 rounded-xl font-display font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 border border-surface-border text-surface-muted hover:border-pink-500/40 hover:text-pink-300 hover:bg-pink-500/5 disabled:opacity-50"
+            className="mt-2 w-full py-2.5 rounded-xl font-display font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 border border-pink-500/40 text-pink-300 bg-pink-500/5 disabled:opacity-50"
           >
             {sharingStory
               ? <><span className="animate-spin text-base">⏳</span> Generando...</>
