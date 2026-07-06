@@ -9,7 +9,7 @@ const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
-const eventUpdateImageUpload = createImageUpload({ maxSizeMb: 5 });
+const eventUpdateImageUpload = createImageUpload({ maxSizeMb: 8 });
 
 function uploadEventCover(req, res, next) {
   eventCoverUpload.single('cover')(req, res, err => {
@@ -882,9 +882,9 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
     if (req.file) {
       imageUrl = await storeImage({
         file: req.file,
-        bucket: 'avatars',
+        bucket: 'chat-images',
         objectName: `event-updates/${userId}/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        fallbackMaxLength: 300000,
+        fallbackMaxLength: 8_000_000,
       });
     }
 

@@ -812,7 +812,7 @@ function CreateEventModal({ onClose, onCreate }) {
                 onClick={() => setShowPhotoMenu(true)}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto de la galería
+                Elegir foto
               </button>
             )}
             <input

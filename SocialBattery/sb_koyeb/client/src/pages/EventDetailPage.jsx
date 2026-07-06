@@ -10,6 +10,7 @@ import { generateEventStoryBlob, shareOrDownloadBlob } from '../lib/instagramSto
 import { useMascot } from '../context/MascotContext';
 import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { getBatteryColor, getEffectiveBatteryLevel } from '../lib/battery';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 function getMascotTier(level) {
   if (level <= 33) return 'low';
@@ -169,6 +170,8 @@ export default function EventDetailPage() {
   const textareaRef = useRef(null);
   const updatesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchEvent = useCallback(async () => {
@@ -642,13 +645,27 @@ export default function EventDetailPage() {
                 📣 Publicar actualización como organizador
               </p>
 
-              {/* Hidden file input */}
+              {/* Hidden file inputs */}
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 className="hidden"
                 onChange={handleImageSelect}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+              <PhotoSourceMenu
+                open={showPhotoMenu}
+                onClose={() => setShowPhotoMenu(false)}
+                onCamera={() => cameraInputRef.current?.click()}
+                onGallery={() => fileInputRef.current?.click()}
               />
 
               {/* Image preview */}
@@ -683,8 +700,8 @@ export default function EventDetailPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono text-slate-600">{draft.length}/2000</span>
                   <button
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Adjuntar foto de la galería"
+                    onClick={() => setShowPhotoMenu(true)}
+                    title="Adjuntar foto"
                     className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono transition-all ${
                       selectedImage
                         ? 'border-accent-primary/40 bg-accent-primary/10 text-accent-glow'
