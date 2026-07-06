@@ -124,6 +124,27 @@ export default function ItemColorEditorPage({
 
   function applyDraftColor() { commitColor(hslDegreesToHex(draftHsl.h, draftHsl.s, draftHsl.l)); }
 
+  // Guardar: si hay una zona seleccionada con un color elegido en el
+  // selector pero aún sin confirmar (el usuario no llegó a tocar
+  // "✓ Aplicar color"), lo confirmamos igualmente antes de guardar para que
+  // no se pierda el color que ya había elegido. Se calcula la lista final
+  // de zonas de forma síncrona (en vez de depender de setZones, que es
+  // asíncrono) para poder pasarla directamente a onSave en esta misma
+  // llamada.
+  function handleSaveClick() {
+    if (pending && masterDataRef.current) {
+      const color = hslDegreesToHex(draftHsl.h, draftHsl.s, draftHsl.l);
+      recolorWithMask(masterDataRef.current, pending.mask, color);
+      drawToVisibleCanvas(masterDataRef.current);
+      const finalZones = [...zones, { x: pending.x, y: pending.y, tolerance: pending.tolerance, color }];
+      setZones(finalZones);
+      setPending(null);
+      onSave(finalZones);
+      return;
+    }
+    onSave(zones);
+  }
+
   function cancelPending() {
     setPending(null);
     if (masterDataRef.current) drawToVisibleCanvas(masterDataRef.current);
@@ -216,7 +237,7 @@ export default function ItemColorEditorPage({
             </span>
           </div>
           <button
-            onClick={() => onSave(zones)}
+            onClick={handleSaveClick}
             className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-display font-bold bg-accent-primary text-white hover:bg-accent-primary/80 transition-all shadow-sm shadow-accent-primary/30"
           >
             Guardar

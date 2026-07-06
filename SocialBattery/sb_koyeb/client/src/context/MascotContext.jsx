@@ -1158,6 +1158,9 @@ export const MASCOT_FEET = [
     price: 70,
     isBase: false,
     isBasic: true,
+    // Ítem de partida fijo para personalizar cualquier color del carrusel
+    // "Retro · colores" (ver pickCarouselTarget en ShopPage.jsx).
+    isCustomizeBase: true,
   },
   {
     id: 'feet_sneaker_1_navy',
@@ -1208,10 +1211,6 @@ export const MASCOT_FEET = [
     price: 70,
     isBase: false,
     isBasic: true,
-    // Ítem de partida fijo para personalizar cualquier color del carrusel
-    // "Retro · colores" (ver pickCarouselTarget en ShopPage.jsx): al ser
-    // blanca, su color base no interfiere con el color que elija el usuario.
-    isCustomizeBase: true,
   },
   {
     id: 'feet_sneaker_1_black',
