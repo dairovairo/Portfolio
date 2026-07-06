@@ -14,7 +14,7 @@ export default function LogoWordmark({ className = '', ...rest }) {
         alt=""
         aria-hidden="true"
         draggable={false}
-        className="inline-block h-[0.95em] w-auto -ml-[0.02em] translate-y-[0.12em] select-none pointer-events-none"
+        className="inline-block h-[0.74em] w-auto -ml-[0.02em] translate-y-[0.22em] select-none pointer-events-none"
       />
       {/* Para lectores de pantalla el nombre se sigue leyendo completo */}
       <span className="sr-only">y</span>
