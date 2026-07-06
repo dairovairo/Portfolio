@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import HexColorPicker from '../components/HexColorPicker';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -140,8 +141,8 @@ function WallpaperPicker({ wallpaper, onSet, onClear }) {
 function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, onOpacityChange, onTextColorChange }) {
   return (
     <div className="space-y-2">
-      <div className="text-xs font-display font-semibold text-surface-text">{label}</div>
       <div className="flex items-center gap-3">
+        <div className="text-xs font-display font-semibold text-surface-text flex-1">{label}</div>
         {/* Swatch preview */}
         <div
           className="w-9 h-9 rounded-xl border border-surface-border flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
@@ -149,37 +150,30 @@ function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, on
         >
           Aa
         </div>
-        <div className="flex-1 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-surface-muted w-16">Color</span>
-            <input
-              type="color"
-              value={color}
-              onChange={e => onColorChange(e.target.value)}
-              className="h-7 flex-1 rounded-lg cursor-pointer bg-transparent border border-surface-border"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-surface-muted w-16">Opacidad</span>
-            <input
-              type="range" min="0.3" max="1" step="0.05"
-              value={opacity}
-              onChange={e => onOpacityChange(parseFloat(e.target.value))}
-              className="flex-1 accent-accent-primary"
-            />
-            <span className="text-xs text-surface-muted font-mono w-8 text-right">
-              {Math.round(opacity * 100)}%
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-surface-muted w-16">Letra</span>
-            <input
-              type="color"
-              value={textColor}
-              onChange={e => onTextColorChange(e.target.value)}
-              className="h-7 flex-1 rounded-lg cursor-pointer bg-transparent border border-surface-border"
-            />
-          </div>
+      </div>
+
+      <div className="space-y-2.5">
+        <div>
+          <span className="text-xs text-surface-muted mb-1 block">Color</span>
+          <HexColorPicker value={color} onChange={onColorChange} />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-surface-muted w-16">Opacidad</span>
+          <input
+            type="range" min="0.3" max="1" step="0.05"
+            value={opacity}
+            onChange={e => onOpacityChange(parseFloat(e.target.value))}
+            className="flex-1 accent-accent-primary"
+          />
+          <span className="text-xs text-surface-muted font-mono w-8 text-right">
+            {Math.round(opacity * 100)}%
+          </span>
+        </div>
+
+        <div>
+          <span className="text-xs text-surface-muted mb-1 block">Letra</span>
+          <HexColorPicker value={textColor} onChange={onTextColorChange} />
         </div>
       </div>
     </div>
@@ -190,26 +184,21 @@ function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, on
 
 function TickColorPicker({ label, description, color, onChange }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
-        {description && <div className="text-xs text-surface-muted">{description}</div>}
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
+          {description && <div className="text-xs text-surface-muted">{description}</div>}
+        </div>
         {/* Swatch preview with double tick */}
-        <span style={{ color }} className="inline-flex items-center">
+        <span style={{ color }} className="inline-flex items-center flex-shrink-0">
           <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </span>
-        <input
-          type="color"
-          value={color}
-          onChange={e => onChange(e.target.value)}
-          className="h-8 w-16 rounded-lg cursor-pointer bg-transparent border border-surface-border"
-        />
       </div>
+      <HexColorPicker value={color} onChange={onChange} />
     </div>
   );
 }
