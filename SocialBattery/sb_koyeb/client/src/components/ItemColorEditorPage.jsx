@@ -291,7 +291,7 @@ export default function ItemColorEditorPage({
 
             {/* Indicador original → nuevo */}
             <div className="flex items-center gap-2 mb-3 min-h-[24px]">
-              {pending ? (
+              {pending && (
                 <>
                   <span className="text-[11px] text-surface-muted">Original</span>
                   <span
@@ -305,10 +305,6 @@ export default function ItemColorEditorPage({
                     style={{ background: `hsl(${draftHsl.h} ${draftHsl.s}% ${draftHsl.l}%)` }}
                   />
                 </>
-              ) : (
-                <span className="text-[11px] text-surface-muted/60 italic">
-                  Toca una zona del item para seleccionar el color
-                </span>
               )}
             </div>
 
@@ -358,14 +354,6 @@ export default function ItemColorEditorPage({
               ✨ Restaurar original
             </button>
           </div>
-
-          {/* ── Guardar ── */}
-          <button
-            onClick={() => onSave(zones)}
-            className="w-full py-3 rounded-xl text-sm font-display font-bold bg-accent-primary hover:bg-accent-primary/80 text-white transition-all shadow-md shadow-accent-primary/20"
-          >
-            Guardar personalización
-          </button>
 
         </div>
       </div>

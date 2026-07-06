@@ -100,8 +100,11 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
         </span>
       </div>
 
-      {/* Battery level */}
-      <div className="flex-shrink-0 text-right">
+      {/* Battery level — ancho fijo (suficiente para "100") para que el
+          número no cambie de tamaño entre 1 y 2 dígitos; si no, al ser
+          flex-shrink-0 dentro del flex, hace que "Info" (flex-1) se encoja
+          o crezca y desplace todo lo que va después, incluida la mascota. */}
+      <div className="flex-shrink-0 text-right w-12">
         <div
           className="font-display text-2xl font-bold tabular-nums transition-colors duration-200"
           style={{ color: color.hex }}
