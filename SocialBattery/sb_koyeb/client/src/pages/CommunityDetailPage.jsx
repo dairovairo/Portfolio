@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import LocationPicker from '../components/LocationPicker';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
@@ -263,6 +265,8 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
   const coverInputRef = useRef(null);
+  const coverCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -272,7 +276,12 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     event_date: defaultDate,
     ends_at: '',
     location: '',
+    lat: null,
+    lng: null,
     url: '',
+    price: '',
+    additional_info: '',
+    promotion_plan: 'basic',
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -307,6 +316,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     setCoverFile(null);
     setCoverPreview('');
     if (coverInputRef.current) coverInputRef.current.value = '';
+    if (coverCameraRef.current) coverCameraRef.current.value = '';
   }
 
   async function handleSubmit() {
@@ -343,6 +353,8 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
+
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">{getEventEmoji(resolvedCategory || form.category)}</span>
           <div>
@@ -357,6 +369,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             <input
               value={form.title}
               onChange={e => set('title', e.target.value)}
+              placeholder="Ej: Concierto en el parque, Hackathon de verano..."
               maxLength={120}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -390,21 +403,31 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               />
             )}
           </div>
-          <textarea
-            value={form.description}
-            onChange={e => set('description', e.target.value)}
-            placeholder="Descripción"
-            rows={3}
-            maxLength={500}
-            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
-          />
-          <input
-            value={form.organization}
-            onChange={e => set('organization', e.target.value)}
-            placeholder="Organización que crea el evento (opcional)"
-            maxLength={120}
-            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-          />
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Descripción <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              placeholder="¿De qué va el evento? ¿Qué pueden esperar los asistentes?"
+              rows={3}
+              maxLength={500}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Organización <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              value={form.organization}
+              onChange={e => set('organization', e.target.value)}
+              placeholder="Ej: Universidad, asociación, club..."
+              maxLength={120}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha y hora *</label>
@@ -416,7 +439,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
-            <div className="col-span-2">
+            <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
               <input
                 type="datetime-local"
@@ -428,13 +451,14 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             </div>
           </div>
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
-            <input
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Ubicación *
+            </label>
+            <LocationPicker
               value={form.location}
-              onChange={e => set('location', e.target.value)}
-              placeholder="Ubicación"
-              maxLength={200}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              lat={form.lat}
+              lng={form.lng}
+              onChange={(location, lat, lng) => setForm(f => ({ ...f, location, lat, lng }))}
             />
           </div>
           <div>
@@ -448,6 +472,33 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               placeholder="Ej: https://eventbrite.com/mi-evento"
               maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Precio <span className="text-slate-600">(€ · vacío o 0 = gratis)</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={e => set('price', e.target.value)}
+              placeholder="Ej: 5.00"
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Información adicional <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={form.additional_info}
+              onChange={e => set('additional_info', e.target.value)}
+              placeholder="Dress code, qué traer, instrucciones de acceso, requisitos..."
+              maxLength={1000}
+              rows={3}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
             />
           </div>
           <div>
@@ -473,10 +524,10 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             ) : (
               <button
                 type="button"
-                onClick={() => coverInputRef.current?.click()}
+                onClick={() => setShowPhotoMenu(true)}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto de la galería
+                Elegir foto
               </button>
             )}
             <input
@@ -486,12 +537,110 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               className="hidden"
               onChange={handleCoverChange}
             />
+            <input
+              ref={coverCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => coverCameraRef.current?.click()}
+              onGallery={() => coverInputRef.current?.click()}
+            />
           </div>
+
+          {/* Promotion Plan */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-2">
+              Promoción del evento
+            </label>
+            <div className="grid grid-cols-1 gap-2">
+              {/* Basic */}
+              <button
+                type="button"
+                onClick={() => set('promotion_plan', 'basic')}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                  form.promotion_plan === 'basic'
+                    ? 'border-accent-primary bg-accent-primary/10'
+                    : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">📋</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Basic Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Listado estándar en la sección de eventos de la comunidad.</p>
+                </div>
+                {form.promotion_plan === 'basic' && (
+                  <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
+                )}
+              </button>
+
+              {/* Premium */}
+              <button
+                type="button"
+                onClick={() => set('promotion_plan', 'premium')}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                  form.promotion_plan === 'premium'
+                    ? 'border-purple-400 bg-purple-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-purple-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">⚡</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Top de "Selección de app" · Etiqueta ⚡ Premium · Notificación push a todos los usuarios de la app al publicar.</p>
+                </div>
+                {form.promotion_plan === 'premium' && (
+                  <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
+                )}
+              </button>
+
+              {/* Ultra */}
+              <button
+                type="button"
+                onClick={() => set('promotion_plan', 'ultra')}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                  form.promotion_plan === 'ultra'
+                    ? 'border-yellow-400 bg-yellow-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-yellow-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">🚀</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Posición #1 garantizada (sobre otros Premium) · Notificación push prominente a todos los usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
+                </div>
+                {form.promotion_plan === 'ultra' && (
+                  <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>
+                )}
+              </button>
+            </div>
+
+            {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
+              <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                💳 El pago se gestionará en el siguiente paso tras publicar el evento.
+              </p>
+            )}
+          </div>
+
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
           <button
             onClick={handleSubmit}
             disabled={saving || !form.title.trim() || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
-            className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50"
+            className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : 'Publicar evento'}
           </button>
