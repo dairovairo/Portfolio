@@ -6,6 +6,7 @@ import {
 import HslColorSquarePicker from './HslColorSquarePicker';
 import MascotDisplay from './MascotDisplay';
 import { MASCOT_ACCESSORIES, useMascot } from '../context/MascotContext';
+import { CURRENCY_SYMBOL } from '../lib/currency';
 
 /**
  * ItemColorEditorPage — editor de personalización de color a pantalla
@@ -22,6 +23,7 @@ import { MASCOT_ACCESSORIES, useMascot } from '../context/MascotContext';
  *   initialZones  receta de zonas ya guardada (o [])
  *   onClose       cierra sin guardar
  *   onSave(zones) confirma y guarda
+ *   saveCost      coste en Volts que se muestra junto al botón "Guardar"
  *   helpText      texto de ayuda contextual
  */
 export default function ItemColorEditorPage({
@@ -31,6 +33,7 @@ export default function ItemColorEditorPage({
   initialZones = [],
   onClose,
   onSave,
+  saveCost = 5,
   helpText = 'Toca una zona para seleccionarla y elige el color que quieras.',
 }) {
   const { activeAccessories, getCustomAccessoryItems } = useMascot();
@@ -238,9 +241,12 @@ export default function ItemColorEditorPage({
           </div>
           <button
             onClick={handleSaveClick}
-            className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-display font-bold bg-accent-primary text-white hover:bg-accent-primary/80 transition-all shadow-sm shadow-accent-primary/30"
+            className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-display font-bold bg-accent-primary text-white hover:bg-accent-primary/80 transition-all shadow-sm shadow-accent-primary/30 flex items-center gap-1"
           >
             Guardar
+            <span className="font-mono font-semibold opacity-90">
+              {saveCost}{CURRENCY_SYMBOL}
+            </span>
           </button>
         </div>
       </nav>

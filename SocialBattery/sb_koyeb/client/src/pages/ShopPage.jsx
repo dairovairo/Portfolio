@@ -1368,7 +1368,8 @@ export default function ShopPage() {
 
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-accent-primary text-white px-5 py-3
-          rounded-2xl text-sm font-display font-semibold shadow-lg shadow-accent-primary/30 animate-slide-down whitespace-nowrap">
+          rounded-2xl text-sm font-display font-semibold shadow-lg shadow-accent-primary/30 animate-slide-down
+          max-w-[85vw] w-max text-center break-words">
           {toast}
         </div>
       )}
@@ -1381,6 +1382,7 @@ export default function ShopPage() {
           initialZones={getFeetZones(editingFeetItem.id)}
           onClose={() => { setEditingFeetItem(null); setEditingCustomId(null); }}
           onSave={handleSaveFeetColors}
+          saveCost={CUSTOMIZATION_SAVE_COST}
           helpText="Toca una zona de la zapatilla para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (suela, cuerpo, cordones…)."
         />
       )}
@@ -1409,6 +1411,7 @@ export default function ShopPage() {
           initialZones={getOutfitZones(editingOutfitItem.id)}
           onClose={() => { setEditingOutfitItem(null); setEditingOutfitCustomId(null); }}
           onSave={handleSaveOutfitColors}
+          saveCost={CUSTOMIZATION_SAVE_COST}
           helpText={`Toca una zona de la ${editingOutfitItem.subcategory === 'camisa' ? 'camisa' : 'camiseta'} para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites.`}
         />
       )}
@@ -1438,6 +1441,7 @@ export default function ShopPage() {
           initialZones={getHeadZones(editingHeadItem.id)}
           onClose={() => { setEditingHeadItem(null); setEditingHeadCustomId(null); }}
           onSave={handleSaveHeadColors}
+          saveCost={CUSTOMIZATION_SAVE_COST}
           helpText="Toca una zona del gorro para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (copa, visera, logo…)."
         />
       )}
@@ -1462,6 +1466,7 @@ export default function ShopPage() {
           initialZones={getAccessoryZones(editingAccessoryItem.id)}
           onClose={() => { setEditingAccessoryItem(null); setEditingAccessoryCustomId(null); }}
           onSave={handleSaveAccessoryColors}
+          saveCost={CUSTOMIZATION_SAVE_COST}
           helpText="Toca una zona del accesorio para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites."
         />
       )}
