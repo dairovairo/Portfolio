@@ -8,9 +8,11 @@
  * Ahora (fase 69): este job corre cada pocos minutos y, en cada pasada:
  *
  *   1. Aplica un tope de 1 notificación promocional (premium/ultra) por
- *      usuario y día, contando TODOS los eventos activos a la vez — un
- *      usuario ya notificado hoy (de cualquier evento) queda fuera del
- *      resto de eventos hasta el día siguiente.
+ *      usuario cada 24h, contando TODOS los eventos activos a la vez — un
+ *      usuario ya notificado en las últimas 24h (de cualquier evento) queda
+ *      fuera del resto de eventos hasta que pasen esas 24h. Es una ventana
+ *      móvil (now - 24h), no la medianoche del servidor, para que una sesión
+ *      de pruebas que cruce esa medianoche no "resetee" el tope a mitad.
  *
  *   2. Reparte el "cupo" de usuarios disponibles ese tick entre los
  *      eventos activos con dos prioridades:
@@ -165,8 +167,13 @@ async function dispatchToEvent(event, users) {
 
 async function runEventPromoPacingTick() {
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  // Antes: "hoy" = medianoche del reloj del servidor (normalmente UTC en Koyeb).
+  // Esto podía resetear el tope a mitad de una sesión de pruebas si esta
+  // cruzaba la medianoche UTC (p.ej. las 2:00 de la madrugada en España en
+  // verano), dejando notificar un segundo evento "el mismo día" para quien
+  // probaba. Ahora usamos una ventana móvil de 24h real, sin depender de
+  // ningún huso horario ni de dónde caiga la medianoche del servidor.
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
   try {
     // 1. Eventos premium/ultra activos (no empezados) que aún no llegan a lo contratado
@@ -182,13 +189,13 @@ async function runEventPromoPacingTick() {
     const pending = (events || []).filter(e => e.notification_sent_count < e.notification_count);
     if (!pending.length) return;
 
-    // 2. Tope diario global: usuarios ya notificados HOY (de cualquier evento)
-    const { data: notifiedToday, error: notifiedError } = await supabase
+    // 2. Tope global: usuarios ya notificados en las últimas 24h (de cualquier evento)
+    const { data: notifiedRecently, error: notifiedError } = await supabase
       .from('event_promo_notifications')
       .select('user_id')
-      .gte('sent_at', todayStart.toISOString());
-    if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
-    const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
+      .gte('sent_at', cutoff.toISOString());
+    if (notifiedError) { console.error('[PROMO-PACING] error consultando log de 24h:', notifiedError); return; }
+    const notifiedTodaySet = new Set((notifiedRecently || []).map(r => r.user_id));
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
