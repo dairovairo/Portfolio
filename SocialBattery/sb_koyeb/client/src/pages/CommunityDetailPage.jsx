@@ -598,7 +598,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                     <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
                     <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Top de "Selección de app" · Etiqueta ⚡ Premium · Notificación push a todos los usuarios de la app al publicar.</p>
+                  <p className="text-xs text-surface-muted mt-0.5">Etiqueta ⚡ Premium · Notificación push a usuarios seleccionados de la app al publicar.</p>
                 </div>
                 {form.promotion_plan === 'premium' && (
                   <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
@@ -621,7 +621,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                     <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
                     <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Posición #1 garantizada (sobre otros Premium) · Notificación push prominente a todos los usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
+                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
                 </div>
                 {form.promotion_plan === 'ultra' && (
                   <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>

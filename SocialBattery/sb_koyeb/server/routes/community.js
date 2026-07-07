@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers, notifyUsers } = require('../lib/webpush');
+const { notifyAllUsers, notifyUpToNUsers, notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -338,42 +338,56 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     const PREMIUM_LIMIT = 1;  // TEST: 1 persona  — PRODUCTION: 5_000
     const ULTRA_LIMIT   = 2;  // TEST: 2 personas — PRODUCTION: 20_000
 
-    if (resolvedPlan === 'ultra') {
-      // Ultra: notify up to ULTRA_LIMIT randomly-selected users.
-      // SW applies requireInteraction + strong vibration for the ultra-event- tag.
-      notifyUpToNUsers(supabase, userId, ULTRA_LIMIT, {
-        title: '🚀 Evento destacado: ' + event.title,
-        body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
-        url:   `/community/event/${event.id}`,
-        tag:   `ultra-event-${event.id}`,
-      }).catch(() => {});
-    } else if (resolvedPlan === 'premium') {
-      // Premium: notify up to PREMIUM_LIMIT randomly-selected users.
-      // Uses a premium-event- tag so the SW applies standard (non-intrusive) treatment.
-      notifyUpToNUsers(supabase, userId, PREMIUM_LIMIT, {
-        title: '⚡ Nuevo evento Premium: ' + event.title,
-        body:  `${event.location ? event.location + ' · ' : ''}¡Échale un vistazo!`,
-        url:   `/community/event/${event.id}`,
-        tag:   `premium-event-${event.id}`,
-      }).catch(() => {});
-    } else if (communityId) {
-      // Basic with community: notify community members only
-      supabase
-        .from('communities')
-        .select('name')
-        .eq('id', communityId)
-        .single()
-        .then(({ data: comm }) => {
+    (async () => {
+      try {
+        // Si el evento pertenece a una comunidad, se avisa a sus miembros
+        // SIEMPRE, sea cual sea el plan de promoción (basic/premium/ultra).
+        let communityMemberIds = [];
+
+        if (communityId) {
+          const [{ data: comm }, { data: members }] = await Promise.all([
+            supabase.from('communities').select('name').eq('id', communityId).single(),
+            supabase.from('community_members').select('user_id').eq('community_id', communityId).neq('user_id', userId),
+          ]);
+
+          communityMemberIds = members?.map(m => m.user_id) || [];
           const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
-          notifyCommunityMembers(supabase, communityId, userId, {
+
+          await notifyUsers(supabase, communityMemberIds, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
             url:   `/community/event/${event.id}`,
             tag:   `community-event-${event.id}`,
           });
-        })
-        .catch(() => {});
-    }
+        }
+
+        // Alcance adicional según el plan. Se excluyen creador + miembros ya
+        // notificados arriba, para no duplicar el push a quien ya lo recibió.
+        const excludeIds = [userId, ...communityMemberIds];
+
+        if (resolvedPlan === 'ultra') {
+          // Ultra: notify up to ULTRA_LIMIT randomly-selected users.
+          // SW applies requireInteraction + strong vibration for the ultra-event- tag.
+          await notifyUpToNUsers(supabase, excludeIds, ULTRA_LIMIT, {
+            title: '🚀 Evento destacado: ' + event.title,
+            body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
+            url:   `/community/event/${event.id}`,
+            tag:   `ultra-event-${event.id}`,
+          });
+        } else if (resolvedPlan === 'premium') {
+          // Premium: notify up to PREMIUM_LIMIT randomly-selected users.
+          // Uses a premium-event- tag so the SW applies standard (non-intrusive) treatment.
+          await notifyUpToNUsers(supabase, excludeIds, PREMIUM_LIMIT, {
+            title: '⚡ Nuevo evento Premium: ' + event.title,
+            body:  `${event.location ? event.location + ' · ' : ''}¡Échale un vistazo!`,
+            url:   `/community/event/${event.id}`,
+            tag:   `premium-event-${event.id}`,
+          });
+        }
+      } catch (err) {
+        console.warn('[community] event push notification error:', err.message);
+      }
+    })();
 
     res.status(201).json({ event });
   } catch (err) {

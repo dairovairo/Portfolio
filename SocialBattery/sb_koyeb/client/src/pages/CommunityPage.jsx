@@ -135,10 +135,9 @@ function sortEventsByProximity(eventList = []) {
   });
 }
 
-// 'app'            → ultra primero → premium → basic; dentro de cada tier, puntuación ponderada
+// 'app'            → puntuación ponderada (likes + apuntados), sin distinción de plan
 // 'planificaciones'→ más apuntados primero
 // 'likes'          → más likes primero
-const PROMOTION_TIER = { ultra: 2, premium: 1, basic: 0 };
 function promotionScore(event) {
   return (event.attendee_count || 0) * 1.5 + (event.like_count || 0);
 }
@@ -150,10 +149,7 @@ function sortEventsBy(eventList = [], sortKey = 'app') {
     if (sortKey === 'planificaciones') {
       return (b.attendee_count || 0) - (a.attendee_count || 0);
     }
-    // 'app': ultra/premium flotan al top; dentro de cada tier, puntuación ponderada como desempate
-    const tierA = PROMOTION_TIER[a.promotion_plan] ?? 0;
-    const tierB = PROMOTION_TIER[b.promotion_plan] ?? 0;
-    if (tierB !== tierA) return tierB - tierA;
+    // 'app': todos los eventos compiten por igual, por puntuación ponderada
     return promotionScore(b) - promotionScore(a);
   });
 }
@@ -202,14 +198,24 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
   };
   const rankStyle = rankColors[rank] || { ring: 'border-surface-border', glow: 'transparent', label: null };
 
-  // Promoted events override border/glow
-  const PROMO_META = {
-    ultra:   { ring: 'border-yellow-400/55', glow: '#facc1522', pill: '🚀 Ultra',   pillClass: 'text-yellow-300 bg-yellow-500/10 border border-yellow-500/25' },
-    premium: { ring: 'border-purple-400/50', glow: '#a855f71a', pill: '⚡ Premium', pillClass: 'text-purple-300 bg-purple-500/10 border border-purple-500/25' },
+  // Ring de borde por plan de pago (se mantiene: distingue visualmente sin afectar orden)
+  const RING_META = {
+    ultra:   { ring: 'border-yellow-400/55' },
+    premium: { ring: 'border-purple-400/50' },
   };
-  const promo = PROMO_META[event.promotion_plan];
-  const activeRing = promo?.ring ?? rankStyle.ring;
-  const activeGlow = promo?.glow ?? (rank <= 3 ? rankStyle.glow : null);
+  const ringOverride = RING_META[event.promotion_plan];
+  const activeRing = ringOverride?.ring ?? rankStyle.ring;
+  // El glow queda reservado al podio real (rank 1-3); premium/ultra ya no fuerzan
+  // su propio glow para no chocar con los colores oro/plata/bronce del podio.
+  const activeGlow = rank <= 3 ? rankStyle.glow : null;
+
+  // Pill de plan: visible para los 3 planes (basic incluido)
+  const PILL_META = {
+    ultra:   { pill: '🚀 Ultra',   pillClass: 'text-yellow-300 bg-yellow-500/10 border border-yellow-500/25' },
+    premium: { pill: '⚡ Premium', pillClass: 'text-purple-300 bg-purple-500/10 border border-purple-500/25' },
+    basic:   { pill: '📋 Basic',   pillClass: 'text-slate-300 bg-slate-500/10 border border-slate-500/25' },
+  };
+  const promo = PILL_META[event.promotion_plan] ?? PILL_META.basic;
 
   async function handleJoin(e) {
     e?.stopPropagation();
@@ -257,7 +263,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
       {rank <= 3 && (
         <span className="absolute -top-2.5 -right-1 text-xl">{rankStyle.label}</span>
       )}
-      {rank > 3 && !promo && (
+      {rank > 3 && !ringOverride && (
         <span className="absolute top-3 right-3 text-xs font-mono text-slate-600">#{rank}</span>
       )}
       {/* Badge actualización no leída */}
@@ -883,7 +889,7 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
                     <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Top de "Selección de app" · Etiqueta ⚡ Premium · Notificación push a todos los usuarios de la app al publicar.</p>
+                  <p className="text-xs text-surface-muted mt-0.5">Etiqueta ⚡ Premium · Notificación push a usuarios seleccionados de la app al publicar.</p>
                 </div>
                 {form.promotion_plan === 'premium' && (
                   <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
@@ -906,7 +912,7 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
                     <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Posición #1 garantizada (sobre otros Premium) · Notificación push prominente a todos los usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
+                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
                 </div>
                 {form.promotion_plan === 'ultra' && (
                   <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>

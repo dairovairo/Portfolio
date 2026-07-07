@@ -157,7 +157,15 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
 
 /**
  * Send a push notification to up to `limit` randomly-selected users that have
- * an active push subscription, excluding `excludeId` (typically the creator).
+ * an active push subscription, excluding `excludeIds` (typically the creator
+ * plus anyone already notified through another channel, e.g. community
+ * members who got the "nuevo evento en tu comunidad" push separately).
+ *
+ * Excluded users are filtered out BEFORE the random draw, and if that leaves
+ * fewer than `limit` candidates, more pages are pulled until either `limit`
+ * unique recipients are found or the subscriptions table is exhausted — i.e.
+ * excluded users are replaced by new ones via re-draw, not just skipped, so
+ * the plan still reaches its full recipient count when possible.
  *
  * Production limits:
  *   premium → 5 000 unique recipients
@@ -167,34 +175,56 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
  * community.js so you can verify the fan-out without spamming real users.
  *
  * @param {object} supabase
- * @param {string} excludeId  — user to skip
+ * @param {string|string[]} excludeIds — user id(s) to skip (creator, community members already notified, ...)
  * @param {number} limit      — max recipients (use 5000 / 20000 in production)
  * @param {{ title: string, body: string, url?: string, tag?: string }} payload
  */
-async function notifyUpToNUsers(supabase, excludeId, limit, payload) {
+async function notifyUpToNUsers(supabase, excludeIds, limit, payload) {
   init();
   if (!webpush) return;
   if (!limit || limit < 1) return;
 
-  try {
-    // Pull at most `limit` subscriptions (server-side cap), excluding creator.
-    // Supabase does not support ORDER BY RANDOM() via the JS client, so we
-    // fetch `limit` rows ordered by insertion time and shuffle client-side.
-    // For very large limits (5 000 / 20 000) this is still a single query.
-    const { data: subs, error: subsErr } = await supabase
-      .from('push_subscriptions')
-      .select('user_id, endpoint, p256dh, auth')
-      .neq('user_id', excludeId)
-      .limit(limit * 2); // overfetch so shuffle gives a better spread
+  const excludeSet = new Set(Array.isArray(excludeIds) ? excludeIds : [excludeIds]);
 
-    if (subsErr || !subs?.length) return;
+  try {
+    // Supabase does not support ORDER BY RANDOM() via the JS client, so we
+    // page through subscriptions, drop anyone in excludeSet, and shuffle
+    // client-side. Excluded users don't shrink the result — we keep pulling
+    // pages (re-sorteando candidatos nuevos) until we hit `limit` unique
+    // recipients or run out of rows.
+    const BATCH = Math.max(limit * 3, 50);
+    const collected = [];
+    const seenEndpoints = new Set();
+    let offset = 0;
+    let exhausted = false;
+
+    while (collected.length < limit && !exhausted) {
+      const { data: subs, error: subsErr } = await supabase
+        .from('push_subscriptions')
+        .select('user_id, endpoint, p256dh, auth')
+        .range(offset, offset + BATCH - 1);
+
+      if (subsErr || !subs?.length) { exhausted = true; break; }
+
+      for (const sub of subs) {
+        if (excludeSet.has(sub.user_id)) continue;
+        if (seenEndpoints.has(sub.endpoint)) continue;
+        seenEndpoints.add(sub.endpoint);
+        collected.push(sub);
+      }
+
+      if (subs.length < BATCH) exhausted = true; // no more rows left in table
+      offset += BATCH;
+    }
+
+    if (!collected.length) return;
 
     // Fisher-Yates shuffle then take `limit` items
-    for (let i = subs.length - 1; i > 0; i--) {
+    for (let i = collected.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [subs[i], subs[j]] = [subs[j], subs[i]];
+      [collected[i], collected[j]] = [collected[j], collected[i]];
     }
-    const recipients = subs.slice(0, limit);
+    const recipients = collected.slice(0, limit);
 
     const expiredEndpoints = [];
     await Promise.allSettled(
@@ -213,7 +243,7 @@ async function notifyUpToNUsers(supabase, excludeId, limit, payload) {
         .catch(() => {});
     }
 
-    console.log(`[webpush] notifyUpToNUsers: sent to ${recipients.length} / ${limit} requested (plan cap)`);
+    console.log(`[webpush] notifyUpToNUsers: sent to ${recipients.length} / ${limit} requested (plan cap, ${excludeSet.size} excluded)`);
   } catch (err) {
     console.warn('[webpush] notifyUpToNUsers error:', err.message);
   }
