@@ -388,6 +388,7 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
+  const [ultraEvents, setUltraEvents] = useState([]);
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -433,12 +434,21 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
+  // Eventos "ultra" por los que se ha notificado hoy al usuario — banner destacado.
+  const fetchUltraEvents = useCallback(async () => {
+    try {
+      const { events } = await api.get('/community/events/ultra-banner');
+      setUltraEvents(events || []);
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     fetchFriends();
     fetchPending();
     fetchUnread();
     fetchGroups();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
+    fetchUltraEvents();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchUltraEvents]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -631,8 +641,20 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
-        {/* Daily update nudge */}
-        {pendingUpdate && (
+        {/* Banner destacado: evento ultra notificado hoy, o aviso de batería sin actualizar */}
+        {ultraEvents.length > 0 ? (
+          <button
+            onClick={() => navigate(`/community/event/${ultraEvents[0].id}`)}
+            className="w-full bg-sky-500/8 border border-sky-500/25 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down text-left hover:bg-sky-500/12 transition-colors"
+          >
+            <span className="text-xl">🚀</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-sky-300/70">Evento destacado</p>
+              <p className="text-sky-200 text-xs font-semibold truncate">{ultraEvents[0].title}</p>
+            </div>
+            <span className="text-sky-300/60 text-sm flex-shrink-0">›</span>
+          </button>
+        ) : pendingUpdate && (
           <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
             <span className="text-xl">⚡</span>
             <p className="text-yellow-300/80 text-xs flex-1">

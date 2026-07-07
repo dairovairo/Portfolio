@@ -969,7 +969,7 @@ function CreateEventModal({ onClose, onCreate }) {
                       <li>· Aparición en lista de eventos</li>
                       <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
                       <li>· Notificaciones a número de usuarios contratado</li>
-                      <li>· Apariciones en banner menú principal (alcance extra)</li>
+                      <li>· Apariciones en banner menú principal</li>
                     </ul>
                   )}
                 </div>

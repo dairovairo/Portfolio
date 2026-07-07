@@ -387,6 +387,59 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   }
 });
 
+// GET /api/community/events/ultra-banner
+// Eventos "ultra" por los que el usuario actual ha sido notificado HOY
+// (event_promo_notifications, poblada por server/jobs/eventPromoPacing.js).
+// Se usa para mostrar el banner destacado en el menú principal (HomePage).
+// NOTA: event_promo_notifications tiene RLS "service role only", por lo que
+// aquí se usa el cliente `supabase` (service key) y no getUserSupabase(req).
+router.get('/events/ultra-banner', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data: notifs, error } = await supabase
+      .from('event_promo_notifications')
+      .select(`
+        event_id, sent_at,
+        event:community_events!event_promo_notifications_event_id_fkey(
+          id, title, location, event_date, ends_at, promotion_plan, cover_image_url
+        )
+      `)
+      .eq('user_id', userId)
+      .gte('sent_at', todayStart.toISOString())
+      .order('sent_at', { ascending: false });
+
+    if (error) throw error;
+
+    const nowMs = now.getTime();
+    const getEndTime = (ev) => {
+      const endTime = ev.ends_at ? new Date(ev.ends_at).getTime() : NaN;
+      if (!Number.isNaN(endTime)) return endTime;
+      const startTime = new Date(ev.event_date).getTime();
+      return Number.isNaN(startTime) ? 0 : startTime;
+    };
+
+    const seen = new Set();
+    const events = (notifs || [])
+      .map(n => n.event)
+      .filter(ev => ev && ev.promotion_plan === 'ultra' && getEndTime(ev) >= nowMs)
+      .filter(ev => {
+        if (seen.has(ev.id)) return false;
+        seen.add(ev.id);
+        return true;
+      });
+
+    res.json({ events });
+  } catch (err) {
+    console.error('[community] GET /events/ultra-banner error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener eventos destacados') });
+  }
+});
+
 // POST /api/community/events/:id/join
 router.post('/events/:id/join', requireAuth, async (req, res) => {
   const { id } = req.params;
