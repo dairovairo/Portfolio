@@ -16,6 +16,7 @@ const groupsRoutes    = require('./routes/groups');
 const communityRoutes = require('./routes/community');
 const { expireStaleBatteries } = require('./lib/batteryExpiry');
 const { notifyPoolsStartingSoon, notifyEventsStartingSoon } = require('./jobs/reminders');
+const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -102,6 +103,17 @@ cron.schedule('* * * * *', () => {
 cron.schedule('* * * * *', () => {
   notifyEventsStartingSoon().catch(err => {
     console.error('[CRON] Event reminders failed:', err);
+  });
+});
+
+// Reparto gradual de notificaciones premium/ultra: cada 5 min, hasta el
+// inicio de cada evento. Prioriza llegar a las 200 mínimas (umbral de
+// cobro) y luego reparte el resto de forma uniforme entre eventos activos,
+// con tope de 1 notificación/usuario/día (across events). Ver
+// server/jobs/eventPromoPacing.js.
+cron.schedule('*/5 * * * *', () => {
+  runEventPromoPacingTick().catch(err => {
+    console.error('[CRON] Event promo pacing failed:', err);
   });
 });
 

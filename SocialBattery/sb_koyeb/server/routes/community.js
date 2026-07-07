@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyAllUsers, notifyUpToNUsers, notifyUsers } = require('../lib/webpush');
+const { notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -347,22 +347,25 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     }
 
     // ── Push notifications (fire-and-forget) ─────────────────────────────────
-    // Premium/Ultra ya no usan un tope fijo: se envía a `resolvedNotificationCount`
-    // usuarios (el número contratado on-demand, validado arriba entre 500 y 50.000).
-
+    // Aviso inmediato SIEMPRE a los miembros de la comunidad, sea cual sea el
+    // plan de promoción (basic/premium/ultra). Esto no cuenta contra el cupo
+    // contratado ni contra el tope diario del reparto premium/ultra.
+    //
+    // El alcance adicional de premium/ultra (resolvedNotificationCount) YA NO
+    // se dispara aquí de golpe: desde la fase 69 lo reparte gradualmente
+    // server/jobs/eventPromoPacing.js (cron cada 5 min) hasta el inicio del
+    // evento, respetando 1 notificación/usuario/día (across events) y
+    // priorizando alcanzar las 200 notificaciones mínimas antes de repartir
+    // el resto de forma uniforme entre eventos activos.
     (async () => {
       try {
-        // Si el evento pertenece a una comunidad, se avisa a sus miembros
-        // SIEMPRE, sea cual sea el plan de promoción (basic/premium/ultra).
-        let communityMemberIds = [];
-
         if (communityId) {
           const [{ data: comm }, { data: members }] = await Promise.all([
             supabase.from('communities').select('name').eq('id', communityId).single(),
             supabase.from('community_members').select('user_id').eq('community_id', communityId).neq('user_id', userId),
           ]);
 
-          communityMemberIds = members?.map(m => m.user_id) || [];
+          const communityMemberIds = members?.map(m => m.user_id) || [];
           const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
 
           await notifyUsers(supabase, communityMemberIds, userId, {
@@ -370,30 +373,6 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
             url:   `/community/event/${event.id}`,
             tag:   `community-event-${event.id}`,
-          });
-        }
-
-        // Alcance adicional según el plan. Se excluyen creador + miembros ya
-        // notificados arriba, para no duplicar el push a quien ya lo recibió.
-        const excludeIds = [userId, ...communityMemberIds];
-
-        if (resolvedPlan === 'ultra') {
-          // Ultra: notify up to resolvedNotificationCount randomly-selected users.
-          // SW applies requireInteraction + strong vibration for the ultra-event- tag.
-          await notifyUpToNUsers(supabase, excludeIds, resolvedNotificationCount, {
-            title: '🚀 Evento destacado: ' + event.title,
-            body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
-            url:   `/community/event/${event.id}`,
-            tag:   `ultra-event-${event.id}`,
-          });
-        } else if (resolvedPlan === 'premium') {
-          // Premium: notify up to resolvedNotificationCount randomly-selected users.
-          // Uses a premium-event- tag so the SW applies standard (non-intrusive) treatment.
-          await notifyUpToNUsers(supabase, excludeIds, resolvedNotificationCount, {
-            title: '⚡ Nuevo evento Premium: ' + event.title,
-            body:  `${event.location ? event.location + ' · ' : ''}¡Échale un vistazo!`,
-            url:   `/community/event/${event.id}`,
-            tag:   `premium-event-${event.id}`,
           });
         }
       } catch (err) {

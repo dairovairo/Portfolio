@@ -535,6 +535,7 @@ function CreateEventModal({ onClose, onCreate }) {
   const coverInputRef = useRef(null);
   const coverCameraRef = useRef(null);
   const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+  const [expandedPlan, setExpandedPlan] = useState(null); // 'basic' | 'premium' | 'ultra' | null
 
   const [form, setForm] = useState({
     title: '',
@@ -852,10 +853,12 @@ function CreateEventModal({ onClose, onCreate }) {
             </label>
             <div className="grid grid-cols-1 gap-2">
               {/* Basic */}
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => set('promotion_plan', 'basic')}
-                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'basic'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
                   form.promotion_plan === 'basic'
                     ? 'border-accent-primary bg-accent-primary/10'
                     : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
@@ -868,17 +871,35 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
                   </div>
                   <p className="text-xs text-surface-muted mt-0.5">Listado estándar en la sección de eventos de la comunidad.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'basic' ? null : 'basic'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'basic' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'basic' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'basic' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                    </ul>
+                  )}
                 </div>
                 {form.promotion_plan === 'basic' && (
                   <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
                 )}
-              </button>
+              </div>
 
               {/* Premium */}
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => set('promotion_plan', 'premium')}
-                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'premium'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
                   form.promotion_plan === 'premium'
                     ? 'border-purple-400 bg-purple-500/10'
                     : 'border-surface-border bg-surface-bg hover:border-purple-400/30'
@@ -891,17 +912,36 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
                   </div>
                   <p className="text-xs text-surface-muted mt-0.5">Etiqueta ⚡ Premium · Notificación push a usuarios seleccionados de la app al publicar.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'premium' ? null : 'premium'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'premium' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'premium' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'premium' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                      <li>· Notificaciones a número de usuarios contratado</li>
+                    </ul>
+                  )}
                 </div>
                 {form.promotion_plan === 'premium' && (
                   <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
                 )}
-              </button>
+              </div>
 
               {/* Ultra */}
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => set('promotion_plan', 'ultra')}
-                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'ultra'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
                   form.promotion_plan === 'ultra'
                     ? 'border-yellow-400 bg-yellow-500/10'
                     : 'border-surface-border bg-surface-bg hover:border-yellow-400/30'
@@ -914,11 +954,29 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
                   </div>
                   <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'ultra' ? null : 'ultra'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'ultra' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'ultra' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'ultra' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                      <li>· Notificaciones a número de usuarios contratado</li>
+                      <li>· Apariciones en banner menú principal (alcance extra)</li>
+                    </ul>
+                  )}
                 </div>
                 {form.promotion_plan === 'ultra' && (
                   <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>
                 )}
-              </button>
+              </div>
             </div>
 
             {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
@@ -945,9 +1003,18 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span>Mín. 500</span>
                     <span>Máx. 50.000</span>
                   </div>
+                  <p className="text-[10px] font-mono text-surface-muted">
+                    ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
+                  </p>
                 </div>
                 <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  💳 El pago se gestionará en el siguiente paso tras publicar el evento.
+                  💳 El pago se efectuará tras el inicio del evento, en base a las notificaciones enviadas hasta su comienzo.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
                 </p>
               </>
             )}

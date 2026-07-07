@@ -291,4 +291,4 @@ async function notifyAllUsers(supabase, excludeId, payload) {
   }
 }
 
-module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers };
+module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers, sendPushToSubscription };
