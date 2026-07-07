@@ -443,6 +443,109 @@ export async function generateEventStoryBlob({ event, attendeeCount, likeCount, 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
+// ── Invite Story ───────────────────────────────────────────────────────────────
+
+/**
+ * generateInviteBlob — genera una imagen cuadrada para invitar a un amigo a
+ * unirse a SocialBattery, lista para compartir por WhatsApp, Instagram
+ * Direct o cualquier otra red vía el share sheet nativo (ver
+ * shareOrDownloadBlob). Incluye la mascota equipada de quien invita (si está
+ * disponible), el mensaje de invitación y el logo de la app, sobre el mismo
+ * color de fondo que usa el resto de la app en modo oscuro.
+ */
+export async function generateInviteBlob({ username, mascot, hex }) {
+  const W = 1080;
+  const H = 1080;
+  const accentHex = hex || '#00949e';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Fondo — mismo color que el fondo del tema oscuro de la app
+  ctx.fillStyle = '#0a0a0f';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle dot grid, mismo estilo decorativo que el resto de historias
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  for (let x = 60; x < W; x += 72) {
+    for (let y = 60; y < H; y += 72) {
+      ctx.beginPath();
+      ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const cx = W / 2;
+  const mascotCy = 350;
+  const r = 210;
+
+  // Ambient glow detrás de la mascota
+  const glow = ctx.createRadialGradient(cx, mascotCy, 0, cx, mascotCy, 480);
+  glow.addColorStop(0, `${accentHex}38`);
+  glow.addColorStop(0.45, `${accentHex}18`);
+  glow.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  drawSparkles(ctx, W, H, accentHex);
+
+  // ── Foto de la mascota — círculo con anillo de color ─────────────────────────
+  ctx.save();
+  ctx.shadowColor = accentHex;
+  ctx.shadowBlur = 30;
+  ctx.strokeStyle = accentHex;
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.arc(cx, mascotCy, r + 7, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, mascotCy, r, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  ctx.fill();
+  ctx.clip();
+  if (mascot) {
+    try {
+      await drawMascotOnCanvas(ctx, mascot, cx - r, mascotCy - r, r * 2, { glowColor: accentHex });
+    } catch (_) {
+      // si falla, dejamos el círculo vacío
+    }
+  }
+  ctx.restore();
+
+  // ── Mensaje de invitación ─────────────────────────────────────────────────────
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const line1Y = mascotCy + r + 115;
+  let line1Size = 52;
+  ctx.font = `700 ${line1Size}px system-ui, sans-serif`;
+  const line1 = `${username || 'Alguien'} te ha invitado a`;
+  while (ctx.measureText(line1).width > W - 140 && line1Size > 30) {
+    line1Size -= 2;
+    ctx.font = `700 ${line1Size}px system-ui, sans-serif`;
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(line1, cx, line1Y);
+
+  const line2Y = line1Y + 92;
+  ctx.font = '800 68px system-ui, sans-serif';
+  ctx.fillStyle = accentHex;
+  ctx.shadowColor = accentHex;
+  ctx.shadowBlur = 24;
+  ctx.fillText('SocialBattery', cx, line2Y);
+  ctx.shadowBlur = 0;
+
+  // ── Logo de la app ────────────────────────────────────────────────────────────
+  await drawAppLogo(ctx, cx, H - 110, 84);
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
 // ── Share / Download ──────────────────────────────────────────────────────────
 // ── Share / Download ──────────────────────────────────────────────────────────
 

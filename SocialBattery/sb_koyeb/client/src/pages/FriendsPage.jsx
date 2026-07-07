@@ -3,10 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { useMascot } from '../context/MascotContext';
 import { api } from '../lib/api';
-import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
+import { resolveMascotLayers } from '../lib/mascotRenderer';
+import { generateInviteBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx, EventDetailPage.jsx, etc.)
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 // ── Shared Components ──────────────────────────────────────────────────────
 
@@ -224,6 +235,7 @@ function GroupRow({ group, onClick, onDelete }) {
 export default function FriendsPage() {
   const { profile } = useAuth();
   const { showOnline, showLastSeen } = useSettings();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
   const navigate = useNavigate();
   const myBattery = profile?.battery_level ?? 50;
 
@@ -241,6 +253,7 @@ export default function FriendsPage() {
   const [sentRequests, setSentRequests] = useState(new Set());
   const [toast, setToast] = useState(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [sharingInvite, setSharingInvite] = useState(false);
 
   const onlineMap = useFriendsOnline(friends);
   // If the user has disabled "Mostrar en línea", treat everyone as offline (mutual, WhatsApp-style)
@@ -323,6 +336,38 @@ export default function FriendsPage() {
       showToast(e.message, 'error');
     } finally {
       setActionLoading(l => ({ ...l, [user.id]: false }));
+    }
+  }
+
+  async function handleInvite() {
+    if (sharingInvite) return;
+    setSharingInvite(true);
+    try {
+      const level = getEffectiveBatteryLevel(profile);
+      const color = getBatteryColor(level);
+      // Resolvemos la mascota tal y como está equipada ahora mismo (ropa,
+      // calzado, gorro, accesorios y actividad), para incluirla como
+      // "fotito" personal en la imagen de invitación.
+      let mascot = null;
+      try {
+        mascot = await resolveMascotLayers(getMascotTier(level), {
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
+      } catch (_) {
+        mascot = null; // si falla, se genera la invitación sin la mascota
+      }
+      const username = profile?.username || 'Alguien';
+      const blob = await generateInviteBlob({ username, mascot, hex: color.hex });
+      const result = await shareOrDownloadBlob(blob, 'invitacion-sb.png', `${username} te ha invitado a SocialBattery`);
+      if (result.method === 'download') {
+        showToast('Imagen descargada. ¡Compártela donde quieras! 📲', 'success');
+      } else if (result.method === 'share') {
+        showToast('¡Invitación lista para compartir! 🚀', 'success');
+      }
+    } catch (e) {
+      showToast('Error al generar la invitación', 'error');
+    } finally {
+      setSharingInvite(false);
     }
   }
 
@@ -566,6 +611,23 @@ export default function FriendsPage() {
                 Escribe al menos 2 caracteres para buscar
               </div>
             )}
+
+            {/* ── Invitar por redes sociales ──────────────────────────────── */}
+            <div className="pt-4 mt-2 border-t border-surface-border">
+              <button
+                onClick={handleInvite}
+                disabled={sharingInvite}
+                className="w-full bg-accent-primary/10 border border-accent-primary/25 rounded-2xl p-4 flex items-center gap-3 hover:bg-accent-primary/15 transition-all text-left disabled:opacity-60"
+              >
+                <span className="text-2xl">{sharingInvite ? '⏳' : '📲'}</span>
+                <div>
+                  <div className="font-display font-semibold text-surface-text text-sm">
+                    {sharingInvite ? 'Generando invitación...' : 'Invitar por redes sociales'}
+                  </div>
+                  <div className="text-xs text-accent-glow">WhatsApp, Instagram Direct y más →</div>
+                </div>
+              </button>
+            </div>
           </>
         )}
       </main>
