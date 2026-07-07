@@ -43,6 +43,11 @@ async function storeImage({
     return publicUrl;
   }
 
+  // No silenciamos el motivo real del fallo de subida — sin esto es
+  // imposible saber por qué cae al fallback de base64 (bucket inexistente,
+  // políticas, tipo MIME no permitido en el bucket, etc.)
+  console.error(`[storeImage] Fallo al subir a bucket "${bucket}" (${fileName}):`, uploadError.message || uploadError);
+
   const base64 = file.buffer.toString('base64');
   const dataUrl = `data:${file.mimetype};base64,${base64}`;
   if (dataUrl.length > fallbackMaxLength) {
