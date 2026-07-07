@@ -805,6 +805,29 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, 
   );
 }
 
+// ── Botón "🎨 Personalizar" de un carrusel de variantes de color ─────────────
+// Se mantiene pulsable incluso cuando está bloqueado (para poder avisar con
+// un toast en vez de quedar mudo), pero visualmente queda "desactivado"
+// (gris, candado 🔒, sin hover) hasta que el usuario haya comprado TODAS las
+// prendas de esa familia de colores (todo el scroll horizontal).
+function CarouselPersonalizeButton({ family, unlockedSet, onOpen, onLocked }) {
+  const unlocked = family.length > 0 && family.every(item => unlockedSet.has(item.id));
+  return (
+    <button
+      onClick={() => (unlocked ? onOpen() : onLocked())}
+      aria-disabled={!unlocked}
+      className={`text-[10px] font-display font-semibold rounded-lg px-2 py-1 transition-all flex items-center gap-1
+        ${unlocked
+          ? 'text-accent-glow bg-accent-primary/10 border border-accent-primary/30 hover:bg-accent-primary/20'
+          : 'text-surface-muted bg-surface-hover border border-surface-border opacity-60 cursor-not-allowed'
+        }`}
+    >
+      <span style={{ fontVariantEmoji: 'emoji' }}>{unlocked ? '🎨' : '🔒'}</span>
+      Personalizar
+    </button>
+  );
+}
+
 // ── ShopPage ──────────────────────────────────────────────────────────────────
 export default function ShopPage() {
   const navigate = useNavigate();
@@ -895,6 +918,17 @@ export default function ShopPage() {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   }
+
+  // Mensaje del botón "🎨 Personalizar" cuando el carrusel aún no está
+  // completo (ver CarouselPersonalizeButton).
+  function showLockedCustomizeToast() {
+    showToast('Bloqueado hasta tener todos los items de esta sección');
+  }
+
+  // Coste en Volts de guardar cualquier personalización de color (calzado,
+  // outfit, cabeza o accesorio). Se cobra una vez por cada "Guardar" que
+  // efectivamente produzca una personalización (ver handleSave*Colors).
+  const CUSTOMIZATION_SAVE_COST = 5;
 
   function handleSaveCurrentOutfit() {
     if (activeOutfit === 'out_none') {
@@ -995,9 +1029,16 @@ export default function ShopPage() {
   }
 
   function handleSaveOutfitColors(zones) {
+    if (coins < CUSTOMIZATION_SAVE_COST) {
+      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      return;
+    }
     const labels = outfitCustomizationLabels(editingOutfitItem?.subcategory);
     const newId = saveOutfitCustomization(editingOutfitItem, zones, editingOutfitCustomId);
-    if (newId) showToast(`¡"${editingOutfitItem.baseName ?? editingOutfitItem.name}" guardada en ${labels.saved}! 🎨`);
+    if (newId) {
+      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      showToast(`¡"${editingOutfitItem.baseName ?? editingOutfitItem.name}" guardada en ${labels.saved}! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+    }
     setEditingOutfitItem(null);
     setEditingOutfitCustomId(null);
   }
@@ -1038,8 +1079,15 @@ export default function ShopPage() {
   }
 
   function handleSaveAccessoryColors(zones) {
+    if (coins < CUSTOMIZATION_SAVE_COST) {
+      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      return;
+    }
     const newId = saveAccessoryCustomization(editingAccessoryItem, zones, editingAccessoryCustomId);
-    if (newId) showToast(`¡"${editingAccessoryItem.baseName ?? editingAccessoryItem.name}" guardado en Accesorios personalizados! 🎨`);
+    if (newId) {
+      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      showToast(`¡"${editingAccessoryItem.baseName ?? editingAccessoryItem.name}" guardado en Accesorios personalizados! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+    }
     setEditingAccessoryItem(null);
     setEditingAccessoryCustomId(null);
   }
@@ -1062,8 +1110,15 @@ export default function ShopPage() {
   }
 
   function handleSaveHeadColors(zones) {
+    if (coins < CUSTOMIZATION_SAVE_COST) {
+      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      return;
+    }
     const newId = saveHeadCustomization(editingHeadItem, zones, editingHeadCustomId);
-    if (newId) showToast(`¡"${editingHeadItem.baseName ?? editingHeadItem.name}" guardada en Gorros personalizados! 🎨`);
+    if (newId) {
+      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      showToast(`¡"${editingHeadItem.baseName ?? editingHeadItem.name}" guardada en Gorros personalizados! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+    }
     setEditingHeadItem(null);
     setEditingHeadCustomId(null);
   }
@@ -1086,8 +1141,15 @@ export default function ShopPage() {
   }
 
   function handleSaveFeetColors(zones) {
+    if (coins < CUSTOMIZATION_SAVE_COST) {
+      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      return;
+    }
     const newId = saveFeetCustomization(editingFeetItem, zones, editingCustomId);
-    if (newId) showToast(`¡"${editingFeetItem.baseName ?? editingFeetItem.name}" guardada en Calzado personalizado! 🎨`);
+    if (newId) {
+      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      showToast(`¡"${editingFeetItem.baseName ?? editingFeetItem.name}" guardada en Calzado personalizado! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+    }
     setEditingFeetItem(null);
     setEditingCustomId(null);
   }
@@ -1616,13 +1678,12 @@ export default function ShopPage() {
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
                         Retro · colores
                       </div>
-                      <button
-                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet))}
-                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                      >
-                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                        Personalizar
-                      </button>
+                      <CarouselPersonalizeButton
+                        family={basicFeet}
+                        unlockedSet={unlockedFeet}
+                        onOpen={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet))}
+                        onLocked={showLockedCustomizeToast}
+                      />
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicFeet.map(feet => (
@@ -1649,13 +1710,12 @@ export default function ShopPage() {
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
                         Chunky · colores
                       </div>
-                      <button
-                        onClick={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet2))}
-                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                      >
-                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                        Personalizar
-                      </button>
+                      <CarouselPersonalizeButton
+                        family={basicFeet2}
+                        unlockedSet={unlockedFeet}
+                        onOpen={() => handleOpenCustomizeNew(pickCarouselTarget(basicFeet2))}
+                        onLocked={showLockedCustomizeToast}
+                      />
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicFeet2.map(feet => (
@@ -1757,13 +1817,12 @@ export default function ShopPage() {
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
                         Básicos
                       </div>
-                      <button
-                        onClick={() => handleOpenCustomizeOutfitNew(pickCarouselTargetOutfit(basicOutfits))}
-                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                      >
-                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                        Personalizar
-                      </button>
+                      <CarouselPersonalizeButton
+                        family={basicOutfits}
+                        unlockedSet={unlockedOutfits}
+                        onOpen={() => handleOpenCustomizeOutfitNew(pickCarouselTargetOutfit(basicOutfits))}
+                        onLocked={showLockedCustomizeToast}
+                      />
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicOutfits.map(outfit => (
@@ -1850,13 +1909,12 @@ export default function ShopPage() {
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
                         Gorras lisas
                       </div>
-                      <button
-                        onClick={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead))}
-                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                      >
-                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                        Personalizar
-                      </button>
+                      <CarouselPersonalizeButton
+                        family={basicHead}
+                        unlockedSet={unlockedHead}
+                        onOpen={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead))}
+                        onLocked={showLockedCustomizeToast}
+                      />
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead.map(head => (
@@ -1882,13 +1940,12 @@ export default function ShopPage() {
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
                         Gorras
                       </div>
-                      <button
-                        onClick={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead2))}
-                        className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                      >
-                        <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                        Personalizar
-                      </button>
+                      <CarouselPersonalizeButton
+                        family={basicHead2}
+                        unlockedSet={unlockedHead}
+                        onOpen={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead2))}
+                        onLocked={showLockedCustomizeToast}
+                      />
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead2.map(head => (
@@ -1962,13 +2019,12 @@ export default function ShopPage() {
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
                     Corbatas · elige una
                   </div>
-                  <button
-                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(tieAccessories))}
-                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                  >
-                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                    Personalizar
-                  </button>
+                  <CarouselPersonalizeButton
+                    family={tieAccessories}
+                    unlockedSet={unlockedAccessories}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(tieAccessories))}
+                    onLocked={showLockedCustomizeToast}
+                  />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseTie, ...tieAccessories].filter(Boolean).map(accessory => (
@@ -1994,13 +2050,12 @@ export default function ShopPage() {
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
                     Pajaritas · elige una
                   </div>
-                  <button
-                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(bowTieAccessories))}
-                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                  >
-                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                    Personalizar
-                  </button>
+                  <CarouselPersonalizeButton
+                    family={bowTieAccessories}
+                    unlockedSet={unlockedAccessories}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(bowTieAccessories))}
+                    onLocked={showLockedCustomizeToast}
+                  />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseBowTie, ...bowTieAccessories].filter(Boolean).map(accessory => (
@@ -2026,13 +2081,12 @@ export default function ShopPage() {
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
                     Cadenas · elige una
                   </div>
-                  <button
-                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(chainAccessories))}
-                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                  >
-                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                    Personalizar
-                  </button>
+                  <CarouselPersonalizeButton
+                    family={chainAccessories}
+                    unlockedSet={unlockedAccessories}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(chainAccessories))}
+                    onLocked={showLockedCustomizeToast}
+                  />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseChain, ...chainAccessories].filter(Boolean).map(accessory => (
@@ -2058,13 +2112,12 @@ export default function ShopPage() {
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
                     Grillz · elige uno
                   </div>
-                  <button
-                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(grillzAccessories))}
-                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                  >
-                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                    Personalizar
-                  </button>
+                  <CarouselPersonalizeButton
+                    family={grillzAccessories}
+                    unlockedSet={unlockedAccessories}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(grillzAccessories))}
+                    onLocked={showLockedCustomizeToast}
+                  />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseGrillz, ...grillzAccessories].filter(Boolean).map(accessory => (
@@ -2117,13 +2170,12 @@ export default function ShopPage() {
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
                     Riñoneras · elige una
                   </div>
-                  <button
-                    onClick={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(rinonAccessories))}
-                    className="text-[10px] font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/30 rounded-lg px-2 py-1 hover:bg-accent-primary/20 transition-all flex items-center gap-1"
-                  >
-                    <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-                    Personalizar
-                  </button>
+                  <CarouselPersonalizeButton
+                    family={rinonAccessories}
+                    unlockedSet={unlockedAccessories}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(rinonAccessories))}
+                    onLocked={showLockedCustomizeToast}
+                  />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseRinon, ...rinonAccessories].filter(Boolean).map(accessory => (
