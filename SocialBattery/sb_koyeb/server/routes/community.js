@@ -221,7 +221,7 @@ router.get('/events', requireAuth, async (req, res) => {
       .from('community_events')
       .select(`
         id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
-        url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan,
+        url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan, notification_count,
         creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
@@ -242,7 +242,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan } = req.body;
+  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -269,6 +269,22 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const maxAttendees = Number.parseInt(max_attendees, 10) || 50;
   if (maxAttendees < 2 || maxAttendees > 10000) {
     return res.status(400).json({ error: 'El maximo de asistentes debe estar entre 2 y 10000' });
+  }
+
+  // Premium/Ultra: notificaciones push on-demand, contratables entre NOTIF_MIN y NOTIF_MAX.
+  const NOTIF_MIN = 500;
+  const NOTIF_MAX = 50000;
+  const resolvedPlan = ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic';
+
+  let resolvedNotificationCount = null;
+  if (resolvedPlan === 'premium' || resolvedPlan === 'ultra') {
+    const parsedCount = Number.parseInt(notification_count, 10);
+    if (!Number.isFinite(parsedCount) || parsedCount < NOTIF_MIN || parsedCount > NOTIF_MAX) {
+      return res.status(400).json({
+        error: `Elige cuántas notificaciones quieres contratar (entre ${NOTIF_MIN} y ${NOTIF_MAX})`,
+      });
+    }
+    resolvedNotificationCount = parsedCount;
   }
 
   try {
@@ -311,7 +327,8 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
-        promotion_plan: ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic',
+        promotion_plan: resolvedPlan,
+        notification_count: resolvedNotificationCount,
       })
       .select()
       .single();
@@ -330,13 +347,8 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     }
 
     // ── Push notifications (fire-and-forget) ─────────────────────────────────
-    const resolvedPlan = ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic';
-
-    // Recipient caps per plan.
-    // TODO: change TEST values to PRODUCTION values before going live:
-    //   premium → 5_000   ultra → 20_000
-    const PREMIUM_LIMIT = 1;  // TEST: 1 persona  — PRODUCTION: 5_000
-    const ULTRA_LIMIT   = 2;  // TEST: 2 personas — PRODUCTION: 20_000
+    // Premium/Ultra ya no usan un tope fijo: se envía a `resolvedNotificationCount`
+    // usuarios (el número contratado on-demand, validado arriba entre 500 y 50.000).
 
     (async () => {
       try {
@@ -366,18 +378,18 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         const excludeIds = [userId, ...communityMemberIds];
 
         if (resolvedPlan === 'ultra') {
-          // Ultra: notify up to ULTRA_LIMIT randomly-selected users.
+          // Ultra: notify up to resolvedNotificationCount randomly-selected users.
           // SW applies requireInteraction + strong vibration for the ultra-event- tag.
-          await notifyUpToNUsers(supabase, excludeIds, ULTRA_LIMIT, {
+          await notifyUpToNUsers(supabase, excludeIds, resolvedNotificationCount, {
             title: '🚀 Evento destacado: ' + event.title,
             body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
             url:   `/community/event/${event.id}`,
             tag:   `ultra-event-${event.id}`,
           });
         } else if (resolvedPlan === 'premium') {
-          // Premium: notify up to PREMIUM_LIMIT randomly-selected users.
+          // Premium: notify up to resolvedNotificationCount randomly-selected users.
           // Uses a premium-event- tag so the SW applies standard (non-intrusive) treatment.
-          await notifyUpToNUsers(supabase, excludeIds, PREMIUM_LIMIT, {
+          await notifyUpToNUsers(supabase, excludeIds, resolvedNotificationCount, {
             title: '⚡ Nuevo evento Premium: ' + event.title,
             body:  `${event.location ? event.location + ' · ' : ''}¡Échale un vistazo!`,
             url:   `/community/event/${event.id}`,
@@ -824,6 +836,7 @@ router.get('/events/:id', requireAuth, async (req, res) => {
       .select(`
         id, title, description, category, event_date, ends_at, location, lat, lng, organization,
         cover_image_url, url, price, additional_info, max_attendees, creator_id, community_id, created_at,
+        promotion_plan, notification_count,
         creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)

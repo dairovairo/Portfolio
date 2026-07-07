@@ -551,6 +551,7 @@ function CreateEventModal({ onClose, onCreate }) {
     price: '',
     additional_info: '',
     promotion_plan: 'basic',
+    notification_count: 500,
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -921,9 +922,34 @@ function CreateEventModal({ onClose, onCreate }) {
             </div>
 
             {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
-              <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                💳 El pago se gestionará en el siguiente paso tras publicar el evento.
-              </p>
+              <>
+                <div className="mt-2 p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-mono text-surface-muted">
+                      📨 Notificaciones a contratar (on-demand)
+                    </label>
+                    <span className="text-xs font-mono font-semibold text-surface-text">
+                      {Number(form.notification_count).toLocaleString('es-ES')}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={500}
+                    max={50000}
+                    step={500}
+                    value={form.notification_count}
+                    onChange={e => set('notification_count', Number(e.target.value))}
+                    className="w-full accent-accent-primary cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
+                    <span>Mín. 500</span>
+                    <span>Máx. 50.000</span>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  💳 El pago se gestionará en el siguiente paso tras publicar el evento.
+                </p>
+              </>
             )}
           </div>
 
