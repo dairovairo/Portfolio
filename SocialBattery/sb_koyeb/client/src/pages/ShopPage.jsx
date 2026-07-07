@@ -1367,10 +1367,12 @@ export default function ShopPage() {
     <div className="min-h-screen bg-surface-bg flex flex-col">
 
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-accent-primary text-white px-5 py-3
-          rounded-2xl text-sm font-display font-semibold shadow-lg shadow-accent-primary/30 animate-slide-down
-          max-w-[85vw] w-max text-center break-words">
-          {toast}
+        <div className="fixed inset-x-0 top-4 z-50 px-4 flex justify-center pointer-events-none">
+          <div className="max-w-full bg-accent-primary text-white px-5 py-3
+            rounded-2xl text-sm font-display font-semibold shadow-lg shadow-accent-primary/30 animate-slide-down
+            text-center break-words pointer-events-auto">
+            {toast}
+          </div>
         </div>
       )}
 
