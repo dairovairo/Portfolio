@@ -13,7 +13,7 @@ import BottomNav from '../components/BottomNav';
 import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
-import { generateBatteryStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+import { generateBatteryStoryBlob, generateInviteBlob, shareOrDownloadBlob } from '../lib/instagramStory';
 import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { useMascot } from '../context/MascotContext';
 import MascotDisplay from '../components/MascotDisplay';
@@ -57,15 +57,49 @@ function BatteryBadge({ level, isEstimated }) {
 // ── Search friends modal ──────────────────────────────────────────────────────
 function SearchModal({ friends, onClose, onToast }) {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
   const [sent, setSent] = useState(new Set());
+  const [sharingInvite, setSharingInvite] = useState(false);
   const friendIds = new Set(friends.map(f => f.id));
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
+
+  async function handleInvite() {
+    if (sharingInvite) return;
+    setSharingInvite(true);
+    try {
+      const level = getEffectiveBatteryLevel(profile);
+      const color = getBatteryColor(level);
+      // Resolvemos la mascota tal y como está equipada ahora mismo, para
+      // incluirla como "fotito" personal en la imagen de invitación.
+      let mascot = null;
+      try {
+        mascot = await resolveMascotLayers(getMascotTier(level), {
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
+      } catch (_) {
+        mascot = null; // si falla, se genera la invitación sin la mascota
+      }
+      const username = profile?.username || 'Alguien';
+      const blob = await generateInviteBlob({ username, mascot, hex: color.hex });
+      const result = await shareOrDownloadBlob(blob, 'invitacion-sb.png', `${username} te ha invitado a SocialBattery`);
+      if (result.method === 'download') {
+        onToast('Imagen descargada. ¡Compártela donde quieras! 📲', 'success');
+      } else if (result.method === 'share') {
+        onToast('¡Invitación lista para compartir! 🚀', 'success');
+      }
+    } catch (e) {
+      onToast('Error al generar la invitación', 'error');
+    } finally {
+      setSharingInvite(false);
+    }
+  }
 
   useEffect(() => {
     if (!query.trim() || query.length < 2) { setResults([]); return; }
@@ -150,6 +184,23 @@ function SearchModal({ friends, onClose, onToast }) {
               </div>
             );
           })}
+        </div>
+
+        {/* ── Invitar por redes sociales ──────────────────────────────────── */}
+        <div className="pt-3 mt-3 border-t border-surface-border flex-shrink-0">
+          <button
+            onClick={handleInvite}
+            disabled={sharingInvite}
+            className="w-full bg-accent-primary/10 border border-accent-primary/25 rounded-2xl p-4 flex items-center gap-3 hover:bg-accent-primary/15 transition-all text-left disabled:opacity-60"
+          >
+            <span className="text-2xl">{sharingInvite ? '⏳' : '📲'}</span>
+            <div>
+              <div className="font-display font-semibold text-surface-text text-sm">
+                {sharingInvite ? 'Generando invitación...' : 'Invitar por redes sociales'}
+              </div>
+              <div className="text-xs text-accent-glow">WhatsApp, Instagram Direct y más →</div>
+            </div>
+          </button>
         </div>
       </div>
     </div>

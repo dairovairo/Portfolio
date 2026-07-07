@@ -407,7 +407,7 @@ export default function PoolChatPage() {
     } catch (e) {
       URL.revokeObjectURL(localUrl);
       setMessages(m => m.filter(msg => msg.id !== optimisticId));
-      showToast('Error al enviar la imagen', 'error');
+      showToast(e.message || 'Error al enviar la imagen', 'error');
     } finally {
       setSendingImage(false);
     }
