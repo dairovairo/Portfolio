@@ -240,6 +240,53 @@ router.get('/events', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/community/events/ultra-banner
+// Eventos "ultra" para los que el usuario actual ha recibido la notificación
+// push promocional (event_promo_notifications) HOY. Se usan para mostrar el
+// banner destacado en el menú principal — solo ese día, ya que cada usuario
+// solo se notifica una vez por evento (ver eventPromoPacing.js).
+router.get('/events/ultra-banner', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // event_promo_notifications solo es legible por el service role (RLS),
+    // así que usamos el cliente `supabase` (service key), no getUserSupabase.
+    const { data: notified, error: notifiedError } = await supabase
+      .from('event_promo_notifications')
+      .select('event_id')
+      .eq('user_id', userId)
+      .gte('sent_at', todayStart.toISOString());
+
+    if (notifiedError) throw notifiedError;
+
+    const eventIds = [...new Set((notified || []).map(row => row.event_id))];
+    if (!eventIds.length) return res.json({ events: [] });
+
+    const db = getUserSupabase(req);
+    const now = new Date().toISOString();
+    const { data: events, error } = await db
+      .from('community_events')
+      .select(`
+        id, title, event_date, ends_at, location, cover_image_url, community_id,
+        community:communities!community_events_community_id_fkey(id, name, organization)
+      `)
+      .in('id', eventIds)
+      .eq('promotion_plan', 'ultra')
+      .or(`ends_at.gte.${now},and(ends_at.is.null,event_date.gte.${now})`)
+      .order('event_date', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ events: events || [] });
+  } catch (err) {
+    console.error('[community] GET /events/ultra-banner error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener eventos destacados') });
+  }
+});
+
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
@@ -348,8 +395,18 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
 
     // ── Push notifications (fire-and-forget) ─────────────────────────────────
     // Aviso inmediato SIEMPRE a los miembros de la comunidad, sea cual sea el
-    // plan de promoción (basic/premium/ultra). Esto no cuenta contra el cupo
-    // contratado ni contra el tope diario del reparto premium/ultra.
+    // plan de promoción (basic/premium/ultra): son gente de tu propia
+    // comunidad, así que este aviso ignora el tope diario de 1 notificación
+    // premium/ultra por usuario (excepción explícita).
+    //
+    // Para premium/ultra SÍ registramos a quién le llegó este aviso en
+    // event_promo_notifications (sent_at = ahora), aunque no cuente contra el
+    // cupo contratado (notification_sent_count no se toca aquí). Esto es lo
+    // que hace que el tope diario funcione de verdad entre eventos: un
+    // miembro de comunidad ya avisado hoy por su propio evento no vuelve a
+    // ser elegido para el "alcance extra" de OTRO evento premium/ultra el
+    // mismo día — solo se le exime del tope para los eventos de su propia
+    // comunidad, no para el resto.
     //
     // El alcance adicional de premium/ultra (resolvedNotificationCount) YA NO
     // se dispara aquí de golpe: desde la fase 69 lo reparte gradualmente
@@ -368,12 +425,24 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           const communityMemberIds = members?.map(m => m.user_id) || [];
           const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
 
-          await notifyUsers(supabase, communityMemberIds, userId, {
+          const notifiedUserIds = await notifyUsers(supabase, communityMemberIds, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
             url:   `/community/event/${event.id}`,
             tag:   `community-event-${event.id}`,
           });
+
+          if ((resolvedPlan === 'premium' || resolvedPlan === 'ultra') && notifiedUserIds.length) {
+            const { error: logError } = await supabase
+              .from('event_promo_notifications')
+              .upsert(
+                notifiedUserIds.map(uid => ({ event_id: event.id, user_id: uid })),
+                { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+              );
+            if (logError) {
+              console.warn('[community] error registrando aviso inmediato de comunidad:', logError.message);
+            }
+          }
         }
       } catch (err) {
         console.warn('[community] event push notification error:', err.message);
@@ -384,59 +453,6 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /events error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al crear el evento') });
-  }
-});
-
-// GET /api/community/events/ultra-banner
-// Eventos "ultra" por los que el usuario actual ha sido notificado HOY
-// (event_promo_notifications, poblada por server/jobs/eventPromoPacing.js).
-// Se usa para mostrar el banner destacado en el menú principal (HomePage).
-// NOTA: event_promo_notifications tiene RLS "service role only", por lo que
-// aquí se usa el cliente `supabase` (service key) y no getUserSupabase(req).
-router.get('/events/ultra-banner', requireAuth, async (req, res) => {
-  const userId = req.user.id;
-
-  try {
-    const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-
-    const { data: notifs, error } = await supabase
-      .from('event_promo_notifications')
-      .select(`
-        event_id, sent_at,
-        event:community_events!event_promo_notifications_event_id_fkey(
-          id, title, location, event_date, ends_at, promotion_plan, cover_image_url
-        )
-      `)
-      .eq('user_id', userId)
-      .gte('sent_at', todayStart.toISOString())
-      .order('sent_at', { ascending: false });
-
-    if (error) throw error;
-
-    const nowMs = now.getTime();
-    const getEndTime = (ev) => {
-      const endTime = ev.ends_at ? new Date(ev.ends_at).getTime() : NaN;
-      if (!Number.isNaN(endTime)) return endTime;
-      const startTime = new Date(ev.event_date).getTime();
-      return Number.isNaN(startTime) ? 0 : startTime;
-    };
-
-    const seen = new Set();
-    const events = (notifs || [])
-      .map(n => n.event)
-      .filter(ev => ev && ev.promotion_plan === 'ultra' && getEndTime(ev) >= nowMs)
-      .filter(ev => {
-        if (seen.has(ev.id)) return false;
-        seen.add(ev.id);
-        return true;
-      });
-
-    res.json({ events });
-  } catch (err) {
-    console.error('[community] GET /events/ultra-banner error:', err);
-    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener eventos destacados') });
   }
 });
 

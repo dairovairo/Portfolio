@@ -54,6 +54,49 @@ function BatteryBadge({ level, isEstimated }) {
   );
 }
 
+// ── Ultra event banner ────────────────────────────────────────────────────────
+// Muestra los eventos "ultra" para los que el usuario ha recibido la
+// notificación push promocional ese mismo día (ver GET /community/events/ultra-banner).
+function formatEventWhen(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '';
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  const time = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return `Hoy · ${time}`;
+  return `${d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} · ${time}`;
+}
+
+function UltraEventBanner({ events, onOpen }) {
+  const multiple = events.length > 1;
+  return (
+    <div className={`flex gap-3 overflow-x-auto scrollbar-none -mx-1 px-1 animate-slide-down ${multiple ? 'snap-x snap-mandatory' : ''}`}>
+      {events.map(ev => (
+        <button
+          key={ev.id}
+          type="button"
+          onClick={() => onOpen(ev.id)}
+          className={`snap-start shrink-0 ${multiple ? 'w-[88%]' : 'w-full'} flex items-center gap-3 text-left rounded-2xl border border-yellow-500/25 bg-gradient-to-r from-yellow-500/10 via-yellow-500/5 to-transparent px-4 py-3 hover:border-yellow-400/50 transition-colors`}
+        >
+          {ev.cover_image_url ? (
+            <img src={ev.cover_image_url} alt="" className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-yellow-500/20" />
+          ) : (
+            <span className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-yellow-500/10 border border-yellow-500/20">🚀</span>
+          )}
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-yellow-300">🚀 Evento destacado</span>
+            <p className="text-sm font-display font-bold text-surface-text truncate mt-0.5">{ev.title}</p>
+            <p className="text-xs text-surface-muted truncate">
+              {formatEventWhen(ev.event_date)}{ev.location ? ` · ${ev.location}` : ''}
+            </p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Search friends modal ──────────────────────────────────────────────────────
 function SearchModal({ friends, onClose, onToast }) {
   const navigate = useNavigate();
@@ -388,13 +431,13 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
-  const [ultraEvents, setUltraEvents] = useState([]);
   const friendIdsRef = useRef(new Set());
 
   // Modal state
   const [showSearch, setShowSearch] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [ultraEvents, setUltraEvents] = useState([]);
 
   useEffect(() => {
     if (profile) setBattery(getEffectiveBatteryLevel(profile));
@@ -434,11 +477,10 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
-  // Eventos "ultra" por los que se ha notificado hoy al usuario — banner destacado.
   const fetchUltraEvents = useCallback(async () => {
     try {
-      const { events } = await api.get('/community/events/ultra-banner');
-      setUltraEvents(events || []);
+      const { events: data } = await api.get('/community/events/ultra-banner');
+      setUltraEvents(data || []);
     } catch (e) {}
   }, []);
 
@@ -641,19 +683,9 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
-        {/* Banner destacado: evento ultra notificado hoy, o aviso de batería sin actualizar */}
+        {/* Ultra event banner (prioridad) / Daily update nudge */}
         {ultraEvents.length > 0 ? (
-          <button
-            onClick={() => navigate(`/community/event/${ultraEvents[0].id}`)}
-            className="w-full bg-sky-500/8 border border-sky-500/25 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down text-left hover:bg-sky-500/12 transition-colors"
-          >
-            <span className="text-xl">🚀</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-sky-300/70">Evento destacado</p>
-              <p className="text-sky-200 text-xs font-semibold truncate">{ultraEvents[0].title}</p>
-            </div>
-            <span className="text-sky-300/60 text-sm flex-shrink-0">›</span>
-          </button>
+          <UltraEventBanner events={ultraEvents} onOpen={(id) => navigate(`/community/event/${id}`)} />
         ) : pendingUpdate && (
           <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
             <span className="text-xl">⚡</span>

@@ -87,28 +87,31 @@ async function sendPushToSubscription(sub, payload) {
  * @param {string[]} userIds     — recipients
  * @param {string}   excludeId  — user to exclude (e.g. the creator)
  * @param {{ title: string, body: string, url?: string, tag?: string }} payload
+ * @returns {Promise<string[]>} user_ids that were actually notified (at least one push succeeded)
  */
 async function notifyUsers(supabase, userIds, excludeId, payload) {
   init();
-  if (!webpush) return;
-  if (!userIds?.length) return;
+  if (!webpush) return [];
+  if (!userIds?.length) return [];
 
   try {
     const targetIds = userIds.filter(id => id !== excludeId);
-    if (!targetIds.length) return;
+    if (!targetIds.length) return [];
 
     const { data: subs, error: subsErr } = await supabase
       .from('push_subscriptions')
       .select('user_id, endpoint, p256dh, auth')
       .in('user_id', targetIds);
 
-    if (subsErr || !subs?.length) return;
+    if (subsErr || !subs?.length) return [];
 
     const expiredEndpoints = [];
+    const successfulUserIds = new Set();
     await Promise.allSettled(
       subs.map(async sub => {
         const result = await sendPushToSubscription(sub, payload);
         if (result?.expired) expiredEndpoints.push(sub.endpoint);
+        else if (result) successfulUserIds.add(sub.user_id);
       })
     );
 
@@ -120,8 +123,11 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
         .then(() => {})
         .catch(() => {});
     }
+
+    return [...successfulUserIds];
   } catch (err) {
     console.warn('[webpush] notifyUsers error:', err.message);
+    return [];
   }
 }
 
@@ -134,10 +140,11 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
  * @param {string} communityId
  * @param {string} creatorId  — excluded from notifications
  * @param {{ title: string, body: string, url?: string, tag?: string }} payload
+ * @returns {Promise<string[]>} user_ids that were actually notified
  */
 async function notifyCommunityMembers(supabase, communityId, creatorId, payload) {
   init();
-  if (!webpush) return;
+  if (!webpush) return [];
 
   try {
     const { data: members, error: membersErr } = await supabase
@@ -146,12 +153,13 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
       .eq('community_id', communityId)
       .neq('user_id', creatorId);
 
-    if (membersErr || !members?.length) return;
+    if (membersErr || !members?.length) return [];
 
     const memberIds = members.map(m => m.user_id);
-    await notifyUsers(supabase, memberIds, creatorId, payload);
+    return await notifyUsers(supabase, memberIds, creatorId, payload);
   } catch (err) {
     console.warn('[webpush] notifyCommunityMembers error:', err.message);
+    return [];
   }
 }
 
