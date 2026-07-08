@@ -10,8 +10,9 @@
  * Generate a new key-pair once with:
  *   node -e "const wp=require('web-push'); const k=wp.generateVAPIDKeys(); console.log(k);"
  *
- * Then update VITE_VAPID_PUBLIC_KEY in client/.env (and the applicationServerKey
- * in client/src/hooks/usePush.js) to match VAPID_PUBLIC_KEY.
+ * The client can read VAPID_PUBLIC_KEY at runtime from /api/users/push-config.
+ * If the frontend is built/deployed separately, set VITE_VAPID_PUBLIC_KEY to
+ * the same value at client build time.
  *
  * NOTE: The default keys below are TEST-ONLY placeholders and will NOT produce
  * real push messages. Replace them with your own generated pair.
