@@ -140,6 +140,8 @@ async function dispatchToEvent(event, users) {
       .catch(() => {});
   }
 
+  console.log(`[PROMO-PACING][DEBUG] dispatchToEvent evento=${event.id} asignados=${users.length} exitosos=${successfulUserIds.length} expirados=${expiredEndpoints.length}`);
+
   if (!successfulUserIds.length) return 0;
 
   const { error: logError } = await supabase
@@ -168,6 +170,8 @@ async function runEventPromoPacingTick() {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
 
+  console.log(`[PROMO-PACING][DEBUG] === tick iniciado === now=${now.toISOString()} todayStart=${todayStart.toISOString()}`);
+
   try {
     // 1. Eventos premium/ultra activos (no empezados) que aún no llegan a lo contratado
     const { data: events, error: eventsError } = await supabase
@@ -179,8 +183,11 @@ async function runEventPromoPacingTick() {
 
     if (eventsError) { console.error('[PROMO-PACING] error consultando eventos:', eventsError); return; }
 
+    console.log(`[PROMO-PACING][DEBUG] eventos premium/ultra futuros encontrados=${(events || []).length}`);
+
     const pending = (events || []).filter(e => e.notification_sent_count < e.notification_count);
-    if (!pending.length) return;
+    console.log(`[PROMO-PACING][DEBUG] eventos pendientes (sent_count < notification_count)=${pending.length}`, pending.map(e => `${e.id}:${e.promotion_plan}:${e.notification_sent_count}/${e.notification_count}:community=${e.community_id || 'none'}`));
+    if (!pending.length) { console.log('[PROMO-PACING][DEBUG] nada pendiente, tick finalizado sin envíos'); return; }
 
     // 2. Tope diario global: usuarios ya notificados HOY (de cualquier evento)
     const { data: notifiedToday, error: notifiedError } = await supabase
@@ -189,6 +196,7 @@ async function runEventPromoPacingTick() {
       .gte('sent_at', todayStart.toISOString());
     if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
     const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
+    console.log(`[PROMO-PACING][DEBUG] usuarios ya notificados hoy (tope 1/día, cualquier evento)=${notifiedTodaySet.size}`);
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
@@ -215,10 +223,12 @@ async function runEventPromoPacingTick() {
         communityMembersByCommunity.get(m.community_id).add(m.user_id);
       });
     }
+    console.log(`[PROMO-PACING][DEBUG] comunidades implicadas=${communityIds.length}, total miembros excluidos por pertenecer a esas comunidades=${[...communityMembersByCommunity.values()].reduce((acc, s) => acc + s.size, 0)}`);
 
     // 5. Cupo disponible este tick: usuarios con push activo, sin notificar hoy
     let available = await fetchEligiblePool(notifiedTodaySet);
-    if (!available.length) return;
+    console.log(`[PROMO-PACING][DEBUG] usuarios elegibles este tick (con push activo, sin notificar hoy)=${available.length}`);
+    if (!available.length) { console.log('[PROMO-PACING][DEBUG] pool vacío (o todos ya notificados hoy), tick finalizado sin envíos'); return; }
 
     // 6. Priorización: Tier A (bajo mínimo, más urgentes primero) + Tier B (más rezagados primero)
     const urgent = pending
@@ -246,7 +256,10 @@ async function runEventPromoPacingTick() {
         ? Math.min(remainingToThreshold, remainingToCap)
         : Math.min(BASE_CHUNK_PER_TICK, remainingToCap);
 
-      if (chunkTarget <= 0) continue;
+      if (chunkTarget <= 0) {
+        console.log(`[PROMO-PACING][DEBUG] evento=${event.id} sin cupo este tick (chunkTarget=${chunkTarget}, remainingToCap=${remainingToCap}, isEmergency=${isEmergency})`);
+        continue;
+      }
 
       const excludeSet = new Set([
         event.creator_id,
@@ -264,11 +277,15 @@ async function runEventPromoPacingTick() {
         }
       }
 
+      console.log(`[PROMO-PACING][DEBUG] evento=${event.id} community=${event.community_id || 'none'} chunkTarget=${chunkTarget} excludeSet=${excludeSet.size} pool_antes=${available.length} elegidos=${chosen.length}`);
+
       if (chosen.length) {
         assignments.push({ event, users: chosen });
         available = rest;
       }
     }
+
+    console.log(`[PROMO-PACING][DEBUG] asignaciones a ejecutar este tick=${assignments.length}`);
 
     // 8. Ejecutar envíos
     for (const { event, users } of assignments) {
@@ -277,6 +294,8 @@ async function runEventPromoPacingTick() {
         console.log(`[PROMO-PACING] Evento ${event.id} ("${event.title}") +${sent} envíos (${event.notification_sent_count + sent}/${event.notification_count})`);
       }
     }
+
+    console.log('[PROMO-PACING][DEBUG] === tick finalizado ===');
   } catch (err) {
     console.error('[PROMO-PACING] runEventPromoPacingTick error:', err);
   }
