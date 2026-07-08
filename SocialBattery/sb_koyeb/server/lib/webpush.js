@@ -71,8 +71,20 @@ async function sendPushToSubscription(sub, payload) {
     );
     return { expired: false, sent: true };
   } catch (err) {
-    // 410 Gone = subscription expired / revoked → caller should delete it
-    if (err.statusCode === 410 || err.statusCode === 404) {
+    // 410 Gone / 404 Not Found = suscripcion caducada o revocada por el navegador.
+    //
+    // 401 Unauthorized / 403 Forbidden = el servicio push (FCM/Mozilla) ha
+    // rechazado la firma VAPID. Esto pasa sobre todo cuando la suscripcion del
+    // navegador quedo "pinneada" a una applicationServerKey distinta a la que
+    // el servidor esta usando ahora (claves VAPID añadidas/regeneradas
+    // despues de que el usuario ya se hubiera suscrito). El navegador NO
+    // marca estas suscripciones como caducadas por si solo — seguirian
+    // "vivas" e intentando enviarse para siempre sin llegar nunca. Las
+    // tratamos igual que una suscripcion expirada para que se borren de la
+    // tabla; el cliente (pushSubscription.js) detecta el desajuste de clave
+    // en el proximo arranque y crea una suscripcion nueva con la key correcta.
+    if (err.statusCode === 410 || err.statusCode === 404 || err.statusCode === 401 || err.statusCode === 403) {
+      console.warn(`[webpush] suscripcion invalida (status ${err.statusCode}), se elimina:`, sub.endpoint.slice(0, 64));
       return { expired: true, sent: false, endpoint: sub.endpoint };
     }
     console.warn('[webpush] sendNotification error:', err.statusCode || err.message);
