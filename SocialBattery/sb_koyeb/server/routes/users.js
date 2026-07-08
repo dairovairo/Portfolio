@@ -84,12 +84,22 @@ router.post('/push-subscribe', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Missing subscription fields' });
   }
 
-  await supabase.from('push_subscriptions').upsert({
-    user_id: req.user.id,
-    endpoint,
-    p256dh,
-    auth,
-  }, { onConflict: 'user_id,endpoint' }).catch(() => {});
+  // NOTA: el query builder de supabase-js es "thenable" pero no una Promise
+  // real -- .catch() encadenado directamente sobre el builder (sin pasar
+  // antes por .then()) lanza "TypeError: ...catch is not a function" de
+  // forma SINCRONA. Al ocurrir dentro de un handler async, esto rechaza la
+  // promesa del handler sin que Express la capture -> unhandled rejection
+  // -> crash del proceso completo. Por eso se usa try/catch explicito.
+  try {
+    await supabase.from('push_subscriptions').upsert({
+      user_id: req.user.id,
+      endpoint,
+      p256dh,
+      auth,
+    }, { onConflict: 'user_id,endpoint' });
+  } catch (err) {
+    console.error('[users] push-subscribe upsert error:', err);
+  }
 
   res.json({ success: true });
 });

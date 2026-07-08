@@ -54,12 +54,19 @@ router.post('/profile', requireAuth, async (req, res) => {
   }
 
   // Record initial battery in history
-  await supabase.from('battery_history').insert({
-    user_id: userId,
-    level: batteryLevel,
-    day_of_week: new Date().getDay(),
-    hour: new Date().getHours(),
-  }).catch(() => {});
+  // (ver nota en routes/users.js POST /push-subscribe: .catch() encadenado
+  // directamente sobre el builder de supabase-js no es seguro, por eso
+  // try/catch explicito en vez de .catch(() => {}))
+  try {
+    await supabase.from('battery_history').insert({
+      user_id: userId,
+      level: batteryLevel,
+      day_of_week: new Date().getDay(),
+      hour: new Date().getHours(),
+    });
+  } catch (err) {
+    console.error('[auth] battery_history insert error:', err);
+  }
 
   res.status(201).json({ user: data });
 });

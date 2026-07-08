@@ -126,6 +126,20 @@ cron.schedule('*/5 * * * *', () => {
   });
 });
 
+// ── Red de seguridad a nivel de proceso ────────────────────────────────────
+// Ya hemos visto dos veces que un error no capturado en un solo request
+// (rate-limit sin trust proxy, .catch() sobre un builder de supabase-js que
+// no es una Promise real) tumba el proceso ENTERO y deja la app en bucle de
+// reinicios (502 en todo /api). Esto es una ultima red de seguridad: si algo
+// similar se cuela en el futuro, se loguea en vez de matar el contenedor.
+// No sustituye a arreglar la causa real cuando aparezca en los logs.
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+});
+
 // ── Start ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🔋 SocialBattery server running on port ${PORT} (Phase 11)`);
