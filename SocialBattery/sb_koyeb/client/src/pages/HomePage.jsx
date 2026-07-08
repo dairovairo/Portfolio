@@ -388,8 +388,7 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
-  const [ultraBannerEvents, setUltraBannerEvents] = useState([]);
-  const [ultraBannerDebug, setUltraBannerDebug] = useState(null); // TEMP: diagnóstico, quitar cuando funcione
+  const [ultraEvent, setUltraEvent] = useState(null);
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -435,15 +434,13 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
-  const fetchUltraBannerEvents = useCallback(async () => {
+  // Evento "ultra" (si lo hay) por el que se avisó hoy al usuario, para
+  // mostrarlo en el banner del menú principal.
+  const fetchUltraBanner = useCallback(async () => {
     try {
-      const { events } = await api.get('/community/events/ultra-banner');
-      setUltraBannerEvents(events || []);
-      setUltraBannerDebug(`OK — ${(events || []).length} evento(s) ultra notificados hoy`);
-    } catch (e) {
-      setUltraBannerEvents([]);
-      setUltraBannerDebug(`ERROR: ${e?.message || e}`);
-    }
+      const { event } = await api.get('/community/events/notified-today');
+      setUltraEvent(event || null);
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
@@ -451,8 +448,8 @@ export default function HomePage() {
     fetchPending();
     fetchUnread();
     fetchGroups();
-    fetchUltraBannerEvents();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchUltraBannerEvents]);
+    fetchUltraBanner();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchUltraBanner]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -645,34 +642,22 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
-        {/* TEMP: diagnóstico visible — quitar en cuanto confirmemos que funciona */}
-        {ultraBannerDebug && (
-          <div className="text-[10px] font-mono text-white/40 px-1 break-words">
-            🔧 banner ultra: {ultraBannerDebug}
-          </div>
-        )}
-
-        {/* Ultra event banner — eventos ultra notificados hoy al usuario */}
-        {ultraBannerEvents.map(ev => (
+        {/* Ultra event banner — sustituye al recordatorio de batería cuando
+            el usuario ha sido notificado hoy de un evento destacado */}
+        {ultraEvent ? (
           <button
-            key={ev.id}
             type="button"
-            onClick={() => navigate(`/community/event/${ev.id}`)}
-            className="w-full bg-yellow-500/10 border border-yellow-400/30 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down hover:bg-yellow-500/15 active:scale-[0.99] transition-all text-left"
+            onClick={() => navigate(`/community/event/${ultraEvent.id}`)}
+            className="w-full text-left bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down hover:bg-yellow-500/12 transition-colors"
           >
-            <span className="text-xl flex-shrink-0">🚀</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-yellow-300 text-xs font-semibold truncate">Evento destacado: {ev.title}</p>
-              <p className="text-yellow-300/60 text-[11px] truncate">
-                {ev.location ? `${ev.location} · ` : ''}¡No te lo pierdas!
-              </p>
-            </div>
-            <span className="text-yellow-300/50 text-base flex-shrink-0">›</span>
+            <span className="text-xl">🚀</span>
+            <p className="text-yellow-300/80 text-xs flex-1">
+              <span className="font-semibold text-yellow-300">Evento destacado:</span>{' '}
+              {ultraEvent.title}
+              {ultraEvent.location ? ` · ${ultraEvent.location}` : ''}
+            </p>
           </button>
-        ))}
-
-        {/* Daily update nudge */}
-        {pendingUpdate && (
+        ) : pendingUpdate && (
           <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
             <span className="text-xl">⚡</span>
             <p className="text-yellow-300/80 text-xs flex-1">

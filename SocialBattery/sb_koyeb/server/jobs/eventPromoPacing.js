@@ -7,10 +7,15 @@
  *
  * Ahora (fase 69): este job corre cada pocos minutos y, en cada pasada:
  *
- *   1. Aplica un tope de 1 notificación promocional (premium/ultra) por
- *      usuario y día, contando TODOS los eventos activos a la vez — un
- *      usuario ya notificado hoy (de cualquier evento) queda fuera del
- *      resto de eventos hasta el día siguiente.
+ *   1. Aplica un tope de 1 notificación promocional "de reparto general"
+ *      (premium/ultra, source='pacing') por usuario y día, contando TODOS
+ *      los eventos activos a la vez — un usuario ya notificado hoy por
+ *      este canal (de cualquier evento) queda fuera del resto de eventos
+ *      hasta el día siguiente. Los avisos inmediatos a miembros de la
+ *      comunidad del propio evento (source='community', ver
+ *      server/routes/community.js) NO cuentan para este tope: un usuario
+ *      siempre recibe el aviso de un evento de su comunidad, sin excepción
+ *      ni consumo de su cupo diario general.
  *
  *   2. Reparte el "cupo" de usuarios disponibles ese tick entre los
  *      eventos activos con dos prioridades:
@@ -145,7 +150,7 @@ async function dispatchToEvent(event, users) {
   const { error: logError } = await supabase
     .from('event_promo_notifications')
     .upsert(
-      successfulUserIds.map(userId => ({ event_id: event.id, user_id: userId })),
+      successfulUserIds.map(userId => ({ event_id: event.id, user_id: userId, source: 'pacing' })),
       { onConflict: 'event_id,user_id', ignoreDuplicates: true }
     );
   if (logError) {
@@ -182,10 +187,16 @@ async function runEventPromoPacingTick() {
     const pending = (events || []).filter(e => e.notification_sent_count < e.notification_count);
     if (!pending.length) return;
 
-    // 2. Tope diario global: usuarios ya notificados HOY (de cualquier evento)
+    // 2. Tope diario global: usuarios ya notificados HOY vía reparto general
+    //    (source = 'pacing'), de cualquier evento. Los avisos inmediatos a
+    //    miembros de comunidad (source = 'community') quedan FUERA de este
+    //    cálculo a propósito: un usuario siempre recibe el aviso de un
+    //    evento de su propia comunidad, y eso no debe consumir ni bloquear
+    //    su cupo de 1 notificación general del día.
     const { data: notifiedToday, error: notifiedError } = await supabase
       .from('event_promo_notifications')
       .select('user_id')
+      .eq('source', 'pacing')
       .gte('sent_at', todayStart.toISOString());
     if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
     const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
