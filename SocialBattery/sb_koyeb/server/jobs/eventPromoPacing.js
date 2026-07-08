@@ -50,10 +50,6 @@ const BASE_CHUNK_PER_TICK = 50;      // cupo "normal" que puede recibir un event
 const EMERGENCY_WINDOW_MS = 3 * 60 * 60 * 1000; // últimas 3h antes de empezar: modo emergencia
 const SUBS_PAGE_SIZE = 1000;
 
-function debugLog(message) {
-  console.log(`[PROMO-PACING][DEBUG] ${message}`);
-}
-
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -70,7 +66,6 @@ function shuffle(arr) {
 async function fetchEligiblePool(excludeUserIds) {
   const usersMap = new Map();
   let offset = 0;
-  let rowsSeen = 0;
 
   while (true) {
     const { data: subs, error } = await supabase
@@ -78,13 +73,8 @@ async function fetchEligiblePool(excludeUserIds) {
       .select('user_id, endpoint, p256dh, auth')
       .range(offset, offset + SUBS_PAGE_SIZE - 1);
 
-    if (error) {
-      console.error('[PROMO-PACING] error consultando push_subscriptions:', error);
-      break;
-    }
-    if (!subs?.length) break;
+    if (error || !subs?.length) break;
 
-    rowsSeen += subs.length;
     for (const sub of subs) {
       if (excludeUserIds.has(sub.user_id)) continue;
       if (!usersMap.has(sub.user_id)) usersMap.set(sub.user_id, { userId: sub.user_id, subs: [] });
@@ -95,7 +85,6 @@ async function fetchEligiblePool(excludeUserIds) {
     offset += SUBS_PAGE_SIZE;
   }
 
-  debugLog(`eligible pool rows=${rowsSeen} uniqueUsers=${usersMap.size} excludedAlreadyNotifiedToday=${excludeUserIds.size}`);
   return shuffle([...usersMap.values()]);
 }
 
@@ -135,7 +124,7 @@ async function dispatchToEvent(event, users) {
         u.subs.map(async (sub) => {
           const result = await sendPushToSubscription(sub, payload);
           if (result?.expired) expiredEndpoints.push(sub.endpoint);
-          else if (result?.sent) anySuccess = true;
+          else if (result) anySuccess = true;
         })
       );
       if (anySuccess) successfulUserIds.push(u.userId);
@@ -151,10 +140,7 @@ async function dispatchToEvent(event, users) {
       .catch(() => {});
   }
 
-  if (!successfulUserIds.length) {
-    debugLog(`dispatch event=${event.id} selectedUsers=${users.length} successfulUsers=0 expiredEndpoints=${expiredEndpoints.length}`);
-    return 0;
-  }
+  if (!successfulUserIds.length) return 0;
 
   const { error: logError } = await supabase
     .from('event_promo_notifications')
@@ -174,7 +160,6 @@ async function dispatchToEvent(event, users) {
     console.error('[PROMO-PACING] error actualizando contador:', updateError);
   }
 
-  debugLog(`dispatch event=${event.id} selectedUsers=${users.length} successfulUsers=${successfulUserIds.length} expiredEndpoints=${expiredEndpoints.length}`);
   return successfulUserIds.length;
 }
 
@@ -194,16 +179,7 @@ async function runEventPromoPacingTick() {
 
     if (eventsError) { console.error('[PROMO-PACING] error consultando eventos:', eventsError); return; }
 
-    debugLog(`tick now=${now.toISOString()} eventsFound=${(events || []).length}`);
-
-    const pending = (events || [])
-      .map(e => ({
-        ...e,
-        notification_count: Number(e.notification_count) || 0,
-        notification_sent_count: Number(e.notification_sent_count) || 0,
-      }))
-      .filter(e => e.notification_sent_count < e.notification_count);
-    debugLog(`pending events=${pending.length}`);
+    const pending = (events || []).filter(e => e.notification_sent_count < e.notification_count);
     if (!pending.length) return;
 
     // 2. Tope diario global: usuarios ya notificados HOY (de cualquier evento)
@@ -213,7 +189,6 @@ async function runEventPromoPacingTick() {
       .gte('sent_at', todayStart.toISOString());
     if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
     const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
-    debugLog(`users already notified today=${notifiedTodaySet.size} since=${todayStart.toISOString()}`);
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
@@ -240,14 +215,10 @@ async function runEventPromoPacingTick() {
         communityMembersByCommunity.get(m.community_id).add(m.user_id);
       });
     }
-    debugLog(`communities=${communityIds.length} communityMembersLoaded=${[...communityMembersByCommunity.values()].reduce((acc, set) => acc + set.size, 0)}`);
 
     // 5. Cupo disponible este tick: usuarios con push activo, sin notificar hoy
     let available = await fetchEligiblePool(notifiedTodaySet);
-    if (!available.length) {
-      debugLog('no eligible users available after daily cap');
-      return;
-    }
+    if (!available.length) return;
 
     // 6. Priorización: Tier A (bajo mínimo, más urgentes primero) + Tier B (más rezagados primero)
     const urgent = pending
@@ -293,14 +264,11 @@ async function runEventPromoPacingTick() {
         }
       }
 
-      debugLog(`event=${event.id} plan=${event.promotion_plan} target=${chunkTarget} chosen=${chosen.length} excludedForEvent=${excludeSet.size} poolBefore=${available.length}`);
       if (chosen.length) {
         assignments.push({ event, users: chosen });
         available = rest;
       }
     }
-
-    debugLog(`assignments=${assignments.length}`);
 
     // 8. Ejecutar envíos
     for (const { event, users } of assignments) {

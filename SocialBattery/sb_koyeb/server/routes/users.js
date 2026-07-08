@@ -77,18 +77,6 @@ router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req,
   }
 });
 
-// GET /api/users/push-config — runtime public VAPID config for web push
-router.get('/push-config', requireAuth, (_req, res) => {
-  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || null;
-  if (!vapidPublicKey) {
-    console.warn('[users][push-config] VAPID_PUBLIC_KEY no esta configurada en el backend');
-  }
-  res.json({
-    configured: Boolean(vapidPublicKey),
-    vapidPublicKey,
-  });
-});
-
 // POST /api/users/push-subscribe — store push subscription
 router.post('/push-subscribe', requireAuth, async (req, res) => {
   const { endpoint, p256dh, auth } = req.body;
@@ -96,19 +84,12 @@ router.post('/push-subscribe', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Missing subscription fields' });
   }
 
-  const { error } = await supabase.from('push_subscriptions').upsert({
+  await supabase.from('push_subscriptions').upsert({
     user_id: req.user.id,
     endpoint,
     p256dh,
     auth,
-  }, { onConflict: 'user_id,endpoint' });
-
-  if (error) {
-    console.error('[users][push-subscribe] error guardando suscripcion push:', error);
-    return res.status(500).json({ error: 'No se pudo guardar la suscripcion push' });
-  }
-
-  console.log(`[users][push-subscribe] suscripcion push guardada user=${req.user.id} endpoint=${endpoint.slice(0, 48)}...`);
+  }, { onConflict: 'user_id,endpoint' }).catch(() => {});
 
   res.json({ success: true });
 });

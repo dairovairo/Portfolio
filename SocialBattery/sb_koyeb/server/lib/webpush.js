@@ -10,9 +10,8 @@
  * Generate a new key-pair once with:
  *   node -e "const wp=require('web-push'); const k=wp.generateVAPIDKeys(); console.log(k);"
  *
- * The client can read VAPID_PUBLIC_KEY at runtime from /api/users/push-config.
- * If the frontend is built/deployed separately, set VITE_VAPID_PUBLIC_KEY to
- * the same value at client build time.
+ * Then update VITE_VAPID_PUBLIC_KEY in client/.env (and the applicationServerKey
+ * in client/src/hooks/usePush.js) to match VAPID_PUBLIC_KEY.
  *
  * NOTE: The default keys below are TEST-ONLY placeholders and will NOT produce
  * real push messages. Replace them with your own generated pair.
@@ -69,27 +68,14 @@ async function sendPushToSubscription(sub, payload) {
       pushPayload,
       { TTL: 86400 } // 24 h
     );
-    return { expired: false, sent: true };
   } catch (err) {
-    // 410 Gone / 404 Not Found = suscripcion caducada o revocada por el navegador.
-    //
-    // 401 Unauthorized / 403 Forbidden = el servicio push (FCM/Mozilla) ha
-    // rechazado la firma VAPID. Esto pasa sobre todo cuando la suscripcion del
-    // navegador quedo "pinneada" a una applicationServerKey distinta a la que
-    // el servidor esta usando ahora (claves VAPID añadidas/regeneradas
-    // despues de que el usuario ya se hubiera suscrito). El navegador NO
-    // marca estas suscripciones como caducadas por si solo — seguirian
-    // "vivas" e intentando enviarse para siempre sin llegar nunca. Las
-    // tratamos igual que una suscripcion expirada para que se borren de la
-    // tabla; el cliente (pushSubscription.js) detecta el desajuste de clave
-    // en el proximo arranque y crea una suscripcion nueva con la key correcta.
-    if (err.statusCode === 410 || err.statusCode === 404 || err.statusCode === 401 || err.statusCode === 403) {
-      console.warn(`[webpush] suscripcion invalida (status ${err.statusCode}), se elimina:`, sub.endpoint.slice(0, 64));
-      return { expired: true, sent: false, endpoint: sub.endpoint };
+    // 410 Gone = subscription expired / revoked → caller should delete it
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      return { expired: true, endpoint: sub.endpoint };
     }
     console.warn('[webpush] sendNotification error:', err.statusCode || err.message);
-    return { expired: false, sent: false };
   }
+  return { expired: false };
 }
 
 
@@ -100,7 +86,7 @@ async function sendPushToSubscription(sub, payload) {
  * @param {object} supabase
  * @param {string[]} userIds     — recipients
  * @param {string}   excludeId  — user to exclude (e.g. the creator)
- * @param {{ title: string, body: string, url?: string, tag?: string, debugLabel?: string }} payload
+ * @param {{ title: string, body: string, url?: string, tag?: string }} payload
  * @returns {Promise<string[]>} userIds que efectivamente recibieron el push
  *   (al menos una de sus suscripciones tuvo éxito) — [] si no se envió nada.
  */
@@ -110,7 +96,6 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
   if (!userIds?.length) return [];
 
   try {
-    const debugLabel = payload?.debugLabel;
     const targetIds = userIds.filter(id => id !== excludeId);
     if (!targetIds.length) return [];
 
@@ -119,18 +104,7 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
       .select('user_id, endpoint, p256dh, auth')
       .in('user_id', targetIds);
 
-    if (subsErr) {
-      if (debugLabel) console.warn(`[webpush][${debugLabel}] subscription query error:`, subsErr.message);
-      return [];
-    }
-    if (!subs?.length) {
-      if (debugLabel) console.log(`[webpush][${debugLabel}] no active subscriptions for ${targetIds.length} target users`);
-      return [];
-    }
-
-    if (debugLabel) {
-      console.log(`[webpush][${debugLabel}] targetUsers=${targetIds.length} subscriptions=${subs.length} excludeId=${excludeId || 'none'}`);
-    }
+    if (subsErr || !subs?.length) return [];
 
     const expiredEndpoints = [];
     const successfulUserIds = new Set();
@@ -138,7 +112,7 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
       subs.map(async sub => {
         const result = await sendPushToSubscription(sub, payload);
         if (result?.expired) expiredEndpoints.push(sub.endpoint);
-        else if (result?.sent) successfulUserIds.add(sub.user_id);
+        else if (result) successfulUserIds.add(sub.user_id);
       })
     );
 
@@ -149,10 +123,6 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
         .in('endpoint', expiredEndpoints)
         .then(() => {})
         .catch(() => {});
-    }
-
-    if (debugLabel) {
-      console.log(`[webpush][${debugLabel}] successfulUsers=${successfulUserIds.size} expiredEndpoints=${expiredEndpoints.length}`);
     }
 
     return [...successfulUserIds];

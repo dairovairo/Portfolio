@@ -14,6 +14,9 @@ const CommunityNotificationsContext = createContext({
   planningUpdateCount: 0,
   clearEventUpdateBadge: () => {},
   clearAllEventUpdateBadges: () => {},
+  // banner de "nuevo evento" en el home
+  newEventBanner: null,
+  dismissEventBanner: () => {},
 });
 
 export function useCommunityNotifications() {
@@ -90,6 +93,10 @@ export function CommunityNotificationsProvider({ children }) {
   // eventsWithUpdates: Set<eventId> — eventos planificados con actualizaciones no leídas
   const [eventsWithUpdates, setEventsWithUpdates] = useState(loadUpdatesSet);
 
+  // Banner de "nuevo evento" mostrado arriba del todo en el home (ver HomePage)
+  const [newEventBanner, setNewEventBanner] = useState(null);
+  const bannerTimeoutRef        = useRef(null);
+
   const joinedCommunityIdsRef   = useRef(new Set());
   // Set<eventId> de eventos en los que el usuario está apuntado
   const attendingEventIdsRef    = useRef(new Set());
@@ -145,6 +152,33 @@ export function CommunityNotificationsProvider({ children }) {
 
   useEffect(() => { refreshJoinedCommunities(); }, [refreshJoinedCommunities]);
 
+  // ── Banner "nuevo evento" (arriba del todo en el home) ────────────────────
+  const showEventBanner = useCallback((event) => {
+    if (!event?.id) return;
+    if (bannerTimeoutRef.current) clearTimeout(bannerTimeoutRef.current);
+    setNewEventBanner({
+      id: event.id,
+      title: event.title || 'Nuevo evento',
+      coverImageUrl: event.cover_image_url || null,
+    });
+    bannerTimeoutRef.current = setTimeout(() => {
+      setNewEventBanner(null);
+      bannerTimeoutRef.current = null;
+    }, 8000);
+  }, []);
+
+  const dismissEventBanner = useCallback(() => {
+    if (bannerTimeoutRef.current) {
+      clearTimeout(bannerTimeoutRef.current);
+      bannerTimeoutRef.current = null;
+    }
+    setNewEventBanner(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (bannerTimeoutRef.current) clearTimeout(bannerTimeoutRef.current);
+  }, []);
+
   // ── Supabase Realtime: escucha inserts en community_events ────────────────
   useEffect(() => {
     if (!profile?.id) return;
@@ -170,19 +204,10 @@ export function CommunityNotificationsProvider({ children }) {
           const isMember = newEvent.community_id &&
             joinedCommunityIdsRef.current.has(newEvent.community_id);
 
-          // Realtime solo avisa localmente de eventos de comunidades a las que
-          // pertenece el usuario. Los avisos promocionales a no-miembros salen
-          // del backend, que aplica el cupo diario real y registra el envio.
-          if (!isMember) {
-            if (isUltraOrPremium) {
-              console.debug('[community-notifications] promo event ignored locally; backend handles daily cap', {
-                eventId: newEvent.id,
-                plan,
-                userId: profile.id,
-              });
-            }
-            return;
-          }
+          // Notificar si:
+          //   a) El plan es ultra o premium  → todos los usuarios (sin importar membresía)
+          //   b) Plan básico → solo miembros de la comunidad del evento
+          if (!isUltraOrPremium && !isMember) return;
 
           // Incrementar badge solo si el evento pertenece a una comunidad conocida del usuario
           // (los ultra/premium sin comunidad no generan badge de comunidad, solo notificación)
@@ -196,22 +221,49 @@ export function CommunityNotificationsProvider({ children }) {
           const settings = settingsRef.current;
           if (settings.muteAllNotifications || settings.muteNewEvents) return;
 
-          let communityLabel = 'tu comunidad';
-          try {
-            const { data: comm } = await supabase
-              .from('communities')
-              .select('name')
-              .eq('id', newEvent.community_id)
-              .single();
-            if (comm?.name) communityLabel = comm.name;
-          } catch {}
+          if (plan === 'ultra') {
+            // ultra y premium también respetan muteEventRecommendations
+            if (settings.muteEventRecommendations) return;
+            fireLocalNotification({
+              title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
+              body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡No te lo pierdas!`,
+              tag:   `ultra-event-${newEvent.id}`,
+              url:   newEvent.community_id
+                ? `/community/event/${newEvent.id}`
+                : '/community',
+            });
+            showEventBanner(newEvent);
+          } else if (plan === 'premium') {
+            if (settings.muteEventRecommendations) return;
+            fireLocalNotification({
+              title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
+              body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
+              tag:   `premium-event-${newEvent.id}`,
+              url:   newEvent.community_id
+                ? `/community/event/${newEvent.id}`
+                : '/community',
+            });
+            showEventBanner(newEvent);
+          } else {
+            // basic — solo miembros de la comunidad (ya filtrado arriba)
+            let communityLabel = 'tu comunidad';
+            try {
+              const { data: comm } = await supabase
+                .from('communities')
+                .select('name')
+                .eq('id', newEvent.community_id)
+                .single();
+              if (comm?.name) communityLabel = comm.name;
+            } catch {}
 
-          fireLocalNotification({
-            title: `📅 Nuevo evento en ${communityLabel}`,
-            body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
-            tag:   `community-event-${newEvent.id}`,
-            url:   `/community/${newEvent.community_id}`,
-          });
+            fireLocalNotification({
+              title: `📅 Nuevo evento en ${communityLabel}`,
+              body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
+              tag:   `community-event-${newEvent.id}`,
+              url:   `/community/${newEvent.community_id}`,
+            });
+            showEventBanner(newEvent);
+          }
         }
       )
       .subscribe();
@@ -356,6 +408,8 @@ export function CommunityNotificationsProvider({ children }) {
         planningUpdateCount,
         clearEventUpdateBadge,
         clearAllEventUpdateBadges,
+        newEventBanner,
+        dismissEventBanner,
       }}
     >
       {children}

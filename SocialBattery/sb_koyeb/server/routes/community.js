@@ -367,7 +367,6 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     // el resto de forma uniforme entre eventos activos.
     (async () => {
       try {
-        console.log(`[community][event-notify] created event=${event.id} plan=${resolvedPlan} community=${communityId || 'none'} requestedNotifications=${resolvedNotificationCount || 0}`);
         if (communityId) {
           const [{ data: comm }, { data: members }] = await Promise.all([
             supabase.from('communities').select('name').eq('id', communityId).single(),
@@ -376,16 +375,13 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
 
           const communityMemberIds = members?.map(m => m.user_id) || [];
           const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
-          console.log(`[community][event-notify] immediate community push event=${event.id} members=${communityMemberIds.length}`);
 
           const notifiedUserIds = await notifyUsers(supabase, communityMemberIds, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
             url:   `/community/event/${event.id}`,
             tag:   `community-event-${event.id}`,
-            debugLabel: `community-event-${event.id}`,
           });
-          console.log(`[community][event-notify] immediate community push event=${event.id} notified=${notifiedUserIds?.length || 0}`);
 
           if (notifiedUserIds?.length) {
             const { error: logError } = await supabase
@@ -396,12 +392,8 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
               );
             if (logError) {
               console.warn('[community] error registrando aviso inmediato en log diario:', logError.message);
-            } else {
-              console.log(`[community][event-notify] daily log marked for community event=${event.id} users=${notifiedUserIds.length}`);
             }
           }
-        } else {
-          console.log(`[community][event-notify] event=${event.id} has no community; promo pacing will apply daily cap if plan is premium/ultra`);
         }
       } catch (err) {
         console.warn('[community] event push notification error:', err.message);
