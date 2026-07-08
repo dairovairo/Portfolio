@@ -54,49 +54,6 @@ function BatteryBadge({ level, isEstimated }) {
   );
 }
 
-// ── Ultra event banner ────────────────────────────────────────────────────────
-// Muestra los eventos "ultra" para los que el usuario ha recibido la
-// notificación push promocional ese mismo día (ver GET /community/events/ultra-banner).
-function formatEventWhen(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return '';
-  const today = new Date();
-  const isToday = d.toDateString() === today.toDateString();
-  const time = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return `Hoy · ${time}`;
-  return `${d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} · ${time}`;
-}
-
-function UltraEventBanner({ events, onOpen }) {
-  const multiple = events.length > 1;
-  return (
-    <div className={`flex gap-3 overflow-x-auto scrollbar-none -mx-1 px-1 animate-slide-down ${multiple ? 'snap-x snap-mandatory' : ''}`}>
-      {events.map(ev => (
-        <button
-          key={ev.id}
-          type="button"
-          onClick={() => onOpen(ev.id)}
-          className={`snap-start shrink-0 ${multiple ? 'w-[88%]' : 'w-full'} flex items-center gap-3 text-left rounded-2xl border border-yellow-500/25 bg-gradient-to-r from-yellow-500/10 via-yellow-500/5 to-transparent px-4 py-3 hover:border-yellow-400/50 transition-colors`}
-        >
-          {ev.cover_image_url ? (
-            <img src={ev.cover_image_url} alt="" className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-yellow-500/20" />
-          ) : (
-            <span className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-yellow-500/10 border border-yellow-500/20">🚀</span>
-          )}
-          <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-yellow-300">🚀 Evento destacado</span>
-            <p className="text-sm font-display font-bold text-surface-text truncate mt-0.5">{ev.title}</p>
-            <p className="text-xs text-surface-muted truncate">
-              {formatEventWhen(ev.event_date)}{ev.location ? ` · ${ev.location}` : ''}
-            </p>
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ── Search friends modal ──────────────────────────────────────────────────────
 function SearchModal({ friends, onClose, onToast }) {
   const navigate = useNavigate();
@@ -431,13 +388,13 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
+  const [ultraBannerEvents, setUltraBannerEvents] = useState([]);
   const friendIdsRef = useRef(new Set());
 
   // Modal state
   const [showSearch, setShowSearch] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
-  const [ultraEvents, setUltraEvents] = useState([]);
 
   useEffect(() => {
     if (profile) setBattery(getEffectiveBatteryLevel(profile));
@@ -477,10 +434,10 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
-  const fetchUltraEvents = useCallback(async () => {
+  const fetchUltraBannerEvents = useCallback(async () => {
     try {
-      const { events: data } = await api.get('/community/events/ultra-banner');
-      setUltraEvents(data || []);
+      const { events } = await api.get('/community/events/ultra-banner');
+      setUltraBannerEvents(events || []);
     } catch (e) {}
   }, []);
 
@@ -489,8 +446,8 @@ export default function HomePage() {
     fetchPending();
     fetchUnread();
     fetchGroups();
-    fetchUltraEvents();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchUltraEvents]);
+    fetchUltraBannerEvents();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchUltraBannerEvents]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -683,10 +640,27 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
-        {/* Ultra event banner (prioridad) / Daily update nudge */}
-        {ultraEvents.length > 0 ? (
-          <UltraEventBanner events={ultraEvents} onOpen={(id) => navigate(`/community/event/${id}`)} />
-        ) : pendingUpdate && (
+        {/* Ultra event banner — eventos ultra notificados hoy al usuario */}
+        {ultraBannerEvents.map(ev => (
+          <button
+            key={ev.id}
+            type="button"
+            onClick={() => navigate(`/community/event/${ev.id}`)}
+            className="w-full bg-yellow-500/10 border border-yellow-400/30 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down hover:bg-yellow-500/15 active:scale-[0.99] transition-all text-left"
+          >
+            <span className="text-xl flex-shrink-0">🚀</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-yellow-300 text-xs font-semibold truncate">Evento destacado: {ev.title}</p>
+              <p className="text-yellow-300/60 text-[11px] truncate">
+                {ev.location ? `${ev.location} · ` : ''}¡No te lo pierdas!
+              </p>
+            </div>
+            <span className="text-yellow-300/50 text-base flex-shrink-0">›</span>
+          </button>
+        ))}
+
+        {/* Daily update nudge */}
+        {pendingUpdate && (
           <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
             <span className="text-xl">⚡</span>
             <p className="text-yellow-300/80 text-xs flex-1">
