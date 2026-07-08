@@ -389,6 +389,7 @@ export default function HomePage() {
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
   const [ultraBannerEvents, setUltraBannerEvents] = useState([]);
+  const [ultraBannerDebug, setUltraBannerDebug] = useState(null); // TEMP: diagnóstico, quitar cuando funcione
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -438,7 +439,11 @@ export default function HomePage() {
     try {
       const { events } = await api.get('/community/events/ultra-banner');
       setUltraBannerEvents(events || []);
-    } catch (e) {}
+      setUltraBannerDebug(`OK — ${(events || []).length} evento(s) ultra notificados hoy`);
+    } catch (e) {
+      setUltraBannerEvents([]);
+      setUltraBannerDebug(`ERROR: ${e?.message || e}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -639,6 +644,13 @@ export default function HomePage() {
       </nav>
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
+
+        {/* TEMP: diagnóstico visible — quitar en cuanto confirmemos que funciona */}
+        {ultraBannerDebug && (
+          <div className="text-[10px] font-mono text-white/40 px-1 break-words">
+            🔧 banner ultra: {ultraBannerDebug}
+          </div>
+        )}
 
         {/* Ultra event banner — eventos ultra notificados hoy al usuario */}
         {ultraBannerEvents.map(ev => (
