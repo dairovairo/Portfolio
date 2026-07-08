@@ -252,24 +252,19 @@ router.get('/events/ultra-banner', requireAuth, async (req, res) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const { data: notifications, error: notifError } = await supabase
+    // Una sola consulta con join embebido (en vez de 2 round-trips a Supabase)
+    const { data: rows, error } = await supabase
       .from('event_promo_notifications')
-      .select('event_id')
+      .select(`
+        event_id,
+        event:community_events!event_promo_notifications_event_id_fkey(
+          id, title, location, event_date, ends_at, cover_image_url, community_id, promotion_plan
+        )
+      `)
       .eq('user_id', userId)
       .gte('sent_at', todayStart.toISOString());
 
-    if (notifError) throw notifError;
-
-    const eventIds = [...new Set((notifications || []).map(n => n.event_id))];
-    if (!eventIds.length) return res.json({ events: [] });
-
-    const { data: events, error: eventsError } = await supabase
-      .from('community_events')
-      .select('id, title, location, event_date, ends_at, cover_image_url, community_id, promotion_plan')
-      .in('id', eventIds)
-      .eq('promotion_plan', 'ultra');
-
-    if (eventsError) throw eventsError;
+    if (error) throw error;
 
     // Descarta eventos que ya han terminado (misma lógica que splitEventsByDate)
     const now = Date.now();
@@ -280,8 +275,11 @@ router.get('/events/ultra-banner', requireAuth, async (req, res) => {
       return Number.isNaN(startTime) ? 0 : startTime;
     };
 
-    const activeEvents = (events || [])
-      .filter(ev => getEndTime(ev) >= now)
+    const seen = new Set();
+    const activeEvents = (rows || [])
+      .map(r => r.event)
+      .filter(ev => ev && ev.promotion_plan === 'ultra' && getEndTime(ev) >= now)
+      .filter(ev => (seen.has(ev.id) ? false : (seen.add(ev.id), true)))
       .sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
 
     res.json({ events: activeEvents });
