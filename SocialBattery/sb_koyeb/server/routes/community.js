@@ -240,52 +240,6 @@ router.get('/events', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/community/events/notified-today
-// Devuelve el evento "ultra" (si hay alguno, aun no terminado) por el que el
-// usuario actual haya recibido una notificación HOY — ya sea el aviso
-// inmediato de su comunidad o el reparto general de eventPromoPacing.js.
-// Ambos quedan registrados en event_promo_notifications, así que basta con
-// mirar ese log. Usado por el banner destacado del menú principal.
-router.get('/events/notified-today', requireAuth, async (req, res) => {
-  const userId = req.user.id;
-
-  try {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const now = new Date().toISOString();
-
-    const { data: rows, error } = await supabase
-      .from('event_promo_notifications')
-      .select(`
-        sent_at,
-        event:community_events!event_promo_notifications_event_id_fkey(
-          id, title, event_date, ends_at, location, cover_image_url, promotion_plan, community_id,
-          community:communities!community_events_community_id_fkey(name)
-        )
-      `)
-      .eq('user_id', userId)
-      .gte('sent_at', todayStart.toISOString())
-      .order('sent_at', { ascending: false });
-
-    if (error) throw error;
-
-    const candidates = (rows || [])
-      .map(r => r.event)
-      .filter(ev => ev && ev.promotion_plan === 'ultra')
-      .filter(ev => (ev.ends_at ? ev.ends_at >= now : ev.event_date >= now));
-
-    if (!candidates.length) return res.json({ event: null });
-
-    // Si hay varios, priorizamos el que empieza antes (el más urgente / accionable).
-    candidates.sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
-
-    res.json({ event: candidates[0] });
-  } catch (err) {
-    console.error('[community] GET /events/notified-today error:', err);
-    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener el evento notificado') });
-  }
-});
-
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
