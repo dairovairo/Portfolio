@@ -21,6 +21,16 @@ const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Railway (igual que Koyeb/Render) coloca el servidor detrás de un único
+// proxy inverso que añade la cabecera X-Forwarded-For. Sin esto, Express no
+// confía en esa cabecera (trust proxy = false por defecto) y
+// express-rate-limit lanza ERR_ERL_UNEXPECTED_X_FORWARDED_FOR en cada
+// request que pasa por el limiter, lo que rompe la respuesta (502) y esto a
+// su vez se manifiesta en el navegador como un falso error de CORS, ya que
+// la respuesta nunca llega a completarse con las cabeceras de cors().
+// "1" = confiar solo en el primer hop del proxy (el de Railway).
+app.set('trust proxy', 1);
+
 // ── Security & Middleware ──────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
