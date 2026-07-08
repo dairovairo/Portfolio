@@ -14,9 +14,6 @@ const CommunityNotificationsContext = createContext({
   planningUpdateCount: 0,
   clearEventUpdateBadge: () => {},
   clearAllEventUpdateBadges: () => {},
-  // banner de "nuevo evento" en el home
-  newEventBanner: null,
-  dismissEventBanner: () => {},
 });
 
 export function useCommunityNotifications() {
@@ -93,10 +90,6 @@ export function CommunityNotificationsProvider({ children }) {
   // eventsWithUpdates: Set<eventId> — eventos planificados con actualizaciones no leídas
   const [eventsWithUpdates, setEventsWithUpdates] = useState(loadUpdatesSet);
 
-  // Banner de "nuevo evento" mostrado arriba del todo en el home (ver HomePage)
-  const [newEventBanner, setNewEventBanner] = useState(null);
-  const bannerTimeoutRef        = useRef(null);
-
   const joinedCommunityIdsRef   = useRef(new Set());
   // Set<eventId> de eventos en los que el usuario está apuntado
   const attendingEventIdsRef    = useRef(new Set());
@@ -152,33 +145,6 @@ export function CommunityNotificationsProvider({ children }) {
 
   useEffect(() => { refreshJoinedCommunities(); }, [refreshJoinedCommunities]);
 
-  // ── Banner "nuevo evento" (arriba del todo en el home) ────────────────────
-  const showEventBanner = useCallback((event) => {
-    if (!event?.id) return;
-    if (bannerTimeoutRef.current) clearTimeout(bannerTimeoutRef.current);
-    setNewEventBanner({
-      id: event.id,
-      title: event.title || 'Nuevo evento',
-      coverImageUrl: event.cover_image_url || null,
-    });
-    bannerTimeoutRef.current = setTimeout(() => {
-      setNewEventBanner(null);
-      bannerTimeoutRef.current = null;
-    }, 8000);
-  }, []);
-
-  const dismissEventBanner = useCallback(() => {
-    if (bannerTimeoutRef.current) {
-      clearTimeout(bannerTimeoutRef.current);
-      bannerTimeoutRef.current = null;
-    }
-    setNewEventBanner(null);
-  }, []);
-
-  useEffect(() => () => {
-    if (bannerTimeoutRef.current) clearTimeout(bannerTimeoutRef.current);
-  }, []);
-
   // ── Supabase Realtime: escucha inserts en community_events ────────────────
   useEffect(() => {
     if (!profile?.id) return;
@@ -232,7 +198,6 @@ export function CommunityNotificationsProvider({ children }) {
                 ? `/community/event/${newEvent.id}`
                 : '/community',
             });
-            showEventBanner(newEvent);
           } else if (plan === 'premium') {
             if (settings.muteEventRecommendations) return;
             fireLocalNotification({
@@ -243,7 +208,6 @@ export function CommunityNotificationsProvider({ children }) {
                 ? `/community/event/${newEvent.id}`
                 : '/community',
             });
-            showEventBanner(newEvent);
           } else {
             // basic — solo miembros de la comunidad (ya filtrado arriba)
             let communityLabel = 'tu comunidad';
@@ -262,7 +226,6 @@ export function CommunityNotificationsProvider({ children }) {
               tag:   `community-event-${newEvent.id}`,
               url:   `/community/${newEvent.community_id}`,
             });
-            showEventBanner(newEvent);
           }
         }
       )
@@ -408,8 +371,6 @@ export function CommunityNotificationsProvider({ children }) {
         planningUpdateCount,
         clearEventUpdateBadge,
         clearAllEventUpdateBadges,
-        newEventBanner,
-        dismissEventBanner,
       }}
     >
       {children}

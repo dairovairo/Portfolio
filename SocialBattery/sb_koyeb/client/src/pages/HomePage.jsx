@@ -10,7 +10,6 @@ import FriendCard from '../components/FriendCard';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import TutorialOverlay from '../components/TutorialOverlay';
 import BottomNav from '../components/BottomNav';
-import NewEventBanner from '../components/NewEventBanner';
 import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
@@ -631,9 +630,6 @@ export default function HomePage() {
       </nav>
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
-
-        {/* Banner de "nuevo evento" (básico/premium/ultra) */}
-        <NewEventBanner />
 
         {/* Daily update nudge */}
         {pendingUpdate && (
