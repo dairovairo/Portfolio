@@ -84,16 +84,12 @@ router.post('/push-subscribe', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Missing subscription fields' });
   }
 
-  const { error } = await supabase.from('push_subscriptions').upsert({
+  await supabase.from('push_subscriptions').upsert({
     user_id: req.user.id,
     endpoint,
     p256dh,
     auth,
-  }, { onConflict: 'user_id,endpoint' });
-
-  if (error) {
-    console.warn('[users] push-subscribe upsert error:', error.message);
-  }
+  }, { onConflict: 'user_id,endpoint' }).catch(() => {});
 
   res.json({ success: true });
 });

@@ -59,38 +59,6 @@ function shuffle(arr) {
 }
 
 /**
- * Trae TODAS las filas de una consulta paginando con .range(), en vez de
- * confiar en un único select sin límite. Supabase/PostgREST corta cualquier
- * select sin paginar en su "max rows" por defecto (1000): con campañas
- * ultra/premium que pueden contratar hasta 50 000 notificaciones, un select
- * sin paginar aquí trunca el resultado en cuanto se superan esas 1000 filas,
- * y las filas "invisibles" a partir de ahí dejan de contar como ya
- * notificadas/excluidas — que es exactamente lo que causaba que un usuario
- * recibiera notificaciones de varios eventos el mismo día.
- *
- * @param {(from: number, to: number) => PromiseLike<{data, error}>} buildPage
- *   función que, dado un rango [from, to], devuelve la promesa de esa página
- *   (normalmente `(from, to) => supabase.from(...).select(...).range(from, to)`)
- */
-async function fetchAllRows(buildPage, pageSize = SUBS_PAGE_SIZE) {
-  const rows = [];
-  let offset = 0;
-
-  while (true) {
-    const { data, error } = await buildPage(offset, offset + pageSize - 1);
-    if (error) return { data: rows, error };
-    if (!data?.length) break;
-
-    rows.push(...data);
-
-    if (data.length < pageSize) break;
-    offset += pageSize;
-  }
-
-  return { data: rows, error: null };
-}
-
-/**
  * Trae TODAS las suscripciones push, agrupadas por usuario (un usuario puede
  * tener varios dispositivos), excluyendo a quien ya se ha notificado hoy.
  * Devuelve un array barajado de { userId, subs: [...] }.
@@ -215,25 +183,19 @@ async function runEventPromoPacingTick() {
     if (!pending.length) return;
 
     // 2. Tope diario global: usuarios ya notificados HOY (de cualquier evento)
-    const { data: notifiedToday, error: notifiedError } = await fetchAllRows((from, to) =>
-      supabase
-        .from('event_promo_notifications')
-        .select('user_id')
-        .gte('sent_at', todayStart.toISOString())
-        .range(from, to)
-    );
+    const { data: notifiedToday, error: notifiedError } = await supabase
+      .from('event_promo_notifications')
+      .select('user_id')
+      .gte('sent_at', todayStart.toISOString());
     if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
     const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
-    const { data: everNotified } = await fetchAllRows((from, to) =>
-      supabase
-        .from('event_promo_notifications')
-        .select('event_id, user_id')
-        .in('event_id', eventIds)
-        .range(from, to)
-    );
+    const { data: everNotified } = await supabase
+      .from('event_promo_notifications')
+      .select('event_id, user_id')
+      .in('event_id', eventIds);
     const everNotifiedByEvent = new Map();
     (everNotified || []).forEach(r => {
       if (!everNotifiedByEvent.has(r.event_id)) everNotifiedByEvent.set(r.event_id, new Set());
@@ -244,13 +206,10 @@ async function runEventPromoPacingTick() {
     const communityIds = [...new Set(pending.filter(e => e.community_id).map(e => e.community_id))];
     const communityMembersByCommunity = new Map();
     if (communityIds.length) {
-      const { data: members } = await fetchAllRows((from, to) =>
-        supabase
-          .from('community_members')
-          .select('community_id, user_id')
-          .in('community_id', communityIds)
-          .range(from, to)
-      );
+      const { data: members } = await supabase
+        .from('community_members')
+        .select('community_id, user_id')
+        .in('community_id', communityIds);
       (members || []).forEach(m => {
         if (!communityMembersByCommunity.has(m.community_id)) communityMembersByCommunity.set(m.community_id, new Set());
         communityMembersByCommunity.get(m.community_id).add(m.user_id);
