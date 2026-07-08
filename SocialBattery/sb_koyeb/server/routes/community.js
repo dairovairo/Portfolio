@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
+const { runEventPromoPacingTick } = require('../jobs/eventPromoPacing');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -83,6 +84,23 @@ function getClientDayRange(tzOffsetMinutesRaw) {
     startIso: new Date(startUtcMs).toISOString(),
     endIso: new Date(startUtcMs + 24 * 60 * 60 * 1000).toISOString(),
   };
+}
+
+async function upsertPromoNotificationRows(rows) {
+  const { error } = await supabase
+    .from('event_promo_notifications')
+    .upsert(rows, { onConflict: 'event_id,user_id', ignoreDuplicates: true });
+
+  if (error?.code === '42703') {
+    return supabase
+      .from('event_promo_notifications')
+      .upsert(
+        rows.map(({ event_id, user_id }) => ({ event_id, user_id })),
+        { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+      );
+  }
+
+  return { error };
 }
 
 function fallbackUsername(user) {

@@ -110,6 +110,23 @@ function buildPayload(event) {
   };
 }
 
+async function upsertPromoNotificationRows(rows) {
+  const { error } = await supabase
+    .from('event_promo_notifications')
+    .upsert(rows, { onConflict: 'event_id,user_id', ignoreDuplicates: true });
+
+  if (error?.code === '42703') {
+    return supabase
+      .from('event_promo_notifications')
+      .upsert(
+        rows.map(({ event_id, user_id }) => ({ event_id, user_id })),
+        { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+      );
+  }
+
+  return { error };
+}
+
 /**
  * Envía la notificación a un grupo de usuarios ya seleccionado para un
  * evento concreto, registra el envío en event_promo_notifications y
@@ -129,7 +146,7 @@ async function dispatchToEvent(event, users) {
         u.subs.map(async (sub) => {
           const result = await sendPushToSubscription(sub, payload);
           if (result?.expired) expiredEndpoints.push(sub.endpoint);
-          else if (result) anySuccess = true;
+          if (result?.sent) anySuccess = true;
         })
       );
       if (anySuccess) successfulUserIds.push(u.userId);
@@ -147,12 +164,9 @@ async function dispatchToEvent(event, users) {
 
   if (!successfulUserIds.length) return 0;
 
-  const { error: logError } = await supabase
-    .from('event_promo_notifications')
-    .upsert(
-      successfulUserIds.map(userId => ({ event_id: event.id, user_id: userId, source: 'pacing' })),
-      { onConflict: 'event_id,user_id', ignoreDuplicates: true }
-    );
+  const { error: logError } = await upsertPromoNotificationRows(
+    successfulUserIds.map(userId => ({ event_id: event.id, user_id: userId, source: 'pacing' }))
+  );
   if (logError) {
     console.error('[PROMO-PACING] error registrando envíos:', logError);
   }
@@ -193,11 +207,17 @@ async function runEventPromoPacingTick() {
     //    cálculo a propósito: un usuario siempre recibe el aviso de un
     //    evento de su propia comunidad, y eso no debe consumir ni bloquear
     //    su cupo de 1 notificación general del día.
-    const { data: notifiedToday, error: notifiedError } = await supabase
+    let { data: notifiedToday, error: notifiedError } = await supabase
       .from('event_promo_notifications')
       .select('user_id')
       .eq('source', 'pacing')
       .gte('sent_at', todayStart.toISOString());
+    if (notifiedError?.code === '42703') {
+      ({ data: notifiedToday, error: notifiedError } = await supabase
+        .from('event_promo_notifications')
+        .select('user_id')
+        .gte('sent_at', todayStart.toISOString()));
+    }
     if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
     const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
 

@@ -68,14 +68,15 @@ async function sendPushToSubscription(sub, payload) {
       pushPayload,
       { TTL: 86400 } // 24 h
     );
+    return { expired: false, sent: true };
   } catch (err) {
     // 410 Gone = subscription expired / revoked → caller should delete it
     if (err.statusCode === 410 || err.statusCode === 404) {
-      return { expired: true, endpoint: sub.endpoint };
+      return { expired: true, sent: false, endpoint: sub.endpoint };
     }
     console.warn('[webpush] sendNotification error:', err.statusCode || err.message);
   }
-  return { expired: false };
+  return { expired: false, sent: false };
 }
 
 
@@ -90,25 +91,27 @@ async function sendPushToSubscription(sub, payload) {
  */
 async function notifyUsers(supabase, userIds, excludeId, payload) {
   init();
-  if (!webpush) return;
-  if (!userIds?.length) return;
+  if (!webpush) return [];
+  if (!userIds?.length) return [];
 
   try {
     const targetIds = userIds.filter(id => id !== excludeId);
-    if (!targetIds.length) return;
+    if (!targetIds.length) return [];
 
     const { data: subs, error: subsErr } = await supabase
       .from('push_subscriptions')
       .select('user_id, endpoint, p256dh, auth')
       .in('user_id', targetIds);
 
-    if (subsErr || !subs?.length) return;
+    if (subsErr || !subs?.length) return [];
 
     const expiredEndpoints = [];
+    const successfulUserIds = new Set();
     await Promise.allSettled(
       subs.map(async sub => {
         const result = await sendPushToSubscription(sub, payload);
         if (result?.expired) expiredEndpoints.push(sub.endpoint);
+        if (result?.sent) successfulUserIds.add(sub.user_id);
       })
     );
 
@@ -120,8 +123,11 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
         .then(() => {})
         .catch(() => {});
     }
+
+    return [...successfulUserIds];
   } catch (err) {
     console.warn('[webpush] notifyUsers error:', err.message);
+    return [];
   }
 }
 
