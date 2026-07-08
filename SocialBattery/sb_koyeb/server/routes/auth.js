@@ -54,16 +54,12 @@ router.post('/profile', requireAuth, async (req, res) => {
   }
 
   // Record initial battery in history
-  const { error: historyError } = await supabase.from('battery_history').insert({
+  await supabase.from('battery_history').insert({
     user_id: userId,
     level: batteryLevel,
     day_of_week: new Date().getDay(),
     hour: new Date().getHours(),
-  });
-
-  if (historyError) {
-    console.error('[auth] battery_history insert error:', historyError.message);
-  }
+  }).catch(() => {});
 
   res.status(201).json({ user: data });
 });

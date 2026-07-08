@@ -170,10 +170,19 @@ export function CommunityNotificationsProvider({ children }) {
           const isMember = newEvent.community_id &&
             joinedCommunityIdsRef.current.has(newEvent.community_id);
 
-          // Notificar si:
-          //   a) El plan es ultra o premium  → todos los usuarios (sin importar membresía)
-          //   b) Plan básico → solo miembros de la comunidad del evento
-          if (!isUltraOrPremium && !isMember) return;
+          // Realtime solo avisa localmente de eventos de comunidades a las que
+          // pertenece el usuario. Los avisos promocionales a no-miembros salen
+          // del backend, que aplica el cupo diario real y registra el envio.
+          if (!isMember) {
+            if (isUltraOrPremium) {
+              console.debug('[community-notifications] promo event ignored locally; backend handles daily cap', {
+                eventId: newEvent.id,
+                plan,
+                userId: profile.id,
+              });
+            }
+            return;
+          }
 
           // Incrementar badge solo si el evento pertenece a una comunidad conocida del usuario
           // (los ultra/premium sin comunidad no generan badge de comunidad, solo notificación)
@@ -187,46 +196,22 @@ export function CommunityNotificationsProvider({ children }) {
           const settings = settingsRef.current;
           if (settings.muteAllNotifications || settings.muteNewEvents) return;
 
-          if (plan === 'ultra') {
-            // ultra y premium también respetan muteEventRecommendations
-            if (settings.muteEventRecommendations) return;
-            fireLocalNotification({
-              title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
-              body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡No te lo pierdas!`,
-              tag:   `ultra-event-${newEvent.id}`,
-              url:   newEvent.community_id
-                ? `/community/event/${newEvent.id}`
-                : '/community',
-            });
-          } else if (plan === 'premium') {
-            if (settings.muteEventRecommendations) return;
-            fireLocalNotification({
-              title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
-              body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
-              tag:   `premium-event-${newEvent.id}`,
-              url:   newEvent.community_id
-                ? `/community/event/${newEvent.id}`
-                : '/community',
-            });
-          } else {
-            // basic — solo miembros de la comunidad (ya filtrado arriba)
-            let communityLabel = 'tu comunidad';
-            try {
-              const { data: comm } = await supabase
-                .from('communities')
-                .select('name')
-                .eq('id', newEvent.community_id)
-                .single();
-              if (comm?.name) communityLabel = comm.name;
-            } catch {}
+          let communityLabel = 'tu comunidad';
+          try {
+            const { data: comm } = await supabase
+              .from('communities')
+              .select('name')
+              .eq('id', newEvent.community_id)
+              .single();
+            if (comm?.name) communityLabel = comm.name;
+          } catch {}
 
-            fireLocalNotification({
-              title: `📅 Nuevo evento en ${communityLabel}`,
-              body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
-              tag:   `community-event-${newEvent.id}`,
-              url:   `/community/${newEvent.community_id}`,
-            });
-          }
+          fireLocalNotification({
+            title: `📅 Nuevo evento en ${communityLabel}`,
+            body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
+            tag:   `community-event-${newEvent.id}`,
+            url:   `/community/${newEvent.community_id}`,
+          });
         }
       )
       .subscribe();

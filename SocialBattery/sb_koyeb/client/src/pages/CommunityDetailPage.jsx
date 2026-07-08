@@ -662,7 +662,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                     <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
                     <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
+                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente (requiere interacción) · Insignia 🚀 Ultra.</p>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'ultra' ? null : 'ultra'); }}

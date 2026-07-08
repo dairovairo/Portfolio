@@ -68,14 +68,15 @@ async function sendPushToSubscription(sub, payload) {
       pushPayload,
       { TTL: 86400 } // 24 h
     );
+    return { expired: false, sent: true };
   } catch (err) {
     // 410 Gone = subscription expired / revoked → caller should delete it
     if (err.statusCode === 410 || err.statusCode === 404) {
-      return { expired: true, endpoint: sub.endpoint };
+      return { expired: true, sent: false, endpoint: sub.endpoint };
     }
     console.warn('[webpush] sendNotification error:', err.statusCode || err.message);
+    return { expired: false, sent: false };
   }
-  return { expired: false };
 }
 
 
@@ -86,29 +87,45 @@ async function sendPushToSubscription(sub, payload) {
  * @param {object} supabase
  * @param {string[]} userIds     — recipients
  * @param {string}   excludeId  — user to exclude (e.g. the creator)
- * @param {{ title: string, body: string, url?: string, tag?: string }} payload
+ * @param {{ title: string, body: string, url?: string, tag?: string, debugLabel?: string }} payload
+ * @returns {Promise<string[]>} userIds que efectivamente recibieron el push
+ *   (al menos una de sus suscripciones tuvo éxito) — [] si no se envió nada.
  */
 async function notifyUsers(supabase, userIds, excludeId, payload) {
   init();
-  if (!webpush) return;
-  if (!userIds?.length) return;
+  if (!webpush) return [];
+  if (!userIds?.length) return [];
 
   try {
+    const debugLabel = payload?.debugLabel;
     const targetIds = userIds.filter(id => id !== excludeId);
-    if (!targetIds.length) return;
+    if (!targetIds.length) return [];
 
     const { data: subs, error: subsErr } = await supabase
       .from('push_subscriptions')
       .select('user_id, endpoint, p256dh, auth')
       .in('user_id', targetIds);
 
-    if (subsErr || !subs?.length) return;
+    if (subsErr) {
+      if (debugLabel) console.warn(`[webpush][${debugLabel}] subscription query error:`, subsErr.message);
+      return [];
+    }
+    if (!subs?.length) {
+      if (debugLabel) console.log(`[webpush][${debugLabel}] no active subscriptions for ${targetIds.length} target users`);
+      return [];
+    }
+
+    if (debugLabel) {
+      console.log(`[webpush][${debugLabel}] targetUsers=${targetIds.length} subscriptions=${subs.length} excludeId=${excludeId || 'none'}`);
+    }
 
     const expiredEndpoints = [];
+    const successfulUserIds = new Set();
     await Promise.allSettled(
       subs.map(async sub => {
         const result = await sendPushToSubscription(sub, payload);
         if (result?.expired) expiredEndpoints.push(sub.endpoint);
+        else if (result?.sent) successfulUserIds.add(sub.user_id);
       })
     );
 
@@ -120,8 +137,15 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
         .then(() => {})
         .catch(() => {});
     }
+
+    if (debugLabel) {
+      console.log(`[webpush][${debugLabel}] successfulUsers=${successfulUserIds.size} expiredEndpoints=${expiredEndpoints.length}`);
+    }
+
+    return [...successfulUserIds];
   } catch (err) {
     console.warn('[webpush] notifyUsers error:', err.message);
+    return [];
   }
 }
 
