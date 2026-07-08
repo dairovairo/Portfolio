@@ -7,15 +7,10 @@
  *
  * Ahora (fase 69): este job corre cada pocos minutos y, en cada pasada:
  *
- *   1. Aplica un tope de 1 notificación promocional "de reparto general"
- *      (premium/ultra, source='pacing') por usuario y día, contando TODOS
- *      los eventos activos a la vez — un usuario ya notificado hoy por
- *      este canal (de cualquier evento) queda fuera del resto de eventos
- *      hasta el día siguiente. Los avisos inmediatos a miembros de la
- *      comunidad del propio evento (source='community', ver
- *      server/routes/community.js) NO cuentan para este tope: un usuario
- *      siempre recibe el aviso de un evento de su comunidad, sin excepción
- *      ni consumo de su cupo diario general.
+ *   1. Aplica un tope de 1 notificación promocional (premium/ultra) por
+ *      usuario y día, contando TODOS los eventos activos a la vez — un
+ *      usuario ya notificado hoy (de cualquier evento) queda fuera del
+ *      resto de eventos hasta el día siguiente.
  *
  *   2. Reparte el "cupo" de usuarios disponibles ese tick entre los
  *      eventos activos con dos prioridades:
@@ -110,23 +105,6 @@ function buildPayload(event) {
   };
 }
 
-async function upsertPromoNotificationRows(rows) {
-  const { error } = await supabase
-    .from('event_promo_notifications')
-    .upsert(rows, { onConflict: 'event_id,user_id', ignoreDuplicates: true });
-
-  if (error?.code === '42703') {
-    return supabase
-      .from('event_promo_notifications')
-      .upsert(
-        rows.map(({ event_id, user_id }) => ({ event_id, user_id })),
-        { onConflict: 'event_id,user_id', ignoreDuplicates: true }
-      );
-  }
-
-  return { error };
-}
-
 /**
  * Envía la notificación a un grupo de usuarios ya seleccionado para un
  * evento concreto, registra el envío en event_promo_notifications y
@@ -146,7 +124,7 @@ async function dispatchToEvent(event, users) {
         u.subs.map(async (sub) => {
           const result = await sendPushToSubscription(sub, payload);
           if (result?.expired) expiredEndpoints.push(sub.endpoint);
-          if (result?.sent) anySuccess = true;
+          else if (result) anySuccess = true;
         })
       );
       if (anySuccess) successfulUserIds.push(u.userId);
@@ -164,9 +142,12 @@ async function dispatchToEvent(event, users) {
 
   if (!successfulUserIds.length) return 0;
 
-  const { error: logError } = await upsertPromoNotificationRows(
-    successfulUserIds.map(userId => ({ event_id: event.id, user_id: userId, source: 'pacing' }))
-  );
+  const { error: logError } = await supabase
+    .from('event_promo_notifications')
+    .upsert(
+      successfulUserIds.map(userId => ({ event_id: event.id, user_id: userId })),
+      { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+    );
   if (logError) {
     console.error('[PROMO-PACING] error registrando envíos:', logError);
   }
@@ -196,37 +177,56 @@ async function runEventPromoPacingTick() {
       .gt('event_date', now.toISOString())
       .not('notification_count', 'is', null);
 
-    if (eventsError) { console.error('[PROMO-PACING] error consultando eventos:', eventsError); return; }
+    if (eventsError) {
+      console.error('[PROMO-PACING] error consultando eventos:', eventsError);
+      return { ok: false, step: 'events_query', error: eventsError.message };
+    }
 
     const pending = (events || []).filter(e => e.notification_sent_count < e.notification_count);
-    if (!pending.length) return;
-
-    // 2. Tope diario global: usuarios ya notificados HOY vía reparto general
-    //    (source = 'pacing'), de cualquier evento. Los avisos inmediatos a
-    //    miembros de comunidad (source = 'community') quedan FUERA de este
-    //    cálculo a propósito: un usuario siempre recibe el aviso de un
-    //    evento de su propia comunidad, y eso no debe consumir ni bloquear
-    //    su cupo de 1 notificación general del día.
-    let { data: notifiedToday, error: notifiedError } = await supabase
-      .from('event_promo_notifications')
-      .select('user_id')
-      .eq('source', 'pacing')
-      .gte('sent_at', todayStart.toISOString());
-    if (notifiedError?.code === '42703') {
-      ({ data: notifiedToday, error: notifiedError } = await supabase
-        .from('event_promo_notifications')
-        .select('user_id')
-        .gte('sent_at', todayStart.toISOString()));
+    if (!pending.length) {
+      return { ok: true, reason: 'no_pending_events', activePremiumUltraEvents: (events || []).length };
     }
-    if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
-    const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
+
+    // 2. Tope diario global: usuarios ya notificados HOY (de cualquier evento)
+    //    NOTA: sin .range()/.limit() Supabase/PostgREST corta en 1000 filas por
+    //    defecto de forma silenciosa (data.length === 1000, sin error). Se pagina
+    //    explícitamente para que el tope siga siendo correcto según crece el uso.
+    const notifiedToday = [];
+    {
+      let offset = 0;
+      while (true) {
+        const { data: page, error: notifiedError } = await supabase
+          .from('event_promo_notifications')
+          .select('user_id')
+          .gte('sent_at', todayStart.toISOString())
+          .range(offset, offset + SUBS_PAGE_SIZE - 1);
+        if (notifiedError) {
+          console.error('[PROMO-PACING] error consultando log diario:', notifiedError);
+          return { ok: false, step: 'daily_log_query', error: notifiedError.message };
+        }
+        notifiedToday.push(...(page || []));
+        if (!page || page.length < SUBS_PAGE_SIZE) break;
+        offset += SUBS_PAGE_SIZE;
+      }
+    }
+    const notifiedTodaySet = new Set(notifiedToday.map(r => r.user_id));
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
-    const { data: everNotified } = await supabase
-      .from('event_promo_notifications')
-      .select('event_id, user_id')
-      .in('event_id', eventIds);
+    const everNotified = [];
+    {
+      let offset = 0;
+      while (true) {
+        const { data: page } = await supabase
+          .from('event_promo_notifications')
+          .select('event_id, user_id')
+          .in('event_id', eventIds)
+          .range(offset, offset + SUBS_PAGE_SIZE - 1);
+        everNotified.push(...(page || []));
+        if (!page || page.length < SUBS_PAGE_SIZE) break;
+        offset += SUBS_PAGE_SIZE;
+      }
+    }
     const everNotifiedByEvent = new Map();
     (everNotified || []).forEach(r => {
       if (!everNotifiedByEvent.has(r.event_id)) everNotifiedByEvent.set(r.event_id, new Set());
@@ -249,7 +249,16 @@ async function runEventPromoPacingTick() {
 
     // 5. Cupo disponible este tick: usuarios con push activo, sin notificar hoy
     let available = await fetchEligiblePool(notifiedTodaySet);
-    if (!available.length) return;
+    const eligiblePoolSize = available.length;
+    if (!available.length) {
+      return {
+        ok: true,
+        reason: 'no_eligible_users',
+        pendingEvents: pending.length,
+        notifiedTodayCount: notifiedTodaySet.size,
+        hint: 'Todos los usuarios con push activo ya fueron notificados hoy, o no hay ninguna suscripción push registrada (push_subscriptions vacía).',
+      };
+    }
 
     // 6. Priorización: Tier A (bajo mínimo, más urgentes primero) + Tier B (más rezagados primero)
     const urgent = pending
@@ -279,6 +288,7 @@ async function runEventPromoPacingTick() {
 
       if (chunkTarget <= 0) continue;
 
+      const communityMemberCount = event.community_id ? (communityMembersByCommunity.get(event.community_id)?.size || 0) : 0;
       const excludeSet = new Set([
         event.creator_id,
         ...(event.community_id ? communityMembersByCommunity.get(event.community_id) || [] : []),
@@ -296,20 +306,44 @@ async function runEventPromoPacingTick() {
       }
 
       if (chosen.length) {
-        assignments.push({ event, users: chosen });
+        assignments.push({ event, users: chosen, communityMemberCount, chunkTarget, isEmergency });
         available = rest;
+      } else {
+        assignments.push({ event, users: [], communityMemberCount, chunkTarget, isEmergency, skippedNoCandidates: true });
       }
     }
 
     // 8. Ejecutar envíos
-    for (const { event, users } of assignments) {
-      const sent = await dispatchToEvent(event, users);
+    const results = [];
+    for (const { event, users, communityMemberCount, chunkTarget, isEmergency, skippedNoCandidates } of assignments) {
+      const sent = users.length ? await dispatchToEvent(event, users) : 0;
       if (sent > 0) {
         console.log(`[PROMO-PACING] Evento ${event.id} ("${event.title}") +${sent} envíos (${event.notification_sent_count + sent}/${event.notification_count})`);
       }
+      results.push({
+        eventId: event.id,
+        title: event.title,
+        communityId: event.community_id,
+        communityMembersExcluded: communityMemberCount,
+        chunkTarget,
+        isEmergency,
+        sent,
+        skippedNoCandidates: !!skippedNoCandidates,
+        totalSentSoFar: event.notification_sent_count + sent,
+        totalContracted: event.notification_count,
+      });
     }
+
+    return {
+      ok: true,
+      pendingEvents: pending.length,
+      eligiblePoolSize,
+      notifiedTodayCount: notifiedTodaySet.size,
+      results,
+    };
   } catch (err) {
     console.error('[PROMO-PACING] runEventPromoPacingTick error:', err);
+    return { ok: false, step: 'unexpected_exception', error: err.message };
   }
 }
 

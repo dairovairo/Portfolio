@@ -388,7 +388,6 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
-  const [ultraEvent, setUltraEvent] = useState(null);
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -434,37 +433,12 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
-  // Evento "ultra" (si lo hay) por el que se avisó hoy al usuario, para
-  // mostrarlo en el banner del menú principal.
-  const fetchUltraBanner = useCallback(async () => {
-    try {
-      const tzOffsetMinutes = new Date().getTimezoneOffset();
-      const { event } = await api.get(`/community/events/notified-today?tzOffsetMinutes=${encodeURIComponent(tzOffsetMinutes)}`);
-      setUltraEvent(event || null);
-    } catch (e) {}
-  }, []);
-
   useEffect(() => {
     fetchFriends();
     fetchPending();
     fetchUnread();
     fetchGroups();
   }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
-
-  useEffect(() => {
-    fetchUltraBanner();
-    const refreshInterval = window.setInterval(fetchUltraBanner, 60 * 1000);
-    const refreshIfVisible = () => {
-      if (!document.hidden) fetchUltraBanner();
-    };
-    window.addEventListener('focus', fetchUltraBanner);
-    document.addEventListener('visibilitychange', refreshIfVisible);
-    return () => {
-      window.clearInterval(refreshInterval);
-      window.removeEventListener('focus', fetchUltraBanner);
-      document.removeEventListener('visibilitychange', refreshIfVisible);
-    };
-  }, [fetchUltraBanner]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -657,22 +631,8 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
-        {/* Ultra event banner — sustituye al recordatorio de batería cuando
-            el usuario ha sido notificado hoy de un evento destacado */}
-        {ultraEvent ? (
-          <button
-            type="button"
-            onClick={() => navigate(`/community/event/${ultraEvent.id}`)}
-            className="w-full text-left bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down hover:bg-yellow-500/12 transition-colors"
-          >
-            <span className="text-xl">🚀</span>
-            <p className="text-yellow-300/80 text-xs flex-1">
-              <span className="font-semibold text-yellow-300">Evento destacado:</span>{' '}
-              {ultraEvent.title}
-              {ultraEvent.location ? ` · ${ultraEvent.location}` : ''}
-            </p>
-          </button>
-        ) : pendingUpdate && (
+        {/* Daily update nudge */}
+        {pendingUpdate && (
           <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
             <span className="text-xl">⚡</span>
             <p className="text-yellow-300/80 text-xs flex-1">

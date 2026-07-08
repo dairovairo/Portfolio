@@ -66,6 +66,20 @@ app.get('/api/debug/reminders', async (req, res) => {
   }
 });
 
+app.get('/api/debug/promo-pacing', async (req, res) => {
+  const secret = req.headers['x-debug-secret'];
+  if (secret !== (process.env.DEBUG_SECRET || 'sb-debug-2025')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    console.log('[DEBUG] Firing event promo pacing tick manually...');
+    const result = await runEventPromoPacingTick();
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.11.0', phase: 11, timestamp: new Date().toISOString() });
 });

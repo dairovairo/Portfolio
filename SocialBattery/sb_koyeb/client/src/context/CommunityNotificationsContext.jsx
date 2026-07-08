@@ -82,7 +82,7 @@ function saveUpdatesSet(set) {
 
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
-  const { muteAllNotifications, muteNewEvents } = useSettings();
+  const { muteAllNotifications, muteNewEvents, muteEventRecommendations } = useSettings();
 
   // eventsByCommunity: { [communityId: string]: number }
   const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
@@ -93,13 +93,13 @@ export function CommunityNotificationsProvider({ children }) {
   const joinedCommunityIdsRef   = useRef(new Set());
   // Set<eventId> de eventos en los que el usuario está apuntado
   const attendingEventIdsRef    = useRef(new Set());
-  const settingsRef             = useRef({ muteAllNotifications, muteNewEvents });
+  const settingsRef             = useRef({ muteAllNotifications, muteNewEvents, muteEventRecommendations });
   const channelRef              = useRef(null);
   const updateChannelRef        = useRef(null);
 
   useEffect(() => {
-    settingsRef.current = { muteAllNotifications, muteNewEvents };
-  }, [muteAllNotifications, muteNewEvents]);
+    settingsRef.current = { muteAllNotifications, muteNewEvents, muteEventRecommendations };
+  }, [muteAllNotifications, muteNewEvents, muteEventRecommendations]);
 
   // ── Derivados ──────────────────────────────────────────────────────────────
   const eventBadgeCount     = totalCount(eventsByCommunity);
@@ -166,13 +166,14 @@ export function CommunityNotificationsProvider({ children }) {
           if (!newEvent?.id || newEvent.creator_id === profile.id) return;
 
           const plan = newEvent.promotion_plan || 'basic';
+          const isUltraOrPremium = plan === 'ultra' || plan === 'premium';
           const isMember = newEvent.community_id &&
             joinedCommunityIdsRef.current.has(newEvent.community_id);
 
-          // El realtime solo cubre el aviso inmediato a miembros de la
-          // comunidad. Las promos premium/ultra para el resto de usuarios las
-          // reparte el backend con el tope de 1 notificacion general al dia.
-          if (!isMember) return;
+          // Notificar si:
+          //   a) El plan es ultra o premium  → todos los usuarios (sin importar membresía)
+          //   b) Plan básico → solo miembros de la comunidad del evento
+          if (!isUltraOrPremium && !isMember) return;
 
           // Incrementar badge solo si el evento pertenece a una comunidad conocida del usuario
           // (los ultra/premium sin comunidad no generan badge de comunidad, solo notificación)
@@ -187,18 +188,25 @@ export function CommunityNotificationsProvider({ children }) {
           if (settings.muteAllNotifications || settings.muteNewEvents) return;
 
           if (plan === 'ultra') {
+            // ultra y premium también respetan muteEventRecommendations
+            if (settings.muteEventRecommendations) return;
             fireLocalNotification({
               title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡No te lo pierdas!`,
               tag:   `ultra-event-${newEvent.id}`,
-              url:   `/community/event/${newEvent.id}`,
+              url:   newEvent.community_id
+                ? `/community/event/${newEvent.id}`
+                : '/community',
             });
           } else if (plan === 'premium') {
+            if (settings.muteEventRecommendations) return;
             fireLocalNotification({
               title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
               tag:   `premium-event-${newEvent.id}`,
-              url:   `/community/event/${newEvent.id}`,
+              url:   newEvent.community_id
+                ? `/community/event/${newEvent.id}`
+                : '/community',
             });
           } else {
             // basic — solo miembros de la comunidad (ya filtrado arriba)

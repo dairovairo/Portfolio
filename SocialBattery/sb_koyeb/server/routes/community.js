@@ -6,7 +6,6 @@ const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
-const { runEventPromoPacingTick } = require('../jobs/eventPromoPacing');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -66,41 +65,6 @@ function communityErrorMessage(err, fallback) {
     return 'Falta aplicar la migracion de comunidad en Supabase.';
   }
   return fallback;
-}
-
-function getClientDayRange(tzOffsetMinutesRaw) {
-  const parsedOffset = Number.parseInt(tzOffsetMinutesRaw, 10);
-  const offsetMinutes = Number.isFinite(parsedOffset) && parsedOffset >= -14 * 60 && parsedOffset <= 14 * 60
-    ? parsedOffset
-    : new Date().getTimezoneOffset();
-
-  const now = new Date();
-  const localNow = new Date(now.getTime() - offsetMinutes * 60 * 1000);
-  const startUtcMs =
-    Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate()) +
-    offsetMinutes * 60 * 1000;
-
-  return {
-    startIso: new Date(startUtcMs).toISOString(),
-    endIso: new Date(startUtcMs + 24 * 60 * 60 * 1000).toISOString(),
-  };
-}
-
-async function upsertPromoNotificationRows(rows) {
-  const { error } = await supabase
-    .from('event_promo_notifications')
-    .upsert(rows, { onConflict: 'event_id,user_id', ignoreDuplicates: true });
-
-  if (error?.code === '42703') {
-    return supabase
-      .from('event_promo_notifications')
-      .upsert(
-        rows.map(({ event_id, user_id }) => ({ event_id, user_id })),
-        { onConflict: 'event_id,user_id', ignoreDuplicates: true }
-      );
-  }
-
-  return { error };
 }
 
 function fallbackUsername(user) {
@@ -276,51 +240,6 @@ router.get('/events', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/community/events/notified-today
-// Devuelve el evento "ultra" (si lo hay) por el que se ha avisado hoy al
-// usuario actual — vía notificación inmediata de comunidad o vía reparto
-// general (event_promo_notifications) — para mostrarlo en el banner del
-// menú principal. Debe ir ANTES de GET /events/:id para que Express no
-// interprete "notified-today" como un :id.
-router.get('/events/notified-today', requireAuth, async (req, res) => {
-  const userId = req.user.id;
-
-  try {
-    const { startIso, endIso } = getClientDayRange(req.query.tzOffsetMinutes);
-
-    const { data: notifs, error: notifErr } = await supabase
-      .from('event_promo_notifications')
-      .select('event_id, sent_at')
-      .eq('user_id', userId)
-      .gte('sent_at', startIso)
-      .lt('sent_at', endIso)
-      .order('sent_at', { ascending: false });
-
-    if (notifErr) throw notifErr;
-    if (!notifs?.length) return res.json({ event: null });
-
-    const eventIds = [...new Set(notifs.map(n => n.event_id))];
-    const nowIso = new Date().toISOString();
-
-    const { data: events, error: evErr } = await supabase
-      .from('community_events')
-      .select('id, title, location, event_date, ends_at, cover_image_url, community_id, promotion_plan')
-      .in('id', eventIds)
-      .eq('promotion_plan', 'ultra')
-      .or(`ends_at.gte.${nowIso},and(ends_at.is.null,event_date.gte.${nowIso})`);
-
-    if (evErr) throw evErr;
-    if (!events?.length) return res.json({ event: null });
-
-    const eventsById = new Map(events.map(event => [event.id, event]));
-    const selectedEvent = eventIds.map(id => eventsById.get(id)).find(Boolean);
-    res.json({ event: selectedEvent || null });
-  } catch (err) {
-    console.error('[community] GET /events/notified-today error:', err);
-    res.status(500).json({ error: communityErrorMessage(err, 'Error al comprobar notificaciones') });
-  }
-});
-
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
@@ -432,7 +351,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     // plan de promoción (basic/premium/ultra). Esto no cuenta contra el cupo
     // contratado ni contra el tope diario del reparto premium/ultra.
     //
-    // El envio adicional de premium/ultra (resolvedNotificationCount) YA NO
+    // El alcance adicional de premium/ultra (resolvedNotificationCount) YA NO
     // se dispara aquí de golpe: desde la fase 69 lo reparte gradualmente
     // server/jobs/eventPromoPacing.js (cron cada 5 min) hasta el inicio del
     // evento, respetando 1 notificación/usuario/día (across events) y
@@ -455,23 +374,6 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
             url:   `/community/event/${event.id}`,
             tag:   `community-event-${event.id}`,
           });
-
-          // Registramos el aviso (source: 'community') para los eventos
-          // premium/ultra: permite que el banner del menú principal sepa
-          // "a este usuario se le avisó hoy de este evento ultra" y hace
-          // que este aviso NO cuente contra el tope diario de 1 notificación
-          // promocional/usuario que sí aplica al reparto general (pacing).
-          if ((resolvedPlan === 'premium' || resolvedPlan === 'ultra') && communityMemberIds.length) {
-            const { error: logError } = await supabase
-              .from('event_promo_notifications')
-              .upsert(
-                communityMemberIds.map(memberId => ({ event_id: event.id, user_id: memberId, source: 'community' })),
-                { onConflict: 'event_id,user_id', ignoreDuplicates: true }
-              );
-            if (logError) {
-              console.warn('[community] error registrando avisos de comunidad:', logError.message);
-            }
-          }
         }
       } catch (err) {
         console.warn('[community] event push notification error:', err.message);
