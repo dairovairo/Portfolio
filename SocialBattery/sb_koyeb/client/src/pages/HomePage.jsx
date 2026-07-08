@@ -387,6 +387,7 @@ export default function HomePage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
+  const [notifiedEvent, setNotifiedEvent] = useState(null);
   const [sharingStory, setSharingStory] = useState(false);
   const friendIdsRef = useRef(new Set());
 
@@ -433,12 +434,20 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
+  const fetchNotifiedEvent = useCallback(async () => {
+    try {
+      const { event } = await api.get('/community/events/notified-today');
+      setNotifiedEvent(event || null);
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     fetchFriends();
     fetchPending();
     fetchUnread();
     fetchGroups();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
+    fetchNotifiedEvent();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchNotifiedEvent]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -631,8 +640,23 @@ export default function HomePage() {
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
-        {/* Daily update nudge */}
-        {pendingUpdate && (
+        {/* Ultra event banner (si te notificaron hoy de un evento destacado) o, si no, el aviso de bateria */}
+        {notifiedEvent ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/community/event/${notifiedEvent.id}`)}
+            className="w-full text-left bg-gradient-to-r from-purple-500/15 via-fuchsia-500/10 to-pink-500/10 border border-purple-400/30 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down hover:border-purple-400/50 active:scale-[0.99] transition-all"
+          >
+            <span className="text-xl" aria-hidden="true">🚀</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-purple-200 text-xs font-semibold truncate">{notifiedEvent.title}</p>
+              <p className="text-purple-300/70 text-[11px] truncate">
+                {notifiedEvent.location ? `${notifiedEvent.location} · ` : ''}Evento destacado · ¡no te lo pierdas!
+              </p>
+            </div>
+            <span className="text-purple-300/60 text-lg shrink-0" aria-hidden="true">›</span>
+          </button>
+        ) : pendingUpdate && (
           <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
             <span className="text-xl">⚡</span>
             <p className="text-yellow-300/80 text-xs flex-1">
