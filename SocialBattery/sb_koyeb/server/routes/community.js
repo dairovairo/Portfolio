@@ -67,6 +67,24 @@ function communityErrorMessage(err, fallback) {
   return fallback;
 }
 
+function getClientDayRange(tzOffsetMinutesRaw) {
+  const parsedOffset = Number.parseInt(tzOffsetMinutesRaw, 10);
+  const offsetMinutes = Number.isFinite(parsedOffset) && parsedOffset >= -14 * 60 && parsedOffset <= 14 * 60
+    ? parsedOffset
+    : new Date().getTimezoneOffset();
+
+  const now = new Date();
+  const localNow = new Date(now.getTime() - offsetMinutes * 60 * 1000);
+  const startUtcMs =
+    Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate()) +
+    offsetMinutes * 60 * 1000;
+
+  return {
+    startIso: new Date(startUtcMs).toISOString(),
+    endIso: new Date(startUtcMs + 24 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
 function fallbackUsername(user) {
   const idPart = user.id.replace(/-/g, '').slice(0, 12);
   return `user_${idPart}`;
@@ -250,14 +268,15 @@ router.get('/events/notified-today', requireAuth, async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const { startIso, endIso } = getClientDayRange(req.query.tzOffsetMinutes);
 
     const { data: notifs, error: notifErr } = await supabase
       .from('event_promo_notifications')
-      .select('event_id')
+      .select('event_id, sent_at')
       .eq('user_id', userId)
-      .gte('sent_at', todayStart.toISOString());
+      .gte('sent_at', startIso)
+      .lt('sent_at', endIso)
+      .order('sent_at', { ascending: false });
 
     if (notifErr) throw notifErr;
     if (!notifs?.length) return res.json({ event: null });
@@ -275,8 +294,9 @@ router.get('/events/notified-today', requireAuth, async (req, res) => {
     if (evErr) throw evErr;
     if (!events?.length) return res.json({ event: null });
 
-    events.sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
-    res.json({ event: events[0] });
+    const eventsById = new Map(events.map(event => [event.id, event]));
+    const selectedEvent = eventIds.map(id => eventsById.get(id)).find(Boolean);
+    res.json({ event: selectedEvent || null });
   } catch (err) {
     console.error('[community] GET /events/notified-today error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al comprobar notificaciones') });
@@ -394,7 +414,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     // plan de promoción (basic/premium/ultra). Esto no cuenta contra el cupo
     // contratado ni contra el tope diario del reparto premium/ultra.
     //
-    // El alcance adicional de premium/ultra (resolvedNotificationCount) YA NO
+    // El envio adicional de premium/ultra (resolvedNotificationCount) YA NO
     // se dispara aquí de golpe: desde la fase 69 lo reparte gradualmente
     // server/jobs/eventPromoPacing.js (cron cada 5 min) hasta el inicio del
     // evento, respetando 1 notificación/usuario/día (across events) y

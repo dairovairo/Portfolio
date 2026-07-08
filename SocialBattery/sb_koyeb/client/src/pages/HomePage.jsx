@@ -438,7 +438,8 @@ export default function HomePage() {
   // mostrarlo en el banner del menú principal.
   const fetchUltraBanner = useCallback(async () => {
     try {
-      const { event } = await api.get('/community/events/notified-today');
+      const tzOffsetMinutes = new Date().getTimezoneOffset();
+      const { event } = await api.get(`/community/events/notified-today?tzOffsetMinutes=${encodeURIComponent(tzOffsetMinutes)}`);
       setUltraEvent(event || null);
     } catch (e) {}
   }, []);
@@ -448,8 +449,22 @@ export default function HomePage() {
     fetchPending();
     fetchUnread();
     fetchGroups();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
+
+  useEffect(() => {
     fetchUltraBanner();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchUltraBanner]);
+    const refreshInterval = window.setInterval(fetchUltraBanner, 60 * 1000);
+    const refreshIfVisible = () => {
+      if (!document.hidden) fetchUltraBanner();
+    };
+    window.addEventListener('focus', fetchUltraBanner);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.clearInterval(refreshInterval);
+      window.removeEventListener('focus', fetchUltraBanner);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [fetchUltraBanner]);
 
   // Realtime subscriptions
   useEffect(() => {
