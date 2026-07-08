@@ -5,6 +5,18 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
+// Red de seguridad: en Node 15+, una promesa rechazada sin .catch() tumba
+// TODO el proceso (esto es justo lo que pasó con el bug de push-subscribe:
+// un .catch() mal encadenado sobre el query builder de Supabase lanzaba un
+// TypeError síncrono dentro de un handler async, que se convertía en un
+// unhandledRejection y reiniciaba el contenedor entero en Railway). Con esto,
+// un fallo aislado en una request queda solo registrado, sin tirar el server
+// para el resto de usuarios. No sustituye a arreglar los bugs de raíz, pero
+// evita que un error suelto se convierta en una caída total.
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+});
+
 const authRoutes      = require('./routes/auth');
 const usersRoutes     = require('./routes/users');
 const batteryRoutes   = require('./routes/battery');
@@ -20,6 +32,11 @@ const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Railway (y la mayoría de PaaS) enrutan el tráfico a través de un proxy inverso
+// que añade X-Forwarded-For. Sin esto, express-rate-limit lanza un ValidationError
+// en cada request y no puede identificar correctamente la IP real del cliente.
+app.set('trust proxy', 1);
 
 // ── Security & Middleware ──────────────────────────────────────────────────
 app.use(helmet({
@@ -75,6 +92,50 @@ app.get('/api/debug/promo-pacing', async (req, res) => {
     console.log('[DEBUG] Firing event promo pacing tick manually...');
     await runEventPromoPacingTick();
     res.json({ ok: true, message: 'Promo pacing tick ejecutado — revisa los logs del servidor (busca [PROMO-PACING][DEBUG])' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function decodeJwtRoleClaim(token) {
+  try {
+    const payloadPart = token.split('.')[1];
+    const decoded = Buffer.from(payloadPart, 'base64').toString('utf8');
+    return JSON.parse(decoded).role || null;
+  } catch {
+    return null;
+  }
+}
+
+app.get('/api/debug/push-subs-count', async (req, res) => {
+  const secret = req.headers['x-debug-secret'];
+  if (secret !== (process.env.DEBUG_SECRET || 'sb-debug-2025')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const supabase = require('./lib/supabase');
+    const { count, error } = await supabase
+      .from('push_subscriptions')
+      .select('*', { count: 'exact', head: true });
+
+    const { count: promoLogCount, error: promoLogError } = await supabase
+      .from('event_promo_notifications')
+      .select('*', { count: 'exact', head: true });
+
+    res.json({
+      ok: !error && !promoLogError,
+      push_subscriptions_count: count,
+      push_subscriptions_error: error?.message || null,
+      event_promo_notifications_count: promoLogCount,
+      event_promo_notifications_error: promoLogError?.message || null,
+      // No exponemos el valor de la clave, solo su claim "role" decodificado del JWT,
+      // para descartar que en Railway se haya puesto la clave "anon" en vez de "service_role"
+      // (eso haría que las tablas con RLS devuelvan 0 filas sin lanzar ningún error).
+      supabase_service_key_present: Boolean(process.env.SUPABASE_SERVICE_KEY),
+      supabase_service_key_role: process.env.SUPABASE_SERVICE_KEY
+        ? decodeJwtRoleClaim(process.env.SUPABASE_SERVICE_KEY)
+        : null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

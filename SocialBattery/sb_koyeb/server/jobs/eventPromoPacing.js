@@ -66,6 +66,8 @@ function shuffle(arr) {
 async function fetchEligiblePool(excludeUserIds) {
   const usersMap = new Map();
   let offset = 0;
+  let totalRowsSeen = 0;
+  let queryError = null;
 
   while (true) {
     const { data: subs, error } = await supabase
@@ -73,8 +75,10 @@ async function fetchEligiblePool(excludeUserIds) {
       .select('user_id, endpoint, p256dh, auth')
       .range(offset, offset + SUBS_PAGE_SIZE - 1);
 
-    if (error || !subs?.length) break;
+    if (error) { queryError = error; break; }
+    if (!subs?.length) break;
 
+    totalRowsSeen += subs.length;
     for (const sub of subs) {
       if (excludeUserIds.has(sub.user_id)) continue;
       if (!usersMap.has(sub.user_id)) usersMap.set(sub.user_id, { userId: sub.user_id, subs: [] });
@@ -83,6 +87,12 @@ async function fetchEligiblePool(excludeUserIds) {
 
     if (subs.length < SUBS_PAGE_SIZE) break;
     offset += SUBS_PAGE_SIZE;
+  }
+
+  if (queryError) {
+    console.error('[PROMO-PACING][DEBUG] error consultando push_subscriptions:', queryError);
+  } else {
+    console.log(`[PROMO-PACING][DEBUG] fetchEligiblePool: filas totales en push_subscriptions=${totalRowsSeen}, usuarios únicos tras excluir notificados-hoy=${usersMap.size}`);
   }
 
   return shuffle([...usersMap.values()]);
