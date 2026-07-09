@@ -48,6 +48,7 @@
 const supabase = require('../lib/supabase');
 const { sendPushToSubscription } = require('../lib/webpush');
 const { getNotificationDayKey } = require('../lib/notificationDay');
+const { INSTANCE_ID } = require('../lib/instanceId');
 
 const FREE_THRESHOLD = 200;          // umbral mínimo para poder cobrar (ver UI)
 const BASE_CHUNK_PER_TICK = 50;      // cupo "normal" que puede recibir un evento por tick
@@ -232,7 +233,7 @@ async function dispatchToEvent(event, users, dayKey) {
   if (updateError) {
     console.error('[PROMO-PACING] error actualizando contador:', updateError);
   } else {
-    console.log(`[PROMO-PACING] Evento ${event.id} ("${event.title}") +${successfulUserIds.length} envíos (${newCount}/${event.notification_count})`);
+    console.log(`[PROMO-PACING][pid:${INSTANCE_ID}] Evento ${event.id} ("${event.title}") +${successfulUserIds.length} envíos (${newCount}/${event.notification_count})`);
   }
 
   return successfulUserIds.length;
@@ -276,7 +277,7 @@ async function runEventPromoPacingTick() {
       return;
     }
     const notifiedTodaySet = new Set((claimedToday || []).map(r => r.user_id));
-    console.log(`[NOTIF-CAP][PROMO-PACING] tick ${dayKey}: ${pending.length} eventos pendientes, ${notifiedTodaySet.size} usuarios ya con hueco de hoy reservado (excluidos de este tick).`);
+    console.log(`[NOTIF-CAP][PROMO-PACING][pid:${INSTANCE_ID}] tick ${dayKey}: ${pending.length} eventos pendientes, ${notifiedTodaySet.size} usuarios ya con hueco de hoy reservado (excluidos de este tick).`);
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
