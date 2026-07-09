@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
+const { getNotificationDayKey } = require('../lib/notificationDay');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -351,13 +352,14 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     // plan de promoción (basic/premium/ultra): son "su" comunidad, así que se
     // les avisa igualmente incluso si ya alcanzaron el tope diario de 1
     // notificación/evento (excepción explícita al tope). Esto no cuenta
-    // contra el cupo contratado (notification_sent_count), pero SÍ se
-    // registra en event_promo_notifications — el mismo log que usa
-    // server/jobs/eventPromoPacing.js para calcular el tope diario — para que
-    // estos usuarios queden marcados como "ya notificados hoy" de cara a
-    // CUALQUIER OTRO evento (de otra comunidad o de alcance general) y no
-    // reciban una segunda notificación no relacionada con su comunidad el
-    // mismo día.
+    // contra el cupo contratado (notification_sent_count). Se registra en
+    // event_promo_notifications (histórico por evento) y, desde la fase 70,
+    // también en user_daily_notification_claims — la tabla que
+    // server/jobs/eventPromoPacing.js usa como fuente de verdad atómica del
+    // tope diario — para que estos usuarios queden marcados como "ya
+    // notificados hoy" de cara a CUALQUIER OTRO evento (de otra comunidad o
+    // de alcance general) y no reciban una segunda notificación no
+    // relacionada con su comunidad el mismo día.
     //
     // El alcance adicional de premium/ultra (resolvedNotificationCount) YA NO
     // se dispara aquí de golpe: desde la fase 69 lo reparte gradualmente
@@ -392,6 +394,23 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
               );
             if (logError) {
               console.warn('[community] error registrando aviso inmediato en log diario:', logError.message);
+            }
+
+            // Marca el hueco del día como usado en la misma tabla que lee
+            // server/jobs/eventPromoPacing.js para el tope de 1/día. El
+            // aviso de comunidad YA se envió (no depende de ganar esta
+            // reserva, es la excepción al tope), así que un simple
+            // "insertar e ignorar si ya existe" basta: da igual si dos
+            // cosas intentan marcar el mismo (user_id, día) a la vez, la
+            // UNIQUE de Postgres se encarga de que quede una sola fila.
+            const { error: claimError } = await supabase
+              .from('user_daily_notification_claims')
+              .upsert(
+                notifiedUserIds.map(uid => ({ user_id: uid, claim_date: getNotificationDayKey(), event_id: event.id })),
+                { onConflict: 'user_id,claim_date', ignoreDuplicates: true }
+              );
+            if (claimError) {
+              console.warn('[community] error reservando hueco diario tras aviso de comunidad:', claimError.message);
             }
           }
         }

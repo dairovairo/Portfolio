@@ -36,14 +36,18 @@
  *      ahora); notification_sent_count queda fijado en ese momento, que
  *      es la base para la facturación (cuando se implemente el cobro).
  *
- * Nota: esto asume una única instancia de servidor corriendo el cron (caso
- * típico de un hobby project en Koyeb). Si en el futuro hay varias
- * instancias, el incremento de notification_sent_count debería moverse a
- * una función SQL atómica (o RPC) para evitar carreras.
+ * Fase 70: el tope diario ("¿a quién ya se le notificó hoy?") se reserva
+ * ahora con una operación atómica de Postgres (INSERT ... ON CONFLICT DO
+ * NOTHING sobre user_daily_notification_claims, UNIQUE por (user_id,
+ * claim_date)), inmune a que corran 1, 2 o N instancias del cron a la vez.
+ * El incremento de notification_sent_count usa igualmente un UPDATE
+ * atómico vía RPC (increment_event_notification_sent_count) en vez de un
+ * read-then-write en JS. Ver supabase_schema_phase70_atomic_daily_notification_cap.sql.
  */
 
 const supabase = require('../lib/supabase');
 const { sendPushToSubscription } = require('../lib/webpush');
+const { getNotificationDayKey } = require('../lib/notificationDay');
 
 const FREE_THRESHOLD = 200;          // umbral mínimo para poder cobrar (ver UI)
 const BASE_CHUNK_PER_TICK = 50;      // cupo "normal" que puede recibir un evento por tick
@@ -106,19 +110,78 @@ function buildPayload(event) {
 }
 
 /**
- * Envía la notificación a un grupo de usuarios ya seleccionado para un
- * evento concreto, registra el envío en event_promo_notifications y
- * actualiza el contador notification_sent_count del evento.
+ * Reserva atómicamente el hueco del día para un grupo de candidatos.
+ *
+ * INSERT ... ON CONFLICT (user_id, claim_date) DO NOTHING vía Supabase
+ * upsert(ignoreDuplicates: true) + select(): PostgREST lo traduce en un
+ * INSERT ... ON CONFLICT DO NOTHING RETURNING *, y una fila que choca con
+ * la UNIQUE simplemente no aparece en el RETURNING. Esto es atómico a
+ * nivel de Postgres pase lo que pase en la app: da igual que 1, 2 o N
+ * instancias/ticks intenten reservar al mismo usuario el mismo día a la
+ * vez, como mucho una gana la fila. Devuelve solo los userIds que
+ * consiguieron la reserva (los "ganadores" de este intento).
  */
-async function dispatchToEvent(event, users) {
+async function claimDailySlots(userIds, eventId, dayKey) {
+  if (!userIds.length) return new Set();
+
+  const { data: claimed, error } = await supabase
+    .from('user_daily_notification_claims')
+    .upsert(
+      userIds.map(userId => ({ user_id: userId, claim_date: dayKey, event_id: eventId })),
+      { onConflict: 'user_id,claim_date', ignoreDuplicates: true }
+    )
+    .select('user_id');
+
+  if (error) {
+    console.error('[PROMO-PACING] error reservando hueco diario:', error);
+    return new Set();
+  }
+
+  return new Set((claimed || []).map(r => r.user_id));
+}
+
+/**
+ * Libera (best-effort) la reserva diaria de usuarios a los que no se les
+ * pudo enviar ningún push (p.ej. suscripciones caducadas), para no
+ * "gastarles" el hueco del día en un envío que nunca llegó. Como cada
+ * instancia solo borra reservas que ella misma acaba de ganar, no reabre
+ * ninguna carrera.
+ */
+async function releaseUnusedClaims(userIds, dayKey) {
+  if (!userIds.length) return;
+  const { error } = await supabase
+    .from('user_daily_notification_claims')
+    .delete()
+    .eq('claim_date', dayKey)
+    .in('user_id', userIds);
+  if (error) {
+    console.warn('[PROMO-PACING] error liberando reservas no usadas:', error);
+  }
+}
+
+/**
+ * Envía la notificación a un grupo de usuarios ya seleccionado para un
+ * evento concreto. Reserva primero el hueco diario de forma atómica (solo
+ * se envía a quien gana la reserva), registra el envío en
+ * event_promo_notifications y actualiza notification_sent_count del
+ * evento con un incremento atómico en BD.
+ */
+async function dispatchToEvent(event, users, dayKey) {
   if (!users.length) return 0;
+
+  // 1) Reservar el hueco del día ANTES de enviar nada: así, aunque haya
+  //    varias instancias corriendo a la vez, solo una puede "ganar" a cada
+  //    usuario para hoy — es la operación atómica que cierra la carrera.
+  const claimedIds = await claimDailySlots(users.map(u => u.userId), event.id, dayKey);
+  const claimedUsers = users.filter(u => claimedIds.has(u.userId));
+  if (!claimedUsers.length) return 0;
 
   const payload = buildPayload(event);
   const expiredEndpoints = [];
   const successfulUserIds = [];
 
   await Promise.allSettled(
-    users.map(async (u) => {
+    claimedUsers.map(async (u) => {
       let anySuccess = false;
       await Promise.allSettled(
         u.subs.map(async (sub) => {
@@ -140,6 +203,16 @@ async function dispatchToEvent(event, users) {
       .catch(() => {});
   }
 
+  // 2) A quien se le reservó el hueco pero no recibió ningún push, se le
+  //    libera la reserva para que pueda optar a otro evento hoy mismo.
+  const successfulSet = new Set(successfulUserIds);
+  const failedUserIds = claimedUsers
+    .map(u => u.userId)
+    .filter(userId => !successfulSet.has(userId));
+  if (failedUserIds.length) {
+    releaseUnusedClaims(failedUserIds, dayKey).catch(() => {});
+  }
+
   if (!successfulUserIds.length) return 0;
 
   const { error: logError } = await supabase
@@ -152,12 +225,14 @@ async function dispatchToEvent(event, users) {
     console.error('[PROMO-PACING] error registrando envíos:', logError);
   }
 
-  const { error: updateError } = await supabase
-    .from('community_events')
-    .update({ notification_sent_count: event.notification_sent_count + successfulUserIds.length })
-    .eq('id', event.id);
+  const { data: newCount, error: updateError } = await supabase.rpc('increment_event_notification_sent_count', {
+    p_event_id: event.id,
+    p_delta: successfulUserIds.length,
+  });
   if (updateError) {
     console.error('[PROMO-PACING] error actualizando contador:', updateError);
+  } else {
+    console.log(`[PROMO-PACING] Evento ${event.id} ("${event.title}") +${successfulUserIds.length} envíos (${newCount}/${event.notification_count})`);
   }
 
   return successfulUserIds.length;
@@ -165,8 +240,7 @@ async function dispatchToEvent(event, users) {
 
 async function runEventPromoPacingTick() {
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  const dayKey = getNotificationDayKey(now);
 
   try {
     // 1. Eventos premium/ultra activos (no empezados) que aún no llegan a lo contratado
@@ -182,13 +256,18 @@ async function runEventPromoPacingTick() {
     const pending = (events || []).filter(e => e.notification_sent_count < e.notification_count);
     if (!pending.length) return;
 
-    // 2. Tope diario global: usuarios ya notificados HOY (de cualquier evento)
-    const { data: notifiedToday, error: notifiedError } = await supabase
-      .from('event_promo_notifications')
+    // 2. Tope diario global: usuarios con el hueco de hoy ya reservado (de
+    //    cualquier evento, o del aviso inmediato de comunidad). Esto es solo
+    //    un PRE-FILTRO para no malgastar cupo del reparto en memoria en
+    //    candidatos que ya sabemos ocupados — la autoridad real que cierra
+    //    la carrera es el INSERT ... ON CONFLICT DO NOTHING atómico dentro
+    //    de dispatchToEvent (claimDailySlots), no esta lectura.
+    const { data: claimedToday, error: notifiedError } = await supabase
+      .from('user_daily_notification_claims')
       .select('user_id')
-      .gte('sent_at', todayStart.toISOString());
-    if (notifiedError) { console.error('[PROMO-PACING] error consultando log diario:', notifiedError); return; }
-    const notifiedTodaySet = new Set((notifiedToday || []).map(r => r.user_id));
+      .eq('claim_date', dayKey);
+    if (notifiedError) { console.error('[PROMO-PACING] error consultando reservas de hoy:', notifiedError); return; }
+    const notifiedTodaySet = new Set((claimedToday || []).map(r => r.user_id));
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
@@ -272,10 +351,7 @@ async function runEventPromoPacingTick() {
 
     // 8. Ejecutar envíos
     for (const { event, users } of assignments) {
-      const sent = await dispatchToEvent(event, users);
-      if (sent > 0) {
-        console.log(`[PROMO-PACING] Evento ${event.id} ("${event.title}") +${sent} envíos (${event.notification_sent_count + sent}/${event.notification_count})`);
-      }
+      await dispatchToEvent(event, users, dayKey);
     }
   } catch (err) {
     console.error('[PROMO-PACING] runEventPromoPacingTick error:', err);
