@@ -388,7 +388,6 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
-  const [notifiedEvent, setNotifiedEvent] = useState(null); // evento (si hay) del que se notificó hoy al usuario, para el panel superior
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -434,22 +433,12 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
-  // Panel fino de "evento notificado hoy" (arriba del todo). Silencioso
-  // si falla: es un extra informativo, nunca debe romper el home.
-  const fetchNotifiedEventPanel = useCallback(async () => {
-    try {
-      const { event } = await api.get('/community/events/notified-panel');
-      setNotifiedEvent(event || null);
-    } catch (e) {}
-  }, []);
-
   useEffect(() => {
     fetchFriends();
     fetchPending();
     fetchUnread();
     fetchGroups();
-    fetchNotifiedEventPanel();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchNotifiedEventPanel]);
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -602,11 +591,8 @@ export default function HomePage() {
         />
       )}
 
-      {/* Top nav + panel de evento notificado, dentro del mismo
-          contenedor sticky para que se fijen juntos al hacer scroll.
-          El panel va DEBAJO del nav (no encima). */}
-      <div className="sticky top-0 z-10 bg-surface-bg/90 backdrop-blur-xl">
-      <nav className="border-b border-surface-border">
+      {/* Top nav */}
+      <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/90 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/logo-icon.png" alt="SocialBattery" className="h-6 w-auto" />
@@ -642,35 +628,6 @@ export default function HomePage() {
           </div>
         </div>
       </nav>
-      {notifiedEvent && (
-        <button
-          type="button"
-          onClick={() => navigate(`/community/event/${notifiedEvent.id}`)}
-          className="w-full block border-b border-surface-border/60 bg-surface-card/40 hover:bg-surface-hover transition-colors text-left animate-slide-down"
-        >
-          {/* Medidas ~10% mayores que un panel "fino" estándar (py-2 → 8.8px,
-              icono 32px → 35px, título 12px → 13px, empresa 11px → 12px) */}
-          <div className="max-w-lg mx-auto px-4 py-[8.8px] flex items-center gap-[11px]">
-            <div className="w-[35px] h-[35px] rounded-lg overflow-hidden bg-surface-hover flex-shrink-0 flex items-center justify-center">
-              {notifiedEvent.cover_image_url
-                ? <img src={notifiedEvent.cover_image_url} alt="" className="w-full h-full object-cover" />
-                : <span className="text-[15px]" aria-hidden="true">📅</span>
-              }
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-surface-text truncate">{notifiedEvent.title}</p>
-              {notifiedEvent.company_name && (
-                <p className="text-[12px] text-surface-muted truncate">{notifiedEvent.company_name}</p>
-              )}
-            </div>
-            <span className="flex items-center gap-1 text-[12px] font-semibold text-accent-primary flex-shrink-0 whitespace-nowrap">
-              ¡Nuevo evento cerca!
-              <span aria-hidden="true">›</span>
-            </span>
-          </div>
-        </button>
-      )}
-      </div>
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
