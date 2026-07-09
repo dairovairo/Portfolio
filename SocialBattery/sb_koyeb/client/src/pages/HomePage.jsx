@@ -388,6 +388,7 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
+  const [notifiedEvent, setNotifiedEvent] = useState(null); // evento (si hay) del que se notificó hoy al usuario, para el panel superior
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -433,12 +434,22 @@ export default function HomePage() {
     } catch (e) {}
   }, []);
 
+  // Panel fino de "evento notificado hoy" (arriba del todo). Silencioso
+  // si falla: es un extra informativo, nunca debe romper el home.
+  const fetchNotifiedEventPanel = useCallback(async () => {
+    try {
+      const { event } = await api.get('/community/events/notified-panel');
+      setNotifiedEvent(event || null);
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     fetchFriends();
     fetchPending();
     fetchUnread();
     fetchGroups();
-  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
+    fetchNotifiedEventPanel();
+  }, [fetchFriends, fetchPending, fetchUnread, fetchGroups, fetchNotifiedEventPanel]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -591,8 +602,33 @@ export default function HomePage() {
         />
       )}
 
-      {/* Top nav */}
-      <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/90 backdrop-blur-xl z-10">
+      {/* Panel de evento notificado (arriba del todo) + top nav, dentro
+          del mismo contenedor sticky para que se fijen juntos al hacer scroll */}
+      <div className="sticky top-0 z-10 bg-surface-bg/90 backdrop-blur-xl">
+      {notifiedEvent && (
+        <button
+          type="button"
+          onClick={() => navigate(`/community/event/${notifiedEvent.id}`)}
+          className="w-full block border-b border-surface-border/60 bg-surface-card/40 hover:bg-surface-hover transition-colors text-left animate-slide-down"
+        >
+          <div className="max-w-lg mx-auto px-4 py-2 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-surface-hover flex-shrink-0 flex items-center justify-center">
+              {notifiedEvent.cover_image_url
+                ? <img src={notifiedEvent.cover_image_url} alt="" className="w-full h-full object-cover" />
+                : <span className="text-sm" aria-hidden="true">📅</span>
+              }
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-surface-text truncate">{notifiedEvent.title}</p>
+              {notifiedEvent.company_name && (
+                <p className="text-[11px] text-surface-muted truncate">{notifiedEvent.company_name}</p>
+              )}
+            </div>
+            <span className="text-surface-muted text-xs flex-shrink-0" aria-hidden="true">›</span>
+          </div>
+        </button>
+      )}
+      <nav className="border-b border-surface-border">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/logo-icon.png" alt="SocialBattery" className="h-6 w-auto" />
@@ -628,6 +664,7 @@ export default function HomePage() {
           </div>
         </div>
       </nav>
+      </div>
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 

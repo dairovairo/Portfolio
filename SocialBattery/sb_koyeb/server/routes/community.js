@@ -242,6 +242,67 @@ router.get('/events', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/community/events/notified-panel
+// Devuelve, como mucho, UN evento: el más reciente del que se ha notificado
+// hoy (día UTC, misma clave que getNotificationDayKey() usa en todo el
+// sistema de pacing) al usuario actual vía push, leyendo el log real de
+// envíos (event_promo_notifications) — no un estado calculado en el
+// cliente, así que funciona igual si la notificación llegó con la app
+// cerrada. Alimenta el panel fino en la parte superior de HomePage: como
+// mucho un panel distinto por día, uno por evento. IMPORTANTE: esta ruta
+// debe registrarse antes que GET /events/:id (más abajo), o Express
+// intentaría resolver "notified-panel" como si fuera un :id de evento.
+router.get('/events/notified-panel', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const dayKey = getNotificationDayKey();
+    const startOfDayIso = `${dayKey}T00:00:00.000Z`;
+
+    // event_promo_notifications solo lo lee/escribe el service role (RLS lo
+    // bloquea para cualquier otro cliente), así que usamos `supabase`
+    // directamente en vez de getUserSupabase(req).
+    const { data: notifRows, error: notifError } = await supabase
+      .from('event_promo_notifications')
+      .select('event_id, sent_at')
+      .eq('user_id', userId)
+      .gte('sent_at', startOfDayIso)
+      .order('sent_at', { ascending: false })
+      .limit(1);
+
+    if (notifError) throw notifError;
+
+    const latest = notifRows?.[0];
+    if (!latest) return res.json({ event: null });
+
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select(`
+        id, title, cover_image_url, organization,
+        community:communities!community_events_community_id_fkey(name, organization)
+      `)
+      .eq('id', latest.event_id)
+      .maybeSingle();
+
+    if (eventError) throw eventError;
+    if (!event) return res.json({ event: null });
+
+    res.json({
+      event: {
+        id: event.id,
+        title: event.title,
+        cover_image_url: event.cover_image_url,
+        // "Nombre de empresa": prioriza el organizador propio del evento;
+        // si no lo tiene, cae a la organización/nombre de la comunidad.
+        company_name: event.organization || event.community?.organization || event.community?.name || null,
+      },
+    });
+  } catch (err) {
+    console.error('[community] GET /events/notified-panel error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener el aviso de evento') });
+  }
+});
+
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
