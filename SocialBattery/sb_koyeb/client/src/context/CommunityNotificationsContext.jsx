@@ -14,8 +14,6 @@ const CommunityNotificationsContext = createContext({
   planningUpdateCount: 0,
   clearEventUpdateBadge: () => {},
   clearAllEventUpdateBadges: () => {},
-  // panel superior de evento notificado
-  eventBanner: null,
 });
 
 export function useCommunityNotifications() {
@@ -25,7 +23,6 @@ export function useCommunityNotifications() {
 const STORAGE_KEY           = 'sb_community_events_badge';
 const STORAGE_KEY_BY_COM    = 'sb_community_events_by_community';
 const STORAGE_KEY_UPDATES   = 'sb_event_updates_badge'; // Set<eventId> serialized as JSON array
-const STORAGE_KEY_BANNER    = 'sb_event_top_banner'; // { eventId, title, organization, day }
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -107,21 +104,6 @@ function saveUpdatesSet(set) {
   try { localStorage.setItem(STORAGE_KEY_UPDATES, JSON.stringify([...set])); } catch {}
 }
 
-// ── Panel superior: el primer evento notificado cada día ────────────────────
-function loadBanner() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_BANNER);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function saveBanner(banner) {
-  try {
-    if (banner) localStorage.setItem(STORAGE_KEY_BANNER, JSON.stringify(banner));
-    else localStorage.removeItem(STORAGE_KEY_BANNER);
-  } catch {}
-}
-
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
   const { muteAllNotifications, muteNewEvents, muteEventRecommendations } = useSettings();
@@ -131,9 +113,6 @@ export function CommunityNotificationsProvider({ children }) {
 
   // eventsWithUpdates: Set<eventId> — eventos planificados con actualizaciones no leídas
   const [eventsWithUpdates, setEventsWithUpdates] = useState(loadUpdatesSet);
-
-  // eventBanner: { eventId, title, organization, day } — primer evento notificado hoy
-  const [eventBanner, setEventBanner] = useState(loadBanner);
 
   const joinedCommunityIdsRef   = useRef(new Set());
   // Set<eventId> de eventos en los que el usuario está apuntado
@@ -164,13 +143,6 @@ export function CommunityNotificationsProvider({ children }) {
   useEffect(() => {
     saveUpdatesSet(eventsWithUpdates);
   }, [eventsWithUpdates]);
-
-  useEffect(() => {
-    saveBanner(eventBanner);
-  }, [eventBanner]);
-
-  // Solo se muestra si corresponde al día de hoy (panel "distinto cada día")
-  const todaysEventBanner = eventBanner && eventBanner.day === getLocalDayKey() ? eventBanner : null;
 
   // ── Carga los IDs de comunidades + eventos a los que pertenece el usuario ──
   const refreshJoinedCommunities = useCallback(async () => {
@@ -257,19 +229,6 @@ export function CommunityNotificationsProvider({ children }) {
               url:   newEvent.community_id
                 ? `/community/event/${newEvent.id}`
                 : '/community',
-            });
-            // Panel superior (perk de Ultra): fija el PRIMER evento notificado
-            // hoy. Si ya hay uno fijado para hoy, no se toca — aunque luego
-            // lleguen notificaciones de eventos de comunidades del usuario.
-            setEventBanner(prev => {
-              const today = getLocalDayKey();
-              if (prev && prev.day === today) return prev;
-              return {
-                eventId: newEvent.id,
-                title: newEvent.title || 'Nuevo evento',
-                organization: newEvent.organization || '',
-                day: today,
-              };
             });
           } else if (plan === 'premium') {
             if (settings.muteEventRecommendations) return;
@@ -446,7 +405,6 @@ export function CommunityNotificationsProvider({ children }) {
         planningUpdateCount,
         clearEventUpdateBadge,
         clearAllEventUpdateBadges,
-        eventBanner: todaysEventBanner,
       }}
     >
       {children}

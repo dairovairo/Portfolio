@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
-import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../lib/api';
 import BatterySlider from '../components/BatterySlider';
@@ -377,7 +376,6 @@ export default function HomePage() {
   const { isLight } = useTheme();
   const navigate = useNavigate();
   const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
-  const { eventBanner } = useCommunityNotifications();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
   const [friends, setFriends] = useState([]);
@@ -390,6 +388,7 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
   const [sharingStory, setSharingStory] = useState(false);
+  const [todayEvent, setTodayEvent] = useState(null);
   const friendIdsRef = useRef(new Set());
 
   // Modal state
@@ -441,6 +440,16 @@ export default function HomePage() {
     fetchUnread();
     fetchGroups();
   }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
+
+  // Panel de "nuevo evento cerca" — el backend ya solo guarda el PRIMER
+  // evento que le reservó al usuario el hueco diario de notificación
+  // (user_daily_notification_claims, PK user_id+fecha), así que este panel
+  // no cambia aunque luego lleguen más notificaciones el mismo día.
+  useEffect(() => {
+    api.get('/community/notifications/today-event')
+      .then(({ event }) => setTodayEvent(event || null))
+      .catch(() => {});
+  }, []);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -631,25 +640,27 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* Panel superior: primer evento notificado hoy (perk Ultra) */}
-      {eventBanner && (
-        <div className="max-w-lg mx-auto px-4 pt-2">
-          <button
-            onClick={() => navigate(eventBanner.eventId ? `/community/event/${eventBanner.eventId}` : '/community')}
-            className="w-full flex items-center justify-between gap-3 rounded-xl border border-yellow-500/25 bg-yellow-500/10 px-3 py-2 text-left hover:bg-yellow-500/15 transition-colors"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-base flex-shrink-0">🚀</span>
-              <div className="min-w-0">
-                <p className="text-xs font-display font-bold text-surface-text truncate">{eventBanner.title}</p>
-                {eventBanner.organization && (
-                  <p className="text-[10px] font-mono text-surface-muted truncate">{eventBanner.organization}</p>
+      {/* Panel fino de evento notificado hoy — un único evento por día */}
+      {todayEvent && (
+        <button
+          onClick={() => navigate(`/community/event/${todayEvent.id}`)}
+          className="w-full border-b border-surface-border bg-accent-primary/8 hover:bg-accent-primary/12 transition-colors text-left"
+        >
+          <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2">
+              <span className="text-base flex-shrink-0" aria-hidden="true">📍</span>
+              <div className="min-w-0 leading-tight">
+                <p className="text-xs font-display font-semibold text-surface-text truncate">{todayEvent.title}</p>
+                {todayEvent.organization && (
+                  <p className="text-[11px] text-surface-muted truncate">{todayEvent.organization}</p>
                 )}
               </div>
             </div>
-            <span className="text-[10px] font-mono font-semibold text-yellow-300 whitespace-nowrap flex-shrink-0">¡Nuevo evento cerca!</span>
-          </button>
-        </div>
+            <span className="text-[11px] font-display font-semibold text-accent-glow whitespace-nowrap flex-shrink-0">
+              ¡Nuevo evento cerca!
+            </span>
+          </div>
+        </button>
       )}
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">

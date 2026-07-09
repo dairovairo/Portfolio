@@ -896,6 +896,47 @@ router.get('/events/:id', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/community/notifications/today-event
+// Devuelve el evento que le "ganó" al usuario el hueco diario de
+// notificación (user_daily_notification_claims, PK user_id+claim_date):
+// como esa tabla solo permite una fila por usuario y día (el resto de
+// intentos de otros eventos se ignoran por conflicto de PK), esto es
+// exactamente "el primer evento que le notificó hoy" — da igual que
+// luego le llegue un aviso de otro evento (p.ej. de una comunidad suya),
+// el panel del front no debe cambiar en todo el día.
+router.get('/notifications/today-event', requireAuth, async (req, res) => {
+  try {
+    const { data: claim, error: claimError } = await supabase
+      .from('user_daily_notification_claims')
+      .select('event_id')
+      .eq('user_id', req.user.id)
+      .eq('claim_date', getNotificationDayKey())
+      .maybeSingle();
+
+    if (claimError) throw claimError;
+    if (!claim?.event_id) return res.json({ event: null });
+
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id, title, organization, community:communities!community_events_community_id_fkey(organization)')
+      .eq('id', claim.event_id)
+      .maybeSingle();
+
+    if (eventError || !event) return res.json({ event: null });
+
+    res.json({
+      event: {
+        id: event.id,
+        title: event.title,
+        organization: event.organization || event.community?.organization || null,
+      },
+    });
+  } catch (err) {
+    console.error('[community] GET /notifications/today-event error:', err);
+    res.status(500).json({ error: 'Error al comprobar el evento notificado hoy' });
+  }
+});
+
 // GET /api/community/events/:id/updates
 router.get('/events/:id/updates', requireAuth, async (req, res) => {
   const { id } = req.params;
