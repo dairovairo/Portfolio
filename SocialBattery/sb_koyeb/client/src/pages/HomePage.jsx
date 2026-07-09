@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../lib/api';
 import BatterySlider from '../components/BatterySlider';
@@ -376,6 +377,7 @@ export default function HomePage() {
   const { isLight } = useTheme();
   const navigate = useNavigate();
   const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
+  const { eventBanner } = useCommunityNotifications();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
   const [friends, setFriends] = useState([]);
@@ -628,6 +630,27 @@ export default function HomePage() {
           </div>
         </div>
       </nav>
+
+      {/* Panel superior: primer evento notificado hoy (perk Ultra) */}
+      {eventBanner && (
+        <div className="max-w-lg mx-auto px-4 pt-2">
+          <button
+            onClick={() => navigate(eventBanner.eventId ? `/community/event/${eventBanner.eventId}` : '/community')}
+            className="w-full flex items-center justify-between gap-3 rounded-xl border border-yellow-500/25 bg-yellow-500/10 px-3 py-2 text-left hover:bg-yellow-500/15 transition-colors"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base flex-shrink-0">🚀</span>
+              <div className="min-w-0">
+                <p className="text-xs font-display font-bold text-surface-text truncate">{eventBanner.title}</p>
+                {eventBanner.organization && (
+                  <p className="text-[10px] font-mono text-surface-muted truncate">{eventBanner.organization}</p>
+                )}
+              </div>
+            </div>
+            <span className="text-[10px] font-mono font-semibold text-yellow-300 whitespace-nowrap flex-shrink-0">¡Nuevo evento cerca!</span>
+          </button>
+        </div>
+      )}
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
