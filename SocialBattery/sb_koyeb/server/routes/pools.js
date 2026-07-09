@@ -519,7 +519,7 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
     const notifPayload = {
       title: `🎉 ${creatorName} propone una quedada`,
       body: `${activityLabel}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
-      url: '/pools',
+      url: `/pools?pool=${pool.id}`,
       tag: `new-pool-${pool.id}`,
     };
 
@@ -824,7 +824,7 @@ router.post('/:id/invite', requireAuth, async (req, res) => {
           notifyUsers(supabase, [user_id], userId, {
             title: `🤝 ${creatorName} te invita a una quedada`,
             body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
-            url: '/pools',
+            url: `/pools?pool=${poolId}`,
             tag: `pool-invite-${poolId}`,
           }),
           supabase.channel(`pool-notif-${user_id}`).send({
@@ -927,7 +927,7 @@ router.post('/:id/request-invite', requireAuth, async (req, res) => {
           notifyUsers(supabase, [pool.creator_id], userId, {
             title: '🙋 Nueva solicitud de invitación',
             body: `${requesterName} propone invitar a ${targetName} a "${pool.activity}"`,
-            url: '/pools',
+            url: `/pools?pool=${poolId}`,
             tag: `pool-join-request-${poolId}`,
           }),
           supabase.channel(`pool-notif-${pool.creator_id}`).send({
@@ -1012,7 +1012,7 @@ router.patch('/:id/join-requests/:requestId', requireAuth, async (req, res) => {
             notifyUsers(supabase, [request.requested_user_id], userId, {
               title: `🤝 ${creatorName} te invita a una quedada`,
               body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
-              url: '/pools',
+              url: `/pools?pool=${poolId}`,
               tag: `pool-invite-${poolId}`,
             }),
             supabase.channel(`pool-notif-${request.requested_user_id}`).send({

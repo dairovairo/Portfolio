@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import TutorialOverlay from '../components/TutorialOverlay';
 import { useAuth } from '../context/AuthContext';
@@ -1273,6 +1273,7 @@ function isActive(p) {
 export default function PoolsPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [pools, setPools] = useState([]);
   const [myCreated, setMyCreated] = useState([]);
@@ -1340,6 +1341,24 @@ export default function PoolsPage() {
   useEffect(() => {
     fetchPools(tab);
   }, [tab, fetchPools]);
+
+  // Deep-link desde notificación (push o in-app): ?pool=<id> abre directamente
+  // el detalle de esa quedada, sin depender de que ya esté cargada en la
+  // pestaña actual (funciona igual si es una quedada ajena/invitación nueva).
+  useEffect(() => {
+    const poolId = searchParams.get('pool');
+    if (!poolId) return;
+
+    api.get(`/pools/${poolId}`)
+      .then(({ pool: full }) => setDetailPool(full))
+      .catch(() => showToast('No se pudo abrir esa quedada', 'error'));
+
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('pool');
+      return next;
+    }, { replace: true });
+  }, [searchParams]);
 
   useEffect(() => {
     if (!profile?.id) return;

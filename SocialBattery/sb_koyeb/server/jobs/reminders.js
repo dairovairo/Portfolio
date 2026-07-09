@@ -119,7 +119,7 @@ async function notifyPoolsStartingSoon() {
         const pushPayload = {
           title: `⏰ Tu quedada empieza en ${leadLabel}`,
           body: `${activityLabel}${locationHint}`,
-          url: '/pools',
+          url: `/pools?pool=${pool.id}`,
           tag: `pool-reminder-${pool.id}-${minutes}`,
         };
 
@@ -190,14 +190,14 @@ async function notifyEventsStartingSoon() {
 
     for (const { event, groups } of dueEvents) {
       const communityName = event.community_id ? communityMap[event.community_id] || null : null;
-      const communityUrl = event.community_id ? `/community/${event.community_id}` : '/community';
+      const eventUrl = `/community/event/${event.id}`;
 
       for (const [minutes, userIds] of groups.entries()) {
         const leadLabel = formatReminderLead(minutes);
         const pushPayload = {
           title: `📅 Tu evento empieza en ${leadLabel}`,
           body: event.location ? `${event.title} · ${event.location}` : event.title,
-          url: communityUrl,
+          url: eventUrl,
           tag: `event-reminder-${event.id}-${minutes}`,
         };
 

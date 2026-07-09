@@ -342,7 +342,7 @@ export function useMessageNotifications(profile, settings) {
             title,
             body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
             tag: `pool-${pool.pool_id}`,
-            navigateTo: '/pools',
+            navigateTo: `/pools?pool=${pool.pool_id}`,
           });
         })
         .on('broadcast', { event: 'pool_join_request' }, (msg) => {
@@ -360,7 +360,7 @@ export function useMessageNotifications(profile, settings) {
             title: '🙋 Nueva solicitud de invitación',
             body: `${req.requester_name} propone invitar a ${req.target_name} a "${req.activity}"`,
             tag: `pool-join-request-${req.pool_id}`,
-            navigateTo: '/pools',
+            navigateTo: `/pools?pool=${req.pool_id}`,
           });
         })
         .subscribe();
@@ -384,27 +384,28 @@ export function useMessageNotifications(profile, settings) {
 
             const leadMinutes = data.minutes_left || 10;
             const leadLabel = formatReminderLead(leadMinutes);
+            const poolPath = `/pools?pool=${data.pool_id}`;
             if (!document.hidden && locationRef.current === '/pools') return;
             const poolBody = data.location ? `${data.activity} · ${data.location}` : data.activity;
             fireNotification({
               title: `⏰ Tu quedada empieza en ${leadLabel}`,
               body:  poolBody,
               tag:   `pool-reminder-${data.pool_id}-${leadMinutes}`,
-              navigateTo: '/pools',
+              navigateTo: poolPath,
             });
           } else if (data.type === 'event') {
             if (s.muteEventReminders) return;
 
             const leadMinutes = data.minutes_left || (data.hours_left ? data.hours_left * 60 : 24 * 60);
             const leadLabel = formatReminderLead(leadMinutes);
-            const communityPath = data.community_id ? '/community/' + data.community_id : '/community';
-            if (!document.hidden && locationRef.current === communityPath) return;
+            const eventPath = `/community/event/${data.event_id}`;
+            if (!document.hidden && locationRef.current === eventPath) return;
             const eventBody = data.location ? `${data.title} · ${data.location}` : data.title;
             fireNotification({
               title: `📅 Tu evento empieza en ${leadLabel}`,
               body:  eventBody,
               tag:   `event-reminder-${data.event_id}-${leadMinutes}`,
-              navigateTo: communityPath,
+              navigateTo: eventPath,
             });
           }
         })
