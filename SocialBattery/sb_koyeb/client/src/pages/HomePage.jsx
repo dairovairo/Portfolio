@@ -648,7 +648,15 @@ export default function HomePage() {
         >
           <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-between gap-3">
             <div className="min-w-0 flex items-center gap-2">
-              <span className="text-base flex-shrink-0" aria-hidden="true">📍</span>
+              {todayEvent.cover_image_url ? (
+                <img
+                  src={todayEvent.cover_image_url}
+                  alt=""
+                  className="w-7 h-7 rounded-lg object-cover flex-shrink-0 border border-surface-border"
+                />
+              ) : (
+                <span className="text-base flex-shrink-0" aria-hidden="true">📍</span>
+              )}
               <div className="min-w-0 leading-tight">
                 <p className="text-xs font-display font-semibold text-surface-text truncate">{todayEvent.title}</p>
                 {todayEvent.organization && (

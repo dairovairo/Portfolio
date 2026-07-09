@@ -368,4 +368,4 @@ async function runEventPromoPacingTick() {
   }
 }
 
-module.exports = { runEventPromoPacingTick };
+module.exports = { runEventPromoPacingTick, FREE_THRESHOLD };

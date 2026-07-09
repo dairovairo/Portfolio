@@ -725,6 +725,12 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                   🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
                 </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🔁 En cada promoción cada usuario se notifica una vez, para que usuarios ya notificados vuelvan a serlo, se debe renovar la promoción desde el evento creado.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  💶 La promoción se cobrará al empezar el evento automáticamente o al renovar la promoción.
+                </p>
               </>
             )}
           </div>
