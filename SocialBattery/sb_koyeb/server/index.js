@@ -229,15 +229,15 @@ app.get('/api/debug/notifications/captest', async (req, res) => {
 
     if (firstErr || secondErr) {
       report.ok = false;
-      report.verdict = 'ERROR — no se pudo escribir en user_daily_notification_claims. Mira error_code/error de arriba: si es 42501 es RLS (SUPABASE_SERVICE_KEY en Railway no es la service_role key real), si es 42P10 falta la restricción UNIQUE(user_id, claim_date) (la tabla existe con otra forma; haz DROP TABLE public.user_daily_notification_claims CASCADE; en el SQL Editor y vuelve a correr supabase_schema_phase71_notification_cap_reapply.sql), si es 42P01 la tabla no existe en absoluto.';
+      report.verdict = 'ERROR - no se pudo escribir en user_daily_notification_claims. Mira error_code/error de arriba: si es 42501 es RLS (SUPABASE_SERVICE_KEY en Railway no es la service_role key real), si es 42P10 falta la restriccion UNIQUE(user_id, claim_date) (la tabla existe con otra forma; haz DROP TABLE public.user_daily_notification_claims CASCADE en el SQL Editor y vuelve a correr supabase_schema_phase71_notification_cap_reapply.sql), si es 42P01 la tabla no existe en absoluto.';
     } else if (report.first_claim.won && !report.second_claim.won) {
-      report.verdict = 'OK — el tope diario funciona correctamente a nivel de base de datos: la primera reserva gana, la segunda queda bloqueada. Si en la app real sigues viendo 2 notificaciones el mismo día, la causa NO es esta tabla — revisa si hay más de un servicio/deploy activo en Railway respondiendo al cron (Settings → verifica que solo hay 1 servicio corriendo, no una versión vieja y una nueva a la vez).';
+      report.verdict = 'OK - el tope diario funciona correctamente a nivel de base de datos: la primera reserva gana, la segunda queda bloqueada. Si en la app real sigues viendo 2 notificaciones el mismo dia, la causa NO es esta tabla - revisa si hay mas de un servicio/deploy activo en Railway respondiendo al cron (Settings, verifica que solo hay 1 servicio corriendo, no una version vieja y una nueva a la vez).';
     } else if (report.first_claim.won && report.second_claim.won) {
       report.ok = false;
-      report.verdict = 'BUG CONFIRMADO — ambas reservas ganaron, es decir, el mismo usuario puede reservar el hueco del mismo día dos veces. La restricción UNIQUE(user_id, claim_date) no está realmente aplicada en la tabla, aunque no haya dado error. Haz DROP TABLE public.user_daily_notification_claims CASCADE; en el SQL Editor de Supabase y vuelve a correr supabase_schema_phase71_notification_cap_reapply.sql desde cero.';
+      report.verdict = 'BUG CONFIRMADO - ambas reservas ganaron, es decir, el mismo usuario puede reservar el hueco del mismo dia dos veces. La restriccion UNIQUE(user_id, claim_date) no esta realmente aplicada en la tabla, aunque no haya dado error. Haz DROP TABLE public.user_daily_notification_claims CASCADE en el SQL Editor de Supabase y vuelve a correr supabase_schema_phase71_notification_cap_reapply.sql desde cero.';
     } else {
       report.ok = false;
-      report.verdict = 'INESPERADO — ni siquiera la primera reserva ganó. Revisa first_claim.error arriba.';
+      report.verdict = 'INESPERADO - ni siquiera la primera reserva gano. Revisa first_claim.error arriba.';
     }
   } catch (err) {
     report.ok = false;
@@ -248,7 +248,7 @@ app.get('/api/debug/notifications/captest', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.11.0', phase: 11, timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: '1.11.0', phase: 11, build: 'notif-cap-fase72-captest', timestamp: new Date().toISOString() });
 });
 
 // ── Cron Jobs ──────────────────────────────────────────────────────────────
