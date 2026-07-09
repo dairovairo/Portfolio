@@ -602,32 +602,10 @@ export default function HomePage() {
         />
       )}
 
-      {/* Panel de evento notificado (arriba del todo) + top nav, dentro
-          del mismo contenedor sticky para que se fijen juntos al hacer scroll */}
+      {/* Top nav + panel de evento notificado, dentro del mismo
+          contenedor sticky para que se fijen juntos al hacer scroll.
+          El panel va DEBAJO del nav (no encima). */}
       <div className="sticky top-0 z-10 bg-surface-bg/90 backdrop-blur-xl">
-      {notifiedEvent && (
-        <button
-          type="button"
-          onClick={() => navigate(`/community/event/${notifiedEvent.id}`)}
-          className="w-full block border-b border-surface-border/60 bg-surface-card/40 hover:bg-surface-hover transition-colors text-left animate-slide-down"
-        >
-          <div className="max-w-lg mx-auto px-4 py-2 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-surface-hover flex-shrink-0 flex items-center justify-center">
-              {notifiedEvent.cover_image_url
-                ? <img src={notifiedEvent.cover_image_url} alt="" className="w-full h-full object-cover" />
-                : <span className="text-sm" aria-hidden="true">📅</span>
-              }
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-surface-text truncate">{notifiedEvent.title}</p>
-              {notifiedEvent.company_name && (
-                <p className="text-[11px] text-surface-muted truncate">{notifiedEvent.company_name}</p>
-              )}
-            </div>
-            <span className="text-surface-muted text-xs flex-shrink-0" aria-hidden="true">›</span>
-          </div>
-        </button>
-      )}
       <nav className="border-b border-surface-border">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -664,6 +642,34 @@ export default function HomePage() {
           </div>
         </div>
       </nav>
+      {notifiedEvent && (
+        <button
+          type="button"
+          onClick={() => navigate(`/community/event/${notifiedEvent.id}`)}
+          className="w-full block border-b border-surface-border/60 bg-surface-card/40 hover:bg-surface-hover transition-colors text-left animate-slide-down"
+        >
+          {/* Medidas ~10% mayores que un panel "fino" estándar (py-2 → 8.8px,
+              icono 32px → 35px, título 12px → 13px, empresa 11px → 12px) */}
+          <div className="max-w-lg mx-auto px-4 py-[8.8px] flex items-center gap-[11px]">
+            <div className="w-[35px] h-[35px] rounded-lg overflow-hidden bg-surface-hover flex-shrink-0 flex items-center justify-center">
+              {notifiedEvent.cover_image_url
+                ? <img src={notifiedEvent.cover_image_url} alt="" className="w-full h-full object-cover" />
+                : <span className="text-[15px]" aria-hidden="true">📅</span>
+              }
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-surface-text truncate">{notifiedEvent.title}</p>
+              {notifiedEvent.company_name && (
+                <p className="text-[12px] text-surface-muted truncate">{notifiedEvent.company_name}</p>
+              )}
+            </div>
+            <span className="flex items-center gap-1 text-[12px] font-semibold text-accent-primary flex-shrink-0 whitespace-nowrap">
+              ¡Nuevo evento cerca!
+              <span aria-hidden="true">›</span>
+            </span>
+          </div>
+        </button>
+      )}
       </div>
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
