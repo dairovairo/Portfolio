@@ -52,6 +52,30 @@ function fireLocalNotification({ title, body, tag, url }) {
   } catch { /* progressive enhancement */ }
 }
 
+// ── Tope de 1 notificación local/día (salvo evento de tu propia comunidad) ──
+// Este listener de Realtime dispara notificaciones locales al instante y en
+// paralelo al webpush del backend (que sí respeta el tope de 1/día vía
+// user_daily_notification_claims). Sin esto, cada evento ultra/premium que
+// se crea dispara un aviso local aparte, sin ningún límite — que es
+// exactamente el bug: varios eventos cualquiera notificando el mismo día.
+// Usamos la misma clave de día (UTC) que el backend (notificationDay.js)
+// para que el criterio de "hoy" sea el mismo.
+const DAILY_LOCAL_NOTIF_KEY = 'sb_daily_local_notif_claim';
+
+function getLocalDayKey() {
+  return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+}
+
+function hasClaimedLocalNotifToday() {
+  try {
+    return localStorage.getItem(DAILY_LOCAL_NOTIF_KEY) === getLocalDayKey();
+  } catch { return false; }
+}
+
+function claimLocalNotifToday() {
+  try { localStorage.setItem(DAILY_LOCAL_NOTIF_KEY, getLocalDayKey()); } catch {}
+}
+
 // ── Serialize / deserialize el mapa { communityId -> count } ─────────────────
 function loadByComMap() {
   try {
@@ -175,6 +199,13 @@ export function CommunityNotificationsProvider({ children }) {
           //   b) Plan básico → solo miembros de la comunidad del evento
           if (!isUltraOrPremium && !isMember) return;
 
+          // Tope de 1 notificación local/día, salvo que el evento sea de una
+          // comunidad del usuario (excepción explícita, igual que en el
+          // backend): esos SIEMPRE notifican. Un evento genérico ultra/premium
+          // que no sea de "tu" comunidad, en cambio, solo dispara aviso si hoy
+          // todavía no se ha disparado ninguno.
+          if (!isMember && hasClaimedLocalNotifToday()) return;
+
           // Incrementar badge solo si el evento pertenece a una comunidad conocida del usuario
           // (los ultra/premium sin comunidad no generan badge de comunidad, solo notificación)
           if (isMember) {
@@ -190,6 +221,7 @@ export function CommunityNotificationsProvider({ children }) {
           if (plan === 'ultra') {
             // ultra y premium también respetan muteEventRecommendations
             if (settings.muteEventRecommendations) return;
+            claimLocalNotifToday();
             fireLocalNotification({
               title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡No te lo pierdas!`,
@@ -200,6 +232,7 @@ export function CommunityNotificationsProvider({ children }) {
             });
           } else if (plan === 'premium') {
             if (settings.muteEventRecommendations) return;
+            claimLocalNotifToday();
             fireLocalNotification({
               title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
@@ -220,6 +253,7 @@ export function CommunityNotificationsProvider({ children }) {
               if (comm?.name) communityLabel = comm.name;
             } catch {}
 
+            claimLocalNotifToday();
             fireLocalNotification({
               title: `📅 Nuevo evento en ${communityLabel}`,
               body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
