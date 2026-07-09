@@ -68,14 +68,20 @@ async function sendPushToSubscription(sub, payload) {
       pushPayload,
       { TTL: 86400 } // 24 h
     );
+    return { expired: false, success: true };
   } catch (err) {
     // 410 Gone = subscription expired / revoked → caller should delete it
     if (err.statusCode === 410 || err.statusCode === 404) {
-      return { expired: true, endpoint: sub.endpoint };
+      return { expired: true, success: false, endpoint: sub.endpoint };
     }
+    // BUG (fase 70→71): antes esta rama caía al `return { expired: false }`
+    // final sin marcar el fallo, así que un error real de envío (400/403/
+    // 5xx, etc.) se contabilizaba como "éxito" en notifyUsers/dispatchToEvent
+    // → el usuario quedaba marcado como "notificado hoy" (hueco diario
+    // gastado + fila en event_promo_notifications) SIN haber recibido nada.
     console.warn('[webpush] sendNotification error:', err.statusCode || err.message);
+    return { expired: false, success: false };
   }
-  return { expired: false };
 }
 
 
@@ -112,7 +118,7 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
       subs.map(async sub => {
         const result = await sendPushToSubscription(sub, payload);
         if (result?.expired) expiredEndpoints.push(sub.endpoint);
-        else if (result) successfulUserIds.add(sub.user_id);
+        else if (result?.success) successfulUserIds.add(sub.user_id);
       })
     );
 

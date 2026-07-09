@@ -7,6 +7,7 @@ const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 const { getNotificationDayKey } = require('../lib/notificationDay');
+const { runEventPromoPacingTick } = require('../jobs/eventPromoPacing');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -377,6 +378,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
 
           const communityMemberIds = members?.map(m => m.user_id) || [];
           const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
+          console.log(`[NOTIF-CAP] evento ${event.id} ("${event.title}") es de comunidad ${communityId}: ${communityMemberIds.length} miembros a notificar SIEMPRE (excepción al tope diario).`);
 
           const notifiedUserIds = await notifyUsers(supabase, communityMemberIds, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
@@ -384,6 +386,8 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
             url:   `/community/event/${event.id}`,
             tag:   `community-event-${event.id}`,
           });
+
+          console.log(`[NOTIF-CAP] evento ${event.id}: push de comunidad entregado a ${notifiedUserIds?.length || 0}/${communityMemberIds.length} miembros.`);
 
           if (notifiedUserIds?.length) {
             const { error: logError } = await supabase
@@ -403,16 +407,37 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
             // "insertar e ignorar si ya existe" basta: da igual si dos
             // cosas intentan marcar el mismo (user_id, día) a la vez, la
             // UNIQUE de Postgres se encarga de que quede una sola fila.
-            const { error: claimError } = await supabase
+            const { error: claimError, data: claimRows } = await supabase
               .from('user_daily_notification_claims')
               .upsert(
                 notifiedUserIds.map(uid => ({ user_id: uid, claim_date: getNotificationDayKey(), event_id: event.id })),
                 { onConflict: 'user_id,claim_date', ignoreDuplicates: true }
-              );
+              )
+              .select('user_id');
             if (claimError) {
-              console.warn('[community] error reservando hueco diario tras aviso de comunidad:', claimError.message);
+              // Si esto falla sistemáticamente (p.ej. la tabla no existe
+              // porque la migración de fase 70 no se llegó a ejecutar en
+              // Supabase, o SUPABASE_SERVICE_KEY no es la service_role key
+              // real y RLS está bloqueando el insert), el hueco diario de
+              // estos usuarios NUNCA queda reservado y por tanto pueden
+              // recibir además una notificación no relacionada el mismo
+              // día vía server/jobs/eventPromoPacing.js — este log es la
+              // señal a buscar en Railway si el tope no se respeta.
+              console.error('[NOTIF-CAP] ⚠️ error reservando hueco diario tras aviso de comunidad (revisar migración fase70 / SUPABASE_SERVICE_KEY):', claimError.message);
+            } else {
+              console.log(`[NOTIF-CAP] evento ${event.id}: hueco diario reservado para ${claimRows?.length || 0} usuarios.`);
             }
           }
+        }
+
+        // Premium/Ultra: en vez de esperar hasta 5 min al siguiente tick del
+        // cron (server/jobs/eventPromoPacing.js), disparamos un tick ahora
+        // mismo para que el reparto empiece de inmediato. El cron sigue
+        // corriendo cada 5 min para continuar repartiendo lo que falte hasta
+        // el inicio del evento — esto solo adelanta el primer envío.
+        if (resolvedPlan === 'premium' || resolvedPlan === 'ultra') {
+          console.log(`[NOTIF-CAP] evento ${event.id} es ${resolvedPlan}, disparando tick de pacing inmediato...`);
+          await runEventPromoPacingTick();
         }
       } catch (err) {
         console.warn('[community] event push notification error:', err.message);

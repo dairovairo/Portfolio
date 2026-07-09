@@ -187,7 +187,7 @@ async function dispatchToEvent(event, users, dayKey) {
         u.subs.map(async (sub) => {
           const result = await sendPushToSubscription(sub, payload);
           if (result?.expired) expiredEndpoints.push(sub.endpoint);
-          else if (result) anySuccess = true;
+          else if (result?.success) anySuccess = true;
         })
       );
       if (anySuccess) successfulUserIds.push(u.userId);
@@ -266,8 +266,17 @@ async function runEventPromoPacingTick() {
       .from('user_daily_notification_claims')
       .select('user_id')
       .eq('claim_date', dayKey);
-    if (notifiedError) { console.error('[PROMO-PACING] error consultando reservas de hoy:', notifiedError); return; }
+    if (notifiedError) {
+      // Si user_daily_notification_claims no existe (migración fase70 no
+      // ejecutada) o SUPABASE_SERVICE_KEY no es la service_role real, esta
+      // consulta falla y CORTAMOS el tick entero aquí — no se envía nada,
+      // no se "salta" el tope. Si en producción ves eventos premium/ultra
+      // que nunca reciben push, este es el primer log a buscar.
+      console.error('[NOTIF-CAP][PROMO-PACING] ⚠️ error consultando reservas de hoy (revisar migración fase70 / SUPABASE_SERVICE_KEY):', notifiedError);
+      return;
+    }
     const notifiedTodaySet = new Set((claimedToday || []).map(r => r.user_id));
+    console.log(`[NOTIF-CAP][PROMO-PACING] tick ${dayKey}: ${pending.length} eventos pendientes, ${notifiedTodaySet.size} usuarios ya con hueco de hoy reservado (excluidos de este tick).`);
 
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
