@@ -1,5 +1,5 @@
-// SocialBattery Service Worker — Phase 11 (mascot avatar pools)
-const CACHE_NAME = 'socialbattery-v11';
+// SocialBattery Service Worker — Phase 12 (soft in-app navigation on notification click)
+const CACHE_NAME = 'socialbattery-v12';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell
@@ -83,21 +83,34 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Notification click → open/focus app at the event URL
+// Notification click → open/focus app at the event/pool/chat URL.
+//
+// IMPORTANTE: si la app ya está abierta (pestaña o PWA en segundo plano),
+// NO usamos client.navigate() — eso fuerza una recarga completa de
+// documento a esa URL exacta, y si el hosting estático no tiene un rewrite
+// SPA (servir index.html para cualquier ruta), esa recarga cae en un 404 o
+// termina redirigida a "/", que es justo el síntoma de "todas las
+// notificaciones me llevan al menú principal". En su lugar, le mandamos un
+// postMessage a la app ya viva para que navegue con React Router (sin
+// recarga, sin depender del hosting) — ver el listener en App.jsx.
+// Solo si NO hay ninguna ventana abierta usamos clients.openWindow(), que
+// sí es una carga completa (inevitable para arrancar la app desde cero) y
+// por tanto sí depende de que el hosting sirva index.html en esa ruta.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/community';
+  const targetUrl = event.notification.data?.url || '/';
 
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.focus();
-          client.navigate(targetUrl);
-          return;
-        }
+  event.waitUntil((async () => {
+    const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+
+    for (const client of clientList) {
+      if (client.url.includes(self.location.origin) && 'focus' in client) {
+        await client.focus();
+        client.postMessage({ type: 'sb-notification-click', url: targetUrl });
+        return;
       }
-      if (clients.openWindow) return clients.openWindow(targetUrl);
-    })
-  );
+    }
+
+    if (clients.openWindow) return clients.openWindow(targetUrl);
+  })());
 });

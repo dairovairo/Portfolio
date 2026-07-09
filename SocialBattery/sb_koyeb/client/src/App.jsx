@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
@@ -30,6 +31,24 @@ import MascotPreviewSync from './components/MascotPreviewSync';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
+  const navigate = useNavigate();
+
+  // El Service Worker (sw.js → notificationclick) nos manda esta URL cuando
+  // el usuario toca una notificación con la app ya abierta, en vez de hacer
+  // una recarga completa (client.navigate), para no depender de que el
+  // hosting estático tenga configurado un rewrite SPA para rutas profundas.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    function handleMessage(event) {
+      if (event.data?.type === 'sb-notification-click' && event.data.url) {
+        navigate(event.data.url);
+      }
+    }
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+  }, [navigate]);
 
   if (isLoading) {
     return (
