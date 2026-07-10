@@ -26,9 +26,18 @@ import { supabase } from '../lib/supabase';
  * contexto, en cambio, dependía solo de postgres_changes sobre
  * pool_invitees, que por lo visto no llega de forma fiable (¿RLS de
  * Realtime sin política de SELECT para el invitado en esa tabla?). Como
- * red fiable añadimos el mismo broadcast personal `pool-notif-{userId}`
- * que ya usa el servidor (server/routes/pools.js) para el push — ese
- * canal usa la service key y no depende de RLS, así que sí llega siempre.
+ * red fiable escuchamos también el evento de window 'sb-pool-invite', que
+ * useMessageNotifications.js emite al recibir el broadcast personal
+ * `pool-notif-{userId}` que el servidor ya usa para el push (ese canal usa
+ * la service key y no depende de RLS, así que sí llega siempre).
+ *
+ * IMPORTANTE: NO abrir aquí un canal de Supabase con el mismo nombre
+ * `pool-notif-{userId}` — ese canal ya lo abre y suscribe
+ * useMessageNotifications.js, y Supabase reutiliza el canal existente si el
+ * topic coincide; un segundo .subscribe() sobre el mismo objeto rompe la
+ * suscripción entera (así se rompió el badge la primera vez que se intentó
+ * este fix). Por eso el punto de enganche aquí es el evento de window, no
+ * un canal nuevo.
  */
 const PoolInviteNotificationsContext = createContext({
   poolInviteBadgeCount: 0,
@@ -44,7 +53,6 @@ export function PoolInviteNotificationsProvider({ children }) {
   const [count, setCount] = useState(0);
   const refreshTimerRef = useRef(null);
   const channelRef = useRef(null);
-  const broadcastChannelRef = useRef(null);
 
   const refreshPoolInviteBadge = useCallback(async () => {
     if (!profile?.id) { setCount(0); return; }
@@ -87,24 +95,19 @@ export function PoolInviteNotificationsProvider({ children }) {
         (payload) => { if (payload.old?.user_id === profile.id) scheduleRefresh(); })
       .subscribe();
 
-    // Canal personal por broadcast (service key, sin RLS) — el mismo que usa
-    // el servidor para el push de "te invitan a una quedada" (ver
-    // broadcastToUsers/notifyUsers en server/routes/pools.js). A diferencia
-    // de postgres_changes sobre pool_invitees, este SIEMPRE llega, así que
-    // es la señal fiable para refrescar el badge del dock al instante.
-    const broadcastChannel = supabase
-      .channel(`pool-notif-${profile.id}`)
-      .on('broadcast', { event: 'new_pool' }, () => scheduleRefresh())
-      .subscribe();
+    // Evento de window emitido por useMessageNotifications.js cuando llega el
+    // broadcast personal `pool-notif-{userId}` (mismo canal que usa el push
+    // del servidor, sin depender de RLS). No abrimos un canal de Supabase
+    // aquí a propósito — ver comentario del bloque de arriba del archivo.
+    const handleInviteBroadcast = () => scheduleRefresh();
+    window.addEventListener('sb-pool-invite', handleInviteBroadcast);
 
     channelRef.current = channel;
-    broadcastChannelRef.current = broadcastChannel;
 
     return () => {
       supabase.removeChannel(channel);
-      supabase.removeChannel(broadcastChannel);
+      window.removeEventListener('sb-pool-invite', handleInviteBroadcast);
       channelRef.current = null;
-      broadcastChannelRef.current = null;
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;

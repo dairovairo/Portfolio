@@ -318,18 +318,28 @@ export function useMessageNotifications(profile, settings) {
       }
 
       // ── 6 & 7. Quedadas (públicas de amigos + invitaciones privadas) ──────────
-      // BUG (arreglado): esto disparaba una notificación local (fireNotification)
+      // BUG #1 (arreglado): esto disparaba una notificación local (fireNotification)
       // cada vez que llegaba el broadcast 'new_pool' / 'pool_join_request' — pero
       // el servidor YA envía un webpush real para ese mismo evento en paralelo
       // (ver notifyUsers + broadcastToUsers en server/routes/pools.js), y ese
       // push llega igual con la app en foreground o background/cerrada. El
-      // resultado eran 2 notificaciones por cada invitación a una quedada.
-      // Dejamos el canal suscrito (sin acción) por si en el futuro se necesita
-      // para actualizar UI en vivo sin generar una notificación del sistema;
-      // el badge del dock ya se refresca de forma independiente a través de
-      // PoolInviteNotificationsContext, que escucha este mismo canal.
+      // resultado eran 2 notificaciones por cada invitación a una quedada. Se
+      // quitó fireNotification de aquí; el push del servidor es ahora la única
+      // notificación del sistema para este evento.
+      //
+      // BUG #2 (arreglado): este es el ÚNICO sitio del cliente que debe abrir el
+      // canal `pool-notif-{userId}` — Supabase reutiliza el canal si el topic ya
+      // existe, así que abrir un SEGUNDO canal con el mismo nombre en otro
+      // componente (como se probó en PoolInviteNotificationsContext) reutiliza
+      // este mismo objeto y su segundo .subscribe() rompe la suscripción
+      // entera (ni el badge ni nada más vuelve a recibir eventos). En vez de
+      // eso, este handler emite un evento de window para que otros
+      // componentes (el badge del dock) se enteren sin tocar Supabase.
       const poolBroadcastCh = supabase
         .channel(`pool-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_pool' }, (msg) => {
+          window.dispatchEvent(new CustomEvent('sb-pool-invite', { detail: msg.payload }));
+        })
         .subscribe();
       channels.push(poolBroadcastCh);
 
