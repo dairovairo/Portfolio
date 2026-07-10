@@ -2017,6 +2017,40 @@ export default function ShopPage() {
               previewTier={previewTier}
             />
 
+            {/* Carrusel: Riñoneras — elige una.
+                Subido aquí arriba, junto al resto de carruseles horizontales
+                de accesorios (antes quedaba el último, pegado a la rejilla
+                de "resto de accesorios", separado visualmente del grupo). */}
+            {rinonAccessories.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    Riñoneras · elige una
+                  </div>
+                  <CarouselPersonalizeButton
+                    family={rinonAccessories}
+                    unlockedSet={unlockedAccessories}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(rinonAccessories))}
+                    onLocked={showLockedCustomizeToast}
+                  />
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {[baseRinon, ...rinonAccessories].filter(Boolean).map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Carrusel: Corbatas — elige una. La opción "Sin corbata" va
                 como primera tarjeta del propio carrusel (con preview de la
                 mascota sin corbata), en vez de un botón de reset aparte. */}
@@ -2155,37 +2189,6 @@ export default function ShopPage() {
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseGlasses, ...glassesAccessories].filter(Boolean).map(accessory => (
-                    <CompactAccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={isAccessoryCardActive(accessory)}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onToggle={() => handleToggleAccessory(accessory)}
-                      previewTier={previewTier}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Carrusel: Riñoneras — elige una */}
-            {rinonAccessories.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between px-0.5 mb-1.5">
-                  <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    Riñoneras · elige una
-                  </div>
-                  <CarouselPersonalizeButton
-                    family={rinonAccessories}
-                    unlockedSet={unlockedAccessories}
-                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(rinonAccessories))}
-                    onLocked={showLockedCustomizeToast}
-                  />
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {[baseRinon, ...rinonAccessories].filter(Boolean).map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
                       accessory={accessory}

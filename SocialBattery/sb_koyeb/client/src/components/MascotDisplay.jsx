@@ -438,19 +438,17 @@ export default function MascotDisplay({
         // PNG 900×900 normalizado: la riñonera ocupa aprox. el 93% del ancho
         // del lienzo y está centrada. Se escala y posiciona para quedar en
         // la cadera de la mascota.
-        // Tamaño base: width=126%, height=49% (aumentado un 40% respecto al
-        // ajuste inicial de 90%/35%). left=-13% para centrar.
-        // top base=62%; las variantes con rinonOffsetY suman ese valor al top.
-        // Ajuste posterior: subida un 5%, movida a la derecha un 20% y
-        // agrandada un 15% (manteniendo el mismo centro visual que antes de
-        // agrandar, igual que se hizo con la pajarita — left/top recalculados
-        // para que el 15% extra crezca desde el centro, no desde la esquina).
-        // Centro anterior: cx=50 (=-13+126/2), cy=86.5 (=62+49/2).
-        // Nuevo centro tras subir 5 y mover 20 a la derecha: cx=70, cy=81.5.
-        // Nuevo tamaño: width=144.9% (126*1.15), height=56.35% (49*1.15).
-        // Nuevo left = cx - width/2 = -2.45; nuevo top base = cy - height/2 = 53.325.
+        // Tamaño base original: width=126%, height=49%, left=-13%, top=62%.
+        // Ajuste 1: subida 5%, derecha 20%, +15% tamaño (recentrado desde el
+        // centro anterior 50,86.5 → nuevo centro 70,81.5). Resultado:
+        // left=-2.45, top=53.325, width=144.9, height=56.35.
+        // Ajuste 2: otros 3% a la derecha y +5% tamaño más (recentrado desde
+        // el centro del ajuste 1, 70,81.5 → tras mover 73,81.5). Resultado:
+        // left=-3.0725, top=51.91625, width=152.145, height=59.1675.
+        // top base final=51.91625%; las variantes con rinonOffsetY suman ese
+        // valor al top.
         if (acc.isRinon) {
-          const rinonTop = 53.325 + (acc.rinonOffsetY ?? 0);
+          const rinonTop = 51.91625 + (acc.rinonOffsetY ?? 0);
           return (
             <ColorizedImage
               key={acc.id}
@@ -460,10 +458,10 @@ export default function MascotDisplay({
               draggable={false}
               className="absolute select-none pointer-events-none"
               style={{
-                left: '-2.45%',
-                width: '144.9%',
+                left: '-3.0725%',
+                width: '152.145%',
                 top: `${rinonTop}%`,
-                height: '56.35%',
+                height: '59.1675%',
                 objectFit: 'contain',
                 objectPosition: 'center',
               }}
