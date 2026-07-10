@@ -1029,13 +1029,19 @@ function CreateEventModal({ onClose, onCreate }) {
                   </p>
                 </div>
                 <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  💳 El pago se efectuará tras el inicio del evento, en base a las notificaciones enviadas hasta su comienzo.
+                  💳 Se aplicará una retención al comenzar la promoción; el pago se efectuará al finalizar la promoción, al renovarla o en su defecto, al empezar el evento, en base a las notificaciones enviadas hasta ese momento.
                 </p>
                 <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                   📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
                 </p>
                 <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                   🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🔁 Se notificará como máximo una vez a cada usuario dentro de una misma promoción; para repetir notificaciones a usuarios se deberá crear otra promoción.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📍 Todas las notificaciones se reparten mediante algoritmos basados en intereses y ubicación.
                 </p>
               </>
             )}

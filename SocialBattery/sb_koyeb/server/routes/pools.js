@@ -513,18 +513,18 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
   if (!Array.isArray(invitedIds)) invitedIds = [];
 
   if (!activity?.trim()) return res.status(400).json({ error: 'activity is required' });
-  if (!scheduled_at) return res.status(400).json({ error: 'scheduled_at is required' });
+  if (!scheduled_at) return res.status(400).json({ error: 'La fecha es obligatoria' });
   const startDate = new Date(scheduled_at);
   if (Number.isNaN(startDate.getTime())) {
-    return res.status(400).json({ error: 'scheduled_at is not valid' });
+    return res.status(400).json({ error: 'La fecha no es válida' });
   }
   if (startDate <= new Date()) {
-    return res.status(400).json({ error: 'scheduled_at must be in the future' });
+    return res.status(400).json({ error: 'La fecha debe ser en el futuro' });
   }
   // La fecha de inicio no puede quedar a más de un año de la creación de la quedada.
   const maxPoolStartDate = addYears(new Date(), 1);
   if (startDate > maxPoolStartDate) {
-    return res.status(400).json({ error: 'scheduled_at no puede ser más de un año después de la creación de la quedada' });
+    return res.status(400).json({ error: 'La fecha de inicio no puede ser más de un año después de la creación de la quedada' });
   }
   const location = location_hint?.trim();
   if (!location) return res.status(400).json({ error: 'location_hint is required' });
@@ -533,15 +533,15 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
   if (ends_at) {
     const endDate = new Date(ends_at);
     if (Number.isNaN(endDate.getTime())) {
-      return res.status(400).json({ error: 'ends_at is not valid' });
+      return res.status(400).json({ error: 'La fecha fin no es válida' });
     }
     if (endDate <= startDate) {
-      return res.status(400).json({ error: 'ends_at must be after scheduled_at' });
+      return res.status(400).json({ error: 'La fecha fin debe ser posterior al inicio' });
     }
     // La fecha de fin no puede quedar a más de un día de la fecha de inicio.
     const maxPoolEndDate = addDays(startDate, 1);
     if (endDate > maxPoolEndDate) {
-      return res.status(400).json({ error: 'ends_at no puede ser más de un día después de scheduled_at' });
+      return res.status(400).json({ error: 'La fecha fin no puede ser más de un día después del inicio' });
     }
     endDateIso = endDate.toISOString();
   }
@@ -1210,12 +1210,12 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if (scheduled_at !== undefined) {
       const startDate = new Date(scheduled_at);
       if (Number.isNaN(startDate.getTime())) {
-        return res.status(400).json({ error: 'scheduled_at is not valid' });
+        return res.status(400).json({ error: 'La fecha no es válida' });
       }
       // La fecha de inicio no puede quedar a más de un año de la creación de la quedada.
       const maxPoolStartDate = addYears(new Date(pool.created_at), 1);
       if (startDate > maxPoolStartDate) {
-        return res.status(400).json({ error: 'scheduled_at no puede ser más de un año después de la creación de la quedada' });
+        return res.status(400).json({ error: 'La fecha de inicio no puede ser más de un año después de la creación de la quedada' });
       }
       updates.scheduled_at = startDate.toISOString();
     }
@@ -1226,15 +1226,15 @@ router.patch('/:id', requireAuth, async (req, res) => {
       } else {
         const endDate = new Date(ends_at);
         if (Number.isNaN(endDate.getTime())) {
-          return res.status(400).json({ error: 'ends_at is not valid' });
+          return res.status(400).json({ error: 'La fecha fin no es válida' });
         }
         if (endDate <= referenceStart) {
-          return res.status(400).json({ error: 'ends_at must be after scheduled_at' });
+          return res.status(400).json({ error: 'La fecha fin debe ser posterior al inicio' });
         }
         // La fecha de fin no puede quedar a más de un día de la fecha de inicio.
         const maxPoolEndDate = addDays(referenceStart, 1);
         if (endDate > maxPoolEndDate) {
-          return res.status(400).json({ error: 'ends_at no puede ser más de un día después de scheduled_at' });
+          return res.status(400).json({ error: 'La fecha fin no puede ser más de un día después del inicio' });
         }
         updates.ends_at = endDate.toISOString();
       }
