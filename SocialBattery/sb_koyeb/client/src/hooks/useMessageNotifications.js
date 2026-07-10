@@ -318,51 +318,18 @@ export function useMessageNotifications(profile, settings) {
       }
 
       // ── 6 & 7. Quedadas (públicas de amigos + invitaciones privadas) ──────────
-      // El servidor emite un broadcast al canal personal `pool-notif-{userId}`
-      // con la service key (sin RLS), cubriendo ambos casos: pool pública de amigo
-      // y pool privada donde el usuario está invitado individualmente o via grupo.
+      // BUG (arreglado): esto disparaba una notificación local (fireNotification)
+      // cada vez que llegaba el broadcast 'new_pool' / 'pool_join_request' — pero
+      // el servidor YA envía un webpush real para ese mismo evento en paralelo
+      // (ver notifyUsers + broadcastToUsers en server/routes/pools.js), y ese
+      // push llega igual con la app en foreground o background/cerrada. El
+      // resultado eran 2 notificaciones por cada invitación a una quedada.
+      // Dejamos el canal suscrito (sin acción) por si en el futuro se necesita
+      // para actualizar UI en vivo sin generar una notificación del sistema;
+      // el badge del dock ya se refresca de forma independiente a través de
+      // PoolInviteNotificationsContext, que escucha este mismo canal.
       const poolBroadcastCh = supabase
         .channel(`pool-notif-${profile.id}`)
-        .on('broadcast', { event: 'new_pool' }, (msg) => {
-          const s = settingsRef.current;
-          if (s.muteAllNotifications || s.muteNewPools) return;
-
-          const pool = msg.payload;
-          if (!pool?.pool_id) return;
-          if (pool.creator_id === profile.id) return;
-
-          if (!document.hidden && locationRef.current === '/pools') return;
-
-          const creatorName = pool.creator_name || 'Un amigo';
-          const title = pool.is_public
-            ? `🎉 ${creatorName} propone una quedada`
-            : `🤝 ${creatorName} te invita a una quedada`;
-
-          fireNotification({
-            title,
-            body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
-            tag: `pool-${pool.pool_id}`,
-            navigateTo: `/pools?pool=${pool.pool_id}`,
-          });
-        })
-        .on('broadcast', { event: 'pool_join_request' }, (msg) => {
-          // Un miembro de una quedada privada propone invitar a un amigo —
-          // solo llega al creador (mismo canal personal que new_pool).
-          const s = settingsRef.current;
-          if (s.muteAllNotifications || s.muteNewPools) return;
-
-          const req = msg.payload;
-          if (!req?.pool_id) return;
-
-          if (!document.hidden && locationRef.current === '/pools') return;
-
-          fireNotification({
-            title: '🙋 Nueva solicitud de invitación',
-            body: `${req.requester_name} propone invitar a ${req.target_name} a "${req.activity}"`,
-            tag: `pool-join-request-${req.pool_id}`,
-            navigateTo: `/pools?pool=${req.pool_id}`,
-          });
-        })
         .subscribe();
       channels.push(poolBroadcastCh);
 
