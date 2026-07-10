@@ -159,6 +159,21 @@ async function broadcastPoolChatMessage({ poolId, senderId, senderName, content,
   }
 }
 
+// Construye el resumen de una encuesta (recuentos por opción + voto propio)
+// a partir de las opciones y las filas de pool_message_poll_votes de esa
+// encuesta. Mismo criterio que buildPollSummary en routes/community.js.
+function buildPollSummary(pollOptions, voteRows, userId) {
+  const options = Array.isArray(pollOptions) ? pollOptions : [];
+  const votes = options.map(() => 0);
+  let myVote = null;
+  for (const v of voteRows) {
+    if (v.option_index >= 0 && v.option_index < votes.length) votes[v.option_index] += 1;
+    if (v.user_id === userId) myVote = v.option_index;
+  }
+  const totalVotes = votes.reduce((a, b) => a + b, 0);
+  return { options, votes, totalVotes, myVote };
+}
+
 /** Builds participant preview (up to 6) for the feed */
 function buildParticipantPreview(rawParticipants) {
   return (rawParticipants || [])
@@ -1274,7 +1289,7 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
     const { data, error } = await supabase
       .from('pool_messages')
       .select(`
-        id, content, type, created_at,
+        id, content, type, poll_options, created_at,
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('pool_id', poolId)
@@ -1282,6 +1297,25 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .limit(limit);
 
     if (error) throw error;
+
+    // Adjunta el recuento de votos a los mensajes que son encuestas
+    const pollMessages = (data || []).filter(m => m.type === 'poll');
+    if (pollMessages.length) {
+      const pollIds = pollMessages.map(m => m.id);
+      const { data: voteRows } = await supabase
+        .from('pool_message_poll_votes')
+        .select('message_id, user_id, option_index')
+        .in('message_id', pollIds);
+
+      const votesByMessage = new Map();
+      for (const v of voteRows || []) {
+        if (!votesByMessage.has(v.message_id)) votesByMessage.set(v.message_id, []);
+        votesByMessage.get(v.message_id).push(v);
+      }
+      for (const m of pollMessages) {
+        m.poll = buildPollSummary(m.poll_options, votesByMessage.get(m.id) || [], userId);
+      }
+    }
 
     // Fecha en la que este usuario vació el chat (solo afecta a su propia vista)
     const { data: clearData } = await supabase
@@ -1452,6 +1486,200 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
   } catch (e) {
     console.error('[POOLS] image upload error:', e);
     return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
+  }
+});
+
+// ── POST /api/pools/:id/polls — crear una encuesta en el chat ───────────────
+// Cualquier apuntado a la quedada puede crear encuestas (a diferencia de las
+// encuestas de eventos de comunidad, donde solo el organizador puede).
+router.post('/:id/polls', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const question = (req.body?.question || '').trim();
+  const rawOptions = Array.isArray(req.body?.options) ? req.body.options : [];
+  const options = rawOptions.map(o => (o || '').trim()).filter(Boolean);
+
+  if (!question) return res.status(400).json({ error: 'Escribe una pregunta para la encuesta' });
+  if (question.length > 200) return res.status(400).json({ error: 'La pregunta es demasiado larga (máx. 200)' });
+  if (options.length < 2) return res.status(400).json({ error: 'Añade al menos 2 opciones' });
+  if (options.length > 4) return res.status(400).json({ error: 'Máximo 4 opciones' });
+  if (options.some(o => o.length > 60)) return res.status(400).json({ error: 'Cada opción debe tener máx. 60 caracteres' });
+  if (new Set(options.map(o => o.toLowerCase())).size !== options.length) {
+    return res.status(400).json({ error: 'Las opciones no pueden repetirse' });
+  }
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para crear una encuesta' });
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .insert({ pool_id: poolId, sender_id: userId, content: question, type: 'poll', poll_options: options })
+      .select(`
+        id, content, type, poll_options, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+    data.poll = buildPollSummary(options, [], userId);
+
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastPoolChatMessage({
+      poolId,
+      senderId: userId,
+      senderName,
+      content: `📊 ${question}`,
+      type: 'poll',
+    }).catch(() => {});
+  } catch (err) {
+    console.error('[POOLS] POST /:id/polls', err);
+    res.status(500).json({ error: 'Failed to create poll' });
+  }
+});
+
+// ── GET /api/pools/:id/messages/:messageId/poll — resumen de resultados ─────
+// Usado por el cliente para refrescar solo esa encuesta cuando llega un
+// evento realtime de votos.
+router.get('/:id/messages/:messageId/poll', requireAuth, async (req, res) => {
+  const poolId = req.params.id;
+  const messageId = req.params.messageId;
+  const userId = req.user.id;
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para ver esta encuesta' });
+
+    const { data: message, error: msgErr } = await supabase
+      .from('pool_messages')
+      .select('id, poll_options')
+      .eq('id', messageId)
+      .eq('pool_id', poolId)
+      .eq('type', 'poll')
+      .single();
+
+    if (msgErr || !message) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const { data: voteRows, error: votesErr } = await supabase
+      .from('pool_message_poll_votes')
+      .select('message_id, user_id, option_index')
+      .eq('message_id', messageId);
+
+    if (votesErr) throw votesErr;
+
+    res.json({ poll: buildPollSummary(message.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[POOLS] GET /:id/messages/:messageId/poll', err);
+    res.status(500).json({ error: 'Failed to fetch poll' });
+  }
+});
+
+// ── POST /api/pools/:id/messages/:messageId/vote — votar (o cambiar voto) ───
+router.post('/:id/messages/:messageId/vote', requireAuth, async (req, res) => {
+  const poolId = req.params.id;
+  const messageId = req.params.messageId;
+  const userId = req.user.id;
+  const optionIndex = Number(req.body?.optionIndex);
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para votar' });
+
+    const { data: message, error: msgErr } = await supabase
+      .from('pool_messages')
+      .select('id, poll_options')
+      .eq('id', messageId)
+      .eq('pool_id', poolId)
+      .eq('type', 'poll')
+      .single();
+
+    if (msgErr || !message) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const optionCount = Array.isArray(message.poll_options) ? message.poll_options.length : 0;
+    if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= optionCount) {
+      return res.status(400).json({ error: 'Opción no válida' });
+    }
+
+    const { error } = await supabase
+      .from('pool_message_poll_votes')
+      .upsert(
+        { message_id: messageId, pool_id: poolId, user_id: userId, option_index: optionIndex, created_at: new Date().toISOString() },
+        { onConflict: 'message_id,user_id' }
+      );
+
+    if (error) throw error;
+
+    const { data: voteRows } = await supabase
+      .from('pool_message_poll_votes')
+      .select('message_id, user_id, option_index')
+      .eq('message_id', messageId);
+
+    res.json({ poll: buildPollSummary(message.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[POOLS] POST /:id/messages/:messageId/vote', err);
+    res.status(500).json({ error: 'Failed to vote' });
+  }
+});
+
+// ── DELETE /api/pools/:id/messages/:messageId/vote — quitar mi voto ─────────
+router.delete('/:id/messages/:messageId/vote', requireAuth, async (req, res) => {
+  const poolId = req.params.id;
+  const messageId = req.params.messageId;
+  const userId = req.user.id;
+
+  try {
+    const { data: message, error: msgErr } = await supabase
+      .from('pool_messages')
+      .select('id, poll_options')
+      .eq('id', messageId)
+      .eq('pool_id', poolId)
+      .eq('type', 'poll')
+      .single();
+
+    if (msgErr || !message) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const { error } = await supabase
+      .from('pool_message_poll_votes')
+      .delete()
+      .eq('message_id', messageId)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    const { data: voteRows } = await supabase
+      .from('pool_message_poll_votes')
+      .select('message_id, user_id, option_index')
+      .eq('message_id', messageId);
+
+    res.json({ poll: buildPollSummary(message.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[POOLS] DELETE /:id/messages/:messageId/vote', err);
+    res.status(500).json({ error: 'Failed to remove vote' });
   }
 });
 

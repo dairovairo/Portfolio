@@ -212,6 +212,199 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
   );
 }
 
+// ── Poll bubble — mensaje de encuesta con votación en vivo ───────────────────
+function PollBubble({ msg, isMe, identity, onVote, voting }) {
+  const poll = msg.poll || {
+    options: msg.poll_options || [],
+    votes: (msg.poll_options || []).map(() => 0),
+    totalVotes: 0,
+    myVote: null,
+  };
+  const isVoting = voting === msg.id;
+
+  return (
+    <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+      {!isMe && <Avatar user={msg.sender} />}
+      <div className="flex items-end gap-1.5 max-w-[85%]">
+        <div className="min-w-0 w-full">
+          {!isMe && (
+            <div className="text-xs text-surface-muted font-mono mb-1 ml-1">
+              {msg.sender?.username}
+            </div>
+          )}
+          <div className="w-full min-w-[220px] bg-surface-card border border-surface-border rounded-2xl px-4 py-3">
+            <p className="text-sm font-display font-semibold text-surface-text mb-2 flex items-center gap-1.5">
+              📊 {msg.content}
+            </p>
+            <div className="space-y-1.5">
+              {poll.options.map((opt, i) => {
+                const count = poll.votes[i] || 0;
+                const pct = poll.totalVotes ? Math.round((count / poll.totalVotes) * 100) : 0;
+                const mine = poll.myVote === i;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={isVoting}
+                    onClick={() => onVote(msg.id, i, mine)}
+                    className={`relative w-full text-left rounded-xl border overflow-hidden transition-all disabled:opacity-70 ${
+                      mine ? 'border-accent-primary' : 'border-surface-border hover:border-accent-primary/40'
+                    }`}
+                  >
+                    <div
+                      className="absolute inset-y-0 left-0 bg-accent-primary/15 transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                    <div className="relative flex items-center justify-between gap-2 px-3 py-2">
+                      <span className={`text-xs font-mono ${mine ? 'text-accent-glow font-semibold' : 'text-surface-text'}`}>
+                        {mine ? '✓ ' : ''}{opt}
+                      </span>
+                      <span className="text-[10px] font-mono text-surface-muted flex-shrink-0">{pct}% · {count}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[10px] font-mono text-surface-muted mt-2">
+              {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'} · {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              {poll.myVote != null ? ' · toca tu opción para quitar el voto' : ''}
+            </div>
+          </div>
+        </div>
+        {identity && (
+          <IdentityBadge identity={identity} align={isMe ? 'right' : 'left'} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Create poll modal ─────────────────────────────────────────────────────────
+function CreatePollModal({ onClose, onCreate }) {
+  const [question, setQuestion] = useState('');
+  const [options, setOptions] = useState(['', '']);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function updateOption(i, value) {
+    setOptions(prev => prev.map((o, idx) => (idx === i ? value : o)));
+  }
+
+  function addOption() {
+    if (options.length >= 4) return;
+    setOptions(prev => [...prev, '']);
+  }
+
+  function removeOption(i) {
+    if (options.length <= 2) return;
+    setOptions(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function handleSubmit() {
+    if (saving) return;
+    setError('');
+    const cleanQuestion = question.trim();
+    const cleanOptions = options.map(o => o.trim()).filter(Boolean);
+    if (!cleanQuestion) return setError('Escribe una pregunta');
+    if (cleanOptions.length < 2) return setError('Añade al menos 2 opciones');
+    if (new Set(cleanOptions.map(o => o.toLowerCase())).size !== cleanOptions.length) {
+      return setError('Las opciones no pueden repetirse');
+    }
+    setSaving(true);
+    try {
+      await onCreate(cleanQuestion, cleanOptions);
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Error al crear la encuesta');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface-card border border-surface-border rounded-t-3xl p-5 w-full max-w-lg space-y-3 max-h-[85vh] overflow-y-auto animate-slide-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xl">📊</span>
+          <div className="flex-1">
+            <h2 className="font-display font-bold text-surface-text">Nueva encuesta</h2>
+            <p className="text-xs text-surface-muted">Los apuntados votarán en tiempo real</p>
+          </div>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Pregunta</label>
+          <input
+            type="text"
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            placeholder="¿A qué hora quedamos?"
+            maxLength={200}
+            autoFocus
+            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Opciones</label>
+          <div className="space-y-2">
+            {options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={opt}
+                  onChange={e => updateOption(i, e.target.value)}
+                  placeholder={`Opción ${i + 1}`}
+                  maxLength={60}
+                  className="flex-1 bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                />
+                {options.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeOption(i)}
+                    className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-400 transition-colors"
+                    title="Quitar opción"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {options.length < 4 && (
+            <button
+              type="button"
+              onClick={addOption}
+              className="mt-2 text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
+            >
+              + Añadir opción
+            </button>
+          )}
+        </div>
+
+        {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-semibold disabled:opacity-50 transition-all"
+          >
+            {saving ? 'Creando...' : '📊 Crear encuesta'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DateDivider({ date }) {
   const today = new Date().toDateString();
   const yesterday = new Date(Date.now() - 86400000).toDateString();
@@ -251,6 +444,8 @@ export default function PoolChatPage() {
   const photoInputRef = useRef(null);
   const photoCameraRef = useRef(null);
   const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [votingMessageId, setVotingMessageId] = useState(null);
   const headerMenuRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
@@ -326,16 +521,43 @@ export default function PoolChatPage() {
         if (payload.new?.sender_id === profile.id) return;
         const { data } = await supabase
           .from('pool_messages')
-          .select(`id, pool_id, sender_id, content, type, created_at, sender:sender_id(id, username, avatar_url, battery_level)`)
+          .select(`id, pool_id, sender_id, content, type, poll_options, created_at, sender:sender_id(id, username, avatar_url, battery_level)`)
           .eq('id', payload.new.id)
           .single();
         if (data) {
+          if (data.type === 'poll') {
+            data.poll = { options: data.poll_options || [], votes: (data.poll_options || []).map(() => 0), totalVotes: 0, myVote: null };
+          }
           setMessages(m => [...m, data]);
         }
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [poolId, profile?.id]);
+
+  // Realtime: recuentos de votos en vivo para las encuestas de esta quedada
+  useEffect(() => {
+    if (!poolId) return;
+    const channel = supabase
+      .channel(`pool-poll-votes-${poolId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'pool_message_poll_votes',
+        filter: `pool_id=eq.${poolId}`,
+      }, async (payload) => {
+        const messageId = payload.new?.message_id || payload.old?.message_id;
+        if (!messageId) return;
+        try {
+          const data = await api.get(`/pools/${poolId}/messages/${messageId}/poll`);
+          setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, poll: data.poll } : m)));
+        } catch {
+          // non-critical
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [poolId]);
 
   async function clearChat() {
     setClearingChat(true);
@@ -410,6 +632,27 @@ export default function PoolChatPage() {
       showToast(e.message || 'Error al enviar la imagen', 'error');
     } finally {
       setSendingImage(false);
+    }
+  }
+
+  async function handleCreatePoll(question, options) {
+    const { message } = await api.post(`/pools/${poolId}/polls`, { question, options });
+    setMessages(m => [...m, message]);
+    showToast('Encuesta enviada 📊');
+  }
+
+  async function handleVote(messageId, optionIndex, isMine) {
+    if (votingMessageId) return;
+    setVotingMessageId(messageId);
+    try {
+      const data = isMine
+        ? await api.delete(`/pools/${poolId}/messages/${messageId}/vote`)
+        : await api.post(`/pools/${poolId}/messages/${messageId}/vote`, { optionIndex });
+      setMessages(m => m.map(msg => (msg.id === messageId ? { ...msg, poll: data.poll } : msg)));
+    } catch (e) {
+      showToast(e.message || 'Error al votar', 'error');
+    } finally {
+      setVotingMessageId(null);
     }
   }
 
@@ -527,6 +770,19 @@ export default function PoolChatPage() {
               );
             }
 
+            if (msg.type === 'poll') {
+              return (
+                <PollBubble
+                  key={item.key}
+                  msg={msg}
+                  isMe={isMe}
+                  identity={identity}
+                  onVote={handleVote}
+                  voting={votingMessageId}
+                />
+              );
+            }
+
             return (
               <TextBubble
                 key={item.key}
@@ -577,6 +833,13 @@ export default function PoolChatPage() {
               onCamera={() => photoCameraRef.current?.click()}
               onGallery={() => photoInputRef.current?.click()}
             />
+            <button
+              onClick={() => setShowPollModal(true)}
+              title="Crear encuesta"
+              className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all"
+            >
+              📊
+            </button>
             <input
               ref={inputRef}
               value={input}
@@ -605,6 +868,14 @@ export default function PoolChatPage() {
           confirmLabel={clearingChat ? 'Vaciando…' : 'Vaciar'}
           onConfirm={clearChat}
           onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
+
+      {/* Create poll modal */}
+      {showPollModal && (
+        <CreatePollModal
+          onClose={() => setShowPollModal(false)}
+          onCreate={handleCreatePoll}
         />
       )}
     </div>
