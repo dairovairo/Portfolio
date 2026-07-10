@@ -10,6 +10,7 @@ const {
   DEFAULT_POOL_REMINDER_MINUTES,
   parseReminderMinutes,
 } = require('../lib/reminderLeadTime');
+const { addYears, addDays } = require('../lib/dateRangeLimits');
 
 // Multer instance for pool chat image uploads (8 MB max) — same pattern as groups
 const _poolImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
@@ -520,6 +521,11 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
   if (startDate <= new Date()) {
     return res.status(400).json({ error: 'scheduled_at must be in the future' });
   }
+  // La fecha de inicio no puede quedar a más de un año de la creación de la quedada.
+  const maxPoolStartDate = addYears(new Date(), 1);
+  if (startDate > maxPoolStartDate) {
+    return res.status(400).json({ error: 'scheduled_at no puede ser más de un año después de la creación de la quedada' });
+  }
   const location = location_hint?.trim();
   if (!location) return res.status(400).json({ error: 'location_hint is required' });
 
@@ -531,6 +537,11 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
     }
     if (endDate <= startDate) {
       return res.status(400).json({ error: 'ends_at must be after scheduled_at' });
+    }
+    // La fecha de fin no puede quedar a más de un día de la fecha de inicio.
+    const maxPoolEndDate = addDays(startDate, 1);
+    if (endDate > maxPoolEndDate) {
+      return res.status(400).json({ error: 'ends_at no puede ser más de un día después de scheduled_at' });
     }
     endDateIso = endDate.toISOString();
   }
@@ -1181,7 +1192,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const { data: pool } = await supabase
       .from('hangout_pools')
-      .select('creator_id, status, max_people, scheduled_at')
+      .select('creator_id, status, max_people, scheduled_at, created_at')
       .eq('id', poolId)
       .single();
 
@@ -1201,6 +1212,11 @@ router.patch('/:id', requireAuth, async (req, res) => {
       if (Number.isNaN(startDate.getTime())) {
         return res.status(400).json({ error: 'scheduled_at is not valid' });
       }
+      // La fecha de inicio no puede quedar a más de un año de la creación de la quedada.
+      const maxPoolStartDate = addYears(new Date(pool.created_at), 1);
+      if (startDate > maxPoolStartDate) {
+        return res.status(400).json({ error: 'scheduled_at no puede ser más de un año después de la creación de la quedada' });
+      }
       updates.scheduled_at = startDate.toISOString();
     }
     if (ends_at !== undefined) {
@@ -1214,6 +1230,11 @@ router.patch('/:id', requireAuth, async (req, res) => {
         }
         if (endDate <= referenceStart) {
           return res.status(400).json({ error: 'ends_at must be after scheduled_at' });
+        }
+        // La fecha de fin no puede quedar a más de un día de la fecha de inicio.
+        const maxPoolEndDate = addDays(referenceStart, 1);
+        if (endDate > maxPoolEndDate) {
+          return res.status(400).json({ error: 'ends_at no puede ser más de un día después de scheduled_at' });
         }
         updates.ends_at = endDate.toISOString();
       }

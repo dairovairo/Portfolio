@@ -531,7 +531,12 @@ function CreateEventModal({ onClose, onCreate }) {
   const now = new Date();
   const minDate = new Date(now.getTime() + 30 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
-  const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
+  const toLocalInputValue = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const defaultDate = toLocalInputValue(minDate);
+  // La fecha de inicio no puede ser más de un año después de la creación del evento.
+  const maxStartDate = new Date(now);
+  maxStartDate.setFullYear(maxStartDate.getFullYear() + 1);
+  const maxStartDateValue = toLocalInputValue(maxStartDate);
   const coverInputRef = useRef(null);
   const coverCameraRef = useRef(null);
   const [showPhotoMenu, setShowPhotoMenu] = useState(false);
@@ -560,6 +565,11 @@ function CreateEventModal({ onClose, onCreate }) {
   const [error, setError] = useState('');
   const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
   const emoji = getEventEmoji(resolvedCategory || form.category);
+  // La fecha de fin no puede ser más de un mes después de la fecha de inicio elegida.
+  const eventStartForEnd = form.event_date ? new Date(form.event_date) : minDate;
+  const maxEndDate = new Date(eventStartForEnd);
+  maxEndDate.setMonth(maxEndDate.getMonth() + 1);
+  const maxEndDateValue = toLocalInputValue(maxEndDate);
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
 
@@ -602,6 +612,14 @@ function CreateEventModal({ onClose, onCreate }) {
     }
     if (new Date(form.ends_at) <= new Date(form.event_date)) {
       setError('La fecha fin debe ser posterior al inicio');
+      return;
+    }
+    if (new Date(form.event_date) > maxStartDate) {
+      setError('La fecha de inicio no puede ser más de un año después de la creación del evento');
+      return;
+    }
+    if (new Date(form.ends_at) > maxEndDate) {
+      setError('La fecha fin no puede ser más de un mes después del inicio');
       return;
     }
     setError('');
@@ -719,6 +737,7 @@ function CreateEventModal({ onClose, onCreate }) {
                 type="datetime-local"
                 value={form.event_date}
                 min={defaultDate}
+                max={maxStartDateValue}
                 onChange={e => set('event_date', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
@@ -729,6 +748,7 @@ function CreateEventModal({ onClose, onCreate }) {
                 type="datetime-local"
                 value={form.ends_at}
                 min={form.event_date || defaultDate}
+                max={maxEndDateValue}
                 onChange={e => set('ends_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />

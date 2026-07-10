@@ -8,6 +8,7 @@ const { notifyUsers } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 const { getNotificationDayKey } = require('../lib/notificationDay');
 const { runEventPromoPacingTick, FREE_THRESHOLD } = require('../jobs/eventPromoPacing');
+const { addYears, addMonths } = require('../lib/dateRangeLimits');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -253,6 +254,11 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   if (Number.isNaN(eventDate.getTime())) {
     return res.status(400).json({ error: 'La fecha no es valida' });
   }
+  // La fecha de inicio no puede quedar a más de un año de la creación del evento.
+  const maxEventStartDate = addYears(new Date(), 1);
+  if (eventDate > maxEventStartDate) {
+    return res.status(400).json({ error: 'La fecha de inicio no puede ser más de un año después de la creación del evento' });
+  }
   const eventLocation = location?.trim();
   if (!eventLocation) return res.status(400).json({ error: 'La ubicacion es obligatoria' });
 
@@ -264,6 +270,11 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     }
     if (endDate <= eventDate) {
       return res.status(400).json({ error: 'La fecha fin debe ser posterior al inicio' });
+    }
+    // La fecha de fin no puede quedar a más de un mes de la fecha de inicio.
+    const maxEventEndDate = addMonths(eventDate, 1);
+    if (endDate > maxEventEndDate) {
+      return res.status(400).json({ error: 'La fecha fin no puede ser más de un mes después del inicio' });
     }
     endDateIso = endDate.toISOString();
   }

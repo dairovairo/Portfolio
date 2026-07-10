@@ -969,6 +969,10 @@ function buildPoolFormData(form) {
 // los valores por defecto (público, sin grupo).
 function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const minDate = formatInputDateTime(new Date(Date.now() + 30 * 60 * 1000));
+  // La fecha de inicio no puede ser más de un año después de la creación de la quedada.
+  const maxStartDateObj = new Date();
+  maxStartDateObj.setFullYear(maxStartDateObj.getFullYear() + 1);
+  const maxStartDate = formatInputDateTime(maxStartDateObj);
   const coverInputRef = useRef(null);
   const coverCameraRef = useRef(null);
   const [showPhotoMenu, setShowPhotoMenu] = useState(false);
@@ -989,6 +993,11 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const emoji = getActivityEmoji(form.activity);
+  // La fecha de fin no puede ser más de un día después de la fecha de inicio elegida.
+  const poolStartForEnd = form.scheduled_at ? new Date(form.scheduled_at) : new Date(minDate);
+  const maxEndDateObj = new Date(poolStartForEnd);
+  maxEndDateObj.setDate(maxEndDateObj.getDate() + 1);
+  const maxEndDate = formatInputDateTime(maxEndDateObj);
 
   useEffect(() => {
     api.get('/groups').then(({ groups: data }) => setGroups(data || [])).catch(() => {});
@@ -1032,6 +1041,14 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
     if (!form.location_hint.trim()) { setError('La ubicacion es obligatoria'); return; }
     if (form.ends_at && new Date(form.ends_at) <= new Date(form.scheduled_at)) {
       setError('La fecha fin debe ser posterior al inicio');
+      return;
+    }
+    if (new Date(form.scheduled_at) > new Date(maxStartDate)) {
+      setError('La fecha de inicio no puede ser más de un año después de la creación del plan');
+      return;
+    }
+    if (form.ends_at && new Date(form.ends_at) > new Date(maxEndDate)) {
+      setError('La fecha fin no puede ser más de un día después del inicio');
       return;
     }
     if (!form.is_public && !hasPrivateTarget) {
@@ -1091,12 +1108,12 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Cuándo *</label>
-              <input type="datetime-local" value={form.scheduled_at} min={minDate} onChange={e => set('scheduled_at', e.target.value)}
+              <input type="datetime-local" value={form.scheduled_at} min={minDate} max={maxStartDate} onChange={e => set('scheduled_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
-              <input type="datetime-local" value={form.ends_at} min={form.scheduled_at || minDate} onChange={e => set('ends_at', e.target.value)}
+              <input type="datetime-local" value={form.ends_at} min={form.scheduled_at || minDate} max={maxEndDate} onChange={e => set('ends_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
             <div>
