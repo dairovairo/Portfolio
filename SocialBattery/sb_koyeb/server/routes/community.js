@@ -608,6 +608,72 @@ router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/community/events/:id/end-promotion
+// Permite al CREADOR del evento finalizar su promoción premium/ultra antes
+// de tiempo: el evento pasa a listado Basic (gratis) y deja de recibir
+// nuevos envíos del job de pacing (que solo selecciona eventos con
+// promotion_plan IN ('premium','ultra')).
+//
+// A diferencia de renovar, aquí NO se resetea notification_sent_count ni se
+// borra el historial de event_promo_notifications: la lógica de cobro sigue
+// siendo la misma que ya existía ("el pago se efectuará al empezar el
+// evento, en base a las notificaciones enviadas hasta su comienzo") — al
+// finalizar simplemente se congela ese contador antes de tiempo, igual que
+// ocurre de forma natural cuando arranca el evento.
+//
+// Igual que al renovar, no se permite finalizar una promoción premium/ultra
+// que todavía no ha alcanzado el mínimo de FREE_THRESHOLD notificaciones
+// enviadas, para evitar contratar una promoción y cancelarla al instante sin
+// que llegue nunca a poder cobrarse.
+router.post('/events/:id/end-promotion', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id, title, creator_id, event_date, ends_at, promotion_plan, notification_sent_count')
+      .eq('id', id)
+      .single();
+
+    if (eventError || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+    if (event.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador del evento puede finalizar su promoción' });
+    }
+    if (new Date(event.ends_at || event.event_date) < new Date()) {
+      return res.status(400).json({ error: 'No se puede finalizar la promoción de un evento ya finalizado' });
+    }
+    if (event.promotion_plan !== 'premium' && event.promotion_plan !== 'ultra') {
+      return res.status(400).json({ error: 'Este evento no tiene una promoción activa que finalizar' });
+    }
+
+    const sentCount = event.notification_sent_count || 0;
+    if (sentCount < FREE_THRESHOLD) {
+      return res.status(400).json({
+        error: `Aún no puedes finalizar: hace falta alcanzar el mínimo de ${FREE_THRESHOLD} notificaciones enviadas para que se pueda cobrar (llevas ${sentCount}/${FREE_THRESHOLD}).`,
+      });
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('community_events')
+      .update({
+        promotion_plan: 'basic',
+        notification_count: null,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.json({ event: updated });
+  } catch (err) {
+    console.error('[community] POST /events/:id/end-promotion error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al finalizar la promoción') });
+  }
+});
+
+
 // POST /api/community/events/:id/join
 router.post('/events/:id/join', requireAuth, async (req, res) => {
   const { id } = req.params;
@@ -1095,21 +1161,56 @@ router.get('/notifications/today-event', requireAuth, async (req, res) => {
   }
 });
 
+// Construye el resumen de una encuesta (recuentos por opción + voto propio)
+// a partir de las opciones y las filas de event_poll_votes de esa encuesta.
+function buildPollSummary(pollOptions, voteRows, userId) {
+  const options = Array.isArray(pollOptions) ? pollOptions : [];
+  const votes = options.map(() => 0);
+  let myVote = null;
+  for (const v of voteRows) {
+    if (v.option_index >= 0 && v.option_index < votes.length) votes[v.option_index] += 1;
+    if (v.user_id === userId) myVote = v.option_index;
+  }
+  const totalVotes = votes.reduce((a, b) => a + b, 0);
+  return { options, votes, totalVotes, myVote };
+}
+
 // GET /api/community/events/:id/updates
 router.get('/events/:id/updates', requireAuth, async (req, res) => {
   const { id } = req.params;
+  const userId = req.user.id;
 
   try {
     const { data: updates, error } = await supabase
       .from('event_updates')
       .select(`
-        id, content, image_url, created_at, creator_id,
+        id, content, image_url, poll_question, poll_options, created_at, creator_id,
         creator:users!event_updates_creator_id_fkey(username, avatar_url)
       `)
       .eq('event_id', id)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
+
+    // Adjunta el recuento de votos a las filas que son encuestas
+    const pollUpdates = (updates || []).filter(u => u.poll_question);
+    if (pollUpdates.length) {
+      const pollIds = pollUpdates.map(u => u.id);
+      const { data: voteRows } = await supabase
+        .from('event_poll_votes')
+        .select('update_id, user_id, option_index')
+        .in('update_id', pollIds);
+
+      const votesByUpdate = new Map();
+      for (const v of voteRows || []) {
+        if (!votesByUpdate.has(v.update_id)) votesByUpdate.set(v.update_id, []);
+        votesByUpdate.get(v.update_id).push(v);
+      }
+      for (const u of pollUpdates) {
+        u.poll = buildPollSummary(u.poll_options, votesByUpdate.get(u.id) || [], userId);
+      }
+    }
+
     res.json({ updates: updates || [] });
   } catch (err) {
     console.error('[community] GET /events/:id/updates error:', err);
@@ -1207,6 +1308,192 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
   } catch (err) {
     console.error('[community] POST /events/:id/updates error:', err);
     res.status(err.status || 500).json({ error: communityErrorMessage(err, 'Error al publicar actualización') });
+  }
+});
+
+// POST /api/community/events/:id/polls
+// Crea una encuesta como una fila más del hilo de actualizaciones. Solo el
+// organizador del evento puede publicarlas (igual que las actualizaciones).
+router.post('/events/:id/polls', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const question = (req.body?.question || '').trim();
+  const rawOptions = Array.isArray(req.body?.options) ? req.body.options : [];
+  const options = rawOptions.map(o => (o || '').trim()).filter(Boolean);
+
+  if (!question) return res.status(400).json({ error: 'Escribe una pregunta para la encuesta' });
+  if (question.length > 200) return res.status(400).json({ error: 'La pregunta es demasiado larga (máx. 200)' });
+  if (options.length < 2) return res.status(400).json({ error: 'Añade al menos 2 opciones' });
+  if (options.length > 4) return res.status(400).json({ error: 'Máximo 4 opciones' });
+  if (options.some(o => o.length > 60)) return res.status(400).json({ error: 'Cada opción debe tener máx. 60 caracteres' });
+  if (new Set(options.map(o => o.toLowerCase())).size !== options.length) {
+    return res.status(400).json({ error: 'Las opciones no pueden repetirse' });
+  }
+
+  try {
+    const { data: event, error: evErr } = await supabase
+      .from('community_events')
+      .select('id, creator_id, title')
+      .eq('id', id)
+      .single();
+
+    if (evErr || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+    if (event.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el organizador puede crear encuestas' });
+    }
+
+    const { data: update, error } = await supabase
+      .from('event_updates')
+      .insert({
+        event_id: id,
+        creator_id: userId,
+        poll_question: question,
+        poll_options: options,
+      })
+      .select(`
+        id, content, image_url, poll_question, poll_options, created_at, creator_id,
+        creator:users!event_updates_creator_id_fkey(username, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+    update.poll = buildPollSummary(options, [], userId);
+
+    // ── Push notifications a los asistentes (fire-and-forget) ────────────────
+    const { data: attendees } = await supabase
+      .from('community_event_attendees')
+      .select('user_id')
+      .eq('event_id', id)
+      .neq('user_id', userId);
+
+    if (attendees?.length) {
+      notifyUsers(supabase, attendees.map(a => a.user_id), userId, {
+        title: `📊 ${event.title}`,
+        body:  `Nueva encuesta: ${question.length > 70 ? question.slice(0, 67) + '…' : question}`,
+        url:   `/community/event/${id}`,
+        tag:   `event-update-${id}`,
+      }).catch(() => {});
+    }
+
+    res.status(201).json({ update });
+  } catch (err) {
+    console.error('[community] POST /events/:id/polls error:', err);
+    res.status(err.status || 500).json({ error: communityErrorMessage(err, 'Error al crear la encuesta') });
+  }
+});
+
+// GET /api/community/events/:id/updates/:updateId/poll
+// Resumen de resultados de una encuesta concreta (usado por el cliente para
+// refrescar solo esa encuesta cuando llega un evento realtime de votos).
+router.get('/events/:id/updates/:updateId/poll', requireAuth, async (req, res) => {
+  const { id, updateId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: update, error: updErr } = await supabase
+      .from('event_updates')
+      .select('id, poll_options')
+      .eq('id', updateId)
+      .eq('event_id', id)
+      .not('poll_question', 'is', null)
+      .single();
+
+    if (updErr || !update) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const { data: voteRows, error: votesErr } = await supabase
+      .from('event_poll_votes')
+      .select('update_id, user_id, option_index')
+      .eq('update_id', updateId);
+
+    if (votesErr) throw votesErr;
+
+    res.json({ poll: buildPollSummary(update.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[community] GET /events/:id/updates/:updateId/poll error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener la encuesta') });
+  }
+});
+
+// POST /api/community/events/:id/updates/:updateId/vote
+// Vota (o cambia el voto) en una encuesta. Cualquier usuario autenticado que
+// pueda ver el evento puede votar, no solo los asistentes confirmados.
+router.post('/events/:id/updates/:updateId/vote', requireAuth, async (req, res) => {
+  const { id, updateId } = req.params;
+  const userId = req.user.id;
+  const optionIndex = Number(req.body?.optionIndex);
+
+  try {
+    const { data: update, error: updErr } = await supabase
+      .from('event_updates')
+      .select('id, poll_options')
+      .eq('id', updateId)
+      .eq('event_id', id)
+      .not('poll_question', 'is', null)
+      .single();
+
+    if (updErr || !update) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const optionCount = Array.isArray(update.poll_options) ? update.poll_options.length : 0;
+    if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= optionCount) {
+      return res.status(400).json({ error: 'Opción no válida' });
+    }
+
+    const { error } = await supabase
+      .from('event_poll_votes')
+      .upsert(
+        { update_id: updateId, event_id: id, user_id: userId, option_index: optionIndex, created_at: new Date().toISOString() },
+        { onConflict: 'update_id,user_id' }
+      );
+
+    if (error) throw error;
+
+    const { data: voteRows } = await supabase
+      .from('event_poll_votes')
+      .select('update_id, user_id, option_index')
+      .eq('update_id', updateId);
+
+    res.json({ poll: buildPollSummary(update.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[community] POST /events/:id/updates/:updateId/vote error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al votar') });
+  }
+});
+
+// DELETE /api/community/events/:id/updates/:updateId/vote
+// Retira el voto propio de una encuesta (permite "des-votar" tocando la
+// misma opción otra vez).
+router.delete('/events/:id/updates/:updateId/vote', requireAuth, async (req, res) => {
+  const { id, updateId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: update, error: updErr } = await supabase
+      .from('event_updates')
+      .select('id, poll_options')
+      .eq('id', updateId)
+      .eq('event_id', id)
+      .not('poll_question', 'is', null)
+      .single();
+
+    if (updErr || !update) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const { error } = await supabase
+      .from('event_poll_votes')
+      .delete()
+      .eq('update_id', updateId)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    const { data: voteRows } = await supabase
+      .from('event_poll_votes')
+      .select('update_id, user_id, option_index')
+      .eq('update_id', updateId);
+
+    res.json({ poll: buildPollSummary(update.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[community] DELETE /events/:id/updates/:updateId/vote error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al quitar el voto') });
   }
 });
 

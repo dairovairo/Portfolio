@@ -62,18 +62,6 @@ router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req,
         objectName: `mascot-previews/${req.user.id}`,
         fallbackMaxLength: 3000000,
       });
-      // El nombre de objeto es siempre el mismo (`upsert: true`), así que
-      // getPublicUrl() devuelve idéntica URL en cada resubida. Sin un
-      // cache-buster, el navegador (y cualquier CDN delante de Supabase
-      // Storage) puede seguir sirviendo los bytes antiguos de esa URL
-      // aunque el contenido ya se haya actualizado — por eso los cambios de
-      // posicionamiento (p. ej. la riñonera) no se veían reflejados en la
-      // tarjeta de amigos ni en el panel de una quedada hasta que el propio
-      // usuario volvía a tocar su equipado. Añadimos ?v=timestamp para que
-      // cada subida tenga una URL distinta y siempre se pida de nuevo.
-      if (url && !url.startsWith('data:')) {
-        url += `${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
-      }
     }
 
     const { error } = await supabase
