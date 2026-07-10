@@ -450,7 +450,25 @@ export default function MascotDisplay({
         // top base final=51.91625%; las variantes con rinonOffsetY suman ese
         // valor al top.
         if (acc.isRinon) {
-          const rinonTop = 51.91625 + (acc.rinonOffsetY ?? 0);
+          // Caja base compartida por todas las riñoneras.
+          const baseLeft = -0.0725;
+          const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
+          const baseWidth = 152.145;
+          const baseHeight = 59.1675;
+
+          // Algunos colores (p. ej. blanca/negra) tienen más margen interno
+          // en el PNG y se ven más pequeños con la caja base: rinonScale
+          // agranda la caja recentrada sobre el mismo punto central, y
+          // rinonOffsetX aplica un desplazamiento horizontal adicional
+          // (en puntos porcentuales, negativo = izquierda).
+          const scale = acc.rinonScale ?? 1;
+          const width = baseWidth * scale;
+          const height = baseHeight * scale;
+          const centerX = baseLeft + baseWidth / 2;
+          const centerY = baseTop + baseHeight / 2;
+          const rinonLeft = centerX - width / 2 + (acc.rinonOffsetX ?? 0);
+          const rinonTop = centerY - height / 2;
+
           return (
             <ColorizedImage
               key={acc.id}
@@ -460,10 +478,10 @@ export default function MascotDisplay({
               draggable={false}
               className="absolute select-none pointer-events-none"
               style={{
-                left: '-0.0725%',
-                width: '152.145%',
+                left: `${rinonLeft}%`,
+                width: `${width}%`,
                 top: `${rinonTop}%`,
-                height: '59.1675%',
+                height: `${height}%`,
                 objectFit: 'contain',
                 objectPosition: 'center',
               }}

@@ -91,12 +91,21 @@ router.post('/push-subscribe', requireAuth, async (req, res) => {
   // promesa del handler sin que Express la capture -> unhandled rejection
   // -> crash del proceso completo. Por eso se usa try/catch explicito.
   try {
+    // onConflict va sobre 'endpoint' (no 'user_id,endpoint'): el endpoint
+    // identifica un navegador/dispositivo concreto, no un usuario. Si antes
+    // se resolvia por el par (user_id, endpoint), una segunda cuenta que
+    // iniciara sesion en el mismo dispositivo creaba una fila NUEVA en vez
+    // de tomar el control de esa suscripcion, y el dispositivo terminaba
+    // recibiendo los avisos de ambas cuentas (p. ej. recordatorios de
+    // quedadas/eventos a los que el usuario actual no esta inscrito).
+    // Con 'endpoint' como conflicto, volver a suscribirse siempre reasigna
+    // ese endpoint al usuario que ha iniciado sesion ahora.
     await supabase.from('push_subscriptions').upsert({
       user_id: req.user.id,
       endpoint,
       p256dh,
       auth,
-    }, { onConflict: 'user_id,endpoint' });
+    }, { onConflict: 'endpoint' });
   } catch (err) {
     console.error('[users] push-subscribe upsert error:', err);
   }

@@ -272,11 +272,24 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
       // Ver comentario detallado en components/MascotDisplay.jsx:
       // ajuste 3 (otros 3% a la derecha, sin cambio de tamaño):
       // left=-0.0725, top base=51.91625, width=152.145, height=59.1675.
-      const rinonTop = 51.91625 + (acc.rinonOffsetY ?? 0);
+      // rinonScale/rinonOffsetX (por ítem) recentran y desplazan la caja
+      // base para colores cuyo PNG tiene más margen interno — misma
+      // fórmula que en MascotDisplay.jsx.
+      const baseLeft = -0.0725;
+      const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
+      const baseWidth = 152.145;
+      const baseHeight = 59.1675;
+      const scale = acc.rinonScale ?? 1;
+      const rinonWidth = baseWidth * scale;
+      const rinonHeight = baseHeight * scale;
+      const centerX = baseLeft + baseWidth / 2;
+      const centerY = baseTop + baseHeight / 2;
+      const rinonLeft = centerX - rinonWidth / 2 + (acc.rinonOffsetX ?? 0);
+      const rinonTop = centerY - rinonHeight / 2;
       drawContain(
         ctx, img,
-        boxX + pctToPx(-0.0725, boxSize), boxY + pctToPx(rinonTop, boxSize),
-        pctToPx(152.145, boxSize), pctToPx(59.1675, boxSize)
+        boxX + pctToPx(rinonLeft, boxSize), boxY + pctToPx(rinonTop, boxSize),
+        pctToPx(rinonWidth, boxSize), pctToPx(rinonHeight, boxSize)
       );
     } else if (acc.scale) {
       const pct = acc.scale * 100;
