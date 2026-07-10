@@ -29,6 +29,54 @@ export const SETTINGS_DEFAULTS_LIGHT = {
   tickColorRead:       '#00949e',
 };
 
+export const SETTINGS_DEFAULTS_AURORA = {
+  myBubbleColor:       '#dc5078',
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#fff0f5',
+  otherBubbleColor:    '#1e1836',
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#f0e6ff',
+  tickColorSent:       '#fff0f5',
+  tickColorUnread:     '#c9a8d4',
+  tickColorRead:       '#ff82a0',
+};
+
+export const SETTINGS_DEFAULTS_SUNSET = {
+  myBubbleColor:       '#ea781e',
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#fff3e0',
+  otherBubbleColor:    '#251808',
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#ffe0b2',
+  tickColorSent:       '#fff3e0',
+  tickColorUnread:     '#d4a870',
+  tickColorRead:       '#ffb450',
+};
+
+export const SETTINGS_DEFAULTS_FOREST = {
+  myBubbleColor:       '#226e36',
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#f0faf2',
+  otherBubbleColor:    '#ffffff',
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#1a2e1a',
+  tickColorSent:       '#5a7a5a',
+  tickColorUnread:     '#5a7a5a',
+  tickColorRead:       '#226e36',
+};
+
+export const SETTINGS_DEFAULTS_PASTEL = {
+  myBubbleColor:       '#a8d4f5',
+  myBubbleOpacity:     1,
+  myBubbleTextColor:   '#1e2a4a',
+  otherBubbleColor:    '#fdf8c8',
+  otherBubbleOpacity:  1,
+  otherBubbleTextColor:'#3a3010',
+  tickColorSent:       '#7a90b8',
+  tickColorUnread:     '#7a90b8',
+  tickColorRead:       '#5096e6',
+};
+
 const LEGACY_DEFAULT_PALETTES = [
   {
     myBubbleColor:       '#1a5c3a',
@@ -74,10 +122,18 @@ const STORAGE_KEYS = {
   muteAllNotifications:  'sb-mute-all-notifications',
   mutePersonalChats:     'sb-mute-personal-chats',
   muteGroupChats:        'sb-mute-group-chats',
+  muteNewEvents:         'sb-mute-new-events',
+  muteNewPools:          'sb-mute-new-pools',
+  muteEventReminders:        'sb-mute-event-reminders',
+  mutePoolReminders:         'sb-mute-pool-reminders',
+  muteEventRecommendations:  'sb-mute-event-recommendations',
   // privacy
   readReceipts:          'sb-read-receipts',
   showOnline:            'sb-show-online',
   showLastSeen:          'sb-show-last-seen',
+  showInterests:         'sb-show-interests',
+  showPublicStats:       'sb-show-public-stats',
+  showBadges:            'sb-show-badges',
 };
 
 const MESSAGING_FIELDS = [
@@ -93,7 +149,12 @@ const MESSAGING_FIELDS = [
 ];
 
 export function getMessagingDefaultsForTheme(theme) {
-  return theme === 'light' ? SETTINGS_DEFAULTS_LIGHT : SETTINGS_DEFAULTS_DARK;
+  if (theme === 'light')  return SETTINGS_DEFAULTS_LIGHT;
+  if (theme === 'aurora') return SETTINGS_DEFAULTS_AURORA;
+  if (theme === 'sunset') return SETTINGS_DEFAULTS_SUNSET;
+  if (theme === 'forest') return SETTINGS_DEFAULTS_FOREST;
+  if (theme === 'pastel') return SETTINGS_DEFAULTS_PASTEL;
+  return SETTINGS_DEFAULTS_DARK;
 }
 
 function loadStorage(key, fallback) {
@@ -143,6 +204,10 @@ function shouldUseThemeMessagingDefaults() {
   return [
     SETTINGS_DEFAULTS_DARK,
     SETTINGS_DEFAULTS_LIGHT,
+    SETTINGS_DEFAULTS_AURORA,
+    SETTINGS_DEFAULTS_SUNSET,
+    SETTINGS_DEFAULTS_FOREST,
+    SETTINGS_DEFAULTS_PASTEL,
     ...LEGACY_DEFAULT_PALETTES,
   ].some(palette => matchesPalette(snapshot, palette));
 }
@@ -218,6 +283,21 @@ export function SettingsProvider({ children }) {
   const [muteGroupChats, setMuteGroupChatsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteGroupChats, 'false') === 'true'
   );
+  const [muteNewEvents, setMuteNewEventsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteNewEvents, 'false') === 'true'
+  );
+  const [muteNewPools, setMuteNewPoolsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteNewPools, 'false') === 'true'
+  );
+  const [muteEventReminders, setMuteEventRemindersState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteEventReminders, 'false') === 'true'
+  );
+  const [mutePoolReminders, setMutePoolRemindersState] = useState(
+    () => loadStorage(STORAGE_KEYS.mutePoolReminders, 'false') === 'true'
+  );
+  const [muteEventRecommendations, setMuteEventRecommendationsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteEventRecommendations, 'false') === 'true'
+  );
 
   // ── Privacy preferences ───────────────────────────────────────────────────
   // readReceipts: when OFF, we don't send read_at to the server so senders
@@ -232,6 +312,18 @@ export function SettingsProvider({ children }) {
 
   const [showLastSeen, setShowLastSeenState] = useState(
     () => loadStorage(STORAGE_KEYS.showLastSeen, 'true') === 'true'
+  );
+
+  const [showInterests, setShowInterestsState] = useState(
+    () => loadStorage(STORAGE_KEYS.showInterests, 'true') === 'true'
+  );
+
+  const [showPublicStats, setShowPublicStatsState] = useState(
+    () => loadStorage(STORAGE_KEYS.showPublicStats, 'true') === 'true'
+  );
+
+  const [showBadges, setShowBadgesState] = useState(
+    () => loadStorage(STORAGE_KEYS.showBadges, 'true') === 'true'
   );
 
   // ── setters ──────────────────────────────────────────────────────────────
@@ -320,6 +412,31 @@ export function SettingsProvider({ children }) {
     setMuteGroupChatsState(v);
   }, []);
 
+  const setMuteNewEvents = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteNewEvents, String(v));
+    setMuteNewEventsState(v);
+  }, []);
+
+  const setMuteNewPools = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteNewPools, String(v));
+    setMuteNewPoolsState(v);
+  }, []);
+
+  const setMuteEventReminders = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteEventReminders, String(v));
+    setMuteEventRemindersState(v);
+  }, []);
+
+  const setMutePoolReminders = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.mutePoolReminders, String(v));
+    setMutePoolRemindersState(v);
+  }, []);
+
+  const setMuteEventRecommendations = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteEventRecommendations, String(v));
+    setMuteEventRecommendationsState(v);
+  }, []);
+
   const setReadReceipts = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.readReceipts, String(v));
     setReadReceiptsState(v);
@@ -339,6 +456,47 @@ export function SettingsProvider({ children }) {
   const setShowLastSeen = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.showLastSeen, String(v));
     setShowLastSeenState(v);
+  }, []);
+
+  const setShowInterests = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showInterests, String(v));
+    setShowInterestsState(v);
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { show_interests: v }).catch(() => {});
+    });
+  }, []);
+
+  const setShowPublicStats = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showPublicStats, String(v));
+    setShowPublicStatsState(v);
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { show_public_stats: v }).catch(() => {});
+    });
+  }, []);
+
+  const setShowBadges = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.showBadges, String(v));
+    setShowBadgesState(v);
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { show_badges: v }).catch(() => {});
+    });
+  }, []);
+
+  // Sync privacy toggles from server profile (called on login / profile load)
+  const syncPrivacyFromProfile = useCallback((profile) => {
+    if (!profile) return;
+    if (typeof profile.show_interests === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.showInterests, String(profile.show_interests));
+      setShowInterestsState(profile.show_interests);
+    }
+    if (typeof profile.show_public_stats === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.showPublicStats, String(profile.show_public_stats));
+      setShowPublicStatsState(profile.show_public_stats);
+    }
+    if (typeof profile.show_badges === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.showBadges, String(profile.show_badges));
+      setShowBadgesState(profile.show_badges);
+    }
   }, []);
 
   // ── reset to defaults ─────────────────────────────────────────────────────
@@ -432,10 +590,19 @@ export function SettingsProvider({ children }) {
       muteAllNotifications, setMuteAllNotifications,
       mutePersonalChats, setMutePersonalChats,
       muteGroupChats, setMuteGroupChats,
+      muteNewEvents, setMuteNewEvents,
+      muteNewPools, setMuteNewPools,
+      muteEventReminders, setMuteEventReminders,
+      mutePoolReminders, setMutePoolReminders,
+      muteEventRecommendations, setMuteEventRecommendations,
       // privacy
       readReceipts, setReadReceipts,
       showOnline, setShowOnline,
       showLastSeen, setShowLastSeen,
+      showInterests, setShowInterests,
+      showPublicStats, setShowPublicStats,
+      showBadges, setShowBadges,
+      syncPrivacyFromProfile,
     }}>
       {children}
     </SettingsContext.Provider>

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import LocationPicker from '../components/LocationPicker';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
 
 function normalizeText(value = '') {
@@ -15,19 +18,23 @@ function normalizeText(value = '') {
 
 function getEventEmoji(category = '') {
   const c = normalizeText(category);
-  if (/musica|concierto|concert/.test(c)) return '🎵';
-  if (/deporte|sport|futbol|tenis|running/.test(c)) return '⚽';
-  if (/arte|art|exposicion|museo/.test(c)) return '🎨';
-  if (/tecnologia|tech|hacking|codigo/.test(c)) return '💻';
+  // Se añade el selector de variación U+FE0F a cada emoji para forzar su
+  // presentación a color (el CSS global usa font-variant-emoji: text para
+  // dar un estilo mono a los iconos por defecto; sin este selector solo los
+  // emojis que ya lo llevaban incorporado, como el de Comida, salían a color).
+  if (/musica|concierto|concert/.test(c)) return '🎵️';
+  if (/deporte|sport|futbol|tenis|running/.test(c)) return '⚽️';
+  if (/arte|art|exposicion|museo/.test(c)) return '🎨️';
+  if (/tecnologia|tech|hacking|codigo/.test(c)) return '💻️';
   if (/comida|food|gastro|cocina|cena/.test(c)) return '🍽️';
-  if (/fiesta|party|celebracion/.test(c)) return '🎉';
-  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿';
-  if (/cine|film|pelicula|movie/.test(c)) return '🎬';
-  if (/juego|gaming|videojuego/.test(c)) return '🎮';
-  if (/yoga|meditacion|bienestar|wellness/.test(c)) return '🧘';
-  if (/fotografia|photo/.test(c)) return '📷';
-  if (/lectura|libro|book|literatura/.test(c)) return '📚';
-  return '🌐';
+  if (/fiesta|party|celebracion/.test(c)) return '🎉️';
+  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿️';
+  if (/cine|film|pelicula|movie/.test(c)) return '🎬️';
+  if (/juego|gaming|videojuego/.test(c)) return '🎮️';
+  if (/yoga|meditacion|bienestar|wellness/.test(c)) return '🧘️';
+  if (/fotografia|photo/.test(c)) return '📷️';
+  if (/lectura|libro|book|literatura/.test(c)) return '📚️';
+  return '🌐️';
 }
 
 function getCommunityEmoji(category = '') {
@@ -205,7 +212,6 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
             {event.location && <span className="text-xs text-slate-500 font-mono">📍 {event.location}</span>}
           </div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs text-slate-500 font-mono">👥 {event.attendee_count || 0} apuntados</span>
             <button
               type="button"
               onClick={handleLike}
@@ -224,14 +230,14 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
             {isJoined ? (
               <>
                 <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20">
-                  ✓ Apuntado
+                  📅 En tu planificación
                 </span>
                 <button
                   onClick={e => run(onLeave, e)}
                   disabled={busy}
                   className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
                 >
-                  {busy ? '...' : 'Salir'}
+                  {busy ? '...' : 'Quitar'}
                 </button>
               </>
             ) : isPast ? (
@@ -244,7 +250,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
                 disabled={busy}
                 className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50"
               >
-                {busy ? '...' : '+ Apuntarme'}
+                {busy ? '...' : '📅 Añadir a planificación'}
               </button>
             )}
           </div>
@@ -259,6 +265,9 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
   const coverInputRef = useRef(null);
+  const coverCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+  const [expandedPlan, setExpandedPlan] = useState(null); // 'basic' | 'premium' | 'ultra' | null
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -268,7 +277,13 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     event_date: defaultDate,
     ends_at: '',
     location: '',
-    max_attendees: 50,
+    lat: null,
+    lng: null,
+    url: '',
+    price: '',
+    additional_info: '',
+    promotion_plan: 'basic',
+    notification_count: 500,
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -303,17 +318,19 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     setCoverFile(null);
     setCoverPreview('');
     if (coverInputRef.current) coverInputRef.current.value = '';
+    if (coverCameraRef.current) coverCameraRef.current.value = '';
   }
 
   async function handleSubmit() {
     if (!form.title.trim()) { setError('El título es obligatorio'); return; }
     if (!form.event_date) { setError('La fecha es obligatoria'); return; }
+    if (!form.ends_at) { setError('La fecha fin es obligatoria'); return; }
     if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
     if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
     }
-    if (form.ends_at && new Date(form.ends_at) <= new Date(form.event_date)) {
+    if (new Date(form.ends_at) <= new Date(form.event_date)) {
       setError('La fecha fin debe ser posterior al inicio');
       return;
     }
@@ -326,7 +343,6 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
-        max_attendees: parseInt(form.max_attendees, 10) || 50,
       });
       onClose();
     } catch (e) {
@@ -340,6 +356,8 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
+
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">{getEventEmoji(resolvedCategory || form.category)}</span>
           <div>
@@ -354,6 +372,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             <input
               value={form.title}
               onChange={e => set('title', e.target.value)}
+              placeholder="Ej: Concierto en el parque, Hackathon de verano..."
               maxLength={120}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -387,21 +406,31 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               />
             )}
           </div>
-          <textarea
-            value={form.description}
-            onChange={e => set('description', e.target.value)}
-            placeholder="Descripción"
-            rows={3}
-            maxLength={500}
-            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
-          />
-          <input
-            value={form.organization}
-            onChange={e => set('organization', e.target.value)}
-            placeholder="Organización que crea el evento (opcional)"
-            maxLength={120}
-            className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-          />
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Descripción <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              placeholder="¿De qué va el evento? ¿Qué pueden esperar los asistentes?"
+              rows={3}
+              maxLength={500}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Organización <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              value={form.organization}
+              onChange={e => set('organization', e.target.value)}
+              placeholder="Ej: Universidad, asociación, club..."
+              maxLength={120}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha y hora *</label>
@@ -414,7 +443,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               />
             </div>
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin *</label>
               <input
                 type="datetime-local"
                 value={form.ends_at}
@@ -423,26 +452,56 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Máx. asistentes</label>
-              <input
-                type="number"
-                value={form.max_attendees}
-                min={2}
-                max={10000}
-                onChange={e => set('max_attendees', e.target.value)}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
-            </div>
           </div>
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
-            <input
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Ubicación *
+            </label>
+            <LocationPicker
               value={form.location}
-              onChange={e => set('location', e.target.value)}
-              placeholder="Ubicación"
-              maxLength={200}
+              lat={form.lat}
+              lng={form.lng}
+              onChange={(location, lat, lng) => setForm(f => ({ ...f, location, lat, lng }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              URL <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              placeholder="Ej: https://eventbrite.com/mi-evento"
+              maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Precio <span className="text-slate-600">(€ · vacío o 0 = gratis)</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={e => set('price', e.target.value)}
+              placeholder="Ej: 5.00"
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Información adicional <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={form.additional_info}
+              onChange={e => set('additional_info', e.target.value)}
+              placeholder="Dress code, qué traer, instrucciones de acceso, requisitos..."
+              maxLength={1000}
+              rows={3}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
             />
           </div>
           <div>
@@ -468,10 +527,10 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             ) : (
               <button
                 type="button"
-                onClick={() => coverInputRef.current?.click()}
+                onClick={() => setShowPhotoMenu(true)}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto de la galería
+                Elegir foto
               </button>
             )}
             <input
@@ -481,12 +540,210 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               className="hidden"
               onChange={handleCoverChange}
             />
+            <input
+              ref={coverCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => coverCameraRef.current?.click()}
+              onGallery={() => coverInputRef.current?.click()}
+            />
           </div>
+
+          {/* Promotion Plan */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-2">
+              Promoción del evento
+            </label>
+            <div className="grid grid-cols-1 gap-2">
+              {/* Basic */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => set('promotion_plan', 'basic')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'basic'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                  form.promotion_plan === 'basic'
+                    ? 'border-accent-primary bg-accent-primary/10'
+                    : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">📋</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Basic Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Listado estándar en la sección de eventos de la comunidad.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'basic' ? null : 'basic'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'basic' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'basic' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'basic' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                    </ul>
+                  )}
+                </div>
+                {form.promotion_plan === 'basic' && (
+                  <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
+                )}
+              </div>
+
+              {/* Premium */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => set('promotion_plan', 'premium')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'premium'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                  form.promotion_plan === 'premium'
+                    ? 'border-purple-400 bg-purple-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-purple-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">⚡</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Etiqueta ⚡ Premium · Notificación push a usuarios seleccionados de la app al publicar.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'premium' ? null : 'premium'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'premium' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'premium' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'premium' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                      <li>· Notificaciones a número de usuarios contratado</li>
+                    </ul>
+                  )}
+                </div>
+                {form.promotion_plan === 'premium' && (
+                  <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
+                )}
+              </div>
+
+              {/* Ultra */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => set('promotion_plan', 'ultra')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'ultra'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                  form.promotion_plan === 'ultra'
+                    ? 'border-yellow-400 bg-yellow-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-yellow-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">🚀</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'ultra' ? null : 'ultra'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'ultra' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'ultra' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'ultra' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                      <li>· Notificaciones a número de usuarios contratado</li>
+                      <li>· Apariciones en banner menú principal</li>
+                    </ul>
+                  )}
+                </div>
+                {form.promotion_plan === 'ultra' && (
+                  <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>
+                )}
+              </div>
+            </div>
+
+            {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
+              <>
+                <div className="mt-2 p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-mono text-surface-muted">
+                      📨 Notificaciones a contratar (on-demand)
+                    </label>
+                    <span className="text-xs font-mono font-semibold text-surface-text">
+                      {Number(form.notification_count).toLocaleString('es-ES')}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={500}
+                    max={50000}
+                    step={500}
+                    value={form.notification_count}
+                    onChange={e => set('notification_count', Number(e.target.value))}
+                    className="w-full accent-accent-primary cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
+                    <span>Mín. 500</span>
+                    <span>Máx. 50.000</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-surface-muted">
+                    ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  💳 El pago se efectuará tras el inicio del evento, en base a las notificaciones enviadas hasta su comienzo.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🔁 En cada promoción cada usuario se notifica una vez, para que usuarios ya notificados vuelvan a serlo, se debe renovar la promoción desde el evento creado.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  💶 La promoción se cobrará al empezar el evento automáticamente o al renovar la promoción.
+                </p>
+              </>
+            )}
+          </div>
+
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
+          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())) && (
+            <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
+          )}
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim() || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
-            className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50"
+            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
+            className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : 'Publicar evento'}
           </button>
@@ -530,6 +787,7 @@ export default function CommunityDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { clearCommunityBadge, communitiesWithEvents } = useCommunityNotifications();
   const [community, setCommunity] = useState(null);
   const [currentEvents, setCurrentEvents] = useState([]);
   const [pastEvents, setPastEvents] = useState([]);
@@ -553,6 +811,13 @@ export default function CommunityDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Limpiar el badge SOLO después de que la página haya cargado y se muestre al usuario
+  useEffect(() => {
+    if (!loading && community) {
+      clearCommunityBadge(communityId);
+    }
+  }, [loading, community, communityId, clearCommunityBadge]);
 
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
@@ -645,7 +910,12 @@ export default function CommunityDetailPage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
+              {communitiesWithEvents.has(communityId) && (
+                <span className="flex-shrink-0 w-2.5 h-2.5 bg-red-500 rounded-full" />
+              )}
+            </div>
             <p className="text-xs text-surface-muted font-mono">
               {community.member_count || 0} miembros{community.is_admin ? ' · admin' : ''}
             </p>

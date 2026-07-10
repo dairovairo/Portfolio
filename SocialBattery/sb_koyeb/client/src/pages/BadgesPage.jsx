@@ -4,17 +4,19 @@ import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 
-function BadgeCard({ badge, assignment, currentUserId }) {
-  const holder = assignment?.user;
-  const isMine = assignment?.userId === currentUserId;
-  const statusLabel = assignment ? 'Desbloqueada' : 'Bloqueada';
+function BadgeCard({ badge, assignments, currentUserId }) {
+  const holders = assignments || [];
+  const hasAny = holders.length > 0;
+  const mine = holders.find(a => a.userId === currentUserId);
+  const isMine = !!mine;
+  const statusLabel = hasAny ? 'Desbloqueada' : 'Bloqueada';
 
   return (
     <div
       className={`relative rounded-2xl border p-4 flex flex-col items-center text-center gap-2 transition-all duration-300 ${
         isMine
           ? 'bg-surface-card border-accent-primary/40 shadow-lg shadow-accent-primary/10'
-          : assignment
+          : hasAny
           ? 'bg-surface-card border-surface-border'
           : 'bg-surface-card/30 border-surface-border opacity-45'
       }`}
@@ -22,12 +24,12 @@ function BadgeCard({ badge, assignment, currentUserId }) {
     >
       <span
         className={`absolute top-2 right-2 sb-symbol text-sm z-10 ${
-          assignment ? 'text-accent-glow' : 'text-surface-muted'
+          hasAny ? 'text-accent-glow' : 'text-surface-muted'
         }`}
         aria-label={statusLabel}
         title={statusLabel}
       >
-        {assignment ? '🔓︎' : '🔒︎'}
+        {hasAny ? '🔓︎' : '🔒︎'}
       </span>
 
       {isMine && (
@@ -38,7 +40,7 @@ function BadgeCard({ badge, assignment, currentUserId }) {
       )}
 
       <div
-        className={`text-4xl relative z-10 ${assignment ? '' : 'grayscale'}`}
+        className={`text-4xl relative z-10 ${hasAny ? '' : 'grayscale'}`}
         style={isMine ? { filter: 'drop-shadow(0 0 10px rgba(0,148,158,0.5))' } : {}}
       >
         {badge.emoji}
@@ -52,13 +54,17 @@ function BadgeCard({ badge, assignment, currentUserId }) {
         {badge.description}
       </div>
 
-      {assignment ? (
+      {hasAny ? (
         <>
           <div className={`text-xs font-mono relative z-10 ${isMine ? 'text-accent-glow/80' : 'text-surface-muted'}`}>
-            {isMine ? 'Tu identidad' : `@${holder?.username || 'usuario'}`}
+            {isMine
+              ? 'Tu identidad'
+              : holders.length === 1
+              ? `${holders[0].user?.username || 'usuario'}`
+              : `${holders.length} colegas`}
           </div>
           <div className="text-[11px] text-surface-muted/75 leading-tight relative z-10">
-            {assignment.reason}
+            {(mine || holders[0])?.reason}
           </div>
         </>
       ) : (
@@ -140,13 +146,14 @@ export default function BadgesPage() {
     loadBadges();
   }, [selectedGroupId]);
 
-  const assignmentMap = assignments.reduce((acc, assignment) => {
-    acc[assignment.badgeId] = assignment;
+  const assignmentsByBadge = assignments.reduce((acc, assignment) => {
+    if (!acc[assignment.badgeId]) acc[assignment.badgeId] = [];
+    acc[assignment.badgeId].push(assignment);
     return acc;
   }, {});
 
   const myAssignments = assignments.filter(assignment => assignment.userId === profile?.id);
-  const assignedCount = assignments.length;
+  const assignedCount = Object.keys(assignmentsByBadge).length;
   const totalBadges = badges.length;
   const progress = totalBadges > 0 ? Math.round((assignedCount / totalBadges) * 100) : 0;
   const selectedGroup = groups.find(g => g.id === selectedGroupId);
@@ -236,8 +243,8 @@ export default function BadgesPage() {
             </div>
             <p className="text-xs text-surface-muted mt-3 leading-relaxed">
               Cada identidad solo la puede tener una persona en el grupo.
-              Cada persona puede tener como maximo 2. Si hay empate de puntuacion,
-              tiene prioridad quien tenga menos identidades; si sigue empatado,
+              Cada persona puede tener como maximo 1 a la vez. Si hay empate de puntuacion,
+              tiene prioridad quien no tenga ya una identidad activa; si sigue empatado,
               se elige un titular estable al azar. Al ganarla queda en tu perfil para siempre.
             </p>
           </div>
@@ -274,7 +281,7 @@ export default function BadgesPage() {
                 <BadgeCard
                   key={badge.id}
                   badge={badge}
-                  assignment={assignmentMap[badge.id]}
+                  assignments={assignmentsByBadge[badge.id]}
                   currentUserId={profile?.id}
                 />
               ))}

@@ -76,10 +76,15 @@ export function useUserOnline(targetUserId) {
  */
 export function useFriendsOnline(friends) {
   const [onlineMap, setOnlineMap] = useState({});
+  const friendIdsRef = useRef(new Set());
 
   // Initialize from current data
   useEffect(() => {
-    if (!friends?.length) return;
+    friendIdsRef.current = new Set((friends || []).map(f => f.id));
+    if (!friends?.length) {
+      setOnlineMap({});
+      return;
+    }
     const map = {};
     friends.forEach(f => {
       map[f.id] = isOnline(f.last_seen_at);
@@ -100,6 +105,7 @@ export function useFriendsOnline(friends) {
       }, (payload) => {
         const userId = payload.new?.id;
         if (!userId) return;
+        if (!friendIdsRef.current.has(userId)) return;
         const online = isOnline(payload.new.last_seen_at);
         setOnlineMap(prev => ({ ...prev, [userId]: online }));
       })

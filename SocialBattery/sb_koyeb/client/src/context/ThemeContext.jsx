@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
+const VALID_THEMES = ['dark', 'light', 'aurora', 'sunset', 'forest', 'pastel'];
+
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => {
+  const [theme, setThemeState] = useState(() => {
     const saved = localStorage.getItem('sb-theme');
-    if (saved) return saved;
-    return 'dark'; // dark by default
+    return VALID_THEMES.includes(saved) ? saved : 'dark';
   });
 
   useEffect(() => {
@@ -17,15 +18,30 @@ export function ThemeProvider({ children }) {
     // Update PWA theme-color meta
     const meta = document.getElementById('theme-color-meta');
     if (meta) {
-      meta.setAttribute('content', theme === 'light' ? '#f4fbfb' : '#0a0a0f');
+      const colors = { light: '#f4fbfb', dark: '#0a0a0f', aurora: '#0e0b1a', sunset: '#0f0a05', forest: '#f2f7f2', pastel: '#f7f9ff' };
+      meta.setAttribute('content', colors[theme] ?? '#0a0a0f');
     }
   }, [theme]);
 
-  const setAppTheme = (nextTheme) => setTheme(nextTheme === 'light' ? 'light' : 'dark');
-  const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+  const setTheme = (next) => {
+    if (VALID_THEMES.includes(next)) setThemeState(next);
+  };
+
+  // Legacy toggle kept for backward compat (dark ↔ light)
+  const toggle = () => setThemeState(t => t === 'dark' ? 'light' : 'dark');
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme: setAppTheme, toggle, isDark: theme === 'dark' }}>
+    <ThemeContext.Provider value={{
+      theme,
+      setTheme,
+      toggle,
+      isDark:   theme === 'dark' || theme === 'aurora' || theme === 'sunset',
+      isAurora: theme === 'aurora',
+      isSunset: theme === 'sunset',
+      isForest: theme === 'forest',
+      isPastel: theme === 'pastel',
+      isLight:  theme === 'light' || theme === 'forest' || theme === 'pastel',
+    }}>
       {children}
     </ThemeContext.Provider>
   );

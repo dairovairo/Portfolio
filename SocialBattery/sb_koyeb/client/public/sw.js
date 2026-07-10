@@ -1,5 +1,5 @@
-// SocialBattery Service Worker — Phase 8
-const CACHE_NAME = 'socialbattery-v8';
+// SocialBattery Service Worker — Phase 12 (soft in-app navigation on notification click)
+const CACHE_NAME = 'socialbattery-v12';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell
@@ -42,39 +42,75 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Push notifications
+// Push notifications — works in foreground AND background/closed app.
+//
+//  · ultra-event-*   → requireInteraction + strong vibration (user must tap to dismiss)
+//  · premium-event-* → medium vibration, standard dismissal
+//  · others          → minimal vibration
 self.addEventListener('push', (event) => {
   let data = { title: 'SocialBattery', body: 'Tienes una nueva notificación 🔋' };
   try { data = event.data.json(); } catch {}
 
+  const tag = data.tag || '';
+  const isUltra      = tag.startsWith('ultra-event-');
+  const isPremium    = tag.startsWith('premium-event-');
+  const isEventUpdate = tag.startsWith('event-update-');
+
+  const notifOptions = {
+    body:    data.body,
+    icon:    '/icons/icon-192.png',
+    badge:   '/icons/badge-72.png',
+    tag:     tag || 'general',
+    renotify: true,
+    data:    { url: data.url || '/community' },
+    actions: data.actions || [],
+    // Ultra: keep on screen until the user taps + strong vibration pattern
+    // Premium: standard dismissal + softer double-pulse
+    // Event update: medium single-pulse, standard dismissal
+    // Basic: single short vibration
+    requireInteraction: isUltra,
+    vibrate: isUltra
+      ? [200, 100, 200, 100, 400]
+      : isPremium
+        ? [150, 80, 150]
+        : isEventUpdate
+          ? [120, 60, 120]
+          : [100],
+  };
+
   event.waitUntil(
-    self.registration.showNotification(data.title || 'SocialBattery', {
-      body: data.body,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/badge-72.png',
-      tag: data.tag || 'general',
-      renotify: true,
-      data: { url: data.url || '/' },
-      actions: data.actions || [],
-    })
+    self.registration.showNotification(data.title || 'SocialBattery', notifOptions)
   );
 });
 
-// Notification click → open/focus app
+// Notification click → open/focus app at the event/pool/chat URL.
+//
+// IMPORTANTE: si la app ya está abierta (pestaña o PWA en segundo plano),
+// NO usamos client.navigate() — eso fuerza una recarga completa de
+// documento a esa URL exacta, y si el hosting estático no tiene un rewrite
+// SPA (servir index.html para cualquier ruta), esa recarga cae en un 404 o
+// termina redirigida a "/", que es justo el síntoma de "todas las
+// notificaciones me llevan al menú principal". En su lugar, le mandamos un
+// postMessage a la app ya viva para que navegue con React Router (sin
+// recarga, sin depender del hosting) — ver el listener en App.jsx.
+// Solo si NO hay ninguna ventana abierta usamos clients.openWindow(), que
+// sí es una carga completa (inevitable para arrancar la app desde cero) y
+// por tanto sí depende de que el hosting sirva index.html en esa ruta.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || '/';
 
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.focus();
-          client.navigate(targetUrl);
-          return;
-        }
+  event.waitUntil((async () => {
+    const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+
+    for (const client of clientList) {
+      if (client.url.includes(self.location.origin) && 'focus' in client) {
+        await client.focus();
+        client.postMessage({ type: 'sb-notification-click', url: targetUrl });
+        return;
       }
-      if (clients.openWindow) return clients.openWindow(targetUrl);
-    })
-  );
+    }
+
+    if (clients.openWindow) return clients.openWindow(targetUrl);
+  })());
 });

@@ -1,9 +1,19 @@
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { isOnline } from '../hooks/usePresence';
 import { useSettings } from '../context/SettingsContext';
+import MascotDisplay from './MascotDisplay';
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 export default function FriendCard({ friend, online: onlineProp, onClick }) {
   const color = getBatteryColor(friend.battery_level ?? 50);
+  const tier = getMascotTier(friend.battery_level ?? 50);
   const { showLastSeen } = useSettings();
   // If caller passes online prop (reactive), use it; otherwise fall back to local check
   const online = onlineProp !== undefined ? onlineProp : isOnline(friend.last_seen_at);
@@ -11,7 +21,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-full bg-surface-card hover:bg-surface-hover border border-surface-border rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 text-left group"
+      className="w-full bg-surface-card hover:bg-surface-hover border border-surface-border rounded-2xl p-[18px] flex items-center gap-4 transition-all duration-200 text-left group"
     >
       {/* Avatar */}
       <div className="relative flex-shrink-0">
@@ -26,7 +36,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
           {friend.avatar_url ? (
             <img src={friend.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
           ) : (
-            (friend.display_name || friend.username)?.[0]?.toUpperCase()
+            friend.username?.[0]?.toUpperCase()
           )}
         </div>
         {/* Online dot */}
@@ -37,16 +47,13 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-display font-semibold text-surface-text truncate">
-            {friend.display_name || friend.username}
+            {friend.username}
           </span>
           {friend.battery_is_estimated && (
             <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-mono flex-shrink-0">
               ⚡est.
             </span>
           )}
-        </div>
-        <div className="text-xs text-surface-muted font-mono mt-0.5">
-          @{friend.username}
         </div>
         {showLastSeen && (
           <div className="text-xs text-surface-muted mt-1">
@@ -55,8 +62,49 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
         )}
       </div>
 
-      {/* Battery level */}
-      <div className="flex-shrink-0 text-right">
+      {/* Mascota — refleja el nivel de batería del amigo. La base (color/
+          tier) se resuelve siempre localmente a partir de su battery_level,
+          pero la ropa/calzado/gorro/accesorios/actividad NO viven aquí: son
+          personalización local de cada usuario. Para poder mostrarla, cada
+          cliente "hornea" su propio equipado en un PNG (ver
+          lib/mascotRenderer.js → renderMascotOverlayBlob y
+          components/MascotPreviewSync.jsx) que se sube al servidor
+          (users.mascot_preview_url) y llega aquí como
+          friend.mascot_preview_url — simplemente se superpone encima de la
+          mascota base, ya recoloreado y posicionado.
+          Colocada a la derecha del nombre de perfil (antes iba a la
+          izquierda, entre el avatar y el nombre). */}
+      <div className="relative flex-shrink-0 flex flex-col items-center" style={{ width: 56 }}>
+        <div className="relative" style={{ width: 56, height: 56 }}>
+          <MascotDisplay
+            tier={tier}
+            size={56}
+            glowColor={color.hex}
+            outfitSrc={null}
+            feetSrc={null}
+            headSrc={null}
+            accessories={[]}
+            activityLayers={[]}
+          />
+          {friend.mascot_preview_url && (
+            <img
+              src={friend.mascot_preview_url}
+              alt=""
+              draggable={false}
+              className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+            />
+          )}
+        </div>
+        <span className="text-[9px] font-display font-semibold text-surface-muted mt-0.5 max-w-[56px] truncate">
+          {friend.mascot_name || 'Volty'}
+        </span>
+      </div>
+
+      {/* Battery level — ancho fijo (suficiente para "100") para que el
+          número no cambie de tamaño entre 1 y 2 dígitos; si no, al ser
+          flex-shrink-0 dentro del flex, hace que "Info" (flex-1) se encoja
+          o crezca y desplace todo lo que va después, incluida la mascota. */}
+      <div className="flex-shrink-0 text-right w-12">
         <div
           className="font-display text-2xl font-bold tabular-nums transition-colors duration-200"
           style={{ color: color.hex }}

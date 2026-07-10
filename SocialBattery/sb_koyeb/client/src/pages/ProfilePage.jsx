@@ -3,13 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
+import { useSettings } from '../context/SettingsContext';
 import { usePush } from '../hooks/usePush';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { BatteryLineChart, BatteryHeatmap } from '../components/BatteryChart';
 import BatterySlider from '../components/BatterySlider';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import BottomNav from '../components/BottomNav';
+import MascotDisplay from '../components/MascotDisplay';
+import { ALL_INTERESTS } from './OnboardingPage';
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 // ── Public Stats ──────────────────────────────────────────────────────────────
 function formatMemberSince(isoDate) {
@@ -30,10 +42,10 @@ function StatsGrid({ stats }) {
   if (!stats) return null;
   const items = [
     { icon: '👥', label: 'Amigos',           value: stats.friends_count },
-    { icon: '🗓️', label: 'Planes creados',   value: stats.pools_created },
+    { icon: '📅', label: 'Planes creados',   value: stats.pools_created },
     { icon: '🚀', label: 'Planes unidos',    value: stats.pools_joined },
     { icon: '🔋', label: 'Updates batería',  value: stats.battery_updates },
-    { icon: '⏱️', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
+    { icon: '⏰', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
   ];
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
@@ -93,21 +105,25 @@ export default function ProfilePage() {
   const { profile, refreshProfile, signOut } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const { addToast } = useToast();
+  const { showInterests, showPublicStats } = useSettings();
   const { permission, subscribed, requestPermission } = usePush();
   const navigate = useNavigate();
   const fileRef = useRef(null);
+  const cameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   const [history, setHistory] = useState([]);
   const [allBadges, setAllBadges] = useState([]);
   const [earnedBadgesMap, setEarnedBadgesMap] = useState({});
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [historyView, setHistoryView] = useState('line');
+  const [historyView, setHistoryView] = useState('heatmap');
   const [stats, setStats] = useState(null);
 
   // Edit state
   const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [bio, setBio] = useState(profile?.bio || '');
+  const [editInterests, setEditInterests] = useState(profile?.interests || []);
+  const [mascotName, setMascotName] = useState(profile?.mascot_name || 'Volty');
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Avatar upload
@@ -140,16 +156,19 @@ export default function ProfilePage() {
   }, []);
 
   async function saveProfile() {
+    const trimmedMascotName = mascotName.trim().slice(0, 20) || 'Volty';
     if (
-      displayName.trim() === profile?.display_name &&
-      bio.trim() === (profile?.bio || '')
+      bio.trim() === (profile?.bio || '') &&
+      JSON.stringify(editInterests) === JSON.stringify(profile?.interests || []) &&
+      trimmedMascotName === (profile?.mascot_name || 'Volty')
     ) { setEditing(false); return; }
 
     setSavingProfile(true);
     try {
       await api.patch('/users/me', {
-        display_name: displayName.trim(),
         bio: bio.trim() || null,
+        interests: editInterests,
+        mascot_name: trimmedMascotName,
       });
       await refreshProfile();
       setEditing(false);
@@ -198,7 +217,7 @@ export default function ProfilePage() {
   const color = getBatteryColor(profile?.battery_level ?? 50);
 
   const avatarSrc = avatarPreview || profile?.avatar_url;
-  const avatarInitial = (profile?.display_name || profile?.username)?.[0]?.toUpperCase();
+  const avatarInitial = profile?.username?.[0]?.toUpperCase();
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
@@ -210,23 +229,15 @@ export default function ProfilePage() {
           </button>
           <h1 className="font-display font-bold text-surface-text flex-1">Mi Perfil</h1>
           <button
-            onClick={toggleTheme}
-            className={`transition-colors text-lg p-1 ${
-              theme === 'dark'
-                ? 'text-surface-text hover:text-white'
-                : 'text-slate-950 hover:text-surface-text'
-            }`}
-            title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+            onClick={() => navigate('/settings')}
+            className="text-surface-muted hover:text-surface-text transition-colors p-1.5 rounded-xl hover:bg-surface-hover"
+            title="Ajustes"
+            aria-label="Ajustes"
           >
-            <span className="sb-symbol text-xl" aria-hidden="true">
-              {theme === 'dark' ? '☼' : '☾'}
-            </span>
-          </button>
-          <button
-            onClick={signOut}
-            className="text-xs text-surface-muted hover:text-red-400 transition-colors font-mono"
-          >
-            Salir
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
           </button>
         </div>
       </nav>
@@ -244,37 +255,79 @@ export default function ProfilePage() {
           <div className="px-5 pb-5 -mt-10">
             {/* Avatar + edit avatar */}
             <div className="flex items-end justify-between mb-3">
-              <div className="relative">
-                <div
-                  className="w-20 h-20 rounded-2xl border-4 flex items-center justify-center text-2xl font-display font-bold overflow-hidden"
-                  style={{ borderColor: 'var(--sb-card)', background: `${color.hex}20` }}
-                >
-                  {avatarSrc ? (
-                    <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
+              <div className="flex items-end gap-3">
+                <div className="relative">
+                  <div
+                    className="w-20 h-20 rounded-2xl border-4 flex items-center justify-center text-2xl font-display font-bold overflow-hidden"
+                    style={{ borderColor: 'var(--sb-card)', background: `${color.hex}20` }}
+                  >
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span style={{ color: color.hex }}>{avatarInitial}</span>
+                    )}
+                    {uploadingAvatar && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-2xl">
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowPhotoMenu(true)}
+                    className="absolute -bottom-1.5 -right-1.5 bg-accent-primary text-white w-7 h-7
+                      rounded-full flex items-center justify-center text-xs border-2 border-surface-card
+                      hover:bg-accent-primary/80 transition-all"
+                  >
+                    📷
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                  <input ref={cameraRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
+                  <PhotoSourceMenu
+                    open={showPhotoMenu}
+                    onClose={() => setShowPhotoMenu(false)}
+                    onCamera={() => cameraRef.current?.click()}
+                    onGallery={() => fileRef.current?.click()}
+                  />
+                </div>
+
+                {/* Mascota propia + nombre — a la derecha de la foto de perfil.
+                    Al ser tu propio dispositivo, MascotDisplay lee
+                    directamente del contexto (useMascot) tu equipado real
+                    (ropa/calzado/gorro/accesorios/actividad), sin necesidad de
+                    overrides ni de mascot_preview_url. Se sube ligeramente
+                    (marginTop negativo) para dejar hueco al nombre debajo sin
+                    que la fila quede descuadrada. */}
+                <div className="flex-shrink-0 flex flex-col items-center" style={{ width: 64 }}>
+                  <div style={{ width: 64, height: 64, marginTop: '-10px' }}>
+                    <MascotDisplay
+                      tier={getMascotTier(profile?.battery_level ?? 50)}
+                      size={64}
+                      glowColor={color.hex}
+                    />
+                  </div>
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={mascotName}
+                      onChange={e => setMascotName(e.target.value.slice(0, 20))}
+                      placeholder="Volty"
+                      maxLength={20}
+                      className="w-16 mt-0.5 bg-surface-bg border border-surface-border rounded-md px-1 py-0.5
+                        text-[10px] font-display font-semibold text-surface-text text-center
+                        focus:outline-none focus:border-accent-primary transition-colors"
+                    />
                   ) : (
-                    <span style={{ color: color.hex }}>{avatarInitial}</span>
-                  )}
-                  {uploadingAvatar && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-2xl">
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    </div>
+                    <span className="text-[10px] font-display font-semibold text-surface-muted mt-1 max-w-[64px] truncate">
+                      {profile?.mascot_name || 'Volty'}
+                    </span>
                   )}
                 </div>
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="absolute -bottom-1.5 -right-1.5 bg-accent-primary text-white w-7 h-7
-                    rounded-full flex items-center justify-center text-xs border-2 border-surface-card
-                    hover:bg-accent-primary/80 transition-all"
-                >
-                  📷
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
               </div>
 
               {/* Edit button */}
               {!editing && (
                 <button
-                  onClick={() => { setDisplayName(profile?.display_name || ''); setBio(profile?.bio || ''); setEditing(true); }}
+                  onClick={() => { setBio(profile?.bio || ''); setEditInterests(profile?.interests || []); setMascotName(profile?.mascot_name || 'Volty'); setEditing(true); }}
                   className="bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5
                     text-xs font-display font-semibold text-surface-text hover:text-accent-glow transition-all flex items-center gap-1.5"
                 >
@@ -288,30 +341,42 @@ export default function ProfilePage() {
             {editing ? (
               <div className="space-y-3 animate-slide-down">
                 <div>
-                  <label className="block text-xs font-mono text-surface-muted mb-1 uppercase tracking-widest">Nombre</label>
-                  <input
-                    value={displayName}
-                    onChange={e => setDisplayName(e.target.value)}
-                    maxLength={16}
-                    onKeyDown={e => { if (e.key === 'Enter') saveProfile(); if (e.key === 'Escape') setEditing(false); }}
-                    className="w-full bg-surface-bg border border-accent-primary rounded-xl px-3 py-2
-                      text-surface-text text-sm focus:outline-none"
-                    autoFocus
-                  />
-                </div>
-                <div>
                   <label className="block text-xs font-mono text-surface-muted mb-1 uppercase tracking-widest">Bio</label>
                   <textarea
                     value={bio}
                     onChange={e => setBio(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') setEditing(false); }}
                     maxLength={160}
                     rows={2}
                     placeholder="Cuéntanos algo sobre ti..."
+                    autoFocus
                     className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2
                       text-surface-text text-sm focus:outline-none focus:border-accent-primary
                       transition-colors resize-none"
                   />
                   <p className="text-right text-xs text-surface-muted/60">{bio.length}/160</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">Intereses</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {ALL_INTERESTS.map(({ id, emoji }) => {
+                      const selected = editInterests.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setEditInterests(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                          className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 border transition-all text-left
+                            ${selected
+                              ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
+                              : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                            }`}
+                        >
+                          <span className="text-base flex-shrink-0">{emoji}</span>
+                          <span className="text-[10px] font-display font-semibold leading-tight truncate">{id}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -332,11 +397,33 @@ export default function ProfilePage() {
             ) : (
               <>
                 <h2 className="font-display font-bold text-surface-text text-xl leading-tight">
-                  {profile?.display_name}
+                  {profile?.username}
                 </h2>
-                <div className="text-sm text-surface-muted font-mono">@{profile?.username}</div>
                 {profile?.bio && (
                   <p className="text-sm text-surface-muted mt-2 leading-relaxed">{profile.bio}</p>
+                )}
+                {profile?.interests && profile.interests.length > 0 && showInterests && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {profile.interests.map(interest => {
+                      const found = ALL_INTERESTS.find(i => i.id === interest);
+                      return (
+                        <span
+                          key={interest}
+                          className="inline-flex items-center gap-1 bg-accent-primary/10 border border-accent-primary/20
+                            text-accent-glow rounded-full px-2.5 py-1 text-xs font-display font-semibold"
+                        >
+                          {found?.emoji} {interest}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {profile?.interests && profile.interests.length > 0 && !showInterests && (
+                  <div className="flex items-center gap-1.5 mt-3">
+                    <span className="text-xs text-surface-muted/60 font-mono italic">
+                      🔒 Intereses ocultos para otros
+                    </span>
+                  </div>
                 )}
                 <div className="text-xs text-surface-muted/60 mt-2">
                   Miembro desde {profile?.created_at
@@ -426,7 +513,16 @@ export default function ProfilePage() {
         </div>
 
         {/* ── Public Stats ── */}
-        <StatsGrid stats={stats} />
+        {showPublicStats ? (
+          <StatsGrid stats={stats} />
+        ) : (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
+            <div className="flex items-center gap-2 text-surface-muted/60">
+              <span className="text-sm">📊</span>
+              <span className="text-xs font-mono italic">Estadísticas ocultas para otros</span>
+            </div>
+          </div>
+        )}
 
         {/* ── Battery history ── */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
@@ -460,61 +556,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* ── Settings ── */}
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
-          <h3 className="font-display font-semibold text-surface-text text-sm mb-1">Ajustes</h3>
 
-          {/* Theme toggle */}
-          <div className="flex items-center justify-between py-2 border-b border-surface-border">
-            <div>
-              <div className="text-sm font-display font-medium text-surface-text">
-                <span className="sb-symbol mr-1" aria-hidden="true">
-                  {theme === 'dark' ? '☾' : '☼'}
-                </span>
-                {theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}
-              </div>
-              <div className="text-xs text-surface-muted">Apariencia de la app</div>
-            </div>
-            <button
-              onClick={toggleTheme}
-              className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
-                theme === 'light' ? 'bg-accent-primary' : 'bg-surface-border'
-              }`}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
-                theme === 'light' ? 'left-7' : 'left-1'
-              }`} />
-            </button>
-          </div>
-
-          {/* Push notifications */}
-          {('Notification' in window) && (
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <div className="text-sm font-display font-medium text-surface-text">🔔 Notificaciones push</div>
-                <div className="text-xs text-surface-muted">
-                  {permission === 'granted'
-                    ? subscribed ? 'Activadas' : 'Concedidas'
-                    : permission === 'denied' ? 'Bloqueadas en el navegador'
-                    : 'Recibe avisos cuando quieran quedar'}
-                </div>
-              </div>
-              {permission !== 'denied' && (
-                <button
-                  onClick={handlePushToggle}
-                  disabled={subscribed}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-display font-semibold transition-all ${
-                    subscribed
-                      ? 'bg-green-500/10 text-green-400 border border-green-500/20 cursor-default'
-                      : 'bg-accent-primary/15 text-accent-glow border border-accent-primary/30 hover:bg-accent-primary/25'
-                  }`}
-                >
-                  {subscribed ? '✓ Activas' : 'Activar'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
 
         {/* ── Danger zone ── */}
         <div className="bg-surface-card border border-red-500/10 rounded-2xl p-4">

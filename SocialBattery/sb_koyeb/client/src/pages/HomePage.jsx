@@ -3,16 +3,30 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+import { useTheme } from '../context/ThemeContext';
 import { api } from '../lib/api';
 import BatterySlider from '../components/BatterySlider';
 import FriendCard from '../components/FriendCard';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
+import TutorialOverlay from '../components/TutorialOverlay';
 import BottomNav from '../components/BottomNav';
 import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
+import { generateBatteryStoryBlob, generateInviteBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+import { resolveMascotLayers } from '../lib/mascotRenderer';
+import { useMascot } from '../context/MascotContext';
+import MascotDisplay from '../components/MascotDisplay';
+import LogoWordmark from '../components/LogoWordmark';
+import { claimDailyBatteryReward, DAILY_BATTERY_REWARD, CURRENCY_NAME_PLURAL } from '../lib/currency';
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
+
 function Avatar({ user, size = 'sm', online = false }) {
   const color = getBatteryColor(user.battery_level ?? 50);
   const sz = size === 'sm' ? 'w-9 h-9 text-sm' : 'w-12 h-12 text-base';
@@ -23,7 +37,7 @@ function Avatar({ user, size = 'sm', online = false }) {
     >
       {user.avatar_url
         ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-        : (user.display_name || user.username)?.[0]?.toUpperCase()
+        : user.username?.[0]?.toUpperCase()
       }
       <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
     </div>
@@ -43,15 +57,49 @@ function BatteryBadge({ level, isEstimated }) {
 // ── Search friends modal ──────────────────────────────────────────────────────
 function SearchModal({ friends, onClose, onToast }) {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
   const [sent, setSent] = useState(new Set());
+  const [sharingInvite, setSharingInvite] = useState(false);
   const friendIds = new Set(friends.map(f => f.id));
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
+
+  async function handleInvite() {
+    if (sharingInvite) return;
+    setSharingInvite(true);
+    try {
+      const level = getEffectiveBatteryLevel(profile);
+      const color = getBatteryColor(level);
+      // Resolvemos la mascota tal y como está equipada ahora mismo, para
+      // incluirla como "fotito" personal en la imagen de invitación.
+      let mascot = null;
+      try {
+        mascot = await resolveMascotLayers(getMascotTier(level), {
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
+      } catch (_) {
+        mascot = null; // si falla, se genera la invitación sin la mascota
+      }
+      const username = profile?.username || 'Alguien';
+      const blob = await generateInviteBlob({ username, mascot, hex: color.hex });
+      const result = await shareOrDownloadBlob(blob, 'invitacion-sb.png', `${username} te ha invitado a SocialBattery`);
+      if (result.method === 'download') {
+        onToast('Imagen descargada. ¡Compártela donde quieras! 📲', 'success');
+      } else if (result.method === 'share') {
+        onToast('¡Invitación lista para compartir! 🚀', 'success');
+      }
+    } catch (e) {
+      onToast('Error al generar la invitación', 'error');
+    } finally {
+      setSharingInvite(false);
+    }
+  }
 
   useEffect(() => {
     if (!query.trim() || query.length < 2) { setResults([]); return; }
@@ -71,7 +119,7 @@ function SearchModal({ friends, onClose, onToast }) {
     try {
       await api.post('/friends/request', { addressee_id: user.id });
       setSent(s => new Set([...s, user.id]));
-      onToast(`Solicitud enviada a @${user.username} 🤝`);
+      onToast(`Solicitud enviada a ${user.username} 🤝`);
     } catch (e) { onToast(e.message, 'error'); }
     finally { setActionLoading(l => ({ ...l, [user.id]: false })); }
   }
@@ -97,7 +145,7 @@ function SearchModal({ friends, onClose, onToast }) {
         <div className="overflow-y-auto flex-1 space-y-2">
           {loading && <div className="text-center text-surface-muted text-sm py-6 animate-pulse">Buscando...</div>}
           {!loading && query.length >= 2 && results.length === 0 && (
-            <div className="text-center text-surface-muted text-sm py-8">Sin resultados para "@{query}"</div>
+            <div className="text-center text-surface-muted text-sm py-8">Sin resultados para "{query}"</div>
           )}
           {!loading && query.length < 2 && (
             <div className="text-center text-surface-muted text-sm py-8">
@@ -115,8 +163,8 @@ function SearchModal({ friends, onClose, onToast }) {
                 </button>
                 <div className="flex-1 min-w-0">
                   <button onClick={() => navigate(`/user/${user.id}`)} className="text-left">
-                    <div className="font-display font-semibold text-surface-text text-sm truncate">{user.display_name || user.username}</div>
-                    <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
+                    <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
+                    <div className="text-xs text-surface-muted font-mono">{user.username}</div>
                   </button>
                 </div>
                 <BatteryBadge level={user.battery_level} isEstimated={user.battery_is_estimated} />
@@ -136,6 +184,23 @@ function SearchModal({ friends, onClose, onToast }) {
               </div>
             );
           })}
+        </div>
+
+        {/* ── Invitar por redes sociales ──────────────────────────────────── */}
+        <div className="pt-3 mt-3 border-t border-surface-border flex-shrink-0">
+          <button
+            onClick={handleInvite}
+            disabled={sharingInvite}
+            className="w-full bg-accent-primary/10 border border-accent-primary/25 rounded-2xl p-4 flex items-center gap-3 hover:bg-accent-primary/15 transition-all text-left disabled:opacity-60"
+          >
+            <span className="text-2xl">{sharingInvite ? '⏳' : '📲'}</span>
+            <div>
+              <div className="font-display font-semibold text-surface-text text-sm">
+                {sharingInvite ? 'Generando invitación...' : 'Invitar por redes sociales'}
+              </div>
+              <div className="text-xs text-accent-glow">WhatsApp, Instagram Direct y más →</div>
+            </div>
+          </button>
         </div>
       </div>
     </div>
@@ -162,7 +227,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
     try {
       await api.patch(`/friends/request/${requestId}`, { status });
       setRequests(r => r.filter(req => req.id !== requestId));
-      if (status === 'accepted') { onToast(`¡Ahora eres amigo de @${username}! 🎉`); onAccepted?.(); }
+      if (status === 'accepted') { onToast(`¡Ahora eres amigo de ${username}! 🎉`); onAccepted?.(); }
       else onToast('Solicitud rechazada');
     } catch (e) { onToast(e.message, 'error'); }
     finally { setActionLoading(l => ({ ...l, [requestId]: false })); }
@@ -194,8 +259,8 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
                 <Avatar user={req.requester} online={showOnline && isOnline(req.requester.last_seen_at)} />
               </button>
               <div className="flex-1 min-w-0">
-                <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.display_name || req.requester.username}</div>
-                <div className="text-xs text-surface-muted font-mono">@{req.requester.username}</div>
+                <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.username}</div>
+                <div className="text-xs text-surface-muted font-mono">{req.requester.username}</div>
               </div>
               <BatteryBadge level={req.requester.battery_level} />
               <div className="flex gap-1.5 flex-shrink-0">
@@ -279,8 +344,8 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
                       </div>
                       <Avatar user={f} />
                       <div className="flex-1 min-w-0">
-                        <div className="font-display font-semibold text-surface-text text-sm truncate">{f.display_name || f.username}</div>
-                        <div className="text-xs text-surface-muted font-mono">@{f.username}</div>
+                        <div className="font-display font-semibold text-surface-text text-sm truncate">{f.username}</div>
+                        <div className="text-xs text-surface-muted font-mono">{f.username}</div>
                       </div>
                       <BatteryBadge level={f.battery_level} isEstimated={f.battery_is_estimated} />
                     </div>
@@ -308,7 +373,9 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
 export default function HomePage() {
   const { profile, refreshProfile } = useAuth();
   const { addToast } = useToast();
+  const { isLight } = useTheme();
   const navigate = useNavigate();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
 
   const [battery, setBattery] = useState(profile?.battery_level ?? 50);
   const [friends, setFriends] = useState([]);
@@ -320,6 +387,9 @@ export default function HomePage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [newBadges, setNewBadges] = useState([]);
+  const [sharingStory, setSharingStory] = useState(false);
+  const [todayEvent, setTodayEvent] = useState(null);
+  const friendIdsRef = useRef(new Set());
 
   // Modal state
   const [showSearch, setShowSearch] = useState(false);
@@ -330,6 +400,10 @@ export default function HomePage() {
     if (profile) setBattery(getEffectiveBatteryLevel(profile));
   }, [profile]);
 
+  useEffect(() => {
+    friendIdsRef.current = new Set(friends.map(f => f.id));
+  }, [friends]);
+
   const fetchFriends = useCallback(async () => {
     try {
       const { friends: data } = await api.get('/battery/friends');
@@ -337,7 +411,7 @@ export default function HomePage() {
       setFriends(sorted);
     } catch (e) { console.error(e); }
     finally { setLoadingFriends(false); }
-  }, [profile?.battery_level]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — no deps: profile.battery_level was causing a cascade refetch on every save
 
   const fetchPending = useCallback(async () => {
     try {
@@ -348,9 +422,8 @@ export default function HomePage() {
 
   const fetchUnread = useCallback(async () => {
     try {
-      const { conversations } = await api.get('/messages');
-      const unread = (conversations || []).reduce((acc, c) => acc + (c.unread || 0), 0);
-      setUnreadCount(unread);
+      const { count } = await api.get('/messages/unread-count');
+      setUnreadCount(count || 0);
     } catch (e) {}
   }, []);
 
@@ -368,20 +441,99 @@ export default function HomePage() {
     fetchGroups();
   }, [fetchFriends, fetchPending, fetchUnread, fetchGroups]);
 
+  // Panel de "nuevo evento cerca" — el backend ya solo guarda el PRIMER
+  // evento que le reservó al usuario el hueco diario de notificación
+  // (user_daily_notification_claims, PK user_id+fecha), así que este panel
+  // no cambia aunque luego lleguen más notificaciones el mismo día.
+  useEffect(() => {
+    api.get('/community/notifications/today-event')
+      .then(({ event }) => setTodayEvent(event || null))
+      .catch(() => {});
+  }, []);
+
   // Realtime subscriptions
   useEffect(() => {
     if (!profile?.id) return;
     const ch1 = supabase.channel('home-users')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, () => fetchFriends())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
+        const updated = payload.new;
+        if (!updated?.id || !friendIdsRef.current.has(updated.id)) return;
+        setFriends(prev => {
+          let changed = false;
+          const next = prev.map(friend => {
+            if (friend.id !== updated.id) return friend;
+            changed = true;
+            return { ...friend, ...updated };
+          });
+          return changed
+            ? next.sort((a, b) => (b.battery_level ?? -1) - (a.battery_level ?? -1))
+            : prev;
+        });
+      })
       .subscribe();
     const ch2 = supabase.channel('home-friendships')
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'friendships',
         filter: `addressee_id=eq.${profile.id}`,
       }, () => fetchPending())
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'friendships',
+        filter: `addressee_id=eq.${profile.id}`,
+      }, (payload) => {
+        // Cubre el caso en el que la solicitud se acepta desde otra pantalla
+        // (p. ej. la página de Amigos) o desde otro dispositivo: en cuanto
+        // cambia a "accepted" refrescamos al instante, sin recargar la página.
+        if (payload.new?.status === 'accepted') { fetchFriends(); fetchPending(); }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'friendships',
+        filter: `requester_id=eq.${profile.id}`,
+      }, (payload) => {
+        // La otra persona aceptó una solicitud que enviamos nosotros — que
+        // aparezca en "Amigos" al instante, sin esperar a un refresco manual.
+        if (payload.new?.status === 'accepted') fetchFriends();
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
   }, [profile?.id, fetchFriends, fetchPending]);
+
+  async function shareBatteryStory() {
+    if (sharingStory) return;
+    setSharingStory(true);
+    try {
+      const color = getBatteryColor(profileBatteryLevel);
+      // Resolvemos la mascota tal y como está equipada ahora mismo (ropa,
+      // calzado, gorro, accesorios y actividad), con sus colores
+      // personalizados ya aplicados, para "hornearla" dentro de la imagen.
+      let mascot = null;
+      try {
+        mascot = await resolveMascotLayers(getMascotTier(profileBatteryLevel), {
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
+      } catch (_) {
+        mascot = null; // si falla, se genera la historia sin la mascota
+      }
+      const blob = await generateBatteryStoryBlob({
+        level: profileBatteryLevel,
+        label: color.label,
+        hex: color.hex,
+        username: profile?.username || '',
+        avatarUrl: profile?.avatar_url || null,
+        mascot,
+        mascotName: profile?.mascot_name || 'Volty',
+      });
+      const result = await shareOrDownloadBlob(blob, 'mi-bateria-social.png', 'Mi batería social · SocialBattery');
+      if (result.method === 'download') {
+        addToast('Imagen descargada. ¡Súbela a tu historia! 📸', 'success');
+      } else if (result.method === 'share') {
+        addToast('¡Historia lista para compartir! 🚀', 'success');
+      }
+    } catch (e) {
+      addToast('Error al generar la historia', 'error');
+    } finally {
+      setSharingStory(false);
+    }
+  }
 
   async function saveBattery() {
     setSaving(true);
@@ -390,12 +542,17 @@ export default function HomePage() {
       await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-      fetchFriends();
+
       if (earned?.length > 0) {
         setNewBadges(earned);
         addToast(`¡Batería actualizada! +${earned.length} insignia${earned.length > 1 ? 's' : ''} 🏅`, 'success');
       } else {
         addToast('¡Batería actualizada!', 'success');
+      }
+
+      const reward = claimDailyBatteryReward(profile?.id);
+      if (reward.claimed) {
+        addToast(`⚡ +${DAILY_BATTERY_REWARD} ${CURRENCY_NAME_PLURAL} · recompensa diaria`, 'success');
       }
     } catch (err) {
       addToast('Error al actualizar', 'error');
@@ -414,9 +571,12 @@ export default function HomePage() {
   const pendingUpdate = profile && isBatteryExpired(profile.battery_updated_at);
 
   const color = getBatteryColor(profileBatteryLevel);
+  // batteryColor: live slider value — updates immediately while dragging
+  const batteryColor = getBatteryColor(battery);
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">
+      <TutorialOverlay currentPage="/" />
       <BadgeUnlockModal badges={newBadges} onClose={() => setNewBadges([])} />
 
       {/* Modals */}
@@ -446,10 +606,19 @@ export default function HomePage() {
       <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/90 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xl">🔋</span>
-            <span className="font-display font-bold text-surface-text">SocialBattery</span>
+            <img src="/logo-icon.png" alt="SocialBattery" className="h-6 w-auto" />
+            <span className="font-display font-bold text-surface-text">
+              <LogoWordmark />
+            </span>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => navigate('/shop')}
+              className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
+              title="Tienda"
+            >
+              <span className="sb-symbol text-lg" aria-hidden="true">🛒</span>
+            </button>
             <button
               onClick={() => navigate('/settings')}
               className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
@@ -464,12 +633,43 @@ export default function HomePage() {
             >
               {profile?.avatar_url
                 ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover rounded-full" />
-                : (profile?.display_name?.[0] || '?').toUpperCase()
+                : (profile?.username?.[0] || '?').toUpperCase()
               }
             </button>
           </div>
         </div>
       </nav>
+
+      {/* Panel fino de evento notificado hoy — un único evento por día */}
+      {todayEvent && (
+        <button
+          onClick={() => navigate(`/community/event/${todayEvent.id}`)}
+          className="w-full border-b border-surface-border bg-accent-primary/8 hover:bg-accent-primary/12 transition-colors text-left"
+        >
+          <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2">
+              {todayEvent.cover_image_url ? (
+                <img
+                  src={todayEvent.cover_image_url}
+                  alt=""
+                  className="w-7 h-7 rounded-lg object-cover flex-shrink-0 border border-surface-border"
+                />
+              ) : (
+                <span className="text-base flex-shrink-0" aria-hidden="true">📍</span>
+              )}
+              <div className="min-w-0 leading-tight">
+                <p className="text-xs font-display font-semibold text-surface-text truncate">{todayEvent.title}</p>
+                {todayEvent.organization && (
+                  <p className="text-[11px] text-surface-muted truncate">{todayEvent.organization}</p>
+                )}
+              </div>
+            </div>
+            <span className="text-[11px] font-display font-semibold text-accent-glow whitespace-nowrap flex-shrink-0">
+              ¡Nuevo evento cerca!
+            </span>
+          </div>
+        </button>
+      )}
 
       <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
 
@@ -485,34 +685,46 @@ export default function HomePage() {
 
         {/* Battery card */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 animate-slide-up">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="text-xs font-mono text-surface-muted uppercase tracking-widest">
-                Tu batería social
-              </div>
+
+          {/* Header: label + level left · mascot right */}
+          <div className="flex items-end justify-between mb-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-white/70 uppercase tracking-widest">Tu batería social</span>
               {profile?.battery_is_estimated && (
-                <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono">
+                <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono self-start">
                   ⚡ Estimada
                 </span>
               )}
-            </div>
-            <div className="text-right">
-              <span
-                className="font-display text-4xl font-bold"
-                style={{ color: color.hex, textShadow: `0 0 25px ${color.hex}50` }}
-              >
-                {profileBatteryLevel}
+              <div className="flex items-end gap-1 mt-1">
+                <span
+                  className="font-display text-5xl font-bold leading-none"
+                  style={{ color: batteryColor.hex, textShadow: `0 0 28px ${batteryColor.hex}40` }}
+                >
+                  {battery}
+                </span>
+                <span className="text-surface-muted text-xl font-display mb-0.5">%</span>
+              </div>
+              <span className="text-xs font-mono uppercase tracking-widest" style={{ color: batteryColor.hex }}>
+                {batteryColor.label}
               </span>
-              <span className="text-surface-muted text-lg font-display">%</span>
             </div>
+
+            <MascotDisplay
+              tier={getMascotTier(battery)}
+              size={128}
+              glowColor={batteryColor.hex}
+              animate
+            />
           </div>
 
-          <BatterySlider value={battery} onChange={setBattery} />
+          {/* Battery bar — ID para el tutorial paso 2 */}
+          <div id="tutorial-battery-bar" className="rounded-xl transition-all duration-300">
+            <BatterySlider value={battery} onChange={setBattery} hideDisplay />
+          </div>
 
-          <div className="flex items-center justify-between mt-1 mb-4">
-            <span className="text-xs font-mono" style={{ color: color.hex }}>{color.label}</span>
+          <div className="flex items-center justify-end -mt-3 mb-4">
             <span className="text-xs text-surface-muted/60">
-              Última actualización: {formatRelativeTime(profile?.battery_updated_at)}
+              Actualizado {formatRelativeTime(profile?.battery_updated_at)}
             </span>
           </div>
 
@@ -527,7 +739,29 @@ export default function HomePage() {
           >
             {saving ? 'Guardando...' : saved ? '✓ ¡Actualizado!' : 'Actualizar batería'}
           </button>
+
+          {/* Share story button */}
+          <button
+            onClick={shareBatteryStory}
+            disabled={sharingStory}
+            title="Compartir mi batería"
+            className="mt-2 w-full py-2.5 rounded-xl font-display font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 border border-pink-500/40 text-pink-300 bg-pink-500/5 disabled:opacity-50"
+          >
+            {sharingStory
+              ? <><span className="animate-spin text-base">⏳</span> Generando...</>
+              : <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                  Compartir
+                </>
+            }
+          </button>
         </div>
+
+        {/* Panel social — ID para el tutorial paso 3 (cubre amigos + grupos) */}
+        <div id="tutorial-social-panels" className="space-y-4 rounded-2xl transition-all duration-300">
 
         {/* Friends feed */}
         <div className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
@@ -542,11 +776,7 @@ export default function HomePage() {
               <button
                 onClick={() => setShowRequests(true)}
                 title="Solicitudes de amistad"
-                className={`relative w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all
-                  ${pendingCount > 0
-                    ? 'bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30'
-                    : 'bg-surface-card border border-surface-border text-surface-muted hover:text-surface-text hover:bg-surface-hover'
-                  }`}
+                className="relative w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30"
               >
                 🤝
                 {pendingCount > 0 && (
@@ -559,7 +789,7 @@ export default function HomePage() {
               <button
                 onClick={() => setShowSearch(true)}
                 title="Buscar amigos"
-                className="w-8 h-8 rounded-xl bg-surface-card border border-surface-border text-surface-muted hover:text-accent-glow hover:border-accent-primary/40 hover:bg-accent-primary/10 flex items-center justify-center text-base font-bold transition-all"
+                className="w-8 h-8 rounded-xl bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30 flex items-center justify-center text-base font-bold transition-all"
               >
                 +
               </button>
@@ -611,7 +841,7 @@ export default function HomePage() {
             <button
               onClick={() => setShowCreateGroup(true)}
               title="Crear grupo"
-              className="w-8 h-8 rounded-xl bg-surface-card border border-surface-border text-surface-muted hover:text-accent-glow hover:border-accent-primary/40 hover:bg-accent-primary/10 flex items-center justify-center text-base font-bold transition-all"
+              className="w-8 h-8 rounded-xl bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30 flex items-center justify-center text-base font-bold transition-all"
             >
               +
             </button>
@@ -650,7 +880,9 @@ export default function HomePage() {
               )}
             </div>
           )}
-        </div>
+        </div>{/* end Groups panel */}
+
+        </div>{/* end tutorial-social-panels */}
 
       </main>
 

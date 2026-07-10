@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import HexColorPicker from '../components/HexColorPicker';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -140,8 +141,8 @@ function WallpaperPicker({ wallpaper, onSet, onClear }) {
 function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, onOpacityChange, onTextColorChange }) {
   return (
     <div className="space-y-2">
-      <div className="text-xs font-display font-semibold text-surface-text">{label}</div>
       <div className="flex items-center gap-3">
+        <div className="text-xs font-display font-semibold text-surface-text flex-1">{label}</div>
         {/* Swatch preview */}
         <div
           className="w-9 h-9 rounded-xl border border-surface-border flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
@@ -149,37 +150,30 @@ function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, on
         >
           Aa
         </div>
-        <div className="flex-1 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-surface-muted w-16">Color</span>
-            <input
-              type="color"
-              value={color}
-              onChange={e => onColorChange(e.target.value)}
-              className="h-7 flex-1 rounded-lg cursor-pointer bg-transparent border border-surface-border"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-surface-muted w-16">Opacidad</span>
-            <input
-              type="range" min="0.3" max="1" step="0.05"
-              value={opacity}
-              onChange={e => onOpacityChange(parseFloat(e.target.value))}
-              className="flex-1 accent-accent-primary"
-            />
-            <span className="text-xs text-surface-muted font-mono w-8 text-right">
-              {Math.round(opacity * 100)}%
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-surface-muted w-16">Letra</span>
-            <input
-              type="color"
-              value={textColor}
-              onChange={e => onTextColorChange(e.target.value)}
-              className="h-7 flex-1 rounded-lg cursor-pointer bg-transparent border border-surface-border"
-            />
-          </div>
+      </div>
+
+      <div className="space-y-2.5">
+        <div>
+          <span className="text-xs text-surface-muted mb-1 block">Color</span>
+          <HexColorPicker value={color} onChange={onColorChange} />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-surface-muted w-16">Opacidad</span>
+          <input
+            type="range" min="0.3" max="1" step="0.05"
+            value={opacity}
+            onChange={e => onOpacityChange(parseFloat(e.target.value))}
+            className="flex-1 accent-accent-primary"
+          />
+          <span className="text-xs text-surface-muted font-mono w-8 text-right">
+            {Math.round(opacity * 100)}%
+          </span>
+        </div>
+
+        <div>
+          <span className="text-xs text-surface-muted mb-1 block">Letra</span>
+          <HexColorPicker value={textColor} onChange={onTextColorChange} />
         </div>
       </div>
     </div>
@@ -190,26 +184,21 @@ function BubbleColorPicker({ label, color, opacity, textColor, onColorChange, on
 
 function TickColorPicker({ label, description, color, onChange }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
-        {description && <div className="text-xs text-surface-muted">{description}</div>}
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-display font-semibold text-surface-text">{label}</div>
+          {description && <div className="text-xs text-surface-muted">{description}</div>}
+        </div>
         {/* Swatch preview with double tick */}
-        <span style={{ color }} className="inline-flex items-center">
+        <span style={{ color }} className="inline-flex items-center flex-shrink-0">
           <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </span>
-        <input
-          type="color"
-          value={color}
-          onChange={e => onChange(e.target.value)}
-          className="h-8 w-16 rounded-lg cursor-pointer bg-transparent border border-surface-border"
-        />
       </div>
+      <HexColorPicker value={color} onChange={onChange} />
     </div>
   );
 }
@@ -356,7 +345,7 @@ function Toggle({ enabled, onToggle }) {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { theme, isDark, setTheme } = useTheme();
+  const { theme, isDark, isAurora, isSunset, isForest, isPastel, isLight, setTheme } = useTheme();
   const { signOut, updatePassword } = useAuth();
   const { showToast } = useToast();
   const {
@@ -376,9 +365,17 @@ export default function SettingsPage() {
     muteAllNotifications, setMuteAllNotifications,
     mutePersonalChats, setMutePersonalChats,
     muteGroupChats, setMuteGroupChats,
+    muteNewEvents, setMuteNewEvents,
+    muteNewPools, setMuteNewPools,
+    muteEventReminders, setMuteEventReminders,
+    mutePoolReminders, setMutePoolReminders,
+    muteEventRecommendations, setMuteEventRecommendations,
     readReceipts, setReadReceipts,
     showOnline, setShowOnline,
     showLastSeen, setShowLastSeen,
+    showInterests, setShowInterests,
+    showPublicStats, setShowPublicStats,
+    showBadges, setShowBadges,
   } = useSettings();
 
   // Only one section open at a time
@@ -477,29 +474,167 @@ export default function SettingsPage() {
         >
           {/* Temas */}
           <SubSection title="Temas">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
+
+              {/* ── Claro ── */}
               <button
                 onClick={() => selectTheme('light')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
-                  !isDark
-                    ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
-                    : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                  isLight
+                    ? 'border-accent-primary shadow-lg shadow-accent-primary/20'
+                    : 'border-surface-border hover:border-surface-muted'
                 }`}
               >
-                <span className={`sb-symbol ${isDark ? 'text-surface-text' : ''}`} aria-hidden="true">☼</span>
-                Claro
+                {/* Mini preview */}
+                <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#f4fbfb' }}>
+                  <div className="flex gap-1 items-center">
+                    <div className="w-3 h-3 rounded-full" style={{ background: '#d8eeee' }} />
+                    <div className="flex-1 h-1.5 rounded-full" style={{ background: '#d8eeee' }} />
+                  </div>
+                  <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#c9f3f3' }} />
+                  <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#d8eeee' }} />
+                  <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#c9f3f3' }} />
+                </div>
+                <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#ffffff', borderTop: '1px solid #d8eeee' }}>
+                  <span className="sb-symbol text-xs" style={{ color: '#00949e' }}>☼</span>
+                  <span className="text-xs font-display font-bold" style={{ color: '#1a1a2e' }}>Claro</span>
+                  {isLight && <span className="ml-auto text-[10px]" style={{ color: '#00949e' }}>✓</span>}
+                </div>
               </button>
+
+              {/* ── Oscuro ── */}
               <button
                 onClick={() => selectTheme('dark')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display font-semibold transition-all ${
-                  isDark
-                    ? 'bg-accent-primary/20 border-accent-primary text-accent-glow'
-                    : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                  theme === 'dark'
+                    ? 'border-accent-primary shadow-lg shadow-accent-primary/20'
+                    : 'border-surface-border hover:border-surface-muted'
                 }`}
               >
-                <span className={`sb-symbol ${!isDark ? 'text-slate-950' : ''}`} aria-hidden="true">☾</span>
-                Oscuro
+                <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#0a0a0f' }}>
+                  <div className="flex gap-1 items-center">
+                    <div className="w-3 h-3 rounded-full" style={{ background: '#1e1e2e' }} />
+                    <div className="flex-1 h-1.5 rounded-full" style={{ background: '#1e1e2e' }} />
+                  </div>
+                  <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#00949e' }} />
+                  <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#1e1e2e' }} />
+                  <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#00949e' }} />
+                </div>
+                <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#13131a', borderTop: '1px solid #1e1e2e' }}>
+                  <span className="sb-symbol text-xs" style={{ color: '#2dd4dc' }}>☾</span>
+                  <span className="text-xs font-display font-bold" style={{ color: '#e2e8f0' }}>Oscuro</span>
+                  {theme === 'dark' && <span className="ml-auto text-[10px]" style={{ color: '#2dd4dc' }}>✓</span>}
+                </div>
               </button>
+
+            </div>
+
+            {/* ── Otros ── */}
+            <div className="mt-3">
+              <div className="text-[11px] font-mono uppercase tracking-widest text-surface-muted mb-2">Otros</div>
+              <div className="grid grid-cols-2 gap-2">
+
+                {/* ── Aurora ── */}
+                <button
+                  onClick={() => selectTheme('aurora')}
+                  className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                    isAurora
+                      ? 'border-[#dc5078] shadow-lg shadow-[#dc5078]/25'
+                      : 'border-surface-border hover:border-surface-muted'
+                  }`}
+                >
+                  <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#0e0b1a' }}>
+                    <div className="flex gap-1 items-center">
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#2d2450' }} />
+                      <div className="flex-1 h-1.5 rounded-full" style={{ background: '#2d2450' }} />
+                    </div>
+                    <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#dc5078' }} />
+                    <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#2d2450' }} />
+                    <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#dc5078' }} />
+                  </div>
+                  <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#16122a', borderTop: '1px solid #2d2450' }}>
+                    <span className="text-xs">✦</span>
+                    <span className="text-xs font-display font-bold" style={{ color: '#f0e6ff' }}>Aurora</span>
+                    {isAurora && <span className="ml-auto text-[10px]" style={{ color: '#ff82a0' }}>✓</span>}
+                  </div>
+                </button>
+
+                {/* ── Sunset ── */}
+                <button
+                  onClick={() => selectTheme('sunset')}
+                  className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                    isSunset
+                      ? 'border-[#ea781e] shadow-lg shadow-[#ea781e]/25'
+                      : 'border-surface-border hover:border-surface-muted'
+                  }`}
+                >
+                  <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#0f0a05' }}>
+                    <div className="flex gap-1 items-center">
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#3d2410' }} />
+                      <div className="flex-1 h-1.5 rounded-full" style={{ background: '#3d2410' }} />
+                    </div>
+                    <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#ea781e' }} />
+                    <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#3d2410' }} />
+                    <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#ffb450' }} />
+                  </div>
+                  <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#1a1008', borderTop: '1px solid #3d2410' }}>
+                    <span className="text-xs">🌅</span>
+                    <span className="text-xs font-display font-bold" style={{ color: '#fff3e0' }}>Sunset</span>
+                    {isSunset && <span className="ml-auto text-[10px]" style={{ color: '#ffb450' }}>✓</span>}
+                  </div>
+                </button>
+
+                {/* ── Forest ── */}
+                <button
+                  onClick={() => selectTheme('forest')}
+                  className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                    isForest
+                      ? 'border-[#226e36] shadow-lg shadow-[#226e36]/25'
+                      : 'border-surface-border hover:border-surface-muted'
+                  }`}
+                >
+                  <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#f2f7f2' }}>
+                    <div className="flex gap-1 items-center">
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#c8dfc8' }} />
+                      <div className="flex-1 h-1.5 rounded-full" style={{ background: '#c8dfc8' }} />
+                    </div>
+                    <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#226e36' }} />
+                    <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#c8dfc8' }} />
+                    <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#226e36' }} />
+                  </div>
+                  <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#ffffff', borderTop: '1px solid #c8dfc8' }}>
+                    <span className="text-xs">🌿</span>
+                    <span className="text-xs font-display font-bold" style={{ color: '#1a2e1a' }}>Bosque</span>
+                    {isForest && <span className="ml-auto text-[10px]" style={{ color: '#226e36' }}>✓</span>}
+                  </div>
+                </button>
+
+                {/* ── Pastel ── */}
+                <button
+                  onClick={() => selectTheme('pastel')}
+                  className={`relative flex flex-col overflow-hidden rounded-2xl border-2 transition-all ${
+                    isPastel
+                      ? 'border-[#5096e6] shadow-lg shadow-[#5096e6]/25'
+                      : 'border-surface-border hover:border-surface-muted'
+                  }`}
+                >
+                  <div className="h-16 w-full flex flex-col gap-1 p-2" style={{ background: '#f7f9ff' }}>
+                    <div className="flex gap-1 items-center">
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#fdf8c8' }} />
+                      <div className="flex-1 h-1.5 rounded-full" style={{ background: '#cde0f8' }} />
+                    </div>
+                    <div className="self-end w-2/3 h-1.5 rounded-full" style={{ background: '#a8d4f5' }} />
+                    <div className="self-start w-1/2 h-1.5 rounded-full" style={{ background: '#fdf8c8' }} />
+                    <div className="self-end w-1/3 h-1.5 rounded-full" style={{ background: '#a8d4f5' }} />
+                  </div>
+                  <div className="px-2 py-1.5 flex items-center gap-1" style={{ background: '#ffffff', borderTop: '1px solid #cde0f8' }}>
+                    <span className="text-xs">🎀</span>
+                    <span className="text-xs font-display font-bold" style={{ color: '#1e2a4a' }}>Pastel</span>
+                    {isPastel && <span className="ml-auto text-[10px]" style={{ color: '#5096e6' }}>✓</span>}
+                  </div>
+                </button>
+
+              </div>
             </div>
           </SubSection>
 
@@ -647,6 +782,59 @@ export default function SettingsPage() {
                   onToggle={() => setReadReceipts(!readReceipts)}
                 />
               </div>
+
+              <div className="border-t border-surface-border" />
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Mostrar intereses
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    {showInterests
+                      ? 'Tus categorías de interés son visibles en tu perfil público'
+                      : 'Tus intereses quedan ocultos para otros usuarios'}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={showInterests}
+                  onToggle={() => setShowInterests(!showInterests)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Mostrar estadísticas públicas
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    {showPublicStats
+                      ? 'Tus estadísticas (amigos, planes, actividad) son visibles en tu perfil'
+                      : 'Tus estadísticas públicas quedan ocultas para otros usuarios'}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={showPublicStats}
+                  onToggle={() => setShowPublicStats(!showPublicStats)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Mostrar insignias
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    {showBadges
+                      ? 'Tus insignias son visibles en tu perfil público'
+                      : 'Tus insignias quedan ocultas para otros usuarios'}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={showBadges}
+                  onToggle={() => setShowBadges(!showBadges)}
+                />
+              </div>
             </div>
           </SubSection>
         </AccordionSection>
@@ -658,7 +846,7 @@ export default function SettingsPage() {
           onToggle={toggleSection}
           icon="🔔"
           title="Notificaciones"
-          subtitle="Mensajes, batería y alertas"
+          subtitle="Mensajes, eventos, quedadas y alertas"
         >
           <SubSection title="General">
             <div className="space-y-4">
@@ -679,7 +867,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              {/* Sub-toggles — solo visibles si las notifs están activadas */}
+              {/* Sub-toggles — solo visibles si las notifs del sistema están activadas */}
               {!muteAllNotifications && (
                 <div className="pl-4 border-l-2 border-surface-border space-y-4 animate-slide-down">
 
@@ -713,25 +901,106 @@ export default function SettingsPage() {
                     />
                   </div>
 
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar nuevos eventos
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No te avisaremos cuando se cree un nuevo evento en tus comunidades
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteNewEvents}
+                      onToggle={() => setMuteNewEvents(!muteNewEvents)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar recomendaciones de eventos
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de eventos premium y destacados
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteEventRecommendations}
+                      onToggle={() => setMuteEventRecommendations(!muteEventRecommendations)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar nuevas quedadas
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No te avisaremos cuando alguien proponga una nueva quedada
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteNewPools}
+                      onToggle={() => setMuteNewPools(!muteNewPools)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar cambios de batería
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No te avisaremos cuando un amigo actualice su energía
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteBatteryChanges}
+                      onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
+                    />
+                  </div>
+
                 </div>
               )}
 
               <div className="border-t border-surface-border" />
 
-              {/* Silenciar cambios de batería — independiente del mute global */}
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-display font-semibold text-surface-text">
-                    Silenciar cambios de batería
+              {/* Recordatorios */}
+              <div className="text-[11px] font-mono uppercase tracking-widest text-surface-muted pt-1">
+                Recordatorios
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar avisos de eventos
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás recordatorios de eventos en tu planificación
+                    </div>
                   </div>
-                  <div className="text-xs text-surface-muted">
-                    No te avisaremos cuando un amigo actualice su energía
-                  </div>
+                  <Toggle
+                    enabled={muteAllNotifications || muteEventReminders}
+                    onToggle={() => !muteAllNotifications && setMuteEventReminders(!muteEventReminders)}
+                  />
                 </div>
-                <Toggle
-                  enabled={muteBatteryChanges}
-                  onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
-                />
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar avisos de quedadas
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás recordatorios de quedadas a las que te has unido
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteAllNotifications || mutePoolReminders}
+                    onToggle={() => !muteAllNotifications && setMutePoolReminders(!mutePoolReminders)}
+                  />
+                </div>
               </div>
 
             </div>

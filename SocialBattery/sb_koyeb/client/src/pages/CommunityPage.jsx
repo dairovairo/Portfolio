@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import LocationPicker from '../components/LocationPicker';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
+import TutorialOverlay from '../components/TutorialOverlay';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function normalizeText(value = '') {
@@ -16,19 +21,23 @@ function normalizeText(value = '') {
 
 function getEventEmoji(category = '') {
   const c = normalizeText(category);
-  if (/música|musica|concierto|concert/.test(c)) return '🎵';
-  if (/deporte|sport|fútbol|futbol|tenis|running/.test(c)) return '⚽';
-  if (/arte|art|exposición|exposicion|museo/.test(c)) return '🎨';
-  if (/tecnología|tecnologia|tech|hacking|código/.test(c)) return '💻';
+  // Se añade el selector de variación U+FE0F a cada emoji para forzar su
+  // presentación a color (el CSS global usa font-variant-emoji: text para
+  // dar un estilo mono a los iconos por defecto; sin este selector solo los
+  // emojis que ya lo llevaban incorporado, como el de Comida, salían a color).
+  if (/música|musica|concierto|concert/.test(c)) return '🎵️';
+  if (/deporte|sport|fútbol|futbol|tenis|running/.test(c)) return '⚽️';
+  if (/arte|art|exposición|exposicion|museo/.test(c)) return '🎨️';
+  if (/tecnología|tecnologia|tech|hacking|código/.test(c)) return '💻️';
   if (/comida|food|gastro|cocina|cena/.test(c)) return '🍽️';
-  if (/fiesta|party|celebración/.test(c)) return '🎉';
-  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿';
-  if (/cine|film|película|movie/.test(c)) return '🎬';
-  if (/juego|gaming|videojuego/.test(c)) return '🎮';
-  if (/yoga|meditación|bienestar|wellness/.test(c)) return '🧘';
-  if (/fotografía|fotografia|photo/.test(c)) return '📷';
-  if (/lectura|libro|book|literatura/.test(c)) return '📚';
-  return '🌐';
+  if (/fiesta|party|celebración/.test(c)) return '🎉️';
+  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿️';
+  if (/cine|film|película|movie/.test(c)) return '🎬️';
+  if (/juego|gaming|videojuego/.test(c)) return '🎮️';
+  if (/yoga|meditación|bienestar|wellness/.test(c)) return '🧘️';
+  if (/fotografía|fotografia|photo/.test(c)) return '📷️';
+  if (/lectura|libro|book|literatura/.test(c)) return '📚️';
+  return '🌐️';
 }
 
 function getCommunityEmoji(category = '') {
@@ -86,6 +95,19 @@ function getDaysUntilLabel(dateStr) {
   return `Faltan ${days} días`;
 }
 
+function ensureAbsoluteUrl(url) {
+  if (!url) return null;
+  const trimmed = url.trim().replace(/\s+/g, '');
+  if (!trimmed) return null;
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    new URL(withProtocol); // validate
+    return withProtocol;
+  } catch {
+    return null;
+  }
+}
+
 function getEventTime(event) {
   const time = new Date(event.event_date).getTime();
   return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
@@ -110,6 +132,25 @@ function sortEventsByProximity(eventList = []) {
     const bPast = getEventEndTime(b) < now;
     if (aPast !== bPast) return aPast ? 1 : -1;
     return aPast ? bTime - aTime : aTime - bTime;
+  });
+}
+
+// 'app'            → puntuación ponderada (likes + apuntados), sin distinción de plan
+// 'planificaciones'→ más apuntados primero
+// 'likes'          → más likes primero
+function promotionScore(event) {
+  return (event.attendee_count || 0) * 1.5 + (event.like_count || 0);
+}
+function sortEventsBy(eventList = [], sortKey = 'app') {
+  return [...eventList].sort((a, b) => {
+    if (sortKey === 'likes') {
+      return (b.like_count || 0) - (a.like_count || 0);
+    }
+    if (sortKey === 'planificaciones') {
+      return (b.attendee_count || 0) - (a.attendee_count || 0);
+    }
+    // 'app': todos los eventos compiten por igual, por puntuación ponderada
+    return promotionScore(b) - promotionScore(a);
   });
 }
 
@@ -138,7 +179,7 @@ function buildEventFormData(form, extra = {}) {
   return formData;
 }
 
-function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
+function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId, hasUnreadUpdate }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -156,6 +197,25 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
     3: { ring: 'border-amber-600/60', glow: '#d97706/20', label: '🥉' },
   };
   const rankStyle = rankColors[rank] || { ring: 'border-surface-border', glow: 'transparent', label: null };
+
+  // Ring de borde por plan de pago (se mantiene: distingue visualmente sin afectar orden)
+  const RING_META = {
+    ultra:   { ring: 'border-sky-400/55' },
+    premium: { ring: 'border-purple-400/50' },
+  };
+  const ringOverride = RING_META[event.promotion_plan];
+  const activeRing = ringOverride?.ring ?? rankStyle.ring;
+  // El glow queda reservado al podio real (rank 1-3); premium/ultra ya no fuerzan
+  // su propio glow para no chocar con los colores oro/plata/bronce del podio.
+  const activeGlow = rank <= 3 ? rankStyle.glow : null;
+
+  // Pill de plan: visible para los 3 planes (basic incluido)
+  const PILL_META = {
+    ultra:   { pill: '🚀 Ultra',   pillClass: 'text-sky-300 bg-sky-500/10 border border-sky-500/25' },
+    premium: { pill: '⚡ Premium', pillClass: 'text-purple-300 bg-purple-500/10 border border-purple-500/25' },
+    basic:   { pill: '📋 Basic',   pillClass: 'text-slate-300 bg-slate-500/10 border border-slate-500/25' },
+  };
+  const promo = PILL_META[event.promotion_plan] ?? PILL_META.basic;
 
   async function handleJoin(e) {
     e?.stopPropagation();
@@ -192,138 +252,168 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, currentUserId }) {
 
   return (
     <div
-      className={`relative bg-surface-card border ${rankStyle.ring} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30`}
-      style={{ boxShadow: rank <= 3 ? `0 0 20px ${rankStyle.glow}` : undefined }}
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen?.(event.id)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpen?.(event.id); }}
+      className={`relative bg-surface-card border ${activeRing} rounded-2xl p-4 transition-all duration-200 hover:border-accent-primary/30 cursor-pointer`}
+      style={{ boxShadow: activeGlow ? `0 0 20px ${activeGlow}` : undefined }}
     >
-      {/* Rank badge */}
+      {/* Rank medal / number */}
       {rank <= 3 && (
         <span className="absolute -top-2.5 -right-1 text-xl">{rankStyle.label}</span>
       )}
-      {rank > 3 && (
+      {rank > 3 && !ringOverride && (
         <span className="absolute top-3 right-3 text-xs font-mono text-slate-600">#{rank}</span>
       )}
+      {/* Badge actualización no leída */}
+      {hasUnreadUpdate && (
+        <span className="absolute -top-1.5 left-3 bg-red-500 text-white text-[9px] font-bold rounded-full px-1.5 h-[15px] flex items-center justify-center leading-none shadow-md">
+          📣 Actualización
+        </span>
+      )}
 
+      {/* Cover image */}
       {event.cover_image_url && (
         <div className="relative z-10 mb-3 aspect-[16/9] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
-          <img
-            src={event.cover_image_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
+          <img src={event.cover_image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
         </div>
       )}
 
-      <div className="flex gap-3">
-        {/* Emoji */}
-        <div className="w-11 h-11 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
+      {/* ── Header row: emoji + título + pills ── */}
+      <div className="flex items-start gap-3">
+        <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
           {emoji}
         </div>
-
         <div className="flex-1 min-w-0">
-          {/* Title + category */}
-          <div className="flex items-start gap-2 flex-wrap">
-            <h3 className="font-display font-bold text-surface-text text-sm leading-snug line-clamp-1 flex-1">
+          <div className="flex items-start gap-1.5 flex-wrap">
+            <h3 className="font-display font-bold text-surface-text text-base leading-snug line-clamp-2 flex-1">
               {event.title}
             </h3>
-            {event.category && (
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20 flex-shrink-0">
-                {event.category}
+            {promo && (
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${promo.pillClass}`}>
+                {promo.pill}
               </span>
             )}
           </div>
-
-          {/* Creator */}
-          <p className="text-xs text-surface-muted mt-0.5">
-            por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
+          {/* Creator + comunidad */}
+          <p className="text-xs text-surface-muted mt-0.5 leading-snug">
+            <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
             {event.community_name && (
-              <span> · en <span className="text-accent-glow">{event.community_name}</span></span>
+              <span className="text-surface-muted"> · <span className="text-accent-glow">{event.community_name}</span></span>
             )}
             {event.organization && (
-              <span> · org <span className="text-amber-300/90">{event.organization}</span></span>
+              <span className="text-surface-muted"> · <span className="text-amber-300/90">{event.organization}</span></span>
             )}
           </p>
+        </div>
+      </div>
 
-          {/* Description */}
-          {event.description && (
-            <p className="text-xs text-surface-muted mt-1.5 line-clamp-2 leading-relaxed">
-              {event.description}
-            </p>
-          )}
+      {/* ── Meta row: fecha · ubicación · categoría · precio ── */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5 items-center">
+        {daysLabel && (
+          <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
+            ⏳ {daysLabel}
+          </span>
+        )}
+        {isPast && !daysLabel && (
+          <span className="text-xs text-slate-500 font-mono">Ya pasó</span>
+        )}
+        {event.location && (
+          <span className="text-xs text-slate-400 font-mono flex items-center gap-1 truncate max-w-[160px]">
+            📍 {event.location}
+          </span>
+        )}
+        {event.category && (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
+            {event.category}
+          </span>
+        )}
+        {event.price != null && parseFloat(event.price) > 0 ? (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300">
+            💳 {parseFloat(event.price).toFixed(2)}€
+          </span>
+        ) : (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-green-500/25 bg-green-500/10 text-green-400">
+            ✓ Gratis
+          </span>
+        )}
+        {event.url && ensureAbsoluteUrl(event.url) && (
+          <a
+            href={ensureAbsoluteUrl(event.url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-accent-primary/20 bg-accent-primary/10 text-accent-glow/80 hover:text-accent-glow"
+          >
+            🔗 Ver más
+          </a>
+        )}
+      </div>
 
-          {/* Date + location */}
-          <div className="flex items-center gap-3 mt-2 flex-wrap">
-            <span className="text-xs text-slate-500 font-mono flex items-center gap-1">
-              📅 {formatEventDateRange(event)}
-            </span>
-            {daysLabel && (
-              <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
-                ⏳ {daysLabel}
-              </span>
-            )}
-            {event.location && (
-              <span className="text-xs text-slate-500 font-mono flex items-center gap-1 truncate">
-                📍 {event.location}
-              </span>
-            )}
-          </div>
+      {/* ── Descripción ── */}
+      {event.description && (
+        <p className="text-xs text-surface-muted mt-2 line-clamp-2 leading-relaxed">
+          {event.description}
+        </p>
+      )}
 
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs font-mono text-slate-500 px-2 py-1 rounded-lg bg-surface-bg border border-surface-border">
-              👥 {attendeeCount} apuntados
+      {/* ── Footer: like · apuntados · acción ── */}
+      <div className="flex items-center gap-2 mt-3 flex-wrap" onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={handleLike}
+          disabled={liking}
+          aria-pressed={isLiked}
+          className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${
+            isLiked
+              ? 'border-pink-500/40 bg-pink-500/15 text-pink-300'
+              : 'border-surface-border bg-surface-bg text-slate-500 hover:border-pink-500/30 hover:text-pink-300'
+          }`}
+        >
+          {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
+        </button>
+        <span className="text-xs font-mono px-2.5 py-1 rounded-lg border border-accent-primary/20 bg-accent-primary/10 text-accent-glow flex items-center gap-1">
+          📅 {attendeeCount}
+        </span>
+
+        {/* Spacer */}
+        <span className="flex-1" />
+
+        {/* Acción principal */}
+        {isPast && !isJoined ? (
+          <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
+            Pasado
+          </span>
+        ) : isJoined ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1">
+              ✓ Planificado
             </span>
             <button
-              type="button"
-              onClick={handleLike}
-              disabled={liking}
-              aria-pressed={isLiked}
-              className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${
-                isLiked
-                  ? 'border-pink-500/40 bg-pink-500/15 text-pink-300'
-                  : 'border-surface-border bg-surface-bg text-slate-500 hover:border-pink-500/30 hover:text-pink-300'
-              }`}
+              onClick={handleLeave}
+              disabled={leaving}
+              className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
             >
-              {liking ? '...' : `${isLiked ? '♥' : '♡'} ${likeCount}`}
+              {leaving ? '...' : 'Quitar'}
             </button>
           </div>
-
-          {/* Join button */}
-          <div className="mt-3">
-            {isPast && !isJoined ? (
-              <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
-                Evento pasado
-              </span>
-            ) : isJoined ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1 w-fit">
-                  ✓ Apuntado
-                </span>
-                <button
-                  onClick={handleLeave}
-                  disabled={leaving}
-                  className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
-                >
-                  {leaving ? '...' : 'Salir'}
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleJoin}
-                disabled={joining}
-                className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50 active:scale-95"
-              >
-                {joining ? '...' : '+ Apuntarme'}
-              </button>
-            )}
-          </div>
-        </div>
+        ) : (
+          <button
+            onClick={handleJoin}
+            disabled={joining}
+            className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50 active:scale-95"
+          >
+            {joining ? '...' : '+ Planificar'}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 // ── Community Card ────────────────────────────────────────────────────────────
-function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
+function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasNewEvents }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const isMember = community.members?.includes(currentUserId);
@@ -360,8 +450,15 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
       }}
       className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-3 transition-all hover:border-accent-primary/30 cursor-pointer"
     >
-      <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl flex-shrink-0 border border-surface-border">
-        {emoji}
+      <div className="relative w-12 h-12 flex-shrink-0">
+        <div className="w-12 h-12 rounded-2xl bg-surface-bg flex items-center justify-center text-2xl border border-surface-border overflow-hidden">
+          {community.cover_image_url ? (
+            <img src={community.cover_image_url} alt="" className="h-full w-full object-cover" />
+          ) : emoji}
+        </div>
+        {hasNewEvents && (
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-surface-card" />
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -381,6 +478,17 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
         {community.organization && (
           <p className="text-xs text-accent-glow/80 font-mono mt-1">{community.organization}</p>
         )}
+        {community.url && ensureAbsoluteUrl(community.url) && (
+          <a
+            href={ensureAbsoluteUrl(community.url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-xs text-accent-glow/80 font-mono mt-0.5 hover:text-accent-glow flex items-center gap-1 w-fit"
+          >
+            🔗 Ver más
+          </a>
+        )}
         <p className="text-xs text-surface-muted font-mono mt-1">
           👥 {community.member_count || 0} miembros · por {community.creator_name || 'Alguien'}
           {community.is_admin && <span className="text-yellow-300"> · admin</span>}
@@ -390,9 +498,6 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId }) {
       <div className="flex-shrink-0 flex items-center gap-2">
         {isMember ? (
           <>
-            <span className="text-xs font-mono text-green-400 px-2.5 py-1 rounded-xl bg-green-500/10 border border-green-500/20">
-              ✓
-            </span>
             <button
               onClick={handleLeave}
               disabled={leaving}
@@ -428,6 +533,9 @@ function CreateEventModal({ onClose, onCreate }) {
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
   const coverInputRef = useRef(null);
+  const coverCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+  const [expandedPlan, setExpandedPlan] = useState(null); // 'basic' | 'premium' | 'ultra' | null
 
   const [form, setForm] = useState({
     title: '',
@@ -438,7 +546,13 @@ function CreateEventModal({ onClose, onCreate }) {
     event_date: defaultDate,
     ends_at: '',
     location: '',
-    max_attendees: 50,
+    lat: null,
+    lng: null,
+    url: '',
+    price: '',
+    additional_info: '',
+    promotion_plan: 'basic',
+    notification_count: 500,
   });
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
@@ -474,17 +588,19 @@ function CreateEventModal({ onClose, onCreate }) {
     setCoverFile(null);
     setCoverPreview('');
     if (coverInputRef.current) coverInputRef.current.value = '';
+    if (coverCameraRef.current) coverCameraRef.current.value = '';
   }
 
   async function handleSubmit() {
     if (!form.title.trim()) { setError('El título es obligatorio'); return; }
     if (!form.event_date) { setError('La fecha es obligatoria'); return; }
+    if (!form.ends_at) { setError('La fecha fin es obligatoria'); return; }
     if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
     if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
     }
-    if (form.ends_at && new Date(form.ends_at) <= new Date(form.event_date)) {
+    if (new Date(form.ends_at) <= new Date(form.event_date)) {
       setError('La fecha fin debe ser posterior al inicio');
       return;
     }
@@ -497,7 +613,6 @@ function CreateEventModal({ onClose, onCreate }) {
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
-        max_attendees: parseInt(form.max_attendees) || 50,
       });
       onClose();
     } catch (e) {
@@ -596,7 +711,7 @@ function CreateEventModal({ onClose, onCreate }) {
             />
           </div>
 
-          {/* Date + max attendees */}
+          {/* Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha y hora *</label>
@@ -609,24 +724,13 @@ function CreateEventModal({ onClose, onCreate }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin *</label>
               <input
                 type="datetime-local"
                 value={form.ends_at}
                 min={form.event_date || defaultDate}
                 onChange={e => set('ends_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Máx. asistentes</label>
-              <input
-                type="number"
-                value={form.max_attendees}
-                min={2}
-                max={10000}
-                onChange={e => set('max_attendees', e.target.value)}
-                className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
           </div>
@@ -636,13 +740,57 @@ function CreateEventModal({ onClose, onCreate }) {
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
               Ubicación *
             </label>
-            <input
-              type="text"
+            <LocationPicker
               value={form.location}
-              onChange={e => set('location', e.target.value)}
-              placeholder="Ej: Parque del Retiro, Madrid / Online"
-              maxLength={200}
+              lat={form.lat}
+              lng={form.lng}
+              onChange={(location, lat, lng) => setForm(f => ({ ...f, location, lat, lng }))}
+            />
+          </div>
+
+          {/* URL */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              URL <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              placeholder="Ej: https://eventbrite.com/mi-evento"
+              maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Price */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Precio <span className="text-slate-600">(€ · vacío o 0 = gratis)</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={e => set('price', e.target.value)}
+              placeholder="Ej: 5.00"
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Additional info */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Información adicional <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={form.additional_info}
+              onChange={e => set('additional_info', e.target.value)}
+              placeholder="Dress code, qué traer, instrucciones de acceso, requisitos..."
+              maxLength={1000}
+              rows={3}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
             />
           </div>
 
@@ -670,10 +818,10 @@ function CreateEventModal({ onClose, onCreate }) {
             ) : (
               <button
                 type="button"
-                onClick={() => coverInputRef.current?.click()}
+                onClick={() => setShowPhotoMenu(true)}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto de la galería
+                Elegir foto
               </button>
             )}
             <input
@@ -683,6 +831,194 @@ function CreateEventModal({ onClose, onCreate }) {
               className="hidden"
               onChange={handleCoverChange}
             />
+            <input
+              ref={coverCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => coverCameraRef.current?.click()}
+              onGallery={() => coverInputRef.current?.click()}
+            />
+          </div>
+
+          {/* Promotion Plan */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-2">
+              Promoción del evento
+            </label>
+            <div className="grid grid-cols-1 gap-2">
+              {/* Basic */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => set('promotion_plan', 'basic')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'basic'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                  form.promotion_plan === 'basic'
+                    ? 'border-accent-primary bg-accent-primary/10'
+                    : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">📋</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Basic Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Listado estándar en la sección de eventos de la comunidad.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'basic' ? null : 'basic'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'basic' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'basic' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'basic' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                    </ul>
+                  )}
+                </div>
+                {form.promotion_plan === 'basic' && (
+                  <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
+                )}
+              </div>
+
+              {/* Premium */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => set('promotion_plan', 'premium')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'premium'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                  form.promotion_plan === 'premium'
+                    ? 'border-purple-400 bg-purple-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-purple-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">⚡</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Etiqueta ⚡ Premium · Notificación push a usuarios seleccionados de la app al publicar.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'premium' ? null : 'premium'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'premium' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'premium' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'premium' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                      <li>· Notificaciones a número de usuarios contratado</li>
+                    </ul>
+                  )}
+                </div>
+                {form.promotion_plan === 'premium' && (
+                  <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
+                )}
+              </div>
+
+              {/* Ultra */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => set('promotion_plan', 'ultra')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'ultra'); } }}
+                className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                  form.promotion_plan === 'ultra'
+                    ? 'border-yellow-400 bg-yellow-500/10'
+                    : 'border-surface-border bg-surface-bg hover:border-yellow-400/30'
+                }`}
+              >
+                <span className="text-xl mt-0.5">🚀</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
+                    <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
+                  </div>
+                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'ultra' ? null : 'ultra'); }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
+                      {expandedPlan === 'ultra' ? '−' : '+'}
+                    </span>
+                    {expandedPlan === 'ultra' ? 'Ocultar detalles' : 'Ver qué incluye'}
+                  </button>
+                  {expandedPlan === 'ultra' && (
+                    <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
+                      <li>· Aparición en lista de eventos</li>
+                      <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
+                      <li>· Notificaciones a número de usuarios contratado</li>
+                      <li>· Apariciones en banner menú principal</li>
+                    </ul>
+                  )}
+                </div>
+                {form.promotion_plan === 'ultra' && (
+                  <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>
+                )}
+              </div>
+            </div>
+
+            {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
+              <>
+                <div className="mt-2 p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-mono text-surface-muted">
+                      📨 Notificaciones a contratar (on-demand)
+                    </label>
+                    <span className="text-xs font-mono font-semibold text-surface-text">
+                      {Number(form.notification_count).toLocaleString('es-ES')}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={500}
+                    max={50000}
+                    step={500}
+                    value={form.notification_count}
+                    onChange={e => set('notification_count', Number(e.target.value))}
+                    className="w-full accent-accent-primary cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
+                    <span>Mín. 500</span>
+                    <span>Máx. 50.000</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-surface-muted">
+                    ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  💳 El pago se efectuará tras el inicio del evento, en base a las notificaciones enviadas hasta su comienzo.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
+                </p>
+                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
+                </p>
+              </>
+            )}
           </div>
 
           {error && (
@@ -691,9 +1027,13 @@ function CreateEventModal({ onClose, onCreate }) {
             </p>
           )}
 
+          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())) && (
+            <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
+          )}
+
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim() || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
+            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '🌐 Publicar evento'}
@@ -709,6 +1049,20 @@ const COMMUNITY_CATEGORIES = ['Música', 'Deporte', 'Tecnología', 'Arte', 'Viaj
 const ALL_COMMUNITY_CATEGORIES = 'Todo';
 const COMMUNITY_CATEGORY_FILTERS = [ALL_COMMUNITY_CATEGORIES, ...COMMUNITY_CATEGORIES];
 const KNOWN_COMMUNITY_CATEGORIES = COMMUNITY_CATEGORIES.filter(cat => cat !== OTHER_CATEGORY);
+
+const ALL_EVENT_CATEGORIES = 'Todo';
+const EVENT_CATEGORY_FILTERS = [ALL_EVENT_CATEGORIES, ...EVENT_CATEGORIES];
+const KNOWN_EVENT_CATEGORIES = EVENT_CATEGORIES.filter(cat => cat !== OTHER_CATEGORY);
+
+function matchesEventCategory(event, selectedCategory) {
+  if (selectedCategory === ALL_EVENT_CATEGORIES) return true;
+  const category = (event.category || '').trim();
+  if (selectedCategory === OTHER_CATEGORY) {
+    if (!category) return true;
+    return !KNOWN_EVENT_CATEGORIES.some(cat => normalizeText(cat) === normalizeText(category));
+  }
+  return normalizeText(category) === normalizeText(selectedCategory);
+}
 
 function matchesCommunityCategory(community, selectedCategory) {
   if (selectedCategory === ALL_COMMUNITY_CATEGORIES) return true;
@@ -729,7 +1083,11 @@ function CreateCommunityModal({ onClose, onCreate }) {
     category: '',
     custom_category: '',
     organization: '',
+    url: '',
   });
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState('');
+  const coverInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
@@ -745,6 +1103,25 @@ function CreateCommunityModal({ onClose, onCreate }) {
     }));
   }
 
+  async function handleCoverChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setError('La foto no puede superar 3MB');
+      e.target.value = '';
+      return;
+    }
+    setCoverFile(file);
+    setCoverPreview(await readFileAsDataUrl(file));
+    setError('');
+  }
+
+  function clearCover() {
+    setCoverFile(null);
+    setCoverPreview('');
+    if (coverInputRef.current) coverInputRef.current.value = '';
+  }
+
   async function handleSubmit() {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
     if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
@@ -754,7 +1131,14 @@ function CreateCommunityModal({ onClose, onCreate }) {
     setError('');
     setSaving(true);
     try {
-      await onCreate({ ...form, category: resolvedCategory, custom_category: undefined });
+      const formData = new FormData();
+      formData.append('name', form.name.trim());
+      if (form.description.trim()) formData.append('description', form.description.trim());
+      if (resolvedCategory) formData.append('category', resolvedCategory);
+      if (form.organization.trim()) formData.append('organization', form.organization.trim());
+      if (form.url.trim()) formData.append('url', form.url.trim());
+      if (coverFile) formData.append('cover', coverFile);
+      await onCreate(formData);
       onClose();
     } catch (e) {
       setError(e.message || 'Error al crear la comunidad');
@@ -852,6 +1236,60 @@ function CreateCommunityModal({ onClose, onCreate }) {
             />
           </div>
 
+          {/* URL */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              URL <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              placeholder="Ej: https://discord.gg/mi-comunidad"
+              maxLength={500}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Photo */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Foto de la comunidad <span className="text-slate-600">(opcional)</span>
+            </label>
+            {coverPreview ? (
+              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                <div className="aspect-[16/9]">
+                  <img src={coverPreview} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="truncate text-xs text-surface-muted">{coverFile?.name}</span>
+                  <button
+                    type="button"
+                    onClick={clearCover}
+                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
+              >
+                Elegir foto de la galería
+              </button>
+            )}
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+          </div>
+
           {/* Info card */}
           <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3">
             <p className="text-xs text-accent-glow/80 font-mono leading-relaxed">
@@ -878,20 +1316,230 @@ function CreateCommunityModal({ onClose, onCreate }) {
   );
 }
 
+// ── Ranking Modal ─────────────────────────────────────────────────────────────
+const RANK_METRICS = [
+  { key: 'combined',        label: '🔥 Likes + Planes' },
+  { key: 'likes',           label: '♥ Likes' },
+  { key: 'planificaciones', label: '📅 Planificaciones' },
+];
+
+const RANK_VIEWS = [
+  { key: 'current',  label: '⚡ Ahora',    sub: 'Top 20 eventos activos' },
+  { key: 'alltime',  label: '📜 Histórico', sub: 'Top 100 de todos los tiempos' },
+];
+
+// Colores de fondo por posición (inline styles para evitar purge de Tailwind)
+const PODIUM_STYLES = [
+  // 🥇 oro
+  { bg: 'rgba(234,179,8,0.13)', border: 'rgba(234,179,8,0.35)', numberColor: '#eab308' },
+  // 🥈 plata
+  { bg: 'rgba(148,163,184,0.13)', border: 'rgba(148,163,184,0.35)', numberColor: '#94a3b8' },
+  // 🥉 bronce
+  { bg: 'rgba(180,115,60,0.13)', border: 'rgba(180,115,60,0.35)', numberColor: '#b4733c' },
+  // 4-10: tenue acento
+  { bg: 'rgba(99,102,241,0.07)', border: 'rgba(99,102,241,0.18)', numberColor: '#818cf8' },
+];
+
+function podiumStyle(rank) {
+  if (rank < 3) return PODIUM_STYLES[rank];
+  if (rank < 10) return PODIUM_STYLES[3];
+  return null; // sin fondo especial para el resto
+}
+
+function rankScore(event, metric) {
+  const likes = event.like_count || 0;
+  const plans = event.attendee_count || 0;
+  if (metric === 'likes') return likes;
+  if (metric === 'planificaciones') return plans;
+  return likes + plans;
+}
+
+function medalEmoji(i) {
+  if (i === 0) return '🥇';
+  if (i === 1) return '🥈';
+  if (i === 2) return '🥉';
+  return null;
+}
+
+function RankingModal({ events, onClose, onOpen }) {
+  const [metric, setMetric]   = useState('combined');
+  const [view,   setView]     = useState('current');
+
+  const nowMs = Date.now();
+
+  const currentSorted = [...events]
+    .filter(e => {
+      const endMs = e.ends_at
+        ? new Date(e.ends_at).getTime()
+        : new Date(e.event_date).getTime() + 86400000;
+      return endMs >= nowMs;
+    })
+    .sort((a, b) => rankScore(b, metric) - rankScore(a, metric))
+    .slice(0, 20);
+
+  const allTimeSorted = [...events]
+    .sort((a, b) => rankScore(b, metric) - rankScore(a, metric))
+    .slice(0, 100);
+
+  const list        = view === 'current' ? currentSorted : allTimeSorted;
+  const emptyLabel  = view === 'current' ? 'Sin eventos activos aún.' : 'Sin eventos aún.';
+
+  function ScoreChip({ event }) {
+    const likes = event.like_count || 0;
+    const plans = event.attendee_count || 0;
+    if (metric === 'likes')
+      return <span className="font-mono text-xs font-semibold" style={{ color: '#f472b6' }}>♥ {likes}</span>;
+    if (metric === 'planificaciones')
+      return <span className="font-mono text-xs font-semibold text-accent-glow">📅 {plans}</span>;
+    return (
+      <span className="font-mono text-xs flex items-center gap-0.5">
+        <span style={{ color: '#f472b6' }}>♥{likes}</span>
+        <span className="text-slate-600 mx-0.5">+</span>
+        <span className="text-accent-glow">📅{plans}</span>
+      </span>
+    );
+  }
+
+  function RankRow({ event, rank }) {
+    const medal  = medalEmoji(rank);
+    const pStyle = podiumStyle(rank);
+
+    return (
+      <button
+        onClick={() => onOpen(event.id)}
+        style={pStyle
+          ? { background: pStyle.bg, borderColor: pStyle.border }
+          : {}
+        }
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left group transition-all
+          ${pStyle
+            ? 'border hover:brightness-125'
+            : 'hover:bg-surface-bg border border-transparent'
+          }`}
+      >
+        {/* Rank badge */}
+        <div className="w-8 flex-shrink-0 flex items-center justify-center">
+          {medal
+            ? <span className="text-xl leading-none">{medal}</span>
+            : <span
+                className="text-xs font-mono font-bold"
+                style={{ color: pStyle?.numberColor ?? '#64748b' }}
+              >
+                #{rank + 1}
+              </span>
+          }
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-surface-text truncate group-hover:text-accent-glow transition-colors">
+            {getEventEmoji(event.category)} {event.title}
+          </p>
+          {event.location && (
+            <p className="text-xs text-slate-500 font-mono truncate">📍 {event.location}</p>
+          )}
+        </div>
+
+        {/* Score */}
+        <ScoreChip event={event} />
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">🏆</span>
+            <div>
+              <h2 className="font-display font-bold text-surface-text text-lg leading-tight">Rankings</h2>
+              <p className="text-xs text-surface-muted font-mono">{RANK_VIEWS.find(v => v.key === view)?.sub}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-bg border border-surface-border text-slate-400 hover:text-surface-text transition-colors text-sm"
+          >✕</button>
+        </div>
+
+        {/* View toggle: Ahora / Histórico */}
+        <div className="flex gap-1.5 px-5 pb-2 flex-shrink-0">
+          {RANK_VIEWS.map(v => (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
+              className={`flex-1 py-2 rounded-xl text-sm font-display font-semibold transition-all ${
+                view === v.key
+                  ? 'bg-surface-text text-surface-card'
+                  : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-accent-primary/40 hover:text-surface-text'
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Metric filter */}
+        <div className="flex gap-1.5 px-5 pb-3 flex-shrink-0">
+          {RANK_METRICS.map(m => (
+            <button
+              key={m.key}
+              onClick={() => setMetric(m.key)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                metric === m.key
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-accent-primary/40'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {/* List */}
+        <div className="overflow-y-auto flex-1 px-3 pb-4">
+          {list.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3">🏆</div>
+              <p className="text-sm text-surface-muted font-mono">{emptyLabel}</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {list.map((event, i) => (
+                <RankRow key={event.id} event={event} rank={i} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CommunityPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
 
   const [tab, setTab] = useState('events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
   const [communities, setCommunities] = useState([]);
+  const [showRanking, setShowRanking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showCreateCommunity, setShowCreateCommunity] = useState(false);
   const [communitySearch, setCommunitySearch] = useState('');
   const [communityCategoryFilter, setCommunityCategoryFilter] = useState(ALL_COMMUNITY_CATEGORIES);
+  const [eventSearch, setEventSearch] = useState('');
+  const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
+  const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
+  const [eventSort, setEventSort] = useState('app'); // 'app' | 'planificaciones' | 'likes'
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
@@ -921,6 +1569,13 @@ export default function CommunityPage() {
     load();
   }, [fetchEvents, fetchCommunities]);
 
+  // Al entrar a la sección de comunidad se marcan como vistos los badges de
+  // nuevos eventos (BottomNav + por-comunidad). El badge de "Plan" se limpia
+  // al hacer click en ese tab, y el de evento individual en EventDetailPage.
+  useEffect(() => {
+    clearEventBadge();
+  }, [clearEventBadge]);
+
   // ── Actions ─────────────────────────────────────────────────────────────────
   async function handleCreateEvent(form) {
     const data = await api.postForm('/community/events', buildEventFormData(form));
@@ -929,8 +1584,8 @@ export default function CommunityPage() {
     return data;
   }
 
-  async function handleCreateCommunity(form) {
-    const data = await api.post('/community/communities', form);
+  async function handleCreateCommunity(formData) {
+    const data = await api.postForm('/community/communities', formData);
     showToast('¡Comunidad creada! 👥', 'success');
     await fetchCommunities();
     return data;
@@ -941,6 +1596,7 @@ export default function CommunityPage() {
       await api.post(`/community/events/${eventId}/join`, {});
       showToast('¡Te has apuntado al evento! ✓', 'success');
       await fetchEvents();
+      refreshJoinedCommunities(); // actualiza attendingEventIdsRef para recibir badges
     } catch (e) {
       showToast(e.message || 'Error al apuntarse', 'error');
     }
@@ -951,6 +1607,7 @@ export default function CommunityPage() {
       await api.post(`/community/events/${eventId}/leave`, {});
       showToast('Has salido del evento', 'success');
       await fetchEvents();
+      refreshJoinedCommunities(); // actualiza attendingEventIdsRef
     } catch (e) {
       showToast(e.message || 'Error al salir del evento', 'error');
     }
@@ -970,6 +1627,7 @@ export default function CommunityPage() {
       await api.post(`/community/communities/${communityId}/join`, {});
       showToast('¡Te has unido a la comunidad! ✓', 'success');
       await fetchCommunities();
+      refreshJoinedCommunities(); // update badge subscription set
     } catch (e) {
       showToast(e.message || 'Error al unirse', 'error');
     }
@@ -980,6 +1638,7 @@ export default function CommunityPage() {
       await api.post(`/community/communities/${communityId}/leave`, {});
       showToast('Has salido de la comunidad', 'success');
       await fetchCommunities();
+      refreshJoinedCommunities(); // update badge subscription set
     } catch (e) {
       showToast(e.message || 'Error al salir de la comunidad', 'error');
     }
@@ -989,8 +1648,34 @@ export default function CommunityPage() {
   const planningEvents = sortEventsByProximity(events.filter(event => (
     isUpcomingEvent(event) && event.attendee_ids?.includes(profile?.id)
   )));
+
+  // ── Event search + filter ──────────────────────────────────────────────────
+  const normalizedEventSearch = normalizeText(eventSearch);
+  const filteredSortedEvents = sortEventsBy(events, eventSort).filter(event => {
+    if (!isUpcomingEvent(event)) return false;
+    const matchesSearch = !normalizedEventSearch || normalizeText([
+      event.title,
+      event.description,
+      event.category,
+      event.location,
+      event.organization,
+      event.creator_name,
+      event.community_name,
+    ].filter(Boolean).join(' ')).includes(normalizedEventSearch);
+    const matchesPrice = eventPriceFilter === 'all'
+      ? true
+      : eventPriceFilter === 'free'
+        ? (!event.price || parseFloat(event.price) === 0)
+        : (event.price && parseFloat(event.price) > 0);
+    return matchesSearch && matchesEventCategory(event, eventCategoryFilter) && matchesPrice;
+  });
+  const isEventFiltered = normalizedEventSearch || eventCategoryFilter !== ALL_EVENT_CATEGORIES || eventPriceFilter !== 'all';
+  const upcomingEventsTotal = events.filter(isUpcomingEvent).length;
+  const eventCountLabel = isEventFiltered
+    ? `${filteredSortedEvents.length}/${upcomingEventsTotal} eventos`
+    : `${upcomingEventsTotal} eventos`;
   const headerSubtitle = tab === 'events'
-    ? `${events.length} eventos`
+    ? eventCountLabel
     : tab === 'planning'
       ? `${planningEvents.length} planificados`
       : null;
@@ -1015,6 +1700,7 @@ export default function CommunityPage() {
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
+      <TutorialOverlay currentPage="/community" onSwitchTab={setTab} />
       {/* Header */}
       <header className="sticky top-0 z-40 bg-surface-bg/90 backdrop-blur-xl border-b border-surface-border pt-safe">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
@@ -1051,24 +1737,34 @@ export default function CommunityPage() {
               🌐 Eventos
             </button>
             <button
-              onClick={() => setTab('planning')}
-              className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
+              onClick={() => { setTab('planning'); clearAllEventUpdateBadges(); }}
+              className={`relative flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'planning'
                   ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
               📅 Plan
+              {planningUpdateCount > 0 && tab !== 'planning' && (
+                <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
+                  {planningUpdateCount > 9 ? '9+' : planningUpdateCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setTab('communities')}
-              className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
+              className={`relative flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
                 tab === 'communities'
                   ? 'bg-accent-primary text-white shadow-sm'
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
               👥 Comunidades
+              {communitiesWithEvents.size > 0 && (
+                <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
+                  {communitiesWithEvents.size > 9 ? '9+' : communitiesWithEvents.size}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -1084,14 +1780,81 @@ export default function CommunityPage() {
             <p className="text-surface-muted font-mono text-sm">Cargando...</p>
           </div>
         ) : tab === 'events' ? (
-          <>
-            {/* Events title */}
-            <div className="mb-4">
-              <h2 className="font-display font-bold text-surface-text text-lg">Eventos por proximidad</h2>
-              <p className="text-xs text-surface-muted">Los eventos más cercanos aparecen primero</p>
+          <div id="tutorial-events-section" className="rounded-2xl transition-all duration-300">
+            {/* Events title + sort selector */}
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowRanking(true)}
+                  title="Rankings históricos"
+                  className="text-lg leading-none px-2 py-1.5 rounded-lg border border-surface-border bg-surface-card hover:border-accent-primary/50 hover:bg-surface-bg transition-colors"
+                >
+                  🏆
+                </button>
+                <select
+                  value={eventSort}
+                  onChange={e => setEventSort(e.target.value)}
+                  className="text-xs bg-surface-card border border-surface-border rounded-lg px-2 py-1.5 text-surface-muted focus:outline-none focus:border-accent-primary/50 transition-colors cursor-pointer"
+                >
+                  <option value="app">✨ Selección</option>
+                  <option value="planificaciones">📅 Planificaciones</option>
+                  <option value="likes">♥ Likes</option>
+                </select>
+              </div>
             </div>
 
-            {sortedEvents.length === 0 ? (
+            {/* Search + category filter */}
+            <div className="space-y-3 mb-4">
+              <input
+                type="search"
+                value={eventSearch}
+                onChange={e => setEventSearch(e.target.value)}
+                placeholder="Buscar eventos..."
+                className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+
+              {/* Free / Paid sub-tabs */}
+              <div className="flex gap-2">
+                {[
+                  { key: 'all', label: '🌐 Todos' },
+                  { key: 'free', label: '✓ Gratis' },
+                  { key: 'paid', label: '💳 De pago' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setEventPriceFilter(key)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
+                      eventPriceFilter === key
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                {EVENT_CATEGORY_FILTERS.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setEventCategoryFilter(cat)}
+                    className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      eventCategoryFilter === cat
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {cat === ALL_EVENT_CATEGORIES ? '🌐' : getEventEmoji(cat)} {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {events.length === 0 ? (
               <div className="text-center py-16">
                 <div className="text-5xl mb-4">🌐</div>
                 <p className="font-display font-bold text-surface-text mb-1">Sin eventos todavía</p>
@@ -1103,21 +1866,40 @@ export default function CommunityPage() {
                   + Crear evento
                 </button>
               </div>
+            ) : filteredSortedEvents.length === 0 ? (
+              <div className="text-center py-14">
+                <div className="text-4xl mb-3">🌐</div>
+                <p className="font-display font-bold text-surface-text mb-1">Sin resultados</p>
+                <p className="text-sm text-surface-muted mb-5">Prueba con otra búsqueda o categoría.</p>
+                <button
+                  onClick={() => {
+                    setEventSearch('');
+                    setEventCategoryFilter(ALL_EVENT_CATEGORIES);
+                    setEventPriceFilter('all');
+                    setEventSort('app');
+                  }}
+                  className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
             ) : (
               <div className="space-y-3">
-                {sortedEvents.map(event => (
+                {filteredSortedEvents.map((event, i) => (
                   <EventCard
                     key={event.id}
                     event={{ ...event, attendees: event.attendee_ids || [] }}
+                    rank={!isEventFiltered && eventSort === 'app' ? i + 1 : undefined}
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
+                    onOpen={(id) => navigate(`/community/event/${id}`)}
                     currentUserId={profile?.id}
                   />
                 ))}
               </div>
             )}
-          </>
+          </div>
         ) : tab === 'planning' ? (
           <>
             <div className="mb-4">
@@ -1146,14 +1928,16 @@ export default function CommunityPage() {
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}
+                    onOpen={(id) => { clearEventUpdateBadge(id); navigate(`/community/event/${id}`); }}
                     currentUserId={profile?.id}
+                    hasUnreadUpdate={eventsWithUpdates.has(event.id)}
                   />
                 ))}
               </div>
             )}
           </>
         ) : (
-          <>
+          <div id="tutorial-communities-section" className="rounded-2xl transition-all duration-300">
             {/* Communities title */}
             <div className="mb-4">
               <h2 className="font-display font-bold text-surface-text text-lg">Comunidades</h2>
@@ -1224,19 +2008,27 @@ export default function CommunityPage() {
                       community={{ ...community, members: community.member_ids || [] }}
                       onJoin={handleJoinCommunity}
                       onLeave={handleLeaveCommunity}
-                      onOpen={(id) => navigate(`/community/${id}`)}
+                      onOpen={(id) => { clearCommunityBadge(id); navigate(`/community/${id}`); }}
                       currentUserId={profile?.id}
+                      hasNewEvents={communitiesWithEvents.has(community.id)}
                     />
                     ))}
                   </div>
                 )}
               </>
             )}
-          </>
+          </div>
         )}
       </main>
 
       {/* Modals */}
+      {showRanking && (
+        <RankingModal
+          events={events}
+          onClose={() => setShowRanking(false)}
+          onOpen={(id) => { setShowRanking(false); navigate(`/community/event/${id}`); }}
+        />
+      )}
       {showCreateEvent && (
         <CreateEventModal
           onClose={() => setShowCreateEvent(false)}

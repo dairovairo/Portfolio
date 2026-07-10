@@ -4,14 +4,36 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { notifyUsers } = require('../lib/webpush');
+const { parseReminderMinutes } = require('../lib/reminderLeadTime');
+const { getNotificationDayKey } = require('../lib/notificationDay');
+const { runEventPromoPacingTick, FREE_THRESHOLD } = require('../jobs/eventPromoPacing');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
+const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
+const eventUpdateImageUpload = createImageUpload({ maxSizeMb: 8 });
 
 function uploadEventCover(req, res, next) {
   eventCoverUpload.single('cover')(req, res, err => {
     if (!err) return next();
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return res.status(status).json({ error: err.message || 'No se pudo subir la portada' });
+  });
+}
+
+function uploadCommunityCover(req, res, next) {
+  communityCoverUpload.single('cover')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
+  });
+}
+
+function uploadEventUpdateImage(req, res, next) {
+  eventUpdateImageUpload.single('image')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la imagen' });
   });
 }
 
@@ -47,12 +69,6 @@ function communityErrorMessage(err, fallback) {
   return fallback;
 }
 
-function fallbackDisplayName(user) {
-  const fromMetadata = user.user_metadata?.display_name || user.user_metadata?.name;
-  const fromEmail = user.email?.split('@')[0];
-  return (fromMetadata || fromEmail || 'Usuario').trim().slice(0, 16) || 'Usuario';
-}
-
 function fallbackUsername(user) {
   const idPart = user.id.replace(/-/g, '').slice(0, 12);
   return `user_${idPart}`;
@@ -73,7 +89,7 @@ async function ensurePublicProfile(user) {
     .insert({
       id: user.id,
       username: fallbackUsername(user),
-      display_name: fallbackDisplayName(user),
+      display_name: fallbackUsername(user),
     });
 
   if (!insertError) return;
@@ -112,13 +128,16 @@ async function getCommunityAdminState(communityId, userId) {
   };
 }
 
-async function selectEventRows(db, table, eventIds) {
+async function selectEventRows(db, table, eventIds, columns = 'event_id, user_id') {
   const { data, error } = await db
     .from(table)
-    .select('event_id, user_id')
+    .select(columns)
     .in('event_id', eventIds);
 
   if (!error) return data || [];
+  if ((error.code === '42P01' || error.code === '42703') && columns !== 'event_id, user_id') {
+    return selectEventRows(db, table, eventIds);
+  }
   if (error.code === '42P01' || error.code === '42703') return [];
   throw error;
 }
@@ -136,7 +155,7 @@ async function enrichEvents(db, events = [], currentUserId = null) {
   if (eventIds.length === 0) return eventList;
 
   const [attendees, likes] = await Promise.all([
-    selectEventRows(db, 'community_event_attendees', eventIds),
+    selectEventRows(db, 'community_event_attendees', eventIds, 'event_id, user_id, reminder_minutes_before'),
     selectEventRows(db, 'community_event_likes', eventIds),
   ]);
 
@@ -152,16 +171,27 @@ async function enrichEvents(db, events = [], currentUserId = null) {
       ? likes.filter(row => row.user_id === currentUserId).map(row => row.event_id)
       : []
   );
+  const currentReminderByEvent = currentUserId
+    ? attendees.reduce((acc, row) => {
+        if (row.user_id === currentUserId) {
+          acc[row.event_id] = row.reminder_minutes_before ?? null;
+        }
+        return acc;
+      }, {})
+    : {};
 
   return eventList.map(ev => ({
     ...ev,
-    creator_name: ev.creator?.display_name || ev.creator?.username || 'Alguien',
+    creator_name: ev.creator?.username || 'Alguien',
     community_name: ev.community?.name || null,
     organization: ev.organization || ev.community?.organization || null,
     attendee_count: attendeeCountByEvent[ev.id] || 0,
     attendee_ids: attendeeIdsByEvent[ev.id] || [],
     like_count: likeCountByEvent[ev.id] || 0,
     liked_by_current_user: likedEventIds.has(ev.id),
+    current_user_reminder_minutes_before: attendeeIdsByEvent[ev.id]?.includes(currentUserId)
+      ? currentReminderByEvent[ev.id] ?? null
+      : null,
   }));
 }
 
@@ -186,15 +216,20 @@ router.get('/events', requireAuth, async (req, res) => {
   const db = getUserSupabase(req);
 
   try {
+    // Only fetch events that haven't ended yet (or have no end date but start in the future/today).
+    // Limit to 100 to prevent unbounded scans; enrichEvents batches attendees+likes over the full set.
+    const now = new Date().toISOString();
     const { data: events, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
-        max_attendees, creator_id, community_id, created_at,
-        creator:users!community_events_creator_id_fkey(display_name, username),
+        id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
+        url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan, notification_count,
+        creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
-      .order('event_date', { ascending: true });
+      .or(`ends_at.gte.${now},and(ends_at.is.null,event_date.gte.${now})`)
+      .order('event_date', { ascending: true })
+      .limit(100);
 
     if (error) throw error;
 
@@ -209,7 +244,7 @@ router.get('/events', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, max_attendees, community_id, organization } = req.body;
+  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
   const userId = req.user.id;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -236,6 +271,22 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const maxAttendees = Number.parseInt(max_attendees, 10) || 50;
   if (maxAttendees < 2 || maxAttendees > 10000) {
     return res.status(400).json({ error: 'El maximo de asistentes debe estar entre 2 y 10000' });
+  }
+
+  // Premium/Ultra: notificaciones push on-demand, contratables entre NOTIF_MIN y NOTIF_MAX.
+  const NOTIF_MIN = 500;
+  const NOTIF_MAX = 50000;
+  const resolvedPlan = ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : 'basic';
+
+  let resolvedNotificationCount = null;
+  if (resolvedPlan === 'premium' || resolvedPlan === 'ultra') {
+    const parsedCount = Number.parseInt(notification_count, 10);
+    if (!Number.isFinite(parsedCount) || parsedCount < NOTIF_MIN || parsedCount > NOTIF_MAX) {
+      return res.status(400).json({
+        error: `Elige cuántas notificaciones quieres contratar (entre ${NOTIF_MIN} y ${NOTIF_MAX})`,
+      });
+    }
+    resolvedNotificationCount = parsedCount;
   }
 
   try {
@@ -268,11 +319,18 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         event_date: eventDate.toISOString(),
         ends_at: endDateIso,
         location: eventLocation,
+        lat: lat != null && lat !== '' ? parseFloat(lat) : null,
+        lng: lng != null && lng !== '' ? parseFloat(lng) : null,
         organization: organization?.trim() || null,
         cover_image_url: coverImageUrl,
+        url: url?.trim() || null,
+        price: price != null && price !== '' ? parseFloat(price) : null,
+        additional_info: additional_info?.trim() || null,
         max_attendees: maxAttendees,
         creator_id: userId,
         community_id: communityId,
+        promotion_plan: resolvedPlan,
+        notification_count: resolvedNotificationCount,
       })
       .select()
       .single();
@@ -290,10 +348,263 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
       console.warn('[community] event creator auto-join error:', attendeeError);
     }
 
+    // ── Push notifications (fire-and-forget) ─────────────────────────────────
+    // Aviso inmediato SIEMPRE a los miembros de la comunidad, sea cual sea el
+    // plan de promoción (basic/premium/ultra): son "su" comunidad, así que se
+    // les avisa igualmente incluso si ya alcanzaron el tope diario de 1
+    // notificación/evento (excepción explícita al tope). Esto no cuenta
+    // contra el cupo contratado (notification_sent_count). Se registra en
+    // event_promo_notifications (histórico por evento) y, desde la fase 70,
+    // también en user_daily_notification_claims — la tabla que
+    // server/jobs/eventPromoPacing.js usa como fuente de verdad atómica del
+    // tope diario — para que estos usuarios queden marcados como "ya
+    // notificados hoy" de cara a CUALQUIER OTRO evento (de otra comunidad o
+    // de alcance general) y no reciban una segunda notificación no
+    // relacionada con su comunidad el mismo día.
+    //
+    // El alcance adicional de premium/ultra (resolvedNotificationCount) YA NO
+    // se dispara aquí de golpe: desde la fase 69 lo reparte gradualmente
+    // server/jobs/eventPromoPacing.js (cron cada 5 min) hasta el inicio del
+    // evento, respetando 1 notificación/usuario/día (across events) y
+    // priorizando alcanzar las 200 notificaciones mínimas antes de repartir
+    // el resto de forma uniforme entre eventos activos.
+    (async () => {
+      try {
+        if (communityId) {
+          const [{ data: comm }, { data: members }] = await Promise.all([
+            supabase.from('communities').select('name').eq('id', communityId).single(),
+            supabase.from('community_members').select('user_id').eq('community_id', communityId).neq('user_id', userId),
+          ]);
+
+          const communityMemberIds = members?.map(m => m.user_id) || [];
+          const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
+          console.log(`[NOTIF-CAP] evento ${event.id} ("${event.title}") es de comunidad ${communityId}: ${communityMemberIds.length} miembros a notificar SIEMPRE (excepción al tope diario).`);
+
+          const notifiedUserIds = await notifyUsers(supabase, communityMemberIds, userId, {
+            title: `📅 Nuevo evento ${communityLabel}`,
+            body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
+            url:   `/community/event/${event.id}`,
+            tag:   `community-event-${event.id}`,
+          });
+
+          console.log(`[NOTIF-CAP] evento ${event.id}: push de comunidad entregado a ${notifiedUserIds?.length || 0}/${communityMemberIds.length} miembros.`);
+
+          if (notifiedUserIds?.length) {
+            const { error: logError } = await supabase
+              .from('event_promo_notifications')
+              .upsert(
+                notifiedUserIds.map(uid => ({ event_id: event.id, user_id: uid })),
+                { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+              );
+            if (logError) {
+              console.warn('[community] error registrando aviso inmediato en log diario:', logError.message);
+            }
+
+            // Marca el hueco del día como usado en la misma tabla que lee
+            // server/jobs/eventPromoPacing.js para el tope de 1/día. El
+            // aviso de comunidad YA se envió (no depende de ganar esta
+            // reserva, es la excepción al tope), así que un simple
+            // "insertar e ignorar si ya existe" basta: da igual si dos
+            // cosas intentan marcar el mismo (user_id, día) a la vez, la
+            // UNIQUE de Postgres se encarga de que quede una sola fila.
+            const { error: claimError, data: claimRows } = await supabase
+              .from('user_daily_notification_claims')
+              .upsert(
+                notifiedUserIds.map(uid => ({ user_id: uid, claim_date: getNotificationDayKey(), event_id: event.id })),
+                { onConflict: 'user_id,claim_date', ignoreDuplicates: true }
+              )
+              .select('user_id');
+            if (claimError) {
+              // Si esto falla sistemáticamente (p.ej. la tabla no existe
+              // porque la migración de fase 70 no se llegó a ejecutar en
+              // Supabase, o SUPABASE_SERVICE_KEY no es la service_role key
+              // real y RLS está bloqueando el insert), el hueco diario de
+              // estos usuarios NUNCA queda reservado y por tanto pueden
+              // recibir además una notificación no relacionada el mismo
+              // día vía server/jobs/eventPromoPacing.js — este log es la
+              // señal a buscar en Railway si el tope no se respeta.
+              console.error('[NOTIF-CAP] ⚠️ error reservando hueco diario tras aviso de comunidad (revisar migración fase70 / SUPABASE_SERVICE_KEY):', claimError.message);
+            } else {
+              console.log(`[NOTIF-CAP] evento ${event.id}: hueco diario reservado para ${claimRows?.length || 0} usuarios.`);
+            }
+          }
+        }
+
+        // Premium/Ultra: en vez de esperar hasta 5 min al siguiente tick del
+        // cron (server/jobs/eventPromoPacing.js), disparamos un tick ahora
+        // mismo para que el reparto empiece de inmediato. El cron sigue
+        // corriendo cada 5 min para continuar repartiendo lo que falte hasta
+        // el inicio del evento — esto solo adelanta el primer envío.
+        if (resolvedPlan === 'premium' || resolvedPlan === 'ultra') {
+          console.log(`[NOTIF-CAP] evento ${event.id} es ${resolvedPlan}, disparando tick de pacing inmediato...`);
+          await runEventPromoPacingTick();
+        }
+      } catch (err) {
+        console.warn('[community] event push notification error:', err.message);
+      }
+    })();
+
     res.status(201).json({ event });
   } catch (err) {
     console.error('[community] POST /events error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al crear el evento') });
+  }
+});
+
+// POST /api/community/events/:id/renew-promotion
+// Permite al CREADOR del evento renovar su promoción (mismos planes y misma
+// validación que al crear el evento: basic/premium/ultra, con
+// notification_count entre 500 y 50.000 para premium/ultra). Al renovar:
+//
+//   1. Se actualiza promotion_plan / notification_count del evento y se
+//      resetea notification_sent_count a 0 (nuevo ciclo de facturación:
+//      "la promoción se cobrará al empezar el evento automáticamente o al
+//      renovar la promoción").
+//   2. Se BORRA el historial de event_promo_notifications de este evento,
+//      para que los usuarios que ya habían sido notificados en el ciclo
+//      anterior vuelvan a ser candidatos ("en cada promoción cada usuario
+//      se notifica una vez; para que vuelva a serlo, hay que renovar").
+//      Esto no salta el tope diario global (user_daily_notification_claims,
+//      1 notificación/usuario/día entre TODOS los eventos): si a alguien ya
+//      se le notificó HOY de cualquier evento, no recibirá otra hasta
+//      mañana aunque se acabe de renovar esta promoción.
+//   3. Se dispara, igual que al crear el evento, el aviso inmediato a los
+//      miembros de la comunidad (si tiene) y un tick de pacing inmediato
+//      si el plan resultante es premium/ultra.
+//
+// Nota: esta ruta se mantiene deliberadamente independiente del bloque de
+// notificación de POST /events (no se refactoriza a un helper compartido)
+// para no tocar ese flujo ya estabilizado.
+router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { promotion_plan, notification_count } = req.body;
+
+  const NOTIF_MIN = 500;
+  const NOTIF_MAX = 50000;
+  const resolvedPlan = ['basic', 'premium', 'ultra'].includes(promotion_plan) ? promotion_plan : null;
+  if (!resolvedPlan) return res.status(400).json({ error: 'Elige un plan de promoción válido' });
+
+  let resolvedNotificationCount = null;
+  if (resolvedPlan === 'premium' || resolvedPlan === 'ultra') {
+    const parsedCount = Number.parseInt(notification_count, 10);
+    if (!Number.isFinite(parsedCount) || parsedCount < NOTIF_MIN || parsedCount > NOTIF_MAX) {
+      return res.status(400).json({
+        error: `Elige cuántas notificaciones quieres contratar (entre ${NOTIF_MIN} y ${NOTIF_MAX})`,
+      });
+    }
+    resolvedNotificationCount = parsedCount;
+  }
+
+  try {
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id, title, location, creator_id, community_id, event_date, ends_at, promotion_plan, notification_sent_count')
+      .eq('id', id)
+      .single();
+
+    if (eventError || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+    if (event.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador del evento puede renovar su promoción' });
+    }
+    if (new Date(event.ends_at || event.event_date) < new Date()) {
+      return res.status(400).json({ error: 'No se puede renovar la promoción de un evento ya finalizado' });
+    }
+
+    // No se permite renovar (y por tanto resetear notification_sent_count a
+    // 0 y borrar el historial de notificados) una promoción premium/ultra
+    // que todavía no ha alcanzado el mínimo de FREE_THRESHOLD notificaciones
+    // enviadas: si se permitiera, se podría encadenar renovaciones antes de
+    // llegar al umbral de cobro y conseguir notificaciones ilimitadas gratis.
+    const sentCount = event.notification_sent_count || 0;
+    if ((event.promotion_plan === 'premium' || event.promotion_plan === 'ultra') && sentCount < FREE_THRESHOLD) {
+      return res.status(400).json({
+        error: `Aún no puedes renovar: hace falta alcanzar el mínimo de ${FREE_THRESHOLD} notificaciones enviadas para que se pueda cobrar (llevas ${sentCount}/${FREE_THRESHOLD}).`,
+      });
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('community_events')
+      .update({
+        promotion_plan: resolvedPlan,
+        notification_count: resolvedNotificationCount,
+        notification_sent_count: 0,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    const { error: clearError } = await supabase
+      .from('event_promo_notifications')
+      .delete()
+      .eq('event_id', id);
+    if (clearError) {
+      console.warn('[community] error limpiando historial de notificados al renovar:', clearError.message);
+    }
+
+    // ── Push notifications (fire-and-forget) — mismo patrón que POST /events ──
+    (async () => {
+      try {
+        if (event.community_id) {
+          const [{ data: comm }, { data: members }] = await Promise.all([
+            supabase.from('communities').select('name').eq('id', event.community_id).single(),
+            supabase.from('community_members').select('user_id').eq('community_id', event.community_id).neq('user_id', userId),
+          ]);
+
+          const communityMemberIds = members?.map(m => m.user_id) || [];
+          const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
+          console.log(`[NOTIF-CAP] renovación evento ${event.id} ("${event.title}") es de comunidad ${event.community_id}: ${communityMemberIds.length} miembros a re-notificar SIEMPRE (excepción al tope diario).`);
+
+          const notifiedUserIds = await notifyUsers(supabase, communityMemberIds, userId, {
+            title: `📅 Evento renovado ${communityLabel}`,
+            body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
+            url:   `/community/event/${event.id}`,
+            tag:   `community-event-${event.id}`,
+          });
+
+          console.log(`[NOTIF-CAP] renovación evento ${event.id}: push de comunidad entregado a ${notifiedUserIds?.length || 0}/${communityMemberIds.length} miembros.`);
+
+          if (notifiedUserIds?.length) {
+            const { error: logError } = await supabase
+              .from('event_promo_notifications')
+              .upsert(
+                notifiedUserIds.map(uid => ({ event_id: event.id, user_id: uid })),
+                { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+              );
+            if (logError) {
+              console.warn('[community] error registrando aviso inmediato (renovación) en log diario:', logError.message);
+            }
+
+            const { error: claimError, data: claimRows } = await supabase
+              .from('user_daily_notification_claims')
+              .upsert(
+                notifiedUserIds.map(uid => ({ user_id: uid, claim_date: getNotificationDayKey(), event_id: event.id })),
+                { onConflict: 'user_id,claim_date', ignoreDuplicates: true }
+              )
+              .select('user_id');
+            if (claimError) {
+              console.error('[NOTIF-CAP] ⚠️ error reservando hueco diario tras aviso de comunidad (renovación):', claimError.message);
+            } else {
+              console.log(`[NOTIF-CAP] renovación evento ${event.id}: hueco diario reservado para ${claimRows?.length || 0} usuarios.`);
+            }
+          }
+        }
+
+        if (resolvedPlan === 'premium' || resolvedPlan === 'ultra') {
+          console.log(`[NOTIF-CAP] renovación evento ${event.id} es ${resolvedPlan}, disparando tick de pacing inmediato...`);
+          await runEventPromoPacingTick();
+        }
+      } catch (err) {
+        console.warn('[community] renew-promotion push notification error:', err.message);
+      }
+    })();
+
+    res.json({ event: updated });
+  } catch (err) {
+    console.error('[community] POST /events/:id/renew-promotion error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al renovar la promoción') });
   }
 });
 
@@ -364,6 +675,52 @@ router.post('/events/:id/leave', requireAuth, async (req, res) => {
   }
 });
 
+router.patch('/events/:id/reminder', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const reminderMinutes = parseReminderMinutes(req.body?.reminder_minutes_before);
+
+  if (reminderMinutes == null) {
+    return res.status(400).json({ error: 'El aviso debe estar entre 10 minutos y 1 semana' });
+  }
+
+  try {
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id, event_date, ends_at')
+      .eq('id', id)
+      .single();
+
+    if (eventError || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+    if (new Date(event.ends_at || event.event_date) < new Date()) {
+      return res.status(400).json({ error: 'El evento ya ha pasado' });
+    }
+
+    const { data: attendee } = await supabase
+      .from('community_event_attendees')
+      .select('event_id')
+      .eq('event_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!attendee) return res.status(403).json({ error: 'Tienes que estar apuntado para ajustar el aviso' });
+
+    const { data: updated, error } = await supabase
+      .from('community_event_attendees')
+      .update({ reminder_minutes_before: reminderMinutes })
+      .eq('event_id', id)
+      .eq('user_id', userId)
+      .select('reminder_minutes_before')
+      .single();
+
+    if (error) throw error;
+    res.json({ reminder_minutes_before: updated.reminder_minutes_before });
+  } catch (err) {
+    console.error('[community] PATCH /events/:id/reminder error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al cambiar el aviso') });
+  }
+});
+
 // POST /api/community/events/:id/like
 router.post('/events/:id/like', requireAuth, async (req, res) => {
   const { id } = req.params;
@@ -423,29 +780,46 @@ router.get('/communities', requireAuth, async (req, res) => {
       .from('communities')
       .select(`
         id, name, description, category, organization, creator_id, created_at,
-        creator:users!communities_creator_id_fkey(display_name, username)
+        creator:users!communities_creator_id_fkey(username)
       `)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    const enriched = await Promise.all((communities || []).map(async (comm) => {
-      const { data: members, count } = await db
+    const communityIds = (communities || []).map(c => c.id);
+
+    // Single query for all members across all communities — eliminates N+1
+    let allMembers = [];
+    if (communityIds.length > 0) {
+      const { data: membersData, error: mErr } = await db
         .from('community_members')
-        .select('user_id, role', { count: 'exact' })
-        .eq('community_id', comm.id);
-      const currentMembership = (members || []).find(m => m.user_id === userId);
+        .select('community_id, user_id, role')
+        .in('community_id', communityIds);
+      if (mErr) throw mErr;
+      allMembers = membersData || [];
+    }
+
+    // Group members by community_id in JS
+    const membersByCommunity = allMembers.reduce((acc, m) => {
+      if (!acc[m.community_id]) acc[m.community_id] = [];
+      acc[m.community_id].push(m);
+      return acc;
+    }, {});
+
+    const enriched = (communities || []).map((comm) => {
+      const members = membersByCommunity[comm.id] || [];
+      const currentMembership = members.find(m => m.user_id === userId);
 
       return {
         ...comm,
-        creator_name: comm.creator?.display_name || comm.creator?.username || 'Alguien',
-        member_count: count || 0,
-        member_ids: (members || []).map(m => m.user_id),
-        admin_ids: (members || []).filter(m => m.role === 'admin').map(m => m.user_id),
+        creator_name: comm.creator?.username || 'Alguien',
+        member_count: members.length,
+        member_ids: members.map(m => m.user_id),
+        admin_ids: members.filter(m => m.role === 'admin').map(m => m.user_id),
         current_user_role: comm.creator_id === userId ? 'admin' : currentMembership?.role || null,
         is_admin: comm.creator_id === userId || currentMembership?.role === 'admin',
       };
-    }));
+    });
 
     res.json({ communities: enriched });
   } catch (err) {
@@ -465,7 +839,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
       .from('communities')
       .select(`
         id, name, description, category, organization, creator_id, created_at,
-        creator:users!communities_creator_id_fkey(display_name, username)
+        creator:users!communities_creator_id_fkey(username)
       `)
       .eq('id', id)
       .single();
@@ -481,9 +855,9 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: events, error: eventsError } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, organization, cover_image_url,
+        id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
-        creator:users!community_events_creator_id_fkey(display_name, username),
+        creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
       `)
       .eq('community_id', id)
@@ -497,7 +871,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     res.json({
       community: {
         ...community,
-        creator_name: community.creator?.display_name || community.creator?.username || 'Alguien',
+        creator_name: community.creator?.username || 'Alguien',
         member_count: count || 0,
         member_ids: (members || []).map(m => m.user_id),
         admin_ids: (members || []).filter(m => m.role === 'admin').map(m => m.user_id),
@@ -514,14 +888,23 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
 });
 
 // POST /api/community/communities
-router.post('/communities', requireAuth, async (req, res) => {
-  const { name, description, category, organization } = req.body;
+router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) => {
+  const { name, description, category, organization, url } = req.body;
   const userId = req.user.id;
 
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
   try {
     await ensurePublicProfile(req.user);
+
+    let coverImageUrl = null;
+    if (req.file) {
+      coverImageUrl = await storeImage({
+        file: req.file,
+        objectName: `community-covers/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 4500000,
+      });
+    }
 
     const { data: community, error } = await supabase
       .from('communities')
@@ -530,6 +913,8 @@ router.post('/communities', requireAuth, async (req, res) => {
         description: description?.trim() || null,
         category: category?.trim() || null,
         organization: organization?.trim() || null,
+        url: url?.trim() || null,
+        cover_image_url: coverImageUrl,
         creator_id: userId,
       })
       .select()
@@ -637,6 +1022,211 @@ router.post('/communities/:id/leave', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /communities/:id/leave error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al salir de la comunidad') });
+  }
+});
+
+// GET /api/community/events/:id
+router.get('/events/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const db = getUserSupabase(req);
+
+  try {
+    const { data: event, error } = await db
+      .from('community_events')
+      .select(`
+        id, title, description, category, event_date, ends_at, location, lat, lng, organization,
+        cover_image_url, url, price, additional_info, max_attendees, creator_id, community_id, created_at,
+        promotion_plan, notification_count, notification_sent_count,
+        creator:users!community_events_creator_id_fkey(username),
+        community:communities!community_events_community_id_fkey(id, name, organization)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const [enriched] = await enrichEvents(db, [event], req.user.id);
+    res.json({ event: enriched });
+  } catch (err) {
+    console.error('[community] GET /events/:id error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener el evento') });
+  }
+});
+
+// GET /api/community/notifications/today-event
+// Devuelve el evento que le "ganó" al usuario el hueco diario de
+// notificación (user_daily_notification_claims, PK user_id+claim_date):
+// como esa tabla solo permite una fila por usuario y día (el resto de
+// intentos de otros eventos se ignoran por conflicto de PK), esto es
+// exactamente "el primer evento que le notificó hoy" — da igual que
+// luego le llegue un aviso de otro evento (p.ej. de una comunidad suya),
+// el panel del front no debe cambiar en todo el día.
+router.get('/notifications/today-event', requireAuth, async (req, res) => {
+  try {
+    const { data: claim, error: claimError } = await supabase
+      .from('user_daily_notification_claims')
+      .select('event_id')
+      .eq('user_id', req.user.id)
+      .eq('claim_date', getNotificationDayKey())
+      .maybeSingle();
+
+    if (claimError) throw claimError;
+    if (!claim?.event_id) return res.json({ event: null });
+
+    const { data: event, error: eventError } = await supabase
+      .from('community_events')
+      .select('id, title, organization, cover_image_url, community:communities!community_events_community_id_fkey(organization)')
+      .eq('id', claim.event_id)
+      .maybeSingle();
+
+    if (eventError || !event) return res.json({ event: null });
+
+    res.json({
+      event: {
+        id: event.id,
+        title: event.title,
+        organization: event.organization || event.community?.organization || null,
+        cover_image_url: event.cover_image_url || null,
+      },
+    });
+  } catch (err) {
+    console.error('[community] GET /notifications/today-event error:', err);
+    res.status(500).json({ error: 'Error al comprobar el evento notificado hoy' });
+  }
+});
+
+// GET /api/community/events/:id/updates
+router.get('/events/:id/updates', requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data: updates, error } = await supabase
+      .from('event_updates')
+      .select(`
+        id, content, image_url, created_at, creator_id,
+        creator:users!event_updates_creator_id_fkey(username, avatar_url)
+      `)
+      .eq('event_id', id)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    res.json({ updates: updates || [] });
+  } catch (err) {
+    console.error('[community] GET /events/:id/updates error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener actualizaciones') });
+  }
+});
+
+// POST /api/community/events/:id/updates
+router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (req, res) => {
+  const { id } = req.params;
+  const { content } = req.body;
+  const userId = req.user.id;
+
+  const hasContent = content?.trim();
+  const hasImage = !!req.file;
+
+  if (!hasContent && !hasImage) {
+    return res.status(400).json({ error: 'Escribe un mensaje o adjunta una imagen' });
+  }
+  if (hasContent && hasContent.length > 2000) {
+    return res.status(400).json({ error: 'Máximo 2000 caracteres' });
+  }
+
+  try {
+    // Only the event creator can post updates
+    const { data: event, error: evErr } = await supabase
+      .from('community_events')
+      .select('creator_id')
+      .eq('id', id)
+      .single();
+
+    if (evErr || !event) return res.status(404).json({ error: 'Evento no encontrado' });
+    if (event.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el organizador puede publicar actualizaciones' });
+    }
+
+    // Upload image to Supabase Storage if provided
+    let imageUrl = null;
+    if (req.file) {
+      imageUrl = await storeImage({
+        file: req.file,
+        bucket: 'chat-images',
+        objectName: `event-updates/${userId}/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 8_000_000,
+      });
+    }
+
+    // Fetch event title for the notification
+    const { data: eventFull } = await supabase
+      .from('community_events')
+      .select('id, title')
+      .eq('id', id)
+      .single();
+
+    const { data: update, error } = await supabase
+      .from('event_updates')
+      .insert({
+        event_id: id,
+        creator_id: userId,
+        content: hasContent || null,
+        image_url: imageUrl,
+      })
+      .select(`
+        id, content, image_url, created_at, creator_id,
+        creator:users!event_updates_creator_id_fkey(username, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    // ── Push notifications to all attendees (fire-and-forget) ────────────────
+    if (eventFull) {
+      const { data: attendees } = await supabase
+        .from('community_event_attendees')
+        .select('user_id')
+        .eq('event_id', id)
+        .neq('user_id', userId);
+
+      if (attendees?.length) {
+        const attendeeIds = attendees.map(a => a.user_id);
+        const notifBody = hasContent
+          ? hasContent.length > 80 ? hasContent.slice(0, 77) + '…' : hasContent
+          : '📷 Se ha publicado una imagen';
+
+        notifyUsers(supabase, attendeeIds, userId, {
+          title: `📣 ${eventFull.title}`,
+          body:  notifBody,
+          url:   `/community/event/${id}`,
+          tag:   `event-update-${id}`,
+        }).catch(() => {});
+      }
+    }
+
+    res.status(201).json({ update });
+  } catch (err) {
+    console.error('[community] POST /events/:id/updates error:', err);
+    res.status(err.status || 500).json({ error: communityErrorMessage(err, 'Error al publicar actualización') });
+  }
+});
+
+// DELETE /api/community/events/:id/updates/:updateId
+router.delete('/events/:id/updates/:updateId', requireAuth, async (req, res) => {
+  const { updateId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { error } = await supabase
+      .from('event_updates')
+      .delete()
+      .eq('id', updateId)
+      .eq('creator_id', userId);
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[community] DELETE /events/:id/updates/:updateId error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al eliminar actualización') });
   }
 });
 

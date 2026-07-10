@@ -43,10 +43,20 @@ const CIRCLE_BADGES = [
     description: 'Quien tiene mas bateria social por la manana.',
     category: 'circle',
   },
+  {
+    id: 'tapado',
+    name: 'Average Joe/Jane',
+    emoji: '🫥',
+    description: 'Sin insignia... el mas normal de tus colegas.',
+    category: 'circle',
+    exclusive: false,   // a diferencia del resto, esta la pueden tener varias personas a la vez
+  },
 ];
 
+const TAPADO_BADGE_ID = 'tapado';
+
 const BADGE_BY_ID = Object.fromEntries(CIRCLE_BADGES.map(badge => [badge.id, badge]));
-const MAX_IDENTITIES_PER_USER = 2;
+const MAX_IDENTITIES_PER_USER = 1;
 
 async function getCircleMemberIds(userId) {
   const { data: friendships, error } = await supabase
@@ -72,6 +82,26 @@ async function getGroupMemberIds(groupId) {
 
   if (error) throw error;
   return (data || []).map(row => row.user_id);
+}
+
+// Apuntados de una quedada concreta (participantes + quien la creó).
+async function getPoolParticipantIds(poolId) {
+  const { data: pool, error: poolError } = await supabase
+    .from('hangout_pools')
+    .select('creator_id')
+    .eq('id', poolId)
+    .maybeSingle();
+  if (poolError) throw poolError;
+
+  const { data, error } = await supabase
+    .from('pool_participants')
+    .select('user_id')
+    .eq('pool_id', poolId);
+  if (error) throw error;
+
+  const ids = new Set((data || []).map(row => row.user_id));
+  if (pool?.creator_id) ids.add(pool.creator_id);
+  return [...ids];
 }
 
 function createStats(memberIds) {
@@ -190,17 +220,23 @@ function pushLoneWolfCandidates(candidates, statsList) {
 /**
  * Asigna insignias con las siguientes reglas:
  * - Una insignia solo puede tenerla UNA persona (exclusiva por grupo)
- * - Una persona puede tener como maximo dos identidades activas
+ * - Una persona puede tener como maximo UNA identidad activa a la vez
  * - Si varias personas empatan en puntuacion para una insignia,
- *   tiene prioridad quien lleve menos identidades activas
+ *   tiene prioridad quien no tenga ya una identidad activa
+ * - "Tapado" es la excepcion: no compite por puntuacion, sino que se
+ *   asigna automaticamente a cualquier miembro que no haya ganado
+ *   ninguna otra insignia. A diferencia del resto, la pueden tener
+ *   varias personas del grupo a la vez.
  */
-function chooseAssignments(candidates, scopeId = 'circle') {
+function chooseAssignments(candidates, memberIds, scopeId = 'circle') {
   const assignments = [];
   const assignedBadges = new Set();
   const userBadgeCount = {};
 
-  // Procesamos cada insignia en el orden definido en CIRCLE_BADGES
-  for (const badgeDef of CIRCLE_BADGES) {
+  const competitiveBadges = CIRCLE_BADGES.filter(badge => badge.id !== TAPADO_BADGE_ID);
+
+  // Procesamos cada insignia competitiva en el orden definido en CIRCLE_BADGES
+  for (const badgeDef of competitiveBadges) {
     const badgeId = badgeDef.id;
     const badgeCandidates = candidates.filter(c =>
       c.badgeId === badgeId &&
@@ -225,6 +261,25 @@ function chooseAssignments(candidates, scopeId = 'circle') {
     userBadgeCount[winner.userId] = (userBadgeCount[winner.userId] || 0) + 1;
   }
 
+  // "Tapado": red de seguridad para quien no haya ganado ninguna insignia
+  // competitiva. No exclusiva — todos los que apliquen la reciben a la vez.
+  const wonUserIds = new Set(assignments.map(a => a.userId));
+  const tapadoBadge = BADGE_BY_ID[TAPADO_BADGE_ID];
+  memberIds.forEach(userId => {
+    if (wonUserIds.has(userId)) return;
+    assignments.push({
+      badgeId: TAPADO_BADGE_ID,
+      userId,
+      score: 0,
+      sortScore: 0,
+      strength: 0,
+      rank: 1,
+      reason: 'Sin insignia en este grupo... el mas normal de tus colegas.',
+      badge: tapadoBadge,
+      earned_at: new Date().toISOString(),
+    });
+  });
+
   return assignments;
 }
 
@@ -235,7 +290,7 @@ function chooseAssignments(candidates, scopeId = 'circle') {
 async function computeBadgesForMembers(memberIds, options = {}) {
   const { data: members, error: membersError } = await supabase
     .from('users')
-    .select('id, username, display_name, avatar_url, battery_level')
+    .select('id, username, avatar_url, battery_level')
     .in('id', memberIds);
   if (membersError) throw membersError;
 
@@ -371,7 +426,7 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     stats => `${scoreText(stats.average, '%')} de media por la manana (${stats.morningCount} registros)`
   );
 
-  const assignments = chooseAssignments(candidates, options.scopeId || options.groupId || memberIds.join('|'));
+  const assignments = chooseAssignments(candidates, memberIds, options.scopeId || options.groupId || memberIds.join('|'));
   const membersById = Object.fromEntries((members || []).map(member => [member.id, member]));
 
   return {
@@ -417,6 +472,34 @@ async function computeGroupBadges(groupId) {
 }
 
 /**
+ * Calcula las insignias para los apuntados de una quedada (pool) concreta.
+ * Mismo criterio que computeGroupBadges (misma competición, misma
+ * persistencia permanente en user_badges) pero el conjunto de miembros es
+ * el de los apuntados a esa quedada en vez de los de un grupo privado, y
+ * las estadísticas se calculan a nivel de círculo (sin restringir por
+ * group_id) ya que una quedada no agrupa varias quedadas propias.
+ */
+async function computePoolBadges(poolId) {
+  const memberIds = await getPoolParticipantIds(poolId);
+  if (!memberIds.length) return { badges: CIRCLE_BADGES, members: [], assignments: [], stats: {} };
+
+  const result = await computeBadgesForMembers(memberIds, { scopeId: `pool:${poolId}` });
+
+  if (result.assignments.length) {
+    const rows = result.assignments.map(a => ({
+      user_id: a.userId,
+      badge_id: a.badgeId,
+      earned_at: a.earned_at,
+    }));
+    await supabase
+      .from('user_badges')
+      .upsert(rows, { onConflict: 'user_id,badge_id', ignoreDuplicates: true });
+  }
+
+  return result;
+}
+
+/**
  * Calcula las insignias para el círculo completo de amigos aceptados del usuario.
  * Mantenido por compatibilidad con rutas existentes.
  */
@@ -429,4 +512,5 @@ module.exports = {
   CIRCLE_BADGES,
   computeCircleBadges,
   computeGroupBadges,
+  computePoolBadges,
 };

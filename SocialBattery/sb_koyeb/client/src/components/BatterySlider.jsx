@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { getBatteryColor } from '../lib/battery';
 
-export default function BatterySlider({ value, onChange, readonly = false, isEstimated = false }) {
+export default function BatterySlider({ value, onChange, readonly = false, isEstimated = false, hideDisplay = false }) {
   const color = getBatteryColor(value);
   const barRef = useRef(null);
   const isDragging = useRef(false);
@@ -88,7 +88,7 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
       <div className="relative mb-6">
         <div
           ref={barRef}
-          className={`flex items-center gap-1 h-10 ${!readonly ? 'cursor-ew-resize select-none touch-none' : ''}`}
+          className={`flex items-center gap-1 h-9 ${!readonly ? 'cursor-ew-resize select-none touch-none' : ''}`}
           onMouseDown={!readonly ? onMouseDown : undefined}
           onTouchStart={!readonly ? onTouchStart : undefined}
           onTouchMove={!readonly ? onTouchMove : undefined}
@@ -109,7 +109,7 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
               style={{
                 backgroundColor: filled ? hex : '#1e1e2e',
                 opacity: filled ? 1 : 0.5,
-                boxShadow: filled ? `0 0 6px ${hex}40` : 'none',
+                boxShadow: filled ? `0 0 6px ${hex}30` : 'none',
               }}
             />
           ))}
@@ -125,11 +125,11 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
         )}
       </div>
 
-      {/* Level display */}
+      {!hideDisplay && (
       <div className="text-center mb-6">
         <span
           className="font-display text-7xl font-800 tabular-nums transition-colors duration-200"
-          style={{ color: color.hex, textShadow: `0 0 40px ${color.hex}60` }}
+          style={{ color: color.hex, textShadow: `0 0 40px ${color.hex}4D` }}
         >
           {value}
         </span>
@@ -147,6 +147,7 @@ export default function BatterySlider({ value, onChange, readonly = false, isEst
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

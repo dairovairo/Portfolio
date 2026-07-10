@@ -3,6 +3,65 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { notifyUsers } = require('../lib/webpush');
+
+// Multer instance for group chat image uploads (8 MB max)
+const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
+
+// ── Broadcast helper — same pattern as pools ─────────────────────────────────
+// The service-key supabase client bypasses RLS entirely, so every group member
+// receives an instant in-app notification regardless of their RLS policies.
+async function broadcastGroupMessage({ groupId, senderId, senderName, content, type }) {
+  try {
+    const [{ data: group }, { data: members }] = await Promise.all([
+      supabase.from('friend_groups').select('name').eq('id', groupId).single(),
+      supabase
+        .from('friend_group_members')
+        .select('user_id')
+        .eq('group_id', groupId)
+        .neq('user_id', senderId),
+    ]);
+
+    const groupName    = group?.name || 'Grupo';
+    const recipientIds = (members || []).map(m => m.user_id);
+    if (!recipientIds.length) return;
+
+    const broadcastPayload = {
+      group_id:    groupId,
+      group_name:  groupName,
+      sender_id:   senderId,
+      sender_name: senderName,
+      content,
+      type,
+    };
+
+    // Realtime broadcast — one personal channel per recipient, no RLS involved
+    await Promise.allSettled(
+      recipientIds.map(recipientId =>
+        supabase
+          .channel(`group-msg-notif-${recipientId}`)
+          .send({
+            type:    'broadcast',
+            event:   'new_group_message',
+            payload: broadcastPayload,
+          })
+      )
+    );
+
+    // Web-push for recipients who have a push subscription (background / closed app)
+    const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
+    await notifyUsers(supabase, recipientIds, senderId, {
+      title: groupName,
+      body:  `${senderName}: ${previewText}`,
+      url:   `/messages/group/${groupId}`,
+      tag:   `group-${groupId}`,
+    });
+  } catch (err) {
+    console.error('[GROUPS] broadcastGroupMessage error:', err);
+  }
+}
+
 
 // ── GET /api/groups — list my groups (owned + member) ───────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -13,9 +72,9 @@ router.get('/', requireAuth, async (req, res) => {
       .select(`
         group:group_id(
           id, name, created_at,
-          owner:owner_id(id, username, display_name, avatar_url),
+          owner:owner_id(id, username, avatar_url),
           friend_group_members(
-            user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+            user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
           )
         )
       `)
@@ -41,20 +100,25 @@ router.get('/', requireAuth, async (req, res) => {
       .filter(Boolean)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // Fetch last message for each group
+    // Fetch last message for each group in a single batched query instead of N separate queries.
     if (groups.length > 0) {
       const groupIds = groups.map(g => g.id);
-      const { data: lastMsgs } = await supabase
+      const { data: recentMessages } = await supabase
         .from('group_messages')
-        .select('group_id, created_at, sender_id, content')
+        .select('group_id, created_at, sender_id, content, type')
         .in('group_id', groupIds)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(groups.length * 5); // fetch a few per group to ensure we get at least one per group
 
-      const lastMsgMap = {};
-      (lastMsgs || []).forEach(msg => {
-        if (!lastMsgMap[msg.group_id]) lastMsgMap[msg.group_id] = msg;
+      // Keep only the most recent message per group (rows are already ordered desc)
+      const lastByGroup = {};
+      (recentMessages || []).forEach(msg => {
+        if (!lastByGroup[msg.group_id]) lastByGroup[msg.group_id] = msg;
       });
-      groups.forEach(g => { g.last_message = lastMsgMap[g.id] || null; });
+
+      groups.forEach((group, index) => {
+        groups[index].last_message = lastByGroup[group.id] || null;
+      });
     }
 
     res.json({ groups });
@@ -153,10 +217,10 @@ router.get('/:id', requireAuth, async (req, res) => {
       .from('friend_groups')
       .select(`
         id, name, created_at,
-        owner:owner_id(id, username, display_name, avatar_url),
+        owner:owner_id(id, username, avatar_url),
         friend_group_members(
           joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url)
         )
       `)
       .eq('id', req.params.id)
@@ -302,22 +366,63 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .from('group_messages')
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('group_id', req.params.id)
       .order('created_at', { ascending: true })
       .limit(limit);
 
     if (error) throw error;
+
+    // Fecha en la que este usuario vació el chat (solo afecta a su propia vista)
+    const { data: clearData } = await supabase
+      .from('group_conversation_clears')
+      .select('cleared_at')
+      .eq('user_id', userId)
+      .eq('group_id', req.params.id)
+      .maybeSingle();
+
     res.json({
       messages: (data || []).map(message => ({
         ...message,
         sender: applyBatteryExpiry(message.sender),
       })),
+      cleared_at: clearData?.cleared_at || null,
     });
   } catch (err) {
     console.error('[GROUPS] GET /:id/messages', err);
     res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── POST /api/groups/:id/clear — vaciar chat de grupo (solo para mí) ─────────
+router.post('/:id/clear', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Check membership
+    const { data: membership } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('group_id', req.params.id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Not a member' });
+
+    const clearedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('group_conversation_clears')
+      .upsert(
+        { user_id: userId, group_id: req.params.id, cleared_at: clearedAt },
+        { onConflict: 'user_id,group_id' }
+      );
+
+    if (error) throw error;
+    res.json({ success: true, cleared_at: clearedAt });
+  } catch (err) {
+    console.error('[GROUPS] POST /:id/clear', err);
+    res.status(500).json({ error: 'Failed to clear chat' });
   }
 });
 
@@ -345,20 +450,101 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
       .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
       .select(`
         id, content, type, created_at,
-        sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
 
     if (error) throw error;
+
+    // Respond immediately, then broadcast in the background (fire-and-forget)
     res.status(201).json({
       message: {
         ...data,
         sender: applyBatteryExpiry(data.sender),
       },
     });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastGroupMessage({
+      groupId:    req.params.id,
+      senderId:   userId,
+      senderName,
+      content:    data.content,
+      type:       data.type,
+    }).catch(() => {});
   } catch (err) {
     console.error('[GROUPS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── POST /api/groups/:id/messages/image — send an image to a group chat ───────
+router.post('/:id/messages/image', requireAuth, (req, res, next) => {
+  _groupImageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const userId = req.user.id;
+  const groupId = req.params.id;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Se requiere una imagen' });
+  }
+
+  try {
+    // Verify membership
+    const { data: membership } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Not a member' });
+
+    const imageUrl = await storeImage({
+      file: req.file,
+      bucket: 'chat-images',
+      objectName: `group/${groupId}/${Date.now()}`,
+      fallbackMaxLength: 8_000_000,
+    });
+
+    const { data, error } = await supabase
+      .from('group_messages')
+      .insert({
+        group_id: groupId,
+        sender_id: userId,
+        content: imageUrl,
+        type: 'image',
+      })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    // Respond immediately, then broadcast in the background (fire-and-forget)
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastGroupMessage({
+      groupId:    groupId,
+      senderId:   userId,
+      senderName,
+      content:    data.content,
+      type:       'image',
+    }).catch(() => {});
+  } catch (e) {
+    console.error('[GROUPS] image upload error:', e);
+    return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
   }
 });
 

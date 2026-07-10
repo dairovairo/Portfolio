@@ -3,10 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { useMascot } from '../context/MascotContext';
 import { api } from '../lib/api';
-import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
+import { resolveMascotLayers } from '../lib/mascotRenderer';
+import { generateInviteBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx, EventDetailPage.jsx, etc.)
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 // ── Shared Components ──────────────────────────────────────────────────────
 
@@ -20,7 +31,7 @@ function Avatar({ user, size = 'md', online = false }) {
     >
       {user.avatar_url
         ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-        : (user.display_name || user.username)?.[0]?.toUpperCase()
+        : user.username?.[0]?.toUpperCase()
       }
       <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
     </div>
@@ -56,7 +67,7 @@ function FriendRow({ friend, onMessage, onRemove, myBattery, online, showLastSee
       <div className="flex-1 min-w-0">
         <button onClick={() => navigate(`/user/${friend.id}`)} className="text-left w-full">
           <div className="flex items-center gap-2">
-            <span className="font-display font-semibold text-surface-text text-sm truncate">{friend.display_name || friend.username}</span>
+            <span className="font-display font-semibold text-surface-text text-sm truncate">{friend.username}</span>
             {diff <= 15 && <span className="text-xs bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-md font-mono flex-shrink-0">~tuyo</span>}
           </div>
           <OnlineLabel friend={friend} showLastSeen={showLastSeen} />
@@ -90,8 +101,8 @@ function UserRow({ user, action, onAction, loading, onSelect, isSelected }) {
       )}
       <div className="flex-1 min-w-0">
         <button onClick={() => navigate(`/user/${user.id}`)} className="text-left">
-          <div className="font-display font-semibold text-surface-text text-sm truncate">{user.display_name || user.username}</div>
-          <div className="text-xs text-surface-muted font-mono">@{user.username}</div>
+          <div className="font-display font-semibold text-surface-text text-sm truncate">{user.username}</div>
+          <div className="text-xs text-surface-muted font-mono">{user.username}</div>
         </button>
       </div>
       <BatteryBadge level={user.battery_level} isEstimated={user.battery_is_estimated} />
@@ -224,6 +235,7 @@ function GroupRow({ group, onClick, onDelete }) {
 export default function FriendsPage() {
   const { profile } = useAuth();
   const { showOnline, showLastSeen } = useSettings();
+  const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
   const navigate = useNavigate();
   const myBattery = profile?.battery_level ?? 50;
 
@@ -241,6 +253,7 @@ export default function FriendsPage() {
   const [sentRequests, setSentRequests] = useState(new Set());
   const [toast, setToast] = useState(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [sharingInvite, setSharingInvite] = useState(false);
 
   const onlineMap = useFriendsOnline(friends);
   // If the user has disabled "Mostrar en línea", treat everyone as offline (mutual, WhatsApp-style)
@@ -279,10 +292,22 @@ export default function FriendsPage() {
 
   useEffect(() => {
     if (!profile?.id) return;
+    const refreshFriendshipState = () => { fetchFriends(); fetchRequests(); };
     const channel = supabase
       .channel(`friendships-${profile.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friendships', filter: `addressee_id=eq.${profile.id}` }, () => fetchRequests())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships' }, () => { fetchFriends(); fetchRequests(); })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'friendships',
+        filter: `requester_id=eq.${profile.id}`,
+      }, refreshFriendshipState)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'friendships',
+        filter: `addressee_id=eq.${profile.id}`,
+      }, refreshFriendshipState)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [profile?.id, fetchFriends, fetchRequests]);
@@ -306,11 +331,43 @@ export default function FriendsPage() {
     try {
       await api.post('/friends/request', { addressee_id: user.id });
       setSentRequests(s => new Set([...s, user.id]));
-      showToast(`Solicitud enviada a @${user.username} 🤝`);
+      showToast(`Solicitud enviada a ${user.username} 🤝`);
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
       setActionLoading(l => ({ ...l, [user.id]: false }));
+    }
+  }
+
+  async function handleInvite() {
+    if (sharingInvite) return;
+    setSharingInvite(true);
+    try {
+      const level = getEffectiveBatteryLevel(profile);
+      const color = getBatteryColor(level);
+      // Resolvemos la mascota tal y como está equipada ahora mismo (ropa,
+      // calzado, gorro, accesorios y actividad), para incluirla como
+      // "fotito" personal en la imagen de invitación.
+      let mascot = null;
+      try {
+        mascot = await resolveMascotLayers(getMascotTier(level), {
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
+      } catch (_) {
+        mascot = null; // si falla, se genera la invitación sin la mascota
+      }
+      const username = profile?.username || 'Alguien';
+      const blob = await generateInviteBlob({ username, mascot, hex: color.hex });
+      const result = await shareOrDownloadBlob(blob, 'invitacion-sb.png', `${username} te ha invitado a SocialBattery`);
+      if (result.method === 'download') {
+        showToast('Imagen descargada. ¡Compártela donde quieras! 📲', 'success');
+      } else if (result.method === 'share') {
+        showToast('¡Invitación lista para compartir! 🚀', 'success');
+      }
+    } catch (e) {
+      showToast('Error al generar la invitación', 'error');
+    } finally {
+      setSharingInvite(false);
     }
   }
 
@@ -319,7 +376,7 @@ export default function FriendsPage() {
     try {
       await api.patch(`/friends/request/${requestId}`, { status });
       setRequests(r => r.filter(req => req.id !== requestId));
-      if (status === 'accepted') { showToast(`¡Ahora eres amigo de @${requesterName}! 🎉`); fetchFriends(); }
+      if (status === 'accepted') { showToast(`¡Ahora eres amigo de ${requesterName}! 🎉`); fetchFriends(); }
       else showToast('Solicitud rechazada');
     } catch (e) {
       showToast(e.message, 'error');
@@ -329,11 +386,11 @@ export default function FriendsPage() {
   }
 
   async function removeFriend(friend) {
-    if (!confirm(`¿Eliminar a @${friend.username} de tus amigos?`)) return;
+    if (!confirm(`¿Eliminar a ${friend.username} de tus amigos?`)) return;
     try {
       await api.delete(`/friends/${friend.id}`);
       setFriends(f => f.filter(fr => fr.id !== friend.id));
-      showToast(`@${friend.username} eliminado de amigos`);
+      showToast(`${friend.username} eliminado de amigos`);
     } catch (e) { showToast(e.message, 'error'); }
   }
 
@@ -489,8 +546,8 @@ export default function FriendsPage() {
                       <Avatar user={req.requester} size="sm" online={showOnline && isOnline(req.requester.last_seen_at)} />
                     </button>
                     <div className="flex-1 min-w-0">
-                      <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.display_name || req.requester.username}</div>
-                      <div className="text-xs text-surface-muted font-mono">@{req.requester.username}</div>
+                      <div className="font-display font-semibold text-surface-text text-sm truncate">{req.requester.username}</div>
+                      <div className="text-xs text-surface-muted font-mono">{req.requester.username}</div>
                     </div>
                     <BatteryBadge level={req.requester.battery_level} />
                     <div className="flex gap-1.5 flex-shrink-0">
@@ -527,7 +584,7 @@ export default function FriendsPage() {
 
             {searchQuery.length >= 2 && !loadingSearch && (
               searchResults.length === 0 ? (
-                <div className="text-center text-surface-muted text-sm py-8">No se encontraron usuarios con "@{searchQuery}"</div>
+                <div className="text-center text-surface-muted text-sm py-8">No se encontraron usuarios con "{searchQuery}"</div>
               ) : (
                 <div className="space-y-2">
                   {searchResults.map(user => {
@@ -554,6 +611,23 @@ export default function FriendsPage() {
                 Escribe al menos 2 caracteres para buscar
               </div>
             )}
+
+            {/* ── Invitar por redes sociales ──────────────────────────────── */}
+            <div className="pt-4 mt-2 border-t border-surface-border">
+              <button
+                onClick={handleInvite}
+                disabled={sharingInvite}
+                className="w-full bg-accent-primary/10 border border-accent-primary/25 rounded-2xl p-4 flex items-center gap-3 hover:bg-accent-primary/15 transition-all text-left disabled:opacity-60"
+              >
+                <span className="text-2xl">{sharingInvite ? '⏳' : '📲'}</span>
+                <div>
+                  <div className="font-display font-semibold text-surface-text text-sm">
+                    {sharingInvite ? 'Generando invitación...' : 'Invitar por redes sociales'}
+                  </div>
+                  <div className="text-xs text-accent-glow">WhatsApp, Instagram Direct y más →</div>
+                </div>
+              </button>
+            </div>
           </>
         )}
       </main>

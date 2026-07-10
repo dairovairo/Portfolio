@@ -1,15 +1,37 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
-import { getBatteryColor } from '../lib/battery';
+import LogoWordmark from '../components/LogoWordmark';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
+
+// ── Categorías compartidas con Comunidades y Eventos ─────────────────────────
+// U+FE0F (️) after each emoji forces full-color emoji presentation on all platforms
+export const ALL_INTERESTS = [
+  { id: 'Música',       emoji: '🎵️' },
+  { id: 'Deporte',      emoji: '⚽️' },
+  { id: 'Arte',         emoji: '🎨️' },
+  { id: 'Tecnología',   emoji: '💻️' },
+  { id: 'Comida',       emoji: '🍽️' },
+  { id: 'Viajes',       emoji: '✈️' },
+  { id: 'Cine',         emoji: '🎬️' },
+  { id: 'Juego',        emoji: '🎮️' },
+  { id: 'Yoga',         emoji: '🧘️' },
+  { id: 'Fotografía',   emoji: '📷️' },
+  { id: 'Lectura',      emoji: '📚️' },
+  { id: 'Naturaleza',   emoji: '🌿️' },
+  { id: 'Fiesta',       emoji: '🎉️' },
+  { id: 'Bienestar',    emoji: '💆️' },
+  { id: 'Cocina',       emoji: '👨‍🍳️' },
+];
 
 const STEPS = [
-  { id: 'welcome',  label: '¡Hola!' },
-  { id: 'username', label: 'Tu nombre' },
-  { id: 'avatar',   label: 'Tu foto' },
-  { id: 'battery',  label: 'Tu energía' },
-  { id: 'done',     label: '¡Listo!' },
+  { id: 'welcome',   label: '¡Hola!' },
+  { id: 'username',  label: 'Tu nombre' },
+  { id: 'interests', label: 'Intereses' },
+  { id: 'avatar',    label: 'Tu foto' },
+  { id: 'done',      label: '¡Listo!' },
 ];
 
 function ProgressDots({ step }) {
@@ -31,20 +53,20 @@ function ProgressDots({ step }) {
 
 export default function OnboardingPage() {
   const { completeOnboarding, refreshProfile, signOut } = useAuth();
+  const { startTutorial } = useTutorial();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
+  const [interests, setInterests] = useState([]);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
-  const [battery, setBattery] = useState(50);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
-
-  const batteryColor = getBatteryColor(battery);
+  const cameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   function handleAvatarChange(e) {
     const file = e.target.files[0];
@@ -57,6 +79,12 @@ export default function OnboardingPage() {
     setError('');
   }
 
+  function toggleInterest(id) {
+    setInterests(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }
+
   function validateUsername() {
     const u = username.trim();
     if (u.length < 3) return 'Mínimo 3 caracteres';
@@ -65,21 +93,31 @@ export default function OnboardingPage() {
     return null;
   }
 
+  // Index of the avatar step (submit happens there)
+  const avatarStepIdx = STEPS.findIndex(s => s.id === 'avatar');
+  const doneStepIdx   = STEPS.findIndex(s => s.id === 'done');
+
   async function goNext() {
     setError('');
 
-    if (step === 1) {
+    if (STEPS[step].id === 'username') {
       const err = validateUsername();
       if (err) { setError(err); return; }
     }
 
-    if (step === STEPS.length - 2) {
+    if (STEPS[step].id === 'interests') {
+      if (interests.length === 0) {
+        setError('Elige al menos un interés para continuar');
+        return;
+      }
+    }
+
+    if (step === avatarStepIdx) {
       // Final submit
       setLoading(true);
       try {
         let avatarUrl = null;
 
-        // Upload avatar if provided
         if (avatarFile) {
           const formData = new FormData();
           formData.append('avatar', avatarFile);
@@ -91,17 +129,15 @@ export default function OnboardingPage() {
 
         const profilePayload = {
           username: username.trim().toLowerCase(),
-          display_name: displayName.trim() || username.trim(),
           bio: bio.trim() || null,
-          avatar_url: avatarUrl || (avatarPreview ? null : null),
-          initial_battery: battery,
+          avatar_url: avatarUrl || null,
+          initial_battery: 50,
+          interests: interests,
         };
 
         try {
           await completeOnboarding(profilePayload);
         } catch (submitError) {
-          // The profile can be created even if the browser loses the response.
-          // In that case, recover it instead of leaving setup stuck on an error.
           try {
             await refreshProfile();
           } catch {
@@ -109,6 +145,7 @@ export default function OnboardingPage() {
           }
         }
 
+        startTutorial();
         setStep(s => s + 1);
       } catch (err) {
         setError(err.message || 'Algo salió mal');
@@ -126,17 +163,17 @@ export default function OnboardingPage() {
     setStep(s => Math.max(0, s - 1));
   }
 
-  // ── Step renderers ───────────────────────────────────────────
+  // ── Step renderers ───────────────────────────────────────
   const renderStep = () => {
     switch (STEPS[step].id) {
 
       case 'welcome':
         return (
           <div className="text-center animate-scale-in">
-            <div className="text-7xl mb-6 animate-pulse-slow">🔋</div>
+            <img src="/logo-icon.png" alt="SocialBattery" className="h-16 w-auto mx-auto mb-6 animate-pulse-slow" />
             <h1 className="font-display text-3xl font-bold text-surface-text mb-3">
               Bienvenido a<br />
-              <span className="text-accent-glow">SocialBattery</span>
+              <span className="text-accent-glow"><LogoWordmark /></span>
             </h1>
             <p className="text-surface-muted text-sm leading-relaxed mb-8 max-w-xs mx-auto">
               Comparte tu nivel de energía social del día y queda con personas
@@ -163,7 +200,7 @@ export default function OnboardingPage() {
             <div className="text-center mb-6">
               <div className="text-5xl mb-3">👤</div>
               <h2 className="font-display text-2xl font-bold text-surface-text">¿Cómo te llaman?</h2>
-              <p className="text-surface-muted text-sm mt-1">Elige tu usuario único y nombre visible</p>
+              <p className="text-surface-muted text-sm mt-1">Elige tu nombre de usuario único</p>
             </div>
 
             <div className="space-y-4">
@@ -190,23 +227,6 @@ export default function OnboardingPage() {
 
               <div>
                 <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                  Nombre visible (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  placeholder="Tu nombre o apodo"
-                  maxLength={20}
-                  className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3
-                    text-surface-text text-sm placeholder-surface-muted focus:outline-none focus:border-accent-primary
-                    transition-colors"
-                />
-                <p className="text-surface-muted/60 text-xs mt-1">Puede tener espacios · Máx. 20 caracteres</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
                   Bio (opcional)
                 </label>
                 <textarea
@@ -225,6 +245,59 @@ export default function OnboardingPage() {
           </div>
         );
 
+      case 'interests':
+        return (
+          <div className="animate-slide-up">
+            <div className="text-center mb-6">
+              <div className="text-5xl mb-3">✨</div>
+              <h2 className="font-display text-2xl font-bold text-surface-text">¿Qué te gusta?</h2>
+              <p className="text-surface-muted text-sm mt-1">
+                Elige tus categorías favoritas — mínimo una
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {ALL_INTERESTS.map(({ id, emoji }) => {
+                const selected = interests.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => toggleInterest(id)}
+                    style={{ touchAction: 'manipulation' }}
+                    className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-3 border transition-all duration-200 overflow-hidden select-none
+                      ${selected
+                        ? 'bg-accent-primary/20 border-accent-primary text-accent-glow shadow-sm shadow-accent-primary/20'
+                        : 'bg-surface-bg border-surface-border text-surface-muted hover:border-surface-muted'
+                      }`}
+                  >
+                    <div className="h-8 w-full flex items-center justify-center overflow-hidden pointer-events-none">
+                      <span className="text-2xl leading-none" style={{ fontVariantEmoji: 'emoji' }}>{emoji}</span>
+                    </div>
+                    <span className={`text-[11px] font-display font-semibold leading-tight text-center truncate w-full pointer-events-none ${selected ? 'text-accent-glow' : 'text-surface-muted'}`}>
+                      {id}
+                    </span>
+                    {selected && (
+                      <span className="text-[9px] text-accent-primary font-mono pointer-events-none">✓</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {interests.length > 0 && (
+              <p className="text-center text-xs text-accent-glow mt-3 font-mono">
+                {interests.length} seleccionado{interests.length !== 1 ? 's' : ''}
+              </p>
+            )}
+            {interests.length === 0 && (
+              <p className="text-center text-xs text-red-400/70 mt-3">
+                * Selecciona al menos uno para continuar
+              </p>
+            )}
+          </div>
+        );
+
       case 'avatar':
         return (
           <div className="animate-slide-up text-center">
@@ -235,7 +308,7 @@ export default function OnboardingPage() {
             <div className="flex flex-col items-center gap-4">
               {/* Avatar preview */}
               <button
-                onClick={() => fileRef.current?.click()}
+                onClick={() => setShowPhotoMenu(true)}
                 className="relative group"
               >
                 <div
@@ -249,7 +322,7 @@ export default function OnboardingPage() {
                   ) : (
                     <div className="flex flex-col items-center gap-1">
                       <span className="text-3xl">
-                        {(displayName || username)?.[0]?.toUpperCase() || '?'}
+                        {username?.[0]?.toUpperCase() || '?'}
                       </span>
                     </div>
                   )}
@@ -261,10 +334,17 @@ export default function OnboardingPage() {
                 </div>
               </button>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <input ref={cameraRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
+              <PhotoSourceMenu
+                open={showPhotoMenu}
+                onClose={() => setShowPhotoMenu(false)}
+                onCamera={() => cameraRef.current?.click()}
+                onGallery={() => fileRef.current?.click()}
+              />
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => fileRef.current?.click()}
+                  onClick={() => setShowPhotoMenu(true)}
                   className="bg-accent-primary/15 text-accent-glow border border-accent-primary/30
                     rounded-xl px-4 py-2 text-sm font-display font-semibold hover:bg-accent-primary/25 transition-all"
                 >
@@ -286,65 +366,12 @@ export default function OnboardingPage() {
           </div>
         );
 
-      case 'battery':
-        return (
-          <div className="animate-slide-up">
-            <div className="text-center mb-6">
-              <div className="text-5xl mb-3" style={{ filter: `drop-shadow(0 0 12px ${batteryColor.hex})` }}>⚡</div>
-              <h2 className="font-display text-2xl font-bold text-surface-text">¿Cuánta energía tienes hoy?</h2>
-              <p className="text-surface-muted text-sm mt-1">Tu batería social refleja tus ganas de socializar</p>
-            </div>
-
-            {/* Big battery display */}
-            <div className="text-center mb-6">
-              <div
-                className="font-display text-7xl font-bold transition-all duration-200"
-                style={{ color: batteryColor.hex, textShadow: `0 0 40px ${batteryColor.hex}50` }}
-              >
-                {battery}
-              </div>
-              <div className="font-display text-xl text-surface-muted">%</div>
-              <div className="font-mono text-sm mt-1" style={{ color: batteryColor.hex }}>
-                {batteryColor.label}
-              </div>
-            </div>
-
-            {/* Slider */}
-            <div className="px-2">
-              <input
-                type="range"
-                min={0} max={100}
-                value={battery}
-                onChange={e => setBattery(Number(e.target.value))}
-                className="w-full h-3 rounded-full appearance-none cursor-pointer"
-                style={{
-                  background: `linear-gradient(to right, ${batteryColor.hex} ${battery}%, var(--sb-border) ${battery}%)`,
-                  accentColor: batteryColor.hex,
-                }}
-              />
-              <div className="flex justify-between mt-1">
-                <span className="text-xs font-mono" style={{ color: 'var(--battery-dead)' }}>😴 0</span>
-                <span className="text-xs font-mono text-surface-muted">50</span>
-                <span className="text-xs font-mono" style={{ color: 'var(--battery-full)' }}>100 🤩</span>
-              </div>
-            </div>
-
-            {/* Descriptive tips */}
-            <div className="mt-6 bg-surface-card border border-surface-border rounded-2xl p-4">
-              <p className="text-xs text-surface-muted leading-relaxed">
-                💡 Tus amigos verán este número. Actualízalo cada día para que sepan
-                si tienes ganas de quedar o prefieres estar tranquilo.
-              </p>
-            </div>
-          </div>
-        );
-
       case 'done':
         return (
           <div className="text-center animate-scale-in">
             <div className="text-7xl mb-6">🎉</div>
             <h2 className="font-display text-3xl font-bold text-surface-text mb-2">
-              ¡Todo listo, <span className="text-accent-glow">@{username}</span>!
+              ¡Todo listo, <span className="text-accent-glow">{username}</span>!
             </h2>
             <p className="text-surface-muted text-sm mb-8">
               Tu perfil está creado. Ahora añade amigos y empieza a sincronizar energías.
@@ -370,8 +397,8 @@ export default function OnboardingPage() {
     }
   };
 
-  const isLastStep = step === STEPS.length - 1;
-  const isSubmitStep = step === STEPS.length - 2;
+  const isLastStep   = step === STEPS.length - 1;
+  const isSubmitStep = step === avatarStepIdx;
 
   return (
     <div className="min-h-screen bg-surface-bg flex items-start justify-center p-4 noise">
@@ -427,18 +454,9 @@ export default function OnboardingPage() {
             )}
           </div>
 
-          {/* Skip avatar */}
-          {STEPS[step].id === 'avatar' && (
-            <button
-              onClick={goNext}
-              className="mt-2 text-center text-xs text-surface-muted hover:text-surface-text transition-colors py-1"
-            >
-              Saltar por ahora →
-            </button>
-          )}
         </div>
 
-        {/* Escape hatch — session may have expired or the user is stuck */}
+        {/* Escape hatch */}
         <div className="text-center mt-4">
           <button
             onClick={async () => { await signOut(); navigate('/auth', { replace: true }); }}

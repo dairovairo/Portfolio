@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
+import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,21 +68,34 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
 }
 
 // ── DeletedBubble — rastro de mensaje eliminado para todos ────────────────────
-function DeletedBubble({ isMe }) {
+function DeletedBubble({ isMe, msgId }) {
   return (
-    <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div id={msgId ? `msg-${msgId}` : undefined} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       <div className="max-w-[78%] rounded-2xl px-4 py-2.5 border border-surface-border bg-surface-card/50">
         <p className="text-sm italic text-surface-muted flex items-center gap-1.5">
           <span className="text-base">🚫</span>
-          {isMe ? 'Eliminaste este mensaje' : 'Mensaje eliminado'}
+          {isMe ? 'Eliminaste este mensaje' : 'Este mensaje ha sido eliminado'}
         </p>
       </div>
     </div>
   );
 }
 
+// ── LikeBadge — corazoncito flotante en la esquina de la burbuja ─────────────
+function LikeBadge({ liked, isMe }) {
+  if (!liked) return null;
+  return (
+    <span
+      className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} w-5 h-5 rounded-full bg-surface-bg border border-surface-border flex items-center justify-center text-[11px] shadow-md z-10 leading-none animate-scale-in`}
+      title="Le gusta este mensaje"
+    >
+      ❤️
+    </span>
+  );
+}
+
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isMe, onClose, onDeleteForMe, onDeleteForEveryone }) {
+function MessageContextMenu({ msg, isMe, isLiked, onClose, onReply, onToggleLike, onDeleteForMe, onDeleteForEveryone }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -98,11 +112,39 @@ function MessageContextMenu({ msg, isMe, onClose, onDeleteForMe, onDeleteForEver
         {/* Preview */}
         {!msg.deleted_for_everyone && (
           <p className="text-xs text-surface-muted font-mono text-center truncate px-8 mb-3 opacity-60">
-            {msg.content?.slice(0, 80)}{msg.content?.length > 80 ? '…' : ''}
+            {msg.type === 'image' ? '📷 Imagen' : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
           </p>
         )}
 
         <div className="px-4 pb-4 space-y-1.5">
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onToggleLike}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">❤️</span>
+              <div>
+                <div>{isLiked ? 'Quitar me gusta' : 'Me gusta'}</div>
+                <div className="text-xs text-surface-muted font-normal">
+                  {isLiked ? 'Deja de destacar este mensaje' : 'Destaca este mensaje con un corazón'}
+                </div>
+              </div>
+            </button>
+          )}
+
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onReply}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">↩️</span>
+              <div>
+                <div>Responder</div>
+                <div className="text-xs text-surface-muted font-normal">Cita este mensaje en tu respuesta</div>
+              </div>
+            </button>
+          )}
+
           <button
             onClick={onDeleteForMe}
             className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
@@ -174,6 +216,126 @@ function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
   );
 }
 
+// ── BlockUserModal ──────────────────────────────────────────────────────────────
+function BlockUserModal({ friendName, isBlocked, onConfirm, onCancel, loading }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-surface-card border border-surface-border rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="text-center mb-5">
+          <div className="text-4xl mb-3">{isBlocked ? '🔓' : '🚫'}</div>
+          <h3 className="font-display font-bold text-surface-text text-lg mb-2">
+            {isBlocked ? 'Desbloquear' : 'Bloquear'} a {friendName}
+          </h3>
+          <p className="text-surface-muted text-sm leading-relaxed">
+            {isBlocked ? (
+              <><span className="text-surface-text font-medium">{friendName}</span> podrá volver a enviarte mensajes.</>
+            ) : (
+              <>No podrá enviarte más mensajes. Podrás desbloquear a{' '}
+                <span className="text-surface-text font-medium">{friendName}</span> cuando quieras.</>
+            )}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 py-3 rounded-2xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text border border-surface-border hover:bg-surface-hover transition-all disabled:opacity-40"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className={`flex-1 py-3 rounded-2xl text-sm font-display font-semibold transition-all disabled:opacity-40 ${
+              isBlocked
+                ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30 hover:bg-accent-primary/30'
+                : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+            }`}
+          >
+            {loading ? (isBlocked ? 'Desbloqueando…' : 'Bloqueando…') : (isBlocked ? 'Desbloquear' : 'Bloquear')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reply preview helpers ──────────────────────────────────────────────────────
+
+function replyPreviewText(replyTo) {
+  if (!replyTo) return '';
+  if (replyTo.deleted_for_everyone) return '🚫 Mensaje eliminado';
+  if (replyTo.type === 'image') return '📷 Imagen';
+  if (replyTo.type === 'hangout_request') return `🤝 ${replyTo.content}`;
+  return replyTo.content;
+}
+
+// Aplica una actualización realtime a un mensaje y, además, refresca la cita
+// (reply_to) de cualquier otro mensaje ya cargado que estuviera respondiendo a ese
+// mismo mensaje — así, si se elimina el original, la cita pasa a decir
+// "Mensaje eliminado" también en las respuestas que ya estaban en pantalla.
+function applyMessageUpdate(list, updated) {
+  return list.map(msg => {
+    if (msg.id === updated.id) return { ...msg, ...updated };
+    if (msg.reply_to?.id === updated.id) {
+      return {
+        ...msg,
+        reply_to: {
+          ...msg.reply_to,
+          content: updated.content,
+          type: updated.type,
+          deleted_for_everyone: updated.deleted_for_everyone,
+        },
+      };
+    }
+    return msg;
+  });
+}
+
+// ── ReplyQuote — cita renderizada dentro de una burbuja de mensaje ────────────
+function ReplyQuote({ replyTo, onClick }) {
+  if (!replyTo) return null;
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onClick?.(replyTo.id); }}
+      className="w-full text-left flex flex-col gap-0.5 mb-1.5 px-2.5 py-1.5 rounded-lg bg-black/20 border-l-2 border-accent-primary/70 hover:bg-black/30 transition-colors active:scale-[0.99]"
+    >
+      <span className="text-[11px] font-display font-bold text-accent-glow leading-tight truncate">
+        {replyTo._quoteLabel}
+      </span>
+      <span className="text-xs opacity-80 leading-tight truncate">
+        {replyPreviewText(replyTo)}
+      </span>
+    </button>
+  );
+}
+
+// ── ReplyComposerPreview — barra sobre el input mientras se redacta la respuesta
+function ReplyComposerPreview({ replyingTo, label, onCancel }) {
+  return (
+    <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-xl px-3 py-2 mb-2 animate-slide-up">
+      <div className="w-1 self-stretch rounded-full bg-accent-primary flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-display font-bold text-accent-glow truncate">
+          Respondiendo a {label}
+        </div>
+        <div className="text-xs text-surface-muted truncate">
+          {replyPreviewText(replyingTo)}
+        </div>
+      </div>
+      <button
+        onClick={onCancel}
+        className="flex-shrink-0 w-7 h-7 rounded-full text-surface-muted hover:text-surface-text hover:bg-surface-hover flex items-center justify-center text-lg leading-none transition-colors"
+        title="Cancelar respuesta"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function OnlineDot({ lastSeenAt, className = '' }) {
@@ -186,7 +348,7 @@ function OnlineDot({ lastSeenAt, className = '' }) {
   );
 }
 
-function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle, onLongPress }) {
+function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
   const isPending = msg.hangout_status === 'pending';
   const isAccepted = msg.hangout_status === 'accepted';
   const isRejected = msg.hangout_status === 'rejected';
@@ -202,6 +364,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
 
   return (
     <div
+      id={`msg-${msg.id}`}
       className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -209,11 +372,12 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
       onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
     >
       <div
-        className={`max-w-[82%] rounded-2xl px-4 py-3 border ${
+        className={`relative max-w-[82%] rounded-2xl px-4 py-3 border ${
           isAccepted ? 'border-green-500/30' : isRejected ? 'border-slate-600/30' : 'border-accent-primary/30'
         }`}
         style={bubbleStyle}
       >
+        <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">🤝</span>
           <span className="text-xs font-display font-bold text-accent-glow uppercase tracking-wide">Propuesta de quedada</span>
@@ -251,12 +415,13 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
+        <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
       </div>
     </div>
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
 
@@ -269,6 +434,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress })
 
   return (
     <div
+      id={`msg-${msg.id}`}
       className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -276,16 +442,94 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress })
       onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
     >
       <div
-        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''} select-none`}
+        className={`relative max-w-[78%] rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''} select-none`}
         style={bubbleStyle}
       >
+        <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
         <p className="text-sm leading-relaxed break-words">{msg.content}</p>
         <div className="text-xs mt-1 opacity-60 flex items-center justify-end gap-1">
           {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
+        <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
       </div>
     </div>
+  );
+}
+
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
+  const [lightbox, setLightbox] = useState(false);
+  const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
+  const longPressTimer = useRef(null);
+  const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
+
+  function handleTouchStart() {
+    longPressTimer.current = setTimeout(() => { if (!isOptimistic) onLongPress(msg); }, 500);
+  }
+  function handleTouchEnd() {
+    clearTimeout(longPressTimer.current);
+  }
+
+  return (
+    <>
+      <div
+        id={`msg-${msg.id}`}
+        className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchEnd}
+        onContextMenu={e => { e.preventDefault(); if (!isOptimistic) onLongPress(msg); }}
+      >
+        <div
+          className={`relative max-w-[78%] rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
+          style={bubbleStyle}
+        >
+          {msg.reply_to && (
+            <div className="px-2 pt-2">
+              <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
+            </div>
+          )}
+          <div className="relative">
+            <img
+              src={msg.content}
+              alt="Imagen"
+              className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
+              onClick={() => { if (!isOptimistic) setLightbox(true); }}
+            />
+            {isOptimistic && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          <div className="text-xs px-3 pb-2 pt-1 opacity-60 flex items-center justify-end gap-1">
+            {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+            {isMe && !isOptimistic && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
+          </div>
+          <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
+        </div>
+      </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
+          onClick={() => setLightbox(false)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl font-bold z-10 w-10 h-10 flex items-center justify-center"
+            onClick={() => setLightbox(false)}
+          >
+            ×
+          </button>
+          <img
+            src={msg.content}
+            alt="Imagen"
+            className="max-w-[95vw] max-h-[90vh] object-contain rounded-xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -364,21 +608,34 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendingImage, setSendingImage] = useState(false);
   const [showHangoutForm, setShowHangoutForm] = useState(false);
   const [respondingId, setRespondingId] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Context menu (delete message)
+  // Context menu (responder / eliminar mensaje)
   const [contextMenu, setContextMenu] = useState(null); // { msg }
+
+  // Mensaje al que se está respondiendo (preview sobre el input)
+  const [replyingTo, setReplyingTo] = useState(null); // msg | null
 
   // Header menu (clear chat)
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearingChat, setClearingChat] = useState(false);
 
+  // Bloquear / desbloquear usuario
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [blockedByThem, setBlockedByThem] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [blockActionLoading, setBlockActionLoading] = useState(false);
+
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const headerMenuRef = useRef(null);
+  const photoInputRef = useRef(null);
+  const photoCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -387,6 +644,16 @@ export default function MessagesPage() {
 
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
+  }, []);
+
+  // Salta al mensaje original al tocar una cita (como en WhatsApp).
+  // Si el mensaje ya no está cargado en pantalla, no hace nada.
+  const scrollToMessage = useCallback((messageId) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ring-2', 'ring-accent-primary/70', 'rounded-2xl');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-accent-primary/70', 'rounded-2xl'), 1000);
   }, []);
 
   // Close header menu on outside click
@@ -403,13 +670,15 @@ export default function MessagesPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [{ user }, { messages: msgs, cleared_at }] = await Promise.all([
+        const [{ user }, { messages: msgs, cleared_at, blocked_by_me, blocked_by_them }] = await Promise.all([
           api.get(`/users/${friendId}`),
           api.get(`/messages/${friendId}`),
         ]);
         setFriend(user);
         setMessages(msgs || []);
         setClearedAt(cleared_at || null);
+        setBlockedByMe(!!blocked_by_me);
+        setBlockedByThem(!!blocked_by_them);
         if (readReceipts) api.patch(`/messages/${friendId}/read`).catch(() => {});
       } catch (e) {
         console.error(e);
@@ -474,13 +743,28 @@ export default function MessagesPage() {
         event: 'UPDATE',
         schema: 'public',
         table: 'messages',
+        filter: `receiver_id=eq.${profile.id}`,
       }, (payload) => {
         const updated = payload.new;
         const involved =
           (updated.sender_id === profile.id && updated.receiver_id === friendId) ||
           (updated.sender_id === friendId && updated.receiver_id === profile.id);
         if (involved) {
-          setMessages(m => m.map(msg => msg.id === updated.id ? { ...msg, ...updated } : msg));
+          setMessages(m => applyMessageUpdate(m, updated));
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: `sender_id=eq.${profile.id}`,
+      }, (payload) => {
+        const updated = payload.new;
+        const involved =
+          (updated.sender_id === profile.id && updated.receiver_id === friendId) ||
+          (updated.sender_id === friendId && updated.receiver_id === profile.id);
+        if (involved) {
+          setMessages(m => applyMessageUpdate(m, updated));
         }
       })
       // Friend profile changes (battery, online)
@@ -502,7 +786,9 @@ export default function MessagesPage() {
   async function sendText() {
     if (!input.trim() || sending) return;
     const content = input.trim();
+    const replyTarget = replyingTo;
     setInput('');
+    setReplyingTo(null);
     setSending(true);
 
     const optimistic = {
@@ -514,15 +800,27 @@ export default function MessagesPage() {
       created_at: new Date().toISOString(),
       read_at: null,
       delivered_at: null,
+      reply_to_id: replyTarget?.id || null,
+      reply_to: replyTarget ? {
+        id: replyTarget.id,
+        sender_id: replyTarget.sender_id,
+        content: replyTarget.content,
+        type: replyTarget.type,
+        deleted_for_everyone: replyTarget.deleted_for_everyone,
+      } : null,
     };
     setMessages(m => [...m, optimistic]);
 
     try {
-      const { message } = await api.post('/messages', { receiver_id: friendId, content, type: 'text' });
+      const { message } = await api.post('/messages', {
+        receiver_id: friendId, content, type: 'text',
+        ...(replyTarget?.id ? { reply_to_id: replyTarget.id } : {}),
+      });
       setMessages(m => m.map(msg => msg.id === optimistic.id ? message : msg));
     } catch (e) {
       setMessages(m => m.filter(msg => msg.id !== optimistic.id));
       setInput(content);
+      setReplyingTo(replyTarget);
       showToast('Error al enviar el mensaje', 'error');
     } finally {
       setSending(false);
@@ -531,18 +829,67 @@ export default function MessagesPage() {
   }
 
   async function sendHangout(content, hangoutTime) {
+    const replyTarget = replyingTo;
     setSending(true);
     try {
       const { message } = await api.post('/messages', {
         receiver_id: friendId, content, type: 'hangout_request', hangout_time: hangoutTime,
+        ...(replyTarget?.id ? { reply_to_id: replyTarget.id } : {}),
       });
       setMessages(m => [...m, message]);
       setShowHangoutForm(false);
+      setReplyingTo(null);
       showToast('¡Propuesta enviada! 🤝');
     } catch (e) {
       showToast('Error al enviar la propuesta', 'error');
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handlePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const replyTarget = replyingTo;
+    setSendingImage(true);
+    setReplyingTo(null);
+
+    const localUrl = URL.createObjectURL(file);
+    const optimisticId = `opt-img-${Date.now()}`;
+    const optimistic = {
+      id: optimisticId,
+      sender_id: profile.id,
+      receiver_id: friendId,
+      content: localUrl,
+      type: 'image',
+      created_at: new Date().toISOString(),
+      read_at: null,
+      delivered_at: null,
+      reply_to_id: replyTarget?.id || null,
+      reply_to: replyTarget ? {
+        id: replyTarget.id,
+        sender_id: replyTarget.sender_id,
+        content: replyTarget.content,
+        type: replyTarget.type,
+        deleted_for_everyone: replyTarget.deleted_for_everyone,
+      } : null,
+    };
+    setMessages(m => [...m, optimistic]);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      if (replyTarget?.id) formData.append('reply_to_id', replyTarget.id);
+      const { message } = await api.postForm(`/messages/${friendId}/image`, formData);
+      URL.revokeObjectURL(localUrl);
+      setMessages(m => m.map(msg => msg.id === optimisticId ? message : msg));
+    } catch (e) {
+      URL.revokeObjectURL(localUrl);
+      setMessages(m => m.filter(msg => msg.id !== optimisticId));
+      showToast('Error al enviar la imagen', 'error');
+    } finally {
+      setSendingImage(false);
     }
   }
 
@@ -557,6 +904,16 @@ export default function MessagesPage() {
       showToast(e.message, 'error');
     } finally {
       setRespondingId(null);
+    }
+  }
+
+  async function toggleLike(msg) {
+    setContextMenu(null);
+    try {
+      const { message: updated } = await api.patch(`/messages/message/${msg.id}/like`);
+      setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
+    } catch (e) {
+      showToast(e.message || 'Error al reaccionar', 'error');
     }
   }
 
@@ -593,6 +950,27 @@ export default function MessagesPage() {
     }
   }
 
+  async function toggleBlock() {
+    const name = friend?.username || 'este usuario';
+    setBlockActionLoading(true);
+    try {
+      if (blockedByMe) {
+        await api.post(`/messages/chat/${friendId}/unblock`);
+        setBlockedByMe(false);
+        showToast(`Has desbloqueado a ${name}`);
+      } else {
+        await api.post(`/messages/chat/${friendId}/block`);
+        setBlockedByMe(true);
+        showToast(`Has bloqueado a ${name}`);
+      }
+      setShowBlockConfirm(false);
+    } catch (e) {
+      showToast(e.message || 'Error al actualizar el bloqueo', 'error');
+    } finally {
+      setBlockActionLoading(false);
+    }
+  }
+
   // ── Filter & group messages ───────────────────────────────────────────────────
 
   const visibleMessages = messages.filter(msg => {
@@ -601,8 +979,18 @@ export default function MessagesPage() {
     // Hide messages deleted for me (deleted_for_self)
     if (Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(profile?.id)) return false;
     return true;
-  // Inject _readReceipts flag so bubbles can decide whether to show coloured tick
-  }).map(msg => ({ ...msg, _readReceipts: readReceipts, _tickColorRead: tickColorRead, _tickColorUnread: tickColorUnread, _tickColorSent: tickColorSent }));
+  // Inject _readReceipts flag so bubbles can decide whether to show coloured tick,
+  // and _quoteLabel on any quoted reply_to so ReplyQuote can show "Tú" or el nombre del amigo.
+  }).map(msg => ({
+    ...msg,
+    _readReceipts: readReceipts,
+    _tickColorRead: tickColorRead,
+    _tickColorUnread: tickColorUnread,
+    _tickColorSent: tickColorSent,
+    reply_to: msg.reply_to
+      ? { ...msg.reply_to, _quoteLabel: msg.reply_to.sender_id === profile?.id ? 'Tú' : (friend?.username || 'este usuario') }
+      : msg.reply_to,
+  }));
 
   const grouped = [];
   let lastDate = null;
@@ -632,12 +1020,19 @@ export default function MessagesPage() {
         </div>
       )}
 
-      {/* Context menu (delete message) */}
+      {/* Context menu (responder / eliminar mensaje) */}
       {contextMenu && (
         <MessageContextMenu
           msg={contextMenu}
           isMe={contextMenu.sender_id === profile?.id}
+          isLiked={Array.isArray(contextMenu.liked_by) && contextMenu.liked_by.includes(profile?.id)}
           onClose={() => setContextMenu(null)}
+          onReply={() => {
+            setReplyingTo(contextMenu);
+            setContextMenu(null);
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }}
+          onToggleLike={() => toggleLike(contextMenu)}
           onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
         />
@@ -646,10 +1041,21 @@ export default function MessagesPage() {
       {/* Clear chat confirm */}
       {showClearConfirm && (
         <ClearChatModal
-          friendName={friend?.display_name || 'esta persona'}
+          friendName={friend?.username || 'esta persona'}
           onConfirm={clearChat}
           onCancel={() => setShowClearConfirm(false)}
           loading={clearingChat}
+        />
+      )}
+
+      {/* Block / unblock confirm */}
+      {showBlockConfirm && (
+        <BlockUserModal
+          friendName={friend?.username || 'este usuario'}
+          isBlocked={blockedByMe}
+          onConfirm={toggleBlock}
+          onCancel={() => setShowBlockConfirm(false)}
+          loading={blockActionLoading}
         />
       )}
 
@@ -670,14 +1076,14 @@ export default function MessagesPage() {
                   >
                     {friend.avatar_url
                       ? <img src={friend.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                      : friend.display_name?.[0]?.toUpperCase()
+                      : friend.username?.[0]?.toUpperCase()
                     }
                   </div>
                   <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-bg ${friendOnline ? 'bg-green-400' : 'bg-slate-600'}`} />
                 </div>
               </button>
               <button onClick={() => navigate(`/user/${friend.id}`)} className="flex-1 text-left">
-                <div className="font-display font-semibold text-surface-text text-sm">{friend.display_name}</div>
+                <div className="font-display font-semibold text-surface-text text-sm">{friend.username}</div>
                 <div className="text-xs flex items-center gap-1.5">
                   <span className="font-mono" style={{ color: friendColor?.hex }}>
                     🔋 {friend.battery_level}%{friend.battery_is_estimated ? ' ⚡' : ''}
@@ -706,13 +1112,21 @@ export default function MessagesPage() {
               ⋯
             </button>
             {showHeaderMenu && (
-              <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[180px] py-1.5 overflow-hidden">
+              <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[200px] py-1.5 overflow-hidden">
                 <button
                   onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                   className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
                 >
                   <span>🧹</span> Vaciar conversación
                 </button>
+                {friend && (
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); setShowBlockConfirm(true); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+                  >
+                    <span>{blockedByMe ? '🔓' : '🚫'}</span> {blockedByMe ? 'Desbloquear' : 'Bloquear'}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -742,7 +1156,7 @@ export default function MessagesPage() {
             </p>
             {friend && !clearedAt && (
               <p className="text-xs text-slate-600">
-                {friend.display_name} tiene la batería al {friend.battery_level}%
+                {friend.username} tiene la batería al {friend.battery_level}%
               </p>
             )}
           </div>
@@ -756,7 +1170,7 @@ export default function MessagesPage() {
 
             // Deleted for everyone → placeholder visible para ambos
             if (msg.deleted_for_everyone) {
-              return <DeletedBubble key={item.key} isMe={isMe} />;
+              return <DeletedBubble key={item.key} isMe={isMe} msgId={msg.id} />;
             }
 
             if (msg.type === 'hangout_request') {
@@ -770,6 +1184,21 @@ export default function MessagesPage() {
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
                   onLongPress={setContextMenu}
+                  onQuoteClick={scrollToMessage}
+                />
+              );
+            }
+
+            if (msg.type === 'image') {
+              return (
+                <ImageBubble
+                  key={item.key}
+                  msg={msg}
+                  isMe={isMe}
+                  myBubbleStyle={myBubbleStyle}
+                  otherBubbleStyle={otherBubbleStyle}
+                  onLongPress={setContextMenu}
+                  onQuoteClick={scrollToMessage}
                 />
               );
             }
@@ -782,6 +1211,7 @@ export default function MessagesPage() {
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
                 onLongPress={setContextMenu}
+                onQuoteClick={scrollToMessage}
               />
             );
           })
@@ -792,7 +1222,30 @@ export default function MessagesPage() {
       {/* Input area */}
       <div className="flex-shrink-0 border-t border-surface-border bg-surface-bg/95 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-4 py-3 space-y-2">
-          {showHangoutForm ? (
+          {replyingTo && (
+            <ReplyComposerPreview
+              replyingTo={replyingTo}
+              label={replyingTo.sender_id === profile?.id ? 'ti mismo' : (friend?.username || 'este usuario')}
+              onCancel={() => setReplyingTo(null)}
+            />
+          )}
+          {(blockedByMe || blockedByThem) ? (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-surface-card border border-surface-border">
+              <span className="text-surface-muted text-sm">
+                {blockedByMe
+                  ? 'Has bloqueado a esta persona. No podéis enviaros mensajes.'
+                  : 'No puedes enviar mensajes a esta persona.'}
+              </span>
+              {blockedByMe && (
+                <button
+                  onClick={() => setShowBlockConfirm(true)}
+                  className="flex-shrink-0 text-accent-primary text-sm font-display font-semibold hover:underline"
+                >
+                  Desbloquear
+                </button>
+              )}
+            </div>
+          ) : showHangoutForm ? (
             <HangoutForm
               onSend={sendHangout}
               onCancel={() => setShowHangoutForm(false)}
@@ -807,6 +1260,37 @@ export default function MessagesPage() {
               >
                 🤝
               </button>
+              <button
+                onClick={() => setShowPhotoMenu(true)}
+                title="Enviar foto"
+                disabled={sendingImage}
+                className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all disabled:opacity-40"
+              >
+                {sendingImage ? (
+                  <span className="w-4 h-4 border-2 border-surface-muted border-t-transparent rounded-full animate-spin" />
+                ) : '📷'}
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+              <input
+                ref={photoCameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+              <PhotoSourceMenu
+                open={showPhotoMenu}
+                onClose={() => setShowPhotoMenu(false)}
+                onCamera={() => photoCameraRef.current?.click()}
+                onGallery={() => photoInputRef.current?.click()}
+              />
               <input
                 ref={inputRef}
                 value={input}

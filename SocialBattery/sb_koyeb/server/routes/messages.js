@@ -3,6 +3,117 @@ const router = express.Router();
 const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { notifyUsers } = require('../lib/webpush');
+
+// Multer instance for chat image uploads (8 MB max)
+const _dmImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
+
+const MESSAGE_FIELDS = `
+  id, sender_id, receiver_id, content, type, hangout_status, hangout_time,
+  read_at, delivered_at, deleted_for_self, deleted_for_everyone,
+  deleted_for_everyone_at, created_at, reply_to_id, liked_by
+`;
+
+// Same fields plus an embedded preview of the message being replied to
+// (used wherever a message is returned to the client for rendering the quote).
+const MESSAGE_FIELDS_WITH_REPLY = `
+  ${MESSAGE_FIELDS},
+  reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone)
+`;
+
+// Verifies that `messageId` belongs to the 1:1 conversation between userA and userB.
+// Returns the message row or null if it doesn't exist / isn't part of that conversation.
+async function findReplyTarget(messageId, userA, userB) {
+  if (!messageId) return null;
+  const { data } = await supabase
+    .from('messages')
+    .select('id, sender_id, receiver_id')
+    .eq('id', messageId)
+    .or(
+      `and(sender_id.eq.${userA},receiver_id.eq.${userB}),` +
+      `and(sender_id.eq.${userB},receiver_id.eq.${userA})`
+    )
+    .maybeSingle();
+  return data || null;
+}
+
+// Checks the blocking relationship between two users in both directions.
+// Used before sending a message/image and when loading a conversation, so
+// the client knows whether to disable the composer.
+async function getBlockStatus(userA, userB) {
+  const { data } = await supabase
+    .from('blocked_users')
+    .select('blocker_id, blocked_id')
+    .or(
+      `and(blocker_id.eq.${userA},blocked_id.eq.${userB}),` +
+      `and(blocker_id.eq.${userB},blocked_id.eq.${userA})`
+    );
+  const rows = data || [];
+  return {
+    aBlockedB: rows.some(r => r.blocker_id === userA && r.blocked_id === userB),
+    bBlockedA: rows.some(r => r.blocker_id === userB && r.blocked_id === userA),
+  };
+}
+
+// Notifies the author of a message that someone liked it — same pattern as
+// broadcastGroupMessage in routes/groups.js: a personal realtime channel for
+// instant in-app notification, plus web-push for when the app is backgrounded
+// or closed. Fire-and-forget; failures here must never break the like request.
+async function broadcastMessageLike({ messageId, authorId, likerId, messageType, messageContent }) {
+  try {
+    const { data: liker } = await supabase
+      .from('users')
+      .select('username')
+      .eq('id', likerId)
+      .single();
+
+    const likerName = liker?.username ? `@${liker.username}` : 'Alguien';
+    const preview = messageType === 'image'
+      ? 'tu foto'
+      : messageType === 'hangout_request'
+        ? 'tu propuesta de quedada'
+        : `"${(messageContent || '').slice(0, 60)}"`;
+
+    const broadcastPayload = {
+      message_id: messageId,
+      liker_id:   likerId,
+      liker_name: likerName,
+    };
+
+    await supabase
+      .channel(`msg-like-notif-${authorId}`)
+      .send({ type: 'broadcast', event: 'message_liked', payload: broadcastPayload });
+
+    await notifyUsers(supabase, [authorId], likerId, {
+      title: likerName,
+      body:  `❤️ Le ha gustado ${preview}`,
+      url:   `/messages/${likerId}`,
+      tag:   `like-${messageId}`,
+    });
+  } catch (err) {
+    console.error('[MESSAGES] broadcastMessageLike error:', err);
+  }
+}
+
+// ── GET /api/messages/unread-count — lightweight unread badge count ───────────
+// Returns a single integer. Used by HomePage/BottomNav to show the badge.
+// Replaces the old pattern of GET /messages (300 rows) just to reduce to a number.
+router.get('/unread-count', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  // Count messages received by this user that haven't been read yet,
+  // excluding messages deleted for everyone or for this user.
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('receiver_id', userId)
+    .is('read_at', null)
+    .not('deleted_for_everyone', 'is', true);
+
+  if (error) return res.status(500).json({ error: 'Failed to count unread messages' });
+  res.json({ count: count || 0 });
+});
 
 // ── GET /api/messages — list conversations ────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -11,8 +122,8 @@ router.get('/', requireAuth, async (req, res) => {
   const { data: friendships, error: fErr } = await supabase
     .from('friendships')
     .select(`
-      requester:requester_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
-      addressee:addressee_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+      requester:requester_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
+      addressee:addressee_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .eq('status', 'accepted')
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
@@ -30,8 +141,8 @@ router.get('/', requireAuth, async (req, res) => {
     .select(`
       id, content, type, hangout_status, created_at, read_at, delivered_at,
       deleted_for_everyone, deleted_for_self,
-      sender:sender_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
-      receiver:receiver_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
+      sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at),
+      receiver:receiver_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at)
     `)
     .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
     .order('created_at', { ascending: false })
@@ -78,7 +189,7 @@ router.get('/:friendId', requireAuth, async (req, res) => {
 
   let query = supabase
     .from('messages')
-    .select('*')
+    .select(MESSAGE_FIELDS_WITH_REPLY)
     .or(
       `and(sender_id.eq.${userId},receiver_id.eq.${friendId}),` +
       `and(sender_id.eq.${friendId},receiver_id.eq.${userId})`
@@ -117,12 +228,19 @@ router.get('/:friendId', requireAuth, async (req, res) => {
     .eq('partner_id', friendId)
     .maybeSingle();
 
-  res.json({ messages: data, cleared_at: clearData?.cleared_at || null });
+  const { aBlockedB: blockedByMe, bBlockedA: blockedByThem } = await getBlockStatus(userId, friendId);
+
+  res.json({
+    messages: data,
+    cleared_at: clearData?.cleared_at || null,
+    blocked_by_me: blockedByMe,
+    blocked_by_them: blockedByThem,
+  });
 });
 
 // ── POST /api/messages — send message ────────────────────────────────────────
 router.post('/', requireAuth, async (req, res) => {
-  const { receiver_id, content, type = 'text', hangout_time } = req.body;
+  const { receiver_id, content, type = 'text', hangout_time, reply_to_id } = req.body;
   const senderId = req.user.id;
 
   if (!receiver_id || !content?.trim()) {
@@ -146,6 +264,14 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Solo puedes enviar mensajes a amigos' });
   }
 
+  const { aBlockedB, bBlockedA } = await getBlockStatus(senderId, receiver_id);
+  if (aBlockedB) {
+    return res.status(403).json({ error: 'Has bloqueado a este usuario. Desbloquéalo para enviarle mensajes.' });
+  }
+  if (bBlockedA) {
+    return res.status(403).json({ error: 'No puedes enviar mensajes a este usuario.' });
+  }
+
   const insertData = {
     sender_id: senderId,
     receiver_id,
@@ -158,10 +284,17 @@ router.post('/', requireAuth, async (req, res) => {
     if (hangout_time) insertData.hangout_time = hangout_time.trim();
   }
 
+  if (reply_to_id) {
+    const target = await findReplyTarget(reply_to_id, senderId, receiver_id);
+    if (target) insertData.reply_to_id = target.id;
+    // If the referenced message isn't part of this conversation, silently
+    // ignore it rather than failing the whole send.
+  }
+
   const { data, error } = await supabase
     .from('messages')
     .insert(insertData)
-    .select()
+    .select(MESSAGE_FIELDS_WITH_REPLY)
     .single();
 
   if (error) return res.status(500).json({ error: 'Failed to send message' });
@@ -226,7 +359,7 @@ router.patch('/:messageId/hangout', requireAuth, async (req, res) => {
     .from('messages')
     .update({ hangout_status: status })
     .eq('id', req.params.messageId)
-    .select()
+    .select(MESSAGE_FIELDS)
     .single();
 
   if (error) return res.status(500).json({ error: 'Failed to update hangout status' });
@@ -263,7 +396,7 @@ router.patch('/message/:messageId', requireAuth, async (req, res) => {
         deleted_for_everyone_at: new Date().toISOString(),
       })
       .eq('id', req.params.messageId)
-      .select()
+      .select(MESSAGE_FIELDS)
       .single();
 
     if (error) return res.status(500).json({ error: 'Failed to delete message' });
@@ -277,12 +410,59 @@ router.patch('/message/:messageId', requireAuth, async (req, res) => {
       .from('messages')
       .update({ deleted_for_self: current })
       .eq('id', req.params.messageId)
-      .select()
+      .select(MESSAGE_FIELDS)
       .single();
 
     if (error) return res.status(500).json({ error: 'Failed to delete message' });
     return res.json({ message: data });
   }
+});
+
+// ── PATCH /api/messages/message/:messageId/like — alternar "me gusta" ─────────
+router.patch('/message/:messageId/like', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { messageId } = req.params;
+
+  const { data: msg, error: fetchErr } = await supabase
+    .from('messages')
+    .select('id, sender_id, receiver_id, type, content, deleted_for_everyone, liked_by')
+    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .eq('id', messageId)
+    .single();
+
+  if (fetchErr || !msg) return res.status(404).json({ error: 'Message not found' });
+  if (msg.deleted_for_everyone) {
+    return res.status(400).json({ error: 'No puedes reaccionar a un mensaje eliminado' });
+  }
+
+  const current = Array.isArray(msg.liked_by) ? msg.liked_by : [];
+  const alreadyLiked = current.includes(userId);
+  const nextLikedBy = alreadyLiked
+    ? current.filter(id => id !== userId)
+    : [...current, userId];
+
+  const { data, error } = await supabase
+    .from('messages')
+    .update({ liked_by: nextLikedBy })
+    .eq('id', messageId)
+    .select(MESSAGE_FIELDS)
+    .single();
+
+  if (error) return res.status(500).json({ error: 'Failed to update like' });
+
+  // Only notify when someone *other* than the message's own author likes it,
+  // and only on the like (not the unlike).
+  if (!alreadyLiked && userId !== msg.sender_id) {
+    broadcastMessageLike({
+      messageId,
+      authorId:       msg.sender_id,
+      likerId:        userId,
+      messageType:    msg.type,
+      messageContent: msg.content,
+    }).catch(() => {});
+  }
+
+  res.json({ message: data });
 });
 
 // ── POST /api/messages/chat/:friendId/clear — vaciar conversación ─────────────
@@ -301,6 +481,43 @@ router.post('/chat/:friendId/clear', requireAuth, async (req, res) => {
   res.json({ success: true, cleared_at: new Date().toISOString() });
 });
 
+// ── POST /api/messages/chat/:friendId/block — bloquear a un usuario ───────────
+// Impide que el usuario bloqueado envíe mensajes, y también impide que quien
+// bloquea le envíe mensajes a él (conversación cerrada en ambos sentidos).
+router.post('/chat/:friendId/block', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.params;
+
+  if (friendId === userId) {
+    return res.status(400).json({ error: 'No puedes bloquearte a ti mismo' });
+  }
+
+  const { error } = await supabase
+    .from('blocked_users')
+    .upsert(
+      { blocker_id: userId, blocked_id: friendId },
+      { onConflict: 'blocker_id,blocked_id' }
+    );
+
+  if (error) return res.status(500).json({ error: 'Failed to block user' });
+  res.json({ success: true, blocked: true });
+});
+
+// ── POST /api/messages/chat/:friendId/unblock — desbloquear a un usuario ──────
+router.post('/chat/:friendId/unblock', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.params;
+
+  const { error } = await supabase
+    .from('blocked_users')
+    .delete()
+    .eq('blocker_id', userId)
+    .eq('blocked_id', friendId);
+
+  if (error) return res.status(500).json({ error: 'Failed to unblock user' });
+  res.json({ success: true, blocked: false });
+});
+
 // ── PATCH /api/messages/heartbeat ────────────────────────────────────────────
 router.patch('/heartbeat', requireAuth, async (req, res) => {
   await supabase
@@ -309,6 +526,77 @@ router.patch('/heartbeat', requireAuth, async (req, res) => {
     .eq('id', req.user.id);
 
   res.json({ success: true });
+});
+
+// ── POST /api/messages/:receiverId/image — send an image in a DM ─────────────
+router.post('/:receiverId/image', requireAuth, (req, res, next) => {
+  _dmImageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const senderId = req.user.id;
+  const { receiverId } = req.params;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Se requiere una imagen' });
+  }
+
+  // Verify friendship before sending
+  const { data: friendship } = await supabase
+    .from('friendships')
+    .select('id')
+    .eq('status', 'accepted')
+    .or(
+      `and(requester_id.eq.${senderId},addressee_id.eq.${receiverId}),` +
+      `and(requester_id.eq.${receiverId},addressee_id.eq.${senderId})`
+    )
+    .single();
+
+  if (!friendship) {
+    return res.status(403).json({ error: 'Solo puedes enviar mensajes a amigos' });
+  }
+
+  const { aBlockedB, bBlockedA } = await getBlockStatus(senderId, receiverId);
+  if (aBlockedB) {
+    return res.status(403).json({ error: 'Has bloqueado a este usuario. Desbloquéalo para enviarle mensajes.' });
+  }
+  if (bBlockedA) {
+    return res.status(403).json({ error: 'No puedes enviar mensajes a este usuario.' });
+  }
+
+  try {
+    const imageUrl = await storeImage({
+      file: req.file,
+      bucket: 'chat-images',
+      objectName: `dm/${senderId}/${Date.now()}`,
+      fallbackMaxLength: 8_000_000,
+    });
+
+    const insertData = {
+      sender_id: senderId,
+      receiver_id: receiverId,
+      content: imageUrl,
+      type: 'image',
+    };
+
+    if (req.body.reply_to_id) {
+      const target = await findReplyTarget(req.body.reply_to_id, senderId, receiverId);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert(insertData)
+      .select(MESSAGE_FIELDS_WITH_REPLY)
+      .single();
+
+    if (error) return res.status(500).json({ error: 'Failed to save image message' });
+    res.status(201).json({ message: data });
+  } catch (e) {
+    console.error('[MESSAGES] image upload error:', e);
+    return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
+  }
 });
 
 module.exports = router;

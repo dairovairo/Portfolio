@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
-const { CIRCLE_BADGES, computeCircleBadges, computeGroupBadges } = require('../lib/circleBadges');
+const { CIRCLE_BADGES, computeCircleBadges, computeGroupBadges, computePoolBadges } = require('../lib/circleBadges');
 const supabase = require('../lib/supabase');
 
 function toEarnedBadge(assignment) {
@@ -55,6 +55,43 @@ router.get('/group/:groupId', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('[BADGES] group error:', error);
     res.status(500).json({ error: 'Failed to compute group badges' });
+  }
+});
+
+// GET /api/badges/pool/:poolId — insignias activas de los apuntados a una quedada
+// Calcula los titulares actuales y persiste los logros permanentes
+router.get('/pool/:poolId', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { poolId } = req.params;
+
+  try {
+    // Verificar que el usuario está apuntado a la quedada (o es quien la creó)
+    const { data: pool } = await supabase
+      .from('hangout_pools')
+      .select('creator_id')
+      .eq('id', poolId)
+      .maybeSingle();
+
+    if (!pool) {
+      return res.status(404).json({ error: 'Pool not found' });
+    }
+
+    const { data: participation } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!participation && pool.creator_id !== userId) {
+      return res.status(403).json({ error: 'Not a participant of this pool' });
+    }
+
+    const result = await computePoolBadges(poolId);
+    res.json(result);
+  } catch (error) {
+    console.error('[BADGES] pool error:', error);
+    res.status(500).json({ error: 'Failed to compute pool badges' });
   }
 });
 

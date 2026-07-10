@@ -3,6 +3,16 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
+import { ALL_INTERESTS } from './OnboardingPage';
+import MascotDisplay from '../components/MascotDisplay';
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
 
 function BadgePill({ badge }) {
   return (
@@ -33,10 +43,10 @@ function StatsGrid({ stats }) {
   if (!stats) return null;
   const items = [
     { icon: '👥', label: 'Amigos',           value: stats.friends_count },
-    { icon: '🗓️', label: 'Planes creados',   value: stats.pools_created },
+    { icon: '📅', label: 'Planes creados',   value: stats.pools_created },
     { icon: '🚀', label: 'Planes unidos',    value: stats.pools_joined },
     { icon: '🔋', label: 'Updates batería',  value: stats.battery_updates },
-    { icon: '⏱️', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
+    { icon: '⏰', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
   ];
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
@@ -156,7 +166,6 @@ export default function UserProfilePage() {
   const isMe = user.id === myProfile?.id;
   const color = getBatteryColor(user.battery_level ?? 50);
   const earnedBadges = (user._earnedBadges || user.user_badges?.map(ub => ub.badges) || []).filter(Boolean);
-  const diff = myProfile ? Math.abs((user.battery_level ?? 50) - (myProfile.battery_level ?? 50)) : null;
 
   return (
     <div className="min-h-screen bg-surface-bg">
@@ -174,7 +183,7 @@ export default function UserProfilePage() {
           <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-white transition-colors p-1">
             ←
           </button>
-          <h1 className="font-display font-bold text-white flex-1">@{user.username}</h1>
+          <h1 className="font-display font-bold text-white flex-1">{user.username}</h1>
         </div>
       </nav>
 
@@ -189,26 +198,56 @@ export default function UserProfilePage() {
             >
               {user.avatar_url
                 ? <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                : user.display_name?.[0]?.toUpperCase()
+                : user.username?.[0]?.toUpperCase()
               }
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="font-display font-bold text-white text-xl truncate">{user.display_name}</h2>
-              <div className="text-sm text-slate-500 font-mono">@{user.username}</div>
+              <h2 className="font-display font-bold text-white text-xl truncate">{user.username}</h2>
               {user.bio && <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{user.bio}</p>}
-
-              {/* Battery compatibility */}
-              {!isMe && diff !== null && (
-                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-display font-semibold ${
-                  diff <= 15 ? 'bg-green-500/15 text-green-400 border border-green-500/20' :
-                  diff <= 35 ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20' :
-                  'bg-slate-500/15 text-slate-400 border border-slate-500/20'
-                }`}>
-                  {diff <= 15 ? '⚡ Compatibilidad alta' :
-                   diff <= 35 ? '🔋 Compatibilidad media' :
-                   '🪫 Compatibilidad baja'}
-                  <span className="font-mono">({diff}% dif.)</span>
+              {user.interests && user.interests.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {user.interests.map(interest => {
+                    const found = ALL_INTERESTS.find(i => i.id === interest);
+                    return (
+                      <span
+                        key={interest}
+                        className="inline-flex items-center gap-1 bg-accent-primary/10 border border-accent-primary/20
+                          text-accent-glow rounded-full px-2 py-0.5 text-[11px] font-display font-semibold"
+                      >
+                        {found?.emoji} {interest}
+                      </span>
+                    );
+                  })}
                 </div>
+              )}
+
+
+            </div>
+
+            {/* Mascota del usuario — columna propia a la derecha del todo
+                (no pegada al nombre, para no apretar el truncado del texto).
+                Igual que en FriendCard.jsx: la base según su tier de
+                batería se resuelve localmente, y la personalización
+                (ropa/calzado/gorro/accesorios) llega ya horneada como
+                overlay en user.mascot_preview_url. */}
+            <div className="relative flex-shrink-0" style={{ width: 56, height: 56 }}>
+              <MascotDisplay
+                tier={getMascotTier(user.battery_level ?? 50)}
+                size={56}
+                glowColor={color.hex}
+                outfitSrc={null}
+                feetSrc={null}
+                headSrc={null}
+                accessories={[]}
+                activityLayers={[]}
+              />
+              {user.mascot_preview_url && (
+                <img
+                  src={user.mascot_preview_url}
+                  alt=""
+                  draggable={false}
+                  className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+                />
               )}
             </div>
           </div>
@@ -296,7 +335,7 @@ export default function UserProfilePage() {
         </div>
 
         {/* Badges */}
-        {earnedBadges.length > 0 && (
+        {earnedBadges.length > 0 && user.show_badges !== false && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
             <h3 className="font-display font-semibold text-white mb-3">
               Insignias · {earnedBadges.length}

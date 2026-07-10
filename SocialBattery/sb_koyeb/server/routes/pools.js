@@ -4,6 +4,26 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { checkOrganizerBadgeForUser } = require('../jobs/badges');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
+const { notifyUsers } = require('../lib/webpush');
+const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const {
+  DEFAULT_POOL_REMINDER_MINUTES,
+  parseReminderMinutes,
+} = require('../lib/reminderLeadTime');
+
+// Multer instance for pool chat image uploads (8 MB max) — same pattern as groups
+const _poolImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
+
+// Multer instance for pool cover/banner uploads (3 MB max) — same pattern as community events
+const poolCoverUpload = createImageUpload({ maxSizeMb: 3 });
+
+function uploadPoolCover(req, res, next) {
+  poolCoverUpload.single('cover')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
+  });
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +50,14 @@ async function syncPoolStatus(poolId) {
     .single();
 
   if (!pool || pool.status === 'cancelled' || pool.status === 'closed') return;
+
+  // No limit → pool can never become 'full' automatically
+  if (pool.max_people === null) {
+    if (pool.status === 'full') {
+      await supabase.from('hangout_pools').update({ status: 'open' }).eq('id', poolId);
+    }
+    return;
+  }
 
   const { count } = await supabase
     .from('pool_participants')
@@ -77,6 +105,60 @@ async function canAccessPool(pool, userId, friendIds) {
   return !!invite;
 }
 
+/**
+ * Broadcasts a new pool chat message to every participant's personal channel
+ * (service key, bypasses RLS) so anyone with the app open gets an instant
+ * in-app notification, plus a web-push for those who have the app closed.
+ * Same pattern as broadcastGroupMessage in routes/groups.js.
+ */
+async function broadcastPoolChatMessage({ poolId, senderId, senderName, content, type }) {
+  try {
+    const [{ data: pool }, { data: participants }] = await Promise.all([
+      supabase.from('hangout_pools').select('activity').eq('id', poolId).single(),
+      supabase
+        .from('pool_participants')
+        .select('user_id')
+        .eq('pool_id', poolId)
+        .neq('user_id', senderId),
+    ]);
+
+    const activityLabel = pool?.activity || 'la quedada';
+    const recipientIds = (participants || []).map(p => p.user_id);
+    if (!recipientIds.length) return;
+
+    const broadcastPayload = {
+      pool_id:   poolId,
+      activity:  activityLabel,
+      sender_id: senderId,
+      sender_name: senderName,
+      content,
+      type,
+    };
+
+    await Promise.allSettled(
+      recipientIds.map(recipientId =>
+        supabase
+          .channel(`pool-chat-notif-${recipientId}`)
+          .send({
+            type: 'broadcast',
+            event: 'new_pool_message',
+            payload: broadcastPayload,
+          })
+      )
+    );
+
+    const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
+    await notifyUsers(supabase, recipientIds, senderId, {
+      title: `💬 ${activityLabel}`,
+      body: `${senderName}: ${previewText}`,
+      url: `/pools/${poolId}/chat`,
+      tag: `pool-chat-${poolId}`,
+    });
+  } catch (err) {
+    console.error('[POOLS] broadcastPoolChatMessage error:', err);
+  }
+}
+
 /** Builds participant preview (up to 6) for the feed */
 function buildParticipantPreview(rawParticipants) {
   return (rawParticipants || [])
@@ -85,9 +167,11 @@ function buildParticipantPreview(rawParticipants) {
       const user = applyBatteryExpiry(p.user);
       return {
         id: user?.id,
-        display_name: user?.display_name,
+        username: user?.username,
         avatar_url: user?.avatar_url,
         battery_level: user?.battery_level,
+        mascot_preview_url: user?.mascot_preview_url,
+        mascot_name: user?.mascot_name,
       };
     })
     .filter(p => p.id);
@@ -101,15 +185,24 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const friendIds = await getFriendIds(userId);
 
+    // IDs de quedadas privadas donde el usuario ha sido invitado explícitamente
+    // (pool_invitees) — se usa tanto para el filtro de visibilidad ('active')
+    // como para el flag is_invited del badge de "te han invitado" en el cliente.
+    const { data: myInvites } = await supabase
+      .from('pool_invitees')
+      .select('pool_id')
+      .eq('user_id', userId);
+    const myInvitedIds = new Set((myInvites || []).map(i => i.pool_id));
+
     let query = supabase
       .from('hangout_pools')
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
-        max_people, is_public, group_id, status, created_at, creator_id,
-        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
+        max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
+        creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
-          joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+          joined_at, reminder_minutes_before,
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url, mascot_name)
         )
       `)
       .order('scheduled_at', { ascending: true })
@@ -158,11 +251,7 @@ router.get('/', requireAuth, async (req, res) => {
       }
 
       // Via explicit invite
-      const { data: invites } = await supabase
-        .from('pool_invitees')
-        .select('pool_id')
-        .eq('user_id', userId);
-      (invites || []).forEach(i => privatePoolIds.add(i.pool_id));
+      myInvitedIds.forEach(id => privatePoolIds.add(id));
 
       // Build OR filter
       // - own pools
@@ -187,7 +276,8 @@ router.get('/', requireAuth, async (req, res) => {
     const enriched = (pools || []).map(pool => {
       const participants = pool.pool_participants || [];
       const participantCount = participants.length;
-      const hasJoined = participants.some(p => p.user?.id === userId);
+      const currentParticipant = participants.find(p => p.user?.id === userId);
+      const hasJoined = Boolean(currentParticipant);
       const isCreator = pool.creator?.id === userId;
       return {
         ...pool,
@@ -197,7 +287,13 @@ router.get('/', requireAuth, async (req, res) => {
         participants_preview: buildParticipantPreview(participants),
         has_joined: hasJoined,
         is_creator: isCreator,
-        spots_left: pool.max_people - participantCount,
+        // Invitado explícitamente (pool_invitees) y aún sin unirse — dispara
+        // el badge "te han invitado" en el tab Activos y en el dock inferior.
+        is_invited: myInvitedIds.has(pool.id) && !isCreator && !hasJoined,
+        spots_left: pool.max_people !== null ? pool.max_people - participantCount : null,
+        current_user_reminder_minutes_before: hasJoined
+          ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
+          : null,
       };
     });
 
@@ -205,6 +301,113 @@ router.get('/', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[POOLS] GET /', err);
     res.status(500).json({ error: 'Failed to fetch pools' });
+  }
+});
+
+// ── GET /api/pools/invites/count — nº de invitaciones pendientes (badge) ────
+// Cuenta las quedadas privadas donde el usuario ha sido invitado
+// (pool_invitees) pero aún no se ha unido y la quedada sigue abierta/futura.
+// Usado por PoolInviteNotificationsContext para el badge del dock inferior
+// y del tab "Activos" cuando la página de Quedadas no está montada.
+router.get('/invites/count', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data: invites } = await supabase
+      .from('pool_invitees')
+      .select('pool_id')
+      .eq('user_id', userId);
+    const poolIds = [...new Set((invites || []).map(i => i.pool_id))];
+    if (!poolIds.length) return res.json({ count: 0 });
+
+    const { data: joined } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('user_id', userId)
+      .in('pool_id', poolIds);
+    const joinedIds = new Set((joined || []).map(j => j.pool_id));
+    const pendingIds = poolIds.filter(id => !joinedIds.has(id));
+    if (!pendingIds.length) return res.json({ count: 0 });
+
+    const { count } = await supabase
+      .from('hangout_pools')
+      .select('*', { count: 'exact', head: true })
+      .in('id', pendingIds)
+      .in('status', ['open', 'full'])
+      .gt('scheduled_at', new Date().toISOString());
+
+    res.json({ count: count || 0 });
+  } catch (err) {
+    console.error('[POOLS] GET /invites/count', err);
+    res.status(500).json({ error: 'Failed to fetch invite count' });
+  }
+});
+
+// ── GET /api/pools/notifications/count — nº de quedadas nuevas sin ver ──────
+// Cuenta las quedadas creadas después de `since` (ISO timestamp) sobre las
+// que el usuario ha recibido una notificación de creación — quedadas
+// públicas de un amigo O quedadas privadas a las que se le ha invitado —
+// y a las que aún no se ha unido.
+//
+// BUG (arreglado): el badge de "Quedadas" (dock inferior + tab "Activos")
+// usaba /invites/count, que SOLO contaba invitaciones privadas
+// (pool_invitees). Pero el servidor manda exactamente la misma
+// notificación ("🎉 Fulano propone una quedada", ver broadcastToUsers más
+// abajo) tanto para quedadas privadas con invitación como para quedadas
+// públicas notificadas a los amigos del creador — y estas últimas nunca
+// generan fila en pool_invitees, así que el badge nunca aparecía para
+// ellas aunque la notificación sí llegara. Este endpoint sustituye a
+// /invites/count como fuente del badge y cubre ambos casos.
+router.get('/notifications/count', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const since = req.query.since;
+  const sinceDate = since ? new Date(since) : null;
+  if (!sinceDate || Number.isNaN(sinceDate.getTime())) {
+    return res.json({ count: 0 });
+  }
+
+  try {
+    const friendIds = await getFriendIds(userId);
+
+    const { data: myInvites } = await supabase
+      .from('pool_invitees')
+      .select('pool_id')
+      .eq('user_id', userId);
+    const invitedIds = [...new Set((myInvites || []).map(i => i.pool_id))];
+
+    const orParts = [];
+    if (friendIds.length) {
+      orParts.push(`and(is_public.eq.true,creator_id.in.(${friendIds.join(',')}))`);
+    }
+    if (invitedIds.length) {
+      orParts.push(`id.in.(${invitedIds.join(',')})`);
+    }
+    if (!orParts.length) return res.json({ count: 0 });
+
+    const { data: candidatePools, error } = await supabase
+      .from('hangout_pools')
+      .select('id')
+      .neq('creator_id', userId)
+      .gt('created_at', sinceDate.toISOString())
+      .gt('scheduled_at', new Date().toISOString())
+      .in('status', ['open', 'full'])
+      .or(orParts.join(','));
+
+    if (error) throw error;
+    const candidateIds = (candidatePools || []).map(p => p.id);
+    if (!candidateIds.length) return res.json({ count: 0 });
+
+    const { data: joined } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('user_id', userId)
+      .in('pool_id', candidateIds);
+    const joinedIds = new Set((joined || []).map(j => j.pool_id));
+
+    const count = candidateIds.filter(id => !joinedIds.has(id)).length;
+    res.json({ count });
+  } catch (err) {
+    console.error('[POOLS] GET /notifications/count', err);
+    res.status(500).json({ error: 'Failed to fetch notifications count' });
   }
 });
 
@@ -217,11 +420,11 @@ router.get('/:id', requireAuth, async (req, res) => {
       .from('hangout_pools')
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
-        max_people, is_public, group_id, status, created_at, creator_id,
-        creator:creator_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
+        max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
+        creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url),
         pool_participants(
-          joined_at,
-          user:user_id(id, username, display_name, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+          joined_at, reminder_minutes_before,
+          user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url)
         )
       `)
       .eq('id', req.params.id)
@@ -234,7 +437,8 @@ router.get('/:id', requireAuth, async (req, res) => {
     if (!allowed) return res.status(403).json({ error: 'No tienes acceso a este pool' });
 
     const participants = pool.pool_participants || [];
-    const hasJoined = participants.some(p => p.user?.id === userId);
+    const currentParticipant = participants.find(p => p.user?.id === userId);
+    const hasJoined = Boolean(currentParticipant);
     const isCreator = pool.creator?.id === userId;
 
     // Full participant list for detail view
@@ -242,9 +446,11 @@ router.get('/:id', requireAuth, async (req, res) => {
       const user = applyBatteryExpiry(p.user);
       return {
         id: user?.id,
-        display_name: user?.display_name,
+        username: user?.username,
         avatar_url: user?.avatar_url,
         battery_level: user?.battery_level,
+        mascot_preview_url: user?.mascot_preview_url,
+        last_seen_at: user?.last_seen_at,
         joined_at: p.joined_at,
       };
     }).filter(p => p.id);
@@ -259,7 +465,10 @@ router.get('/:id', requireAuth, async (req, res) => {
         participants_preview: buildParticipantPreview(participants),
         has_joined: hasJoined,
         is_creator: isCreator,
-        spots_left: pool.max_people - participants.length,
+        spots_left: pool.max_people !== null ? pool.max_people - participants.length : null,
+        current_user_reminder_minutes_before: hasJoined
+          ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
+          : null,
       }
     });
   } catch (err) {
@@ -269,14 +478,23 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // ── POST /api/pools — create a new pool ─────────────────────────────────────
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
   const userId = req.user.id;
   const {
     activity, description, location_hint, scheduled_at, ends_at,
-    max_people = 4, is_public = false,
+    max_people = null, is_public = false,
     group_id = null,
     invited_user_ids = [],   // NEW: individual friend invites for private pools
   } = req.body;
+
+  // req.body arrives as multipart/form-data (strings only) when a cover photo
+  // is attached, or as JSON otherwise — normalize both shapes here.
+  const isPublic = is_public === true || is_public === 'true';
+  let invitedIds = invited_user_ids;
+  if (typeof invitedIds === 'string') {
+    try { invitedIds = JSON.parse(invitedIds); } catch { invitedIds = []; }
+  }
+  if (!Array.isArray(invitedIds)) invitedIds = [];
 
   if (!activity?.trim()) return res.status(400).json({ error: 'activity is required' });
   if (!scheduled_at) return res.status(400).json({ error: 'scheduled_at is required' });
@@ -302,15 +520,27 @@ router.post('/', requireAuth, async (req, res) => {
     endDateIso = endDate.toISOString();
   }
 
-  const maxPeople = parseInt(max_people, 10);
-  if (Number.isNaN(maxPeople) || maxPeople < 2 || maxPeople > 50) {
-    return res.status(400).json({ error: 'max_people must be between 2 and 50' });
+  // null = sin límite; otherwise must be between 2 and 50
+  const maxPeople = (max_people === null || max_people === undefined || max_people === '')
+    ? null
+    : parseInt(max_people, 10);
+  if (maxPeople !== null && (Number.isNaN(maxPeople) || maxPeople < 2 || maxPeople > 50)) {
+    return res.status(400).json({ error: 'max_people must be between 2 and 50, or null for no limit' });
   }
-  if (!is_public && !group_id && (!invited_user_ids || invited_user_ids.length === 0)) {
+  if (!isPublic && !group_id && (!invitedIds || invitedIds.length === 0)) {
     return res.status(400).json({ error: 'Un pool privado necesita al menos un grupo o un amigo invitado' });
   }
 
   try {
+    let coverImageUrl = null;
+    if (req.file) {
+      coverImageUrl = await storeImage({
+        file: req.file,
+        objectName: `pool-covers/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 4500000,
+      });
+    }
+
     const { data: pool, error } = await supabase
       .from('hangout_pools')
       .insert({
@@ -321,14 +551,15 @@ router.post('/', requireAuth, async (req, res) => {
         scheduled_at: startDate.toISOString(),
         ends_at: endDateIso,
         max_people: maxPeople,
-        is_public: Boolean(is_public),
+        is_public: isPublic,
         group_id: group_id || null,
+        cover_image_url: coverImageUrl,
         status: 'open',
       })
       .select(`
         id, activity, description, location_hint, scheduled_at, ends_at,
-        max_people, is_public, status, created_at,
-        creator:creator_id(id, username, display_name, avatar_url)
+        max_people, is_public, status, created_at, cover_image_url,
+        creator:creator_id(id, username, avatar_url, battery_level, mascot_preview_url, mascot_name)
       `)
       .single();
 
@@ -340,8 +571,8 @@ router.post('/', requireAuth, async (req, res) => {
       .insert({ pool_id: pool.id, user_id: userId });
 
     // Insert individual invitees (deduplicated, excluding creator)
-    if (!is_public && invited_user_ids?.length) {
-      const uniqueInvites = [...new Set(invited_user_ids)]
+    if (!isPublic && invitedIds?.length) {
+      const uniqueInvites = [...new Set(invitedIds)]
         .filter(id => id !== userId)
         .map(uid => ({ pool_id: pool.id, user_id: uid }));
       if (uniqueInvites.length) {
@@ -351,18 +582,91 @@ router.post('/', requireAuth, async (req, res) => {
 
     const newBadgeId = await checkOrganizerBadgeForUser(userId).catch(() => null);
 
+    // ── Push + Realtime broadcast (fire-and-forget) ──────────────────────────
+    const creatorName = pool.creator?.username || 'Un amigo';
+    const activityLabel = pool.activity.trim();
+    const notifPayload = {
+      title: `🎉 ${creatorName} propone una quedada`,
+      body: `${activityLabel}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
+      url: `/pools?pool=${pool.id}`,
+      tag: `new-pool-${pool.id}`,
+    };
+
+    // Broadcast a Realtime message to each recipient's personal channel so the
+    // client gets an in-app notification instantly when the app is open/background.
+    // This bypasses RLS entirely (service key) — same pattern as personal messages.
+    async function broadcastToUsers(recipientIds) {
+      const broadcastPayload = {
+        pool_id:       pool.id,
+        activity:      activityLabel,
+        location_hint: pool.location_hint || null,
+        creator_name:  creatorName,
+        creator_id:    userId,
+        is_public:     isPublic,
+      };
+      await Promise.allSettled(
+        recipientIds.map(recipientId =>
+          supabase
+            .channel(`pool-notif-${recipientId}`)
+            .send({
+              type: 'broadcast',
+              event: 'new_pool',
+              payload: broadcastPayload,
+            })
+        )
+      );
+    }
+
+    if (isPublic) {
+      // Notify all accepted friends of the creator
+      getFriendIds(userId).then(async friendIds => {
+        await Promise.all([
+          notifyUsers(supabase, friendIds, userId, notifPayload),
+          broadcastToUsers(friendIds),
+        ]);
+      }).catch(() => {});
+    } else {
+      // Notify group members + individually invited friends
+      const recipientIds = new Set();
+
+      const notifyPrivate = async () => {
+        if (group_id) {
+          const { data: groupMembers } = await supabase
+            .from('friend_group_members')
+            .select('user_id')
+            .eq('group_id', group_id)
+            .neq('user_id', userId);
+          (groupMembers || []).forEach(m => recipientIds.add(m.user_id));
+        }
+        if (invitedIds?.length) {
+          invitedIds.forEach(id => { if (id !== userId) recipientIds.add(id); });
+        }
+        if (recipientIds.size) {
+          await Promise.all([
+            notifyUsers(supabase, [...recipientIds], userId, notifPayload),
+            broadcastToUsers([...recipientIds]),
+          ]);
+        }
+      };
+      notifyPrivate().catch(() => {});
+    }
+
     res.status(201).json({
       pool: {
         ...pool,
         participant_count: 1,
         participants_preview: [{
           id: userId,
-          display_name: pool.creator?.display_name,
+          username: pool.creator?.username,
           avatar_url: pool.creator?.avatar_url,
+          battery_level: pool.creator?.battery_level,
+          mascot_preview_url: pool.creator?.mascot_preview_url,
+          mascot_name: pool.creator?.mascot_name,
         }],
         has_joined: true,
         is_creator: true,
-        spots_left: pool.max_people - 1,
+        spots_left: pool.max_people !== null ? pool.max_people - 1 : null,
+        current_user_reminder_minutes_before: DEFAULT_POOL_REMINDER_MINUTES,
       },
       newBadges: newBadgeId ? [newBadgeId] : [],
     });
@@ -401,7 +705,7 @@ router.post('/:id/join', requireAuth, async (req, res) => {
       .select('*', { count: 'exact', head: true })
       .eq('pool_id', poolId);
 
-    if (count >= pool.max_people) {
+    if (count >= pool.max_people && pool.max_people !== null) {
       return res.status(400).json({ error: 'Pool is full' });
     }
 
@@ -468,7 +772,392 @@ router.delete('/:id/leave', requireAuth, async (req, res) => {
   }
 });
 
+// ── GET /api/pools/:id/join-requests — solicitudes de invitación (privadas) ──
+// Creador: ve todas las solicitudes pendientes propuestas por los miembros.
+// Miembro (no creador): ve solo las solicitudes que él mismo ha propuesto.
+router.get('/:id/join-requests', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+
+  try {
+    const { data: pool } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id, is_public')
+      .eq('id', poolId)
+      .single();
+
+    if (!pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.is_public) return res.status(400).json({ error: 'Este plan es público' });
+
+    const isCreator = pool.creator_id === userId;
+
+    if (!isCreator) {
+      const { data: membership } = await supabase
+        .from('pool_participants')
+        .select('pool_id')
+        .eq('pool_id', poolId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!membership) return res.status(403).json({ error: 'No tienes acceso a este plan' });
+    }
+
+    const [{ data: invitees }, { data: participants }] = await Promise.all([
+      supabase.from('pool_invitees').select('user_id').eq('pool_id', poolId),
+      supabase.from('pool_participants').select('user_id').eq('pool_id', poolId),
+    ]);
+
+    let requestsQuery = supabase
+      .from('pool_join_requests')
+      .select(`
+        id, status, created_at,
+        requested_user:requested_user_id(id, username, avatar_url),
+        requested_by_user:requested_by(id, username, avatar_url)
+      `)
+      .eq('pool_id', poolId)
+      .order('created_at', { ascending: false });
+
+    requestsQuery = isCreator
+      ? requestsQuery.eq('status', 'pending')
+      : requestsQuery.eq('requested_by', userId);
+
+    const { data: requests, error } = await requestsQuery;
+    if (error) throw error;
+
+    res.json({
+      requests: requests || [],
+      invited_user_ids: (invitees || []).map(i => i.user_id),
+      participant_user_ids: (participants || []).map(p => p.user_id),
+      is_creator: isCreator,
+    });
+  } catch (err) {
+    console.error('[POOLS] GET /:id/join-requests', err);
+    res.status(500).json({ error: 'Failed to fetch join requests' });
+  }
+});
+
+// ── POST /api/pools/:id/invite — el creador invita directamente a un amigo ──
+router.post('/:id/invite', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const { user_id } = req.body;
+
+  if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+  if (user_id === userId) return res.status(400).json({ error: 'No puedes invitarte a ti mismo' });
+
+  try {
+    const { data: pool } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id, is_public, activity, location_hint, status')
+      .eq('id', poolId)
+      .single();
+
+    if (!pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.creator_id !== userId) return res.status(403).json({ error: 'Solo el creador puede invitar' });
+    if (pool.is_public) return res.status(400).json({ error: 'Este plan es público' });
+    if (['cancelled', 'closed'].includes(pool.status)) {
+      return res.status(400).json({ error: 'Este plan ya no está disponible' });
+    }
+
+    const friendIds = await getFriendIds(userId);
+    if (!friendIds.includes(user_id)) {
+      return res.status(400).json({ error: 'Solo puedes invitar a amigos' });
+    }
+
+    const [{ data: existingParticipant }, { data: existingInvite }] = await Promise.all([
+      supabase.from('pool_participants').select('pool_id').eq('pool_id', poolId).eq('user_id', user_id).maybeSingle(),
+      supabase.from('pool_invitees').select('pool_id').eq('pool_id', poolId).eq('user_id', user_id).maybeSingle(),
+    ]);
+    if (existingParticipant) return res.status(409).json({ error: 'Ya está apuntado a este plan' });
+    if (existingInvite) return res.status(409).json({ error: 'Ya está invitado a este plan' });
+
+    const { error } = await supabase.from('pool_invitees').insert({ pool_id: poolId, user_id });
+    if (error) throw error;
+
+    // Si el amigo ya había solicitado su propia invitación vía otro miembro,
+    // marca esa solicitud como aceptada para que no quede huérfana.
+    await supabase
+      .from('pool_join_requests')
+      .update({ status: 'accepted', updated_at: new Date().toISOString() })
+      .eq('pool_id', poolId)
+      .eq('requested_user_id', user_id)
+      .eq('status', 'pending');
+
+    res.status(201).json({ success: true });
+
+    // Notificación (fire-and-forget) — mismo patrón que al crear la quedada
+    (async () => {
+      try {
+        const { data: creator } = await supabase.from('users').select('username').eq('id', userId).single();
+        const creatorName = creator?.username || 'Un amigo';
+        await Promise.all([
+          notifyUsers(supabase, [user_id], userId, {
+            title: `🤝 ${creatorName} te invita a una quedada`,
+            body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
+            url: `/pools?pool=${poolId}`,
+            tag: `pool-invite-${poolId}`,
+          }),
+          supabase.channel(`pool-notif-${user_id}`).send({
+            type: 'broadcast',
+            event: 'new_pool',
+            payload: {
+              pool_id: poolId,
+              activity: pool.activity,
+              location_hint: pool.location_hint || null,
+              creator_name: creatorName,
+              creator_id: userId,
+              is_public: false,
+            },
+          }),
+        ]);
+      } catch (e) {
+        console.error('[POOLS] invite notify error:', e);
+      }
+    })();
+  } catch (err) {
+    console.error('[POOLS] POST /:id/invite', err);
+    res.status(500).json({ error: 'Failed to invite user' });
+  }
+});
+
+// ── POST /api/pools/:id/request-invite — un miembro propone invitar a un amigo ──
+router.post('/:id/request-invite', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const { user_id } = req.body;
+
+  if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+  if (user_id === userId) return res.status(400).json({ error: 'No puedes solicitar tu propia invitación' });
+
+  try {
+    const { data: pool } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id, is_public, activity, status')
+      .eq('id', poolId)
+      .single();
+
+    if (!pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.is_public) return res.status(400).json({ error: 'Este plan es público' });
+    if (pool.creator_id === userId) {
+      return res.status(400).json({ error: 'Eres el creador — usa invitar directamente' });
+    }
+    if (['cancelled', 'closed'].includes(pool.status)) {
+      return res.status(400).json({ error: 'Este plan ya no está disponible' });
+    }
+
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para solicitar invitaciones' });
+
+    const friendIds = await getFriendIds(userId);
+    if (!friendIds.includes(user_id)) {
+      return res.status(400).json({ error: 'Solo puedes solicitar amigos tuyos' });
+    }
+
+    const [{ data: existingParticipant }, { data: existingInvite }] = await Promise.all([
+      supabase.from('pool_participants').select('pool_id').eq('pool_id', poolId).eq('user_id', user_id).maybeSingle(),
+      supabase.from('pool_invitees').select('pool_id').eq('pool_id', poolId).eq('user_id', user_id).maybeSingle(),
+    ]);
+    if (existingParticipant) return res.status(409).json({ error: 'Ya está apuntado a este plan' });
+    if (existingInvite) return res.status(409).json({ error: 'Ya está invitado a este plan' });
+
+    const { data: request, error } = await supabase
+      .from('pool_join_requests')
+      .upsert(
+        {
+          pool_id: poolId,
+          requested_user_id: user_id,
+          requested_by: userId,
+          status: 'pending',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'pool_id,requested_user_id' }
+      )
+      .select('id, status, created_at')
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ request });
+
+    // Notifica al creador (fire-and-forget)
+    (async () => {
+      try {
+        const [{ data: requester }, { data: target }] = await Promise.all([
+          supabase.from('users').select('username').eq('id', userId).single(),
+          supabase.from('users').select('username').eq('id', user_id).single(),
+        ]);
+        const requesterName = requester?.username || 'Un miembro';
+        const targetName = target?.username || 'alguien';
+        await Promise.all([
+          notifyUsers(supabase, [pool.creator_id], userId, {
+            title: '🙋 Nueva solicitud de invitación',
+            body: `${requesterName} propone invitar a ${targetName} a "${pool.activity}"`,
+            url: `/pools?pool=${poolId}`,
+            tag: `pool-join-request-${poolId}`,
+          }),
+          supabase.channel(`pool-notif-${pool.creator_id}`).send({
+            type: 'broadcast',
+            event: 'pool_join_request',
+            payload: {
+              pool_id: poolId,
+              activity: pool.activity,
+              requester_name: requesterName,
+              target_name: targetName,
+            },
+          }),
+        ]);
+      } catch (e) {
+        console.error('[POOLS] request-invite notify error:', e);
+      }
+    })();
+  } catch (err) {
+    console.error('[POOLS] POST /:id/request-invite', err);
+    res.status(500).json({ error: 'Failed to request invite' });
+  }
+});
+
+// ── PATCH /api/pools/:id/join-requests/:requestId — aceptar/rechazar ────────
+router.patch('/:id/join-requests/:requestId', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const { requestId } = req.params;
+  const { status } = req.body;
+
+  if (!['accepted', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Status must be accepted or rejected' });
+  }
+
+  try {
+    const { data: pool } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id, activity, location_hint, status')
+      .eq('id', poolId)
+      .single();
+
+    if (!pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.creator_id !== userId) return res.status(403).json({ error: 'Solo el creador puede gestionar solicitudes' });
+
+    const { data: request, error: fetchErr } = await supabase
+      .from('pool_join_requests')
+      .select('id, requested_user_id, requested_by, status')
+      .eq('id', requestId)
+      .eq('pool_id', poolId)
+      .single();
+
+    if (fetchErr || !request) return res.status(404).json({ error: 'Solicitud no encontrada' });
+    if (request.status !== 'pending') return res.status(409).json({ error: 'Esta solicitud ya fue gestionada' });
+
+    const { error: updateErr } = await supabase
+      .from('pool_join_requests')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', requestId);
+    if (updateErr) throw updateErr;
+
+    if (status === 'accepted') {
+      const { data: existingInvite } = await supabase
+        .from('pool_invitees')
+        .select('pool_id')
+        .eq('pool_id', poolId)
+        .eq('user_id', request.requested_user_id)
+        .maybeSingle();
+      if (!existingInvite) {
+        await supabase.from('pool_invitees').insert({ pool_id: poolId, user_id: request.requested_user_id });
+      }
+    }
+
+    res.json({ success: true });
+
+    // Notificación al amigo invitado, solo si se aceptó (fire-and-forget)
+    if (status === 'accepted') {
+      (async () => {
+        try {
+          const { data: creator } = await supabase.from('users').select('username').eq('id', userId).single();
+          const creatorName = creator?.username || 'El organizador';
+          await Promise.all([
+            notifyUsers(supabase, [request.requested_user_id], userId, {
+              title: `🤝 ${creatorName} te invita a una quedada`,
+              body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
+              url: `/pools?pool=${poolId}`,
+              tag: `pool-invite-${poolId}`,
+            }),
+            supabase.channel(`pool-notif-${request.requested_user_id}`).send({
+              type: 'broadcast',
+              event: 'new_pool',
+              payload: {
+                pool_id: poolId,
+                activity: pool.activity,
+                location_hint: pool.location_hint || null,
+                creator_name: creatorName,
+                creator_id: userId,
+                is_public: false,
+              },
+            }),
+          ]);
+        } catch (e) {
+          console.error('[POOLS] join-request accept notify error:', e);
+        }
+      })();
+    }
+  } catch (err) {
+    console.error('[POOLS] PATCH /:id/join-requests/:requestId', err);
+    res.status(500).json({ error: 'Failed to update join request' });
+  }
+});
+
 // ── PATCH /api/pools/:id — update pool (creator only) ────────────────────────
+router.patch('/:id/reminder', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const reminderMinutes = parseReminderMinutes(req.body?.reminder_minutes_before);
+
+  if (reminderMinutes == null) {
+    return res.status(400).json({ error: 'El aviso debe estar entre 10 minutos y 1 semana' });
+  }
+
+  try {
+    const { data: pool, error: poolErr } = await supabase
+      .from('hangout_pools')
+      .select('id, scheduled_at, status')
+      .eq('id', poolId)
+      .single();
+
+    if (poolErr || !pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.status === 'cancelled' || pool.status === 'closed') {
+      return res.status(400).json({ error: 'No se puede cambiar el aviso de un pool cerrado' });
+    }
+    if (new Date(pool.scheduled_at) <= new Date()) {
+      return res.status(400).json({ error: 'El pool ya ha empezado' });
+    }
+
+    const { data: participant } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!participant) return res.status(403).json({ error: 'Tienes que estar apuntado para ajustar el aviso' });
+
+    const { data: updated, error } = await supabase
+      .from('pool_participants')
+      .update({ reminder_minutes_before: reminderMinutes })
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .select('reminder_minutes_before')
+      .single();
+
+    if (error) throw error;
+    res.json({ reminder_minutes_before: updated.reminder_minutes_before });
+  } catch (err) {
+    console.error('[POOLS] PATCH /:id/reminder', err);
+    res.status(500).json({ error: 'Failed to update pool reminder' });
+  }
+});
+
 router.patch('/:id', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const poolId = req.params.id;
@@ -514,7 +1203,11 @@ router.patch('/:id', requireAuth, async (req, res) => {
         updates.ends_at = endDate.toISOString();
       }
     }
-    if (max_people !== undefined) updates.max_people = parseInt(max_people);
+    if (max_people !== undefined) {
+      updates.max_people = (max_people === null || max_people === '')
+        ? null
+        : parseInt(max_people);
+    }
     if (is_public !== undefined) updates.is_public = Boolean(is_public);
     if (status !== undefined && ['open', 'closed', 'cancelled'].includes(status)) {
       updates.status = status;
@@ -558,6 +1251,207 @@ router.delete('/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[POOLS] DELETE /:id', err);
     res.status(500).json({ error: 'Failed to cancel pool' });
+  }
+});
+
+// ── GET /api/pools/:id/messages — chat de la quedada ─────────────────────────
+router.get('/:id/messages', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const limit = parseInt(req.query.limit) || 60;
+
+  try {
+    // Solo los apuntados a la quedada pueden ver el chat
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para ver el chat' });
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .eq('pool_id', poolId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (error) throw error;
+
+    // Fecha en la que este usuario vació el chat (solo afecta a su propia vista)
+    const { data: clearData } = await supabase
+      .from('pool_conversation_clears')
+      .select('cleared_at')
+      .eq('user_id', userId)
+      .eq('pool_id', poolId)
+      .maybeSingle();
+
+    res.json({
+      messages: (data || []).map(message => ({
+        ...message,
+        sender: applyBatteryExpiry(message.sender),
+      })),
+      cleared_at: clearData?.cleared_at || null,
+    });
+  } catch (err) {
+    console.error('[POOLS] GET /:id/messages', err);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── POST /api/pools/:id/clear — vaciar chat de la quedada (solo para mí) ─────
+router.post('/:id/clear', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para vaciar el chat' });
+
+    const clearedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('pool_conversation_clears')
+      .upsert(
+        { user_id: userId, pool_id: poolId, cleared_at: clearedAt },
+        { onConflict: 'user_id,pool_id' }
+      );
+
+    if (error) throw error;
+    res.json({ success: true, cleared_at: clearedAt });
+  } catch (err) {
+    console.error('[POOLS] POST /:id/clear', err);
+    res.status(500).json({ error: 'Failed to clear chat' });
+  }
+});
+
+// ── POST /api/pools/:id/messages — enviar mensaje de texto al chat ──────────
+router.post('/:id/messages', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const { content, type = 'text' } = req.body;
+
+  if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
+  if (!['text'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para escribir en el chat' });
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .insert({ pool_id: poolId, sender_id: userId, content: content.trim(), type })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    // Responde ya mismo, y difunde en segundo plano (fire-and-forget)
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastPoolChatMessage({
+      poolId,
+      senderId: userId,
+      senderName,
+      content: data.content,
+      type: data.type,
+    }).catch(() => {});
+  } catch (err) {
+    console.error('[POOLS] POST /:id/messages', err);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── POST /api/pools/:id/messages/image — enviar una imagen al chat ──────────
+router.post('/:id/messages/image', requireAuth, (req, res, next) => {
+  _poolImageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Se requiere una imagen' });
+  }
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para escribir en el chat' });
+
+    const imageUrl = await storeImage({
+      file: req.file,
+      bucket: 'chat-images',
+      objectName: `pool/${poolId}/${Date.now()}`,
+      fallbackMaxLength: 8_000_000,
+    });
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .insert({
+        pool_id: poolId,
+        sender_id: userId,
+        content: imageUrl,
+        type: 'image',
+      })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      message: {
+        ...data,
+        sender: applyBatteryExpiry(data.sender),
+      },
+    });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastPoolChatMessage({
+      poolId,
+      senderId: userId,
+      senderName,
+      content: data.content,
+      type: 'image',
+    }).catch(() => {});
+  } catch (e) {
+    console.error('[POOLS] image upload error:', e);
+    return res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
   }
 });
 

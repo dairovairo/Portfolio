@@ -6,12 +6,21 @@ const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 
 const upload = createImageUpload({ maxSizeMb: 2 });
+const uploadMascotPreview = createImageUpload({ maxSizeMb: 2 });
 
 function uploadAvatar(req, res, next) {
   upload.single('avatar')(req, res, err => {
     if (!err) return next();
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return res.status(status).json({ error: err.message || 'No se pudo subir la imagen' });
+  });
+}
+
+function uploadMascotPreviewFile(req, res, next) {
+  uploadMascotPreview.single('mascot')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la mascota' });
   });
 }
 
@@ -37,6 +46,37 @@ router.post('/avatar', requireAuth, uploadAvatar, async (req, res) => {
   }
 });
 
+// POST /api/users/mascot-preview — sube el "retrato" de la mascota equipada
+// (ropa/calzado/gorro/accesorios/actividad, ya recoloreados y horneados en
+// un unico PNG por el cliente — ver lib/mascotRenderer.js ->
+// renderMascotOverlayBlob) para que aparezca en la tarjeta de amigo de los
+// demas (ver FriendCard.jsx). Si no se adjunta archivo (mascota base, sin
+// nada equipado) se interpreta como "sin personalizacion" y se limpia la
+// URL guardada.
+router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req, res) => {
+  try {
+    let url = null;
+    if (req.file) {
+      url = await storeImage({
+        file: req.file,
+        objectName: `mascot-previews/${req.user.id}`,
+        fallbackMaxLength: 3000000,
+      });
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update({ mascot_preview_url: url })
+      .eq('id', req.user.id);
+
+    if (error) throw error;
+
+    res.json({ url });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'No se pudo guardar la mascota' });
+  }
+});
+
 // POST /api/users/push-subscribe — store push subscription
 router.post('/push-subscribe', requireAuth, async (req, res) => {
   const { endpoint, p256dh, auth } = req.body;
@@ -44,12 +84,31 @@ router.post('/push-subscribe', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Missing subscription fields' });
   }
 
-  await supabase.from('push_subscriptions').upsert({
-    user_id: req.user.id,
-    endpoint,
-    p256dh,
-    auth,
-  }, { onConflict: 'user_id,endpoint' }).catch(() => {});
+  // NOTA: el query builder de supabase-js es "thenable" pero no una Promise
+  // real -- .catch() encadenado directamente sobre el builder (sin pasar
+  // antes por .then()) lanza "TypeError: ...catch is not a function" de
+  // forma SINCRONA. Al ocurrir dentro de un handler async, esto rechaza la
+  // promesa del handler sin que Express la capture -> unhandled rejection
+  // -> crash del proceso completo. Por eso se usa try/catch explicito.
+  try {
+    // onConflict va sobre 'endpoint' (no 'user_id,endpoint'): el endpoint
+    // identifica un navegador/dispositivo concreto, no un usuario. Si antes
+    // se resolvia por el par (user_id, endpoint), una segunda cuenta que
+    // iniciara sesion en el mismo dispositivo creaba una fila NUEVA en vez
+    // de tomar el control de esa suscripcion, y el dispositivo terminaba
+    // recibiendo los avisos de ambas cuentas (p. ej. recordatorios de
+    // quedadas/eventos a los que el usuario actual no esta inscrito).
+    // Con 'endpoint' como conflicto, volver a suscribirse siempre reasigna
+    // ese endpoint al usuario que ha iniciado sesion ahora.
+    await supabase.from('push_subscriptions').upsert({
+      user_id: req.user.id,
+      endpoint,
+      p256dh,
+      auth,
+    }, { onConflict: 'endpoint' });
+  } catch (err) {
+    console.error('[users] push-subscribe upsert error:', err);
+  }
 
   res.json({ success: true });
 });
@@ -83,7 +142,7 @@ router.get('/search', requireAuth, async (req, res) => {
 
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, display_name, avatar_url, bio, battery_level, battery_is_estimated, battery_updated_at, last_seen_at')
+    .select('id, username, avatar_url, bio, battery_level, battery_is_estimated, battery_updated_at, last_seen_at')
     .ilike('username', `%${q}%`)
     .neq('id', req.user.id)
     .limit(10);
@@ -97,6 +156,18 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
   const targetId = req.params.id;
 
   try {
+    // Check show_public_stats privacy setting (skip check when viewing own profile)
+    if (req.user.id !== targetId) {
+      const { data: privacyRow } = await supabase
+        .from('users')
+        .select('show_public_stats')
+        .eq('id', targetId)
+        .single();
+      if (privacyRow && privacyRow.show_public_stats === false) {
+        return res.json({ stats: null });
+      }
+    }
+
     const [friendsRes, createdRes, participationsRes, batteryRes, userRes] = await Promise.all([
       // Accepted friendships (both directions)
       supabase
@@ -156,7 +227,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('users')
     .select(`
-      id, username, display_name, bio, avatar_url,
+      id, username, bio, avatar_url, mascot_preview_url, mascot_name, interests, show_interests, show_public_stats, show_badges,
       battery_level, battery_is_estimated, battery_updated_at, last_seen_at, created_at,
       user_badges(badge_id, earned_at, badges(name, emoji, description, category))
     `)
@@ -164,16 +235,31 @@ router.get('/:id', requireAuth, async (req, res) => {
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'User not found' });
+
+  // Strip interests if the user has hidden them (only for other users, not for yourself)
+  if (req.user.id !== req.params.id && data.show_interests === false) {
+    data.interests = [];
+  }
+
+  // Strip badges if the user has hidden them (only for other users, not for yourself)
+  if (req.user.id !== req.params.id && data.show_badges === false) {
+    data.user_badges = [];
+  }
+
   res.json({ user: applyBatteryExpiry(data) });
 });
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { display_name, avatar_url, bio } = req.body;
+  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, mascot_name } = req.body;
   const updates = {};
-  if (display_name !== undefined) updates.display_name = display_name.trim().slice(0, 20);
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
+  if (interests !== undefined) updates.interests = Array.isArray(interests) ? interests : [];
+  if (mascot_name !== undefined) updates.mascot_name = (mascot_name && mascot_name.trim()) ? mascot_name.trim().slice(0, 20) : 'Volty';
+  if (show_interests !== undefined) updates.show_interests = Boolean(show_interests);
+  if (show_public_stats !== undefined) updates.show_public_stats = Boolean(show_public_stats);
+  if (show_badges !== undefined) updates.show_badges = Boolean(show_badges);
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });

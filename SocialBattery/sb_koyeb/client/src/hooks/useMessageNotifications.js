@@ -14,6 +14,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { ensurePushSubscription } from '../lib/pushSubscription';
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -65,6 +66,19 @@ function shouldNotify(currentPath, chatPath) {
   return !currentPath.startsWith(chatPath);
 }
 
+function formatReminderLead(minutes) {
+  const value = Number.parseInt(minutes, 10);
+  if (value >= 24 * 60 && value % (24 * 60) === 0) {
+    const days = value / (24 * 60);
+    return days === 1 ? '1 dia' : `${days} dias`;
+  }
+  if (value >= 60 && value % 60 === 0) {
+    const hours = value / 60;
+    return hours === 1 ? '1 hora' : `${hours} horas`;
+  }
+  return value === 1 ? '1 minuto' : `${value || 10} minutos`;
+}
+
 // ── main hook ─────────────────────────────────────────────────────────────────
 
 export function useMessageNotifications(profile, settings) {
@@ -85,6 +99,7 @@ export function useMessageNotifications(profile, settings) {
       // ── 1. Request permission ───────────────────────────────────────────────
       const permissionGranted = await ensurePermission();
       if (!permissionGranted || cancelled) return;
+      ensurePushSubscription().catch(() => {});
 
       // ── 2. Preload data we'll need for filtering ────────────────────────────
 
@@ -100,16 +115,6 @@ export function useMessageNotifications(profile, settings) {
           friendIds.add(f.requester_id === profile.id ? f.addressee_id : f.requester_id);
         });
       } catch (e) { console.warn('[notif] could not load friends:', e); }
-
-      // Group IDs the user belongs to
-      const groupIds = [];
-      try {
-        const { data } = await supabase
-          .from('friend_group_members')
-          .select('group_id')
-          .eq('user_id', profile.id);
-        (data || []).forEach(r => groupIds.push(r.group_id));
-      } catch (e) { console.warn('[notif] could not load groups:', e); }
 
       if (cancelled) return;
 
@@ -135,10 +140,10 @@ export function useMessageNotifications(profile, settings) {
           try {
             const { data } = await supabase
               .from('users')
-              .select('display_name, username')
+              .select('username')
               .eq('id', msg.sender_id)
               .single();
-            if (data) senderName = data.display_name || `@${data.username}`;
+            if (data) senderName = `@${data.username}`;
           } catch {}
 
           const body = msg.type === 'hangout_request'
@@ -150,46 +155,104 @@ export function useMessageNotifications(profile, settings) {
         .subscribe();
       channels.push(personalCh);
 
-      // ── 4. Group messages — one channel per group (required for RLS) ────────
-      for (const groupId of groupIds) {
-        const ch = supabase
-          .channel(`notif-group-${profile.id}-${groupId}`)
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'group_messages',
-            filter: `group_id=eq.${groupId}`,
-          }, async (payload) => {
-            const s = settingsRef.current;
-            if (s.muteAllNotifications || s.muteGroupChats) return;
+      // ── 3b. Message likes — broadcast per-user channel ──────────────────────
+      // The server broadcasts to `msg-like-notif-{userId}` (service key, no RLS)
+      // whenever someone likes a message this user sent — same instant-notify
+      // pattern as new_group_message / new_pool below. Reuses the personal-chat
+      // mute toggle since a like happens inside a 1:1 conversation.
+      const likeCh = supabase
+        .channel(`msg-like-notif-${profile.id}`)
+        .on('broadcast', { event: 'message_liked' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications || s.mutePersonalChats) return;
 
-            const msg = payload.new;
-            if (msg.sender_id === profile.id) return;
+          const data = msg.payload;
+          if (!data?.liker_id) return;
 
-            const chatPath = `/messages/group/${groupId}`;
-            if (!shouldNotify(locationRef.current, chatPath)) return;
+          const chatPath = `/messages/${data.liker_id}`;
+          if (!shouldNotify(locationRef.current, chatPath)) return;
 
-            let groupName  = 'Grupo';
-            let senderName = 'Alguien';
-            try {
-              const [groupRes, senderRes] = await Promise.all([
-                supabase.from('friend_groups').select('name').eq('id', groupId).single(),
-                supabase.from('users').select('display_name, username').eq('id', msg.sender_id).single(),
-              ]);
-              if (groupRes.data)  groupName  = groupRes.data.name;
-              if (senderRes.data) senderName = senderRes.data.display_name || `@${senderRes.data.username}`;
-            } catch {}
+          fireNotification({
+            title: data.liker_name || 'Alguien',
+            body:  '❤️ Le ha gustado tu mensaje',
+            tag:   `like-${data.message_id}`,
+            navigateTo: chatPath,
+          });
+        })
+        .subscribe();
+      channels.push(likeCh);
 
-            fireNotification({
-              title: groupName,
-              body:  `${senderName}: ${msg.content?.slice(0, 80) || '📩 Nuevo mensaje'}`,
-              tag:   `group-${groupId}`,
-              navigateTo: chatPath,
-            });
-          })
-          .subscribe();
-        channels.push(ch);
-      }
+      // ── 4. Group messages — broadcast per-user channel ──────────────────────
+      // The server broadcasts to `group-msg-notif-{userId}` for every group
+      // member using the service key (no RLS), exactly like the pools pattern.
+      // This replaces the previous per-group postgres_changes approach, which
+      // silently dropped events whenever RLS policies blocked the realtime rows.
+      const groupMsgBroadcastCh = supabase
+        .channel(`group-msg-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_group_message' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications || s.muteGroupChats) return;
+
+          const data = msg.payload;
+          if (!data?.group_id) return;
+          if (data.sender_id === profile.id) return;
+
+          const chatPath = `/messages/group/${data.group_id}`;
+          if (!shouldNotify(locationRef.current, chatPath)) return;
+
+          const groupName  = data.group_name  || 'Grupo';
+          const senderName = data.sender_name || 'Alguien';
+          const body = data.type === 'image'
+            ? `${senderName}: 📷 Imagen`
+            : `${senderName}: ${data.content?.slice(0, 80) || '📩 Nuevo mensaje'}`;
+
+          fireNotification({
+            title:      groupName,
+            body,
+            tag:        `group-${data.group_id}`,
+            navigateTo: chatPath,
+          });
+        })
+        .subscribe();
+      channels.push(groupMsgBroadcastCh);
+
+      // ── 4b. Pool chat messages — broadcast per-user channel ──────────────────
+      // El servidor emite un broadcast a `pool-chat-notif-{userId}` para cada
+      // apuntado a la quedada usando la service key (sin RLS), mismo patrón
+      // que los mensajes de grupo.
+      const poolMsgBroadcastCh = supabase
+        .channel(`pool-chat-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_pool_message' }, (msg) => {
+          const data = msg.payload;
+          if (!data?.pool_id) return;
+          if (data.sender_id === profile.id) return;
+
+          const chatPath = `/pools/${data.pool_id}/chat`;
+
+          // Emite un evento global para que el badge de "Quedadas" (dock,
+          // panel de la quedada y botón de chat) se actualice al instante,
+          // independientemente de si las notificaciones push están silenciadas.
+          window.dispatchEvent(new CustomEvent('sb-pool-message', { detail: data }));
+
+          const s = settingsRef.current;
+          if (s.muteAllNotifications) return;
+          if (!shouldNotify(locationRef.current, chatPath)) return;
+
+          const activityLabel = data.activity || 'la quedada';
+          const senderName = data.sender_name || 'Alguien';
+          const body = data.type === 'image'
+            ? `${senderName}: 📷 Imagen`
+            : `${senderName}: ${data.content?.slice(0, 80) || '📩 Nuevo mensaje'}`;
+
+          fireNotification({
+            title:      `💬 ${activityLabel}`,
+            body,
+            tag:        `pool-chat-${data.pool_id}`,
+            navigateTo: chatPath,
+          });
+        })
+        .subscribe();
+      channels.push(poolMsgBroadcastCh);
 
       // ── 5. Battery changes ──────────────────────────────────────────────────
       // Listen to updates on the users table and filter by preloaded friend IDs.
@@ -239,7 +302,7 @@ export function useMessageNotifications(profile, settings) {
             // Skip if the user is already on the home feed
             if (!document.hidden && locationRef.current === '/') return;
 
-            const name  = updated.display_name || `@${updated.username}` || 'Un amigo';
+            const name  = `@${updated.username}` || 'Un amigo';
             const level = updated.battery_level;
             const emoji = level >= 70 ? '⚡' : level >= 40 ? '🔋' : '🪫';
 
@@ -253,6 +316,78 @@ export function useMessageNotifications(profile, settings) {
           .subscribe();
         channels.push(batteryCh);
       }
+
+      // ── 6 & 7. Quedadas (públicas de amigos + invitaciones privadas) ──────────
+      // BUG #1 (arreglado): esto disparaba una notificación local (fireNotification)
+      // cada vez que llegaba el broadcast 'new_pool' / 'pool_join_request' — pero
+      // el servidor YA envía un webpush real para ese mismo evento en paralelo
+      // (ver notifyUsers + broadcastToUsers en server/routes/pools.js), y ese
+      // push llega igual con la app en foreground o background/cerrada. El
+      // resultado eran 2 notificaciones por cada invitación a una quedada. Se
+      // quitó fireNotification de aquí; el push del servidor es ahora la única
+      // notificación del sistema para este evento.
+      //
+      // BUG #2 (arreglado): este es el ÚNICO sitio del cliente que debe abrir el
+      // canal `pool-notif-{userId}` — Supabase reutiliza el canal si el topic ya
+      // existe, así que abrir un SEGUNDO canal con el mismo nombre en otro
+      // componente (como se probó en PoolInviteNotificationsContext) reutiliza
+      // este mismo objeto y su segundo .subscribe() rompe la suscripción
+      // entera (ni el badge ni nada más vuelve a recibir eventos). En vez de
+      // eso, este handler emite un evento de window para que otros
+      // componentes (el badge del dock) se enteren sin tocar Supabase.
+      const poolBroadcastCh = supabase
+        .channel(`pool-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_pool' }, (msg) => {
+          window.dispatchEvent(new CustomEvent('sb-pool-invite', { detail: msg.payload }));
+        })
+        .subscribe();
+      channels.push(poolBroadcastCh);
+
+      // ── 8. Recordatorios de quedadas y eventos de comunidad ─────────────────
+      // El servidor emite un broadcast al canal personal `reminder-{userId}` con
+      // la service key justo antes de que empiece la quedada (10 min) o el evento
+      // (24 h). El cliente lo recibe aquí y dispara la notificación local.
+      const reminderCh = supabase
+        .channel(`reminder-${profile.id}`)
+        .on('broadcast', { event: 'reminder' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications) return;
+
+          const data = msg.payload;
+          if (!data?.type) return;
+
+          if (data.type === 'pool') {
+            if (s.mutePoolReminders) return;
+
+            const leadMinutes = data.minutes_left || 10;
+            const leadLabel = formatReminderLead(leadMinutes);
+            const poolPath = `/pools?pool=${data.pool_id}`;
+            if (!document.hidden && locationRef.current === '/pools') return;
+            const poolBody = data.location ? `${data.activity} · ${data.location}` : data.activity;
+            fireNotification({
+              title: `⏰ Tu quedada empieza en ${leadLabel}`,
+              body:  poolBody,
+              tag:   `pool-reminder-${data.pool_id}-${leadMinutes}`,
+              navigateTo: poolPath,
+            });
+          } else if (data.type === 'event') {
+            if (s.muteEventReminders) return;
+
+            const leadMinutes = data.minutes_left || (data.hours_left ? data.hours_left * 60 : 24 * 60);
+            const leadLabel = formatReminderLead(leadMinutes);
+            const eventPath = `/community/event/${data.event_id}`;
+            if (!document.hidden && locationRef.current === eventPath) return;
+            const eventBody = data.location ? `${data.title} · ${data.location}` : data.title;
+            fireNotification({
+              title: `📅 Tu evento empieza en ${leadLabel}`,
+              body:  eventBody,
+              tag:   `event-reminder-${data.event_id}-${leadMinutes}`,
+              navigateTo: eventPath,
+            });
+          }
+        })
+        .subscribe();
+      channels.push(reminderCh);
     }
 
     setup();
