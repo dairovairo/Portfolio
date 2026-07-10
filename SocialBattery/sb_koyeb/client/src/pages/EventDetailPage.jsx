@@ -11,6 +11,7 @@ import { useMascot } from '../context/MascotContext';
 import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { getBatteryColor, getEffectiveBatteryLevel } from '../lib/battery';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import { supabase } from '../lib/supabase';
 
 function getMascotTier(level) {
   if (level <= 33) return 'low';
@@ -109,8 +110,61 @@ function InfoRow({ icon, label, children }) {
   );
 }
 
+// ── Poll options bar ─────────────────────────────────────────────────────────
+function PollOptions({ update, onVote, voting }) {
+  const poll = update.poll || {
+    options: update.poll_options || [],
+    votes: (update.poll_options || []).map(() => 0),
+    totalVotes: 0,
+    myVote: null,
+  };
+  const isVoting = voting === update.id;
+
+  return (
+    <div className="mt-2">
+      <p className="text-sm font-display font-semibold text-surface-text mb-2 flex items-center gap-1.5">
+        📊 {update.poll_question}
+      </p>
+      <div className="space-y-1.5">
+        {poll.options.map((opt, i) => {
+          const count = poll.votes[i] || 0;
+          const pct = poll.totalVotes ? Math.round((count / poll.totalVotes) * 100) : 0;
+          const mine = poll.myVote === i;
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={isVoting}
+              onClick={() => onVote(update.id, i, mine)}
+              className={`relative w-full text-left rounded-xl border overflow-hidden transition-all disabled:opacity-70 ${
+                mine ? 'border-accent-primary' : 'border-surface-border hover:border-accent-primary/40'
+              }`}
+            >
+              <div
+                className="absolute inset-y-0 left-0 bg-accent-primary/15 transition-all"
+                style={{ width: `${pct}%` }}
+              />
+              <div className="relative flex items-center justify-between gap-2 px-3 py-2">
+                <span className={`text-xs font-mono ${mine ? 'text-accent-glow font-semibold' : 'text-surface-text'}`}>
+                  {mine ? '✓ ' : ''}{opt}
+                </span>
+                <span className="text-[10px] font-mono text-surface-muted flex-shrink-0">{pct}% · {count}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] font-mono text-surface-muted mt-1.5">
+        🔴 En vivo · {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'}
+        {poll.myVote != null ? ' · toca tu opción otra vez para quitar el voto' : ''}
+      </p>
+    </div>
+  );
+}
+
 // ── Update bubble ─────────────────────────────────────────────────────────────
-function UpdateBubble({ update, isOwn, onDelete }) {
+function UpdateBubble({ update, isOwn, onDelete, onVote, voting }) {
+  const isPoll = !!update.poll_question;
   return (
     <div className="flex flex-col gap-1">
       <div className="bg-surface-card border border-surface-border rounded-2xl rounded-tl-sm overflow-hidden">
@@ -135,6 +189,7 @@ function UpdateBubble({ update, isOwn, onDelete }) {
           {update.content && (
             <p className="text-sm text-surface-text leading-relaxed whitespace-pre-wrap">{update.content}</p>
           )}
+          {isPoll && <PollOptions update={update} onVote={onVote} voting={voting} />}
         </div>
       </div>
       {isOwn && (
@@ -145,6 +200,128 @@ function UpdateBubble({ update, isOwn, onDelete }) {
           Eliminar
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Create poll modal ────────────────────────────────────────────────────────
+function CreatePollModal({ onClose, onCreate }) {
+  const [question, setQuestion] = useState('');
+  const [options, setOptions] = useState(['', '']);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function updateOption(i, value) {
+    setOptions(prev => prev.map((o, idx) => (idx === i ? value : o)));
+  }
+
+  function addOption() {
+    if (options.length >= 4) return;
+    setOptions(prev => [...prev, '']);
+  }
+
+  function removeOption(i) {
+    if (options.length <= 2) return;
+    setOptions(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function handleSubmit() {
+    if (saving) return;
+    setError('');
+    const cleanQuestion = question.trim();
+    const cleanOptions = options.map(o => o.trim()).filter(Boolean);
+    if (!cleanQuestion) return setError('Escribe una pregunta');
+    if (cleanOptions.length < 2) return setError('Añade al menos 2 opciones');
+    if (new Set(cleanOptions.map(o => o.toLowerCase())).size !== cleanOptions.length) {
+      return setError('Las opciones no pueden repetirse');
+    }
+    setSaving(true);
+    try {
+      await onCreate(cleanQuestion, cleanOptions);
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Error al crear la encuesta');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-xl">📊</span>
+          <div className="flex-1">
+            <h2 className="font-display font-bold text-surface-text">Nueva encuesta</h2>
+            <p className="text-xs text-surface-muted">Los asistentes votarán en tiempo real</p>
+          </div>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
+        </div>
+
+        <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Pregunta</label>
+        <input
+          type="text"
+          value={question}
+          onChange={e => setQuestion(e.target.value)}
+          placeholder="¿A qué hora quedamos?"
+          maxLength={200}
+          autoFocus
+          className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors mb-3"
+        />
+
+        <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Opciones</label>
+        <div className="space-y-2">
+          {options.map((opt, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={opt}
+                onChange={e => updateOption(i, e.target.value)}
+                placeholder={`Opción ${i + 1}`}
+                maxLength={60}
+                className="flex-1 bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+              {options.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => removeOption(i)}
+                  className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-400 transition-colors"
+                  title="Quitar opción"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {options.length < 4 && (
+          <button
+            type="button"
+            onClick={addOption}
+            className="mt-2 text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
+          >
+            + Añadir opción
+          </button>
+        )}
+
+        {error && <p className="mt-3 text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-semibold disabled:opacity-50 transition-all"
+          >
+            {saving ? 'Creando...' : '📊 Crear encuesta'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -415,6 +592,8 @@ export default function EventDetailPage() {
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [votingUpdateId, setVotingUpdateId] = useState(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchEvent = useCallback(async () => {
@@ -450,6 +629,58 @@ export default function EventDetailPage() {
   useEffect(() => {
     updatesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [updates.length]);
+
+  // Realtime: nuevas actualizaciones/encuestas publicadas por el organizador
+  // (las que publica el propio usuario ya se añaden localmente al instante).
+  useEffect(() => {
+    if (!eventId) return;
+    const channel = supabase
+      .channel(`event-updates-${eventId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'event_updates',
+        filter: `event_id=eq.${eventId}`,
+      }, async (payload) => {
+        if (payload.new?.creator_id === profile?.id) return;
+        const { data } = await supabase
+          .from('event_updates')
+          .select(`id, content, image_url, poll_question, poll_options, created_at, creator_id, creator:users!event_updates_creator_id_fkey(username, avatar_url)`)
+          .eq('id', payload.new.id)
+          .single();
+        if (!data) return;
+        if (data.poll_question) {
+          data.poll = { options: data.poll_options || [], votes: (data.poll_options || []).map(() => 0), totalVotes: 0, myVote: null };
+        }
+        setUpdates(prev => (prev.some(u => u.id === data.id) ? prev : [...prev, data]));
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [eventId, profile?.id]);
+
+  // Realtime: recuentos de votos en vivo para las encuestas de este evento
+  useEffect(() => {
+    if (!eventId) return;
+    const channel = supabase
+      .channel(`event-poll-votes-${eventId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'event_poll_votes',
+        filter: `event_id=eq.${eventId}`,
+      }, async (payload) => {
+        const updateId = payload.new?.update_id || payload.old?.update_id;
+        if (!updateId) return;
+        try {
+          const data = await api.get(`/community/events/${eventId}/updates/${updateId}/poll`);
+          setUpdates(prev => prev.map(u => (u.id === updateId ? { ...u, poll: data.poll } : u)));
+        } catch {
+          // non-critical
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [eventId]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const isCreator = event?.creator_id === profile?.id;
@@ -603,6 +834,27 @@ export default function EventDetailPage() {
       setUpdates(prev => prev.filter(u => u.id !== updateId));
     } catch (e) {
       showToast(e.message || 'Error al eliminar', 'error');
+    }
+  }
+
+  async function handleCreatePoll(question, options) {
+    const data = await api.post(`/community/events/${eventId}/polls`, { question, options });
+    setUpdates(prev => [...prev, data.update]);
+    showToast('Encuesta publicada 📊', 'success');
+  }
+
+  async function handleVote(updateId, optionIndex, isMine) {
+    if (votingUpdateId) return;
+    setVotingUpdateId(updateId);
+    try {
+      const data = isMine
+        ? await api.delete(`/community/events/${eventId}/updates/${updateId}/vote`)
+        : await api.post(`/community/events/${eventId}/updates/${updateId}/vote`, { optionIndex });
+      setUpdates(prev => prev.map(u => (u.id === updateId ? { ...u, poll: data.poll } : u)));
+    } catch (e) {
+      showToast(e.message || 'Error al votar', 'error');
+    } finally {
+      setVotingUpdateId(null);
     }
   }
 
@@ -900,6 +1152,8 @@ export default function EventDetailPage() {
                   update={update}
                   isOwn={update.creator_id === profile?.id}
                   onDelete={handleDeleteUpdate}
+                  onVote={handleVote}
+                  voting={votingUpdateId}
                 />
               ))}
               <div ref={updatesEndRef} />
@@ -978,6 +1232,13 @@ export default function EventDetailPage() {
                   >
                     📷 {selectedImage ? '1 foto' : 'Foto'}
                   </button>
+                  <button
+                    onClick={() => setShowPollModal(true)}
+                    title="Crear encuesta"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono border-surface-border text-slate-500 hover:border-accent-primary/30 hover:text-accent-glow transition-all"
+                  >
+                    📊
+                  </button>
                 </div>
                 <button
                   onClick={handlePostUpdate}
@@ -997,6 +1258,13 @@ export default function EventDetailPage() {
           event={event}
           onClose={() => setShowRenewModal(false)}
           onRenewed={() => fetchEvent()}
+        />
+      )}
+
+      {showPollModal && (
+        <CreatePollModal
+          onClose={() => setShowPollModal(false)}
+          onCreate={handleCreatePoll}
         />
       )}
     </div>
