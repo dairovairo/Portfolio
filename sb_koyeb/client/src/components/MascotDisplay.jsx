@@ -441,8 +441,16 @@ export default function MascotDisplay({
         // Tamaño base: width=126%, height=49% (aumentado un 40% respecto al
         // ajuste inicial de 90%/35%). left=-13% para centrar.
         // top base=62%; las variantes con rinonOffsetY suman ese valor al top.
+        // Ajuste posterior: subida un 5%, movida a la derecha un 20% y
+        // agrandada un 15% (manteniendo el mismo centro visual que antes de
+        // agrandar, igual que se hizo con la pajarita — left/top recalculados
+        // para que el 15% extra crezca desde el centro, no desde la esquina).
+        // Centro anterior: cx=50 (=-13+126/2), cy=86.5 (=62+49/2).
+        // Nuevo centro tras subir 5 y mover 20 a la derecha: cx=70, cy=81.5.
+        // Nuevo tamaño: width=144.9% (126*1.15), height=56.35% (49*1.15).
+        // Nuevo left = cx - width/2 = -2.45; nuevo top base = cy - height/2 = 53.325.
         if (acc.isRinon) {
-          const rinonTop = 62 + (acc.rinonOffsetY ?? 0);
+          const rinonTop = 53.325 + (acc.rinonOffsetY ?? 0);
           return (
             <ColorizedImage
               key={acc.id}
@@ -452,10 +460,10 @@ export default function MascotDisplay({
               draggable={false}
               className="absolute select-none pointer-events-none"
               style={{
-                left: '-13%',
-                width: '126%',
+                left: '-2.45%',
+                width: '144.9%',
                 top: `${rinonTop}%`,
-                height: '49%',
+                height: '56.35%',
                 objectFit: 'contain',
                 objectPosition: 'center',
               }}
