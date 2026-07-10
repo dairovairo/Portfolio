@@ -1027,9 +1027,10 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const hasPrivateTarget = !form.is_public && (form.group_id || form.invited_user_ids.length > 0);
 
   async function handleSubmit() {
-    if (!form.activity.trim()) { setError('La actividad es obligatoria'); return; }
-    if (!form.scheduled_at) { setError('La fecha es obligatoria'); return; }
-    if (!form.location_hint.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (!form.activity.trim() || !form.scheduled_at || !form.location_hint.trim()) {
+      setError('Introduce todos los campos obligatorios primero');
+      return;
+    }
     if (form.ends_at && new Date(form.ends_at) <= new Date(form.scheduled_at)) {
       setError('La fecha fin debe ser posterior al inicio');
       return;

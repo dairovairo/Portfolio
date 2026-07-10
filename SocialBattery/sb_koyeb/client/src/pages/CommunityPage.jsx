@@ -592,14 +592,15 @@ function CreateEventModal({ onClose, onCreate }) {
   }
 
   async function handleSubmit() {
-    if (!form.title.trim()) { setError('El título es obligatorio'); return; }
-    if (!form.event_date) { setError('La fecha es obligatoria'); return; }
-    if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim()) {
+      setError('Introduce todos los campos obligatorios primero');
+      return;
+    }
     if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
     }
-    if (form.ends_at && new Date(form.ends_at) <= new Date(form.event_date)) {
+    if (new Date(form.ends_at) <= new Date(form.event_date)) {
       setError('La fecha fin debe ser posterior al inicio');
       return;
     }
@@ -723,7 +724,7 @@ function CreateEventModal({ onClose, onCreate }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin *</label>
               <input
                 type="datetime-local"
                 value={form.ends_at}
@@ -1028,7 +1029,7 @@ function CreateEventModal({ onClose, onCreate }) {
 
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim() || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
+            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '🌐 Publicar evento'}

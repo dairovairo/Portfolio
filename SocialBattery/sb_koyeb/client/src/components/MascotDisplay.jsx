@@ -447,11 +447,12 @@ export default function MascotDisplay({
         // left=-3.0725, top=51.91625, width=152.145, height=59.1675.
         // Ajuste 3: otros 3% a la derecha (solo traslación, sin cambio de
         // tamaño). left=-3.0725+3=-0.0725; top/width/height sin cambios.
+        // Ajuste 4: otro 2% a la derecha (solo traslación). left=-0.0725+2=1.9275.
         // top base final=51.91625%; las variantes con rinonOffsetY suman ese
         // valor al top.
         if (acc.isRinon) {
           // Caja base compartida por todas las riñoneras.
-          const baseLeft = -0.0725;
+          const baseLeft = 1.9275;
           const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
           const baseWidth = 152.145;
           const baseHeight = 59.1675;
