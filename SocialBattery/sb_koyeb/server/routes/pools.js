@@ -308,12 +308,7 @@ router.get('/', requireAuth, async (req, res) => {
 // Cuenta las quedadas privadas donde el usuario ha sido invitado
 // (pool_invitees) pero aún no se ha unido y la quedada sigue abierta/futura.
 // Usado por PoolInviteNotificationsContext para el badge del dock inferior
-// y del tab "Activos".
-//
-// Devuelve también `ids` (los pool_id concretos, no solo el nº total) para
-// que el cliente pueda marcar invitaciones individuales como "vistas" al
-// entrar en la sección de Quedadas, sin perder el badge de una invitación
-// nueva que llegue después. Ver PoolInviteNotificationsContext.
+// y del tab "Activos" cuando la página de Quedadas no está montada.
 router.get('/invites/count', requireAuth, async (req, res) => {
   const userId = req.user.id;
   try {
@@ -322,7 +317,7 @@ router.get('/invites/count', requireAuth, async (req, res) => {
       .select('pool_id')
       .eq('user_id', userId);
     const poolIds = [...new Set((invites || []).map(i => i.pool_id))];
-    if (!poolIds.length) return res.json({ count: 0, ids: [] });
+    if (!poolIds.length) return res.json({ count: 0 });
 
     const { data: joined } = await supabase
       .from('pool_participants')
@@ -331,20 +326,88 @@ router.get('/invites/count', requireAuth, async (req, res) => {
       .in('pool_id', poolIds);
     const joinedIds = new Set((joined || []).map(j => j.pool_id));
     const pendingIds = poolIds.filter(id => !joinedIds.has(id));
-    if (!pendingIds.length) return res.json({ count: 0, ids: [] });
+    if (!pendingIds.length) return res.json({ count: 0 });
 
-    const { data: openPools } = await supabase
+    const { count } = await supabase
       .from('hangout_pools')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .in('id', pendingIds)
       .in('status', ['open', 'full'])
       .gt('scheduled_at', new Date().toISOString());
 
-    const activeIds = (openPools || []).map(p => p.id);
-    res.json({ count: activeIds.length, ids: activeIds });
+    res.json({ count: count || 0 });
   } catch (err) {
     console.error('[POOLS] GET /invites/count', err);
     res.status(500).json({ error: 'Failed to fetch invite count' });
+  }
+});
+
+// ── GET /api/pools/notifications/count — nº de quedadas nuevas sin ver ──────
+// Cuenta las quedadas creadas después de `since` (ISO timestamp) sobre las
+// que el usuario ha recibido una notificación de creación — quedadas
+// públicas de un amigo O quedadas privadas a las que se le ha invitado —
+// y a las que aún no se ha unido.
+//
+// BUG (arreglado): el badge de "Quedadas" (dock inferior + tab "Activos")
+// usaba /invites/count, que SOLO contaba invitaciones privadas
+// (pool_invitees). Pero el servidor manda exactamente la misma
+// notificación ("🎉 Fulano propone una quedada", ver broadcastToUsers más
+// abajo) tanto para quedadas privadas con invitación como para quedadas
+// públicas notificadas a los amigos del creador — y estas últimas nunca
+// generan fila en pool_invitees, así que el badge nunca aparecía para
+// ellas aunque la notificación sí llegara. Este endpoint sustituye a
+// /invites/count como fuente del badge y cubre ambos casos.
+router.get('/notifications/count', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const since = req.query.since;
+  const sinceDate = since ? new Date(since) : null;
+  if (!sinceDate || Number.isNaN(sinceDate.getTime())) {
+    return res.json({ count: 0 });
+  }
+
+  try {
+    const friendIds = await getFriendIds(userId);
+
+    const { data: myInvites } = await supabase
+      .from('pool_invitees')
+      .select('pool_id')
+      .eq('user_id', userId);
+    const invitedIds = [...new Set((myInvites || []).map(i => i.pool_id))];
+
+    const orParts = [];
+    if (friendIds.length) {
+      orParts.push(`and(is_public.eq.true,creator_id.in.(${friendIds.join(',')}))`);
+    }
+    if (invitedIds.length) {
+      orParts.push(`id.in.(${invitedIds.join(',')})`);
+    }
+    if (!orParts.length) return res.json({ count: 0 });
+
+    const { data: candidatePools, error } = await supabase
+      .from('hangout_pools')
+      .select('id')
+      .neq('creator_id', userId)
+      .gt('created_at', sinceDate.toISOString())
+      .gt('scheduled_at', new Date().toISOString())
+      .in('status', ['open', 'full'])
+      .or(orParts.join(','));
+
+    if (error) throw error;
+    const candidateIds = (candidatePools || []).map(p => p.id);
+    if (!candidateIds.length) return res.json({ count: 0 });
+
+    const { data: joined } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('user_id', userId)
+      .in('pool_id', candidateIds);
+    const joinedIds = new Set((joined || []).map(j => j.pool_id));
+
+    const count = candidateIds.filter(id => !joinedIds.has(id)).length;
+    res.json({ count });
+  } catch (err) {
+    console.error('[POOLS] GET /notifications/count', err);
+    res.status(500).json({ error: 'Failed to fetch notifications count' });
   }
 });
 

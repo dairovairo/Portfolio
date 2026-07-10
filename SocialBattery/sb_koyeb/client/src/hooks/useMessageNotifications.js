@@ -347,21 +347,9 @@ export function useMessageNotifications(profile, settings) {
       // El servidor emite un broadcast al canal personal `reminder-{userId}` con
       // la service key justo antes de que empiece la quedada (10 min) o el evento
       // (24 h). El cliente lo recibe aquí y dispara la notificación local.
-      //
-      // Re-verificación defensiva: el servidor (server/jobs/reminders.js) ya
-      // construye la lista de destinatarios a partir de pool_participants /
-      // community_event_attendees, así que en condiciones normales este
-      // broadcast solo llega a quien sigue inscrito. Pero el broadcast va al
-      // canal personal del usuario, no por quedada/evento — si el usuario
-      // abandona la quedada o se da de baja del evento en el margen entre el
-      // envío y la recepción (o en otra pestaña/dispositivo), el aviso local
-      // ya no debería mostrarse aunque el mensaje haya llegado. Por eso se
-      // comprueba aquí, igual que ya se hace con `isAttending` para
-      // event_updates en CommunityNotificationsContext, en vez de fiarse
-      // ciegamente del payload.
       const reminderCh = supabase
         .channel(`reminder-${profile.id}`)
-        .on('broadcast', { event: 'reminder' }, async (msg) => {
+        .on('broadcast', { event: 'reminder' }, (msg) => {
           const s = settingsRef.current;
           if (s.muteAllNotifications) return;
 
@@ -369,15 +357,7 @@ export function useMessageNotifications(profile, settings) {
           if (!data?.type) return;
 
           if (data.type === 'pool') {
-            if (s.mutePoolReminders || !data.pool_id) return;
-
-            const { data: participant } = await supabase
-              .from('pool_participants')
-              .select('pool_id')
-              .eq('pool_id', data.pool_id)
-              .eq('user_id', profile.id)
-              .maybeSingle();
-            if (!participant) return; // ya no estás en la quedada — no notificar
+            if (s.mutePoolReminders) return;
 
             const leadMinutes = data.minutes_left || 10;
             const leadLabel = formatReminderLead(leadMinutes);
@@ -391,15 +371,7 @@ export function useMessageNotifications(profile, settings) {
               navigateTo: poolPath,
             });
           } else if (data.type === 'event') {
-            if (s.muteEventReminders || !data.event_id) return;
-
-            const { data: attendee } = await supabase
-              .from('community_event_attendees')
-              .select('event_id')
-              .eq('event_id', data.event_id)
-              .eq('user_id', profile.id)
-              .maybeSingle();
-            if (!attendee) return; // ya no estás apuntado al evento — no notificar
+            if (s.muteEventReminders) return;
 
             const leadMinutes = data.minutes_left || (data.hours_left ? data.hours_left * 60 : 24 * 60);
             const leadLabel = formatReminderLead(leadMinutes);

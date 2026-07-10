@@ -6,41 +6,31 @@ import { supabase } from '../lib/supabase';
 /**
  * PoolInviteNotificationsContext
  *
- * Lleva la cuenta de cuántas quedadas privadas tienen invitaciones
- * pendientes para el usuario (está en pool_invitees pero aún no se ha
- * unido). A diferencia de PoolChatNotificationsContext, el conjunto de
- * invitaciones pendientes (`pendingIds`) es un dato derivado del estado
- * real en el servidor (GET /pools/invites/count, que ahora también
- * devuelve `ids`), no algo que el cliente pueda inventar — no hace falta
- * lógica de "marcar como visto" para saber que una invitación existe, esa
- * parte desaparece sola en cuanto el usuario se une (o pierde acceso).
+ * Lleva la cuenta de cuántas notificaciones de "creación de quedada" sin ver
+ * tiene el usuario — tanto quedadas públicas de un amigo como invitaciones a
+ * quedadas privadas — y a las que aún no se ha unido.
  *
- * Lo que SÍ se marca localmente es qué invitaciones ya ha *visto* el
- * usuario (`seenIds`, persistido en localStorage) — así, al entrar en la
- * sección de Quedadas, el badge desaparece aunque el usuario todavía no se
- * haya unido a esas quedadas. Si llega una invitación nueva después, vuelve
- * a aparecer, porque esa invitación no está en `seenIds`.
- *
- * El badge resultante (`poolInviteBadgeCount` = pendientes - vistas) se usa
- * en dos sitios:
+ * El badge resultante se usa en dos sitios, que SIEMPRE muestran el mismo
+ * número porque ambos leen de aquí (antes cada uno calculaba el suyo por
+ * separado y se desincronizaban):
  *   1. El icono "Quedadas" del dock inferior (BottomNav).
  *   2. El tab "🌐 Activos" dentro de PoolsPage.jsx.
- * Ambos leen directamente de aquí, así que se sincronizan solos: no hace
- * falta que PoolsPage calcule su propio conteo a partir de `pool.is_invited`.
- * PoolsPage llama a `markPoolInvitesSeen()` al montar para vaciar ambos
- * badges (ver comentario en ese archivo).
  *
- * BUG (arreglado, fase anterior): el dock se quedaba siempre en 0 aunque el
- * tab "Activos" sí mostrara el badge. El tab se refrescaba a través del
- * canal 'pools-realtime' de PoolsPage.jsx, que escucha postgres_changes
- * sobre hangout_pools/pool_participants — canales que sí reciben eventos.
- * Este contexto, en cambio, dependía solo de postgres_changes sobre
- * pool_invitees, que por lo visto no llega de forma fiable (¿RLS de
- * Realtime sin política de SELECT para el invitado en esa tabla?). Como
- * red fiable escuchamos también el evento de window 'sb-pool-invite', que
- * useMessageNotifications.js emite al recibir el broadcast personal
- * `pool-notif-{userId}` que el servidor ya usa para el push (ese canal usa
- * la service key y no depende de RLS, así que sí llega siempre).
+ * BUG #1 (arreglado): el conteo salía de GET /pools/invites/count, que SOLO
+ * contaba invitaciones privadas (pool_invitees). Pero el servidor manda la
+ * misma notificación ("🎉 Fulano propone una quedada") tanto para invitaciones
+ * privadas como para quedadas públicas notificadas a los amigos del creador
+ * — y estas últimas nunca generan fila en pool_invitees, así que el badge
+ * nunca aparecía para ellas pese a que la notificación sí llegaba. Ahora se
+ * usa GET /pools/notifications/count?since=..., que cubre ambos casos.
+ *
+ * BUG #2 (arreglado): no existía forma de "marcar como visto" — el badge solo
+ * bajaba si el usuario se unía a la quedada, así que si entrabas al tab
+ * "Activos" sin unirte, el badge se quedaba puesto. Ahora se guarda un
+ * timestamp "última vez visto" (localStorage, por usuario) y
+ * markPoolNotificationsSeen() lo actualiza a "ahora" — PoolsPage.jsx lo llama
+ * al montar (= entrar en el menú Quedadas), y eso vacía el badge en ambos
+ * sitios a la vez porque comparten este mismo estado.
  *
  * IMPORTANTE: NO abrir aquí un canal de Supabase con el mismo nombre
  * `pool-notif-{userId}` — ese canal ya lo abre y suscribe
@@ -53,72 +43,51 @@ import { supabase } from '../lib/supabase';
 const PoolInviteNotificationsContext = createContext({
   poolInviteBadgeCount: 0,
   refreshPoolInviteBadge: () => {},
-  markPoolInvitesSeen: () => {},
+  markPoolNotificationsSeen: () => {},
 });
 
 export function usePoolInviteNotifications() {
   return useContext(PoolInviteNotificationsContext);
 }
 
-const STORAGE_KEY_SEEN = 'sb_pool_invite_seen'; // Set<poolId> serializado como array JSON
-
-function loadSeenSet() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_SEEN);
-    return raw ? new Set(JSON.parse(raw)) : new Set();
-  } catch { return new Set(); }
+function storageKey(userId) {
+  return `sb_pools_notif_last_seen:${userId}`;
 }
 
-function saveSeenSet(set) {
-  try { localStorage.setItem(STORAGE_KEY_SEEN, JSON.stringify([...set])); } catch {}
+function loadLastSeen(userId) {
+  try { return localStorage.getItem(storageKey(userId)); } catch { return null; }
+}
+
+function saveLastSeen(userId, iso) {
+  try { localStorage.setItem(storageKey(userId), iso); } catch { /* non-fatal */ }
 }
 
 export function PoolInviteNotificationsProvider({ children }) {
   const { profile } = useAuth();
-  const [pendingIds, setPendingIds] = useState([]);
-  const [seenIds, setSeenIds] = useState(loadSeenSet);
-  const pendingIdsRef = useRef([]);
+  const [count, setCount] = useState(0);
   const refreshTimerRef = useRef(null);
   const channelRef = useRef(null);
 
-  useEffect(() => { pendingIdsRef.current = pendingIds; }, [pendingIds]);
-
-  useEffect(() => { saveSeenSet(seenIds); }, [seenIds]);
-
-  // Limpieza: si una invitación ya no está pendiente (el usuario se unió, la
-  // quitaron, o la quedada se cerró), no tiene sentido seguir guardando su id
-  // como "vista" — se poda del set para que no crezca sin límite.
-  useEffect(() => {
-    setSeenIds(prev => {
-      const pendingSet = new Set(pendingIds);
-      const next = new Set([...prev].filter(id => pendingSet.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [pendingIds]);
-
-  const poolInviteBadgeCount = pendingIds.filter(id => !seenIds.has(id)).length;
-
   const refreshPoolInviteBadge = useCallback(async () => {
-    if (!profile?.id) { setPendingIds([]); return; }
+    if (!profile?.id) { setCount(0); return; }
+
+    // Primera vez que este usuario usa la app en este dispositivo: no hay
+    // "última vez visto" guardado. Lo inicializamos a "ahora" en vez de
+    // contar todo el historial de quedadas — el badge arranca en 0 y solo
+    // sube con quedadas creadas a partir de este momento.
+    let lastSeen = loadLastSeen(profile.id);
+    if (!lastSeen) {
+      lastSeen = new Date().toISOString();
+      saveLastSeen(profile.id, lastSeen);
+      setCount(0);
+      return;
+    }
+
     try {
-      const { ids } = await api.get('/pools/invites/count');
-      setPendingIds(Array.isArray(ids) ? ids : []);
+      const { count: n } = await api.get(`/pools/notifications/count?since=${encodeURIComponent(lastSeen)}`);
+      setCount(n || 0);
     } catch { /* non-fatal — se reintentará en el próximo evento realtime */ }
   }, [profile?.id]);
-
-  // Marca como vistas todas las invitaciones pendientes conocidas ahora
-  // mismo — se llama al entrar en la sección de Quedadas (PoolsPage), así
-  // ambos badges (dock + tab "Activos") desaparecen de golpe.
-  const markPoolInvitesSeen = useCallback(() => {
-    setSeenIds(prev => {
-      const next = new Set(prev);
-      let changed = false;
-      pendingIdsRef.current.forEach(id => {
-        if (!next.has(id)) { next.add(id); changed = true; }
-      });
-      return changed ? next : prev;
-    });
-  }, []);
 
   useEffect(() => { refreshPoolInviteBadge(); }, [refreshPoolInviteBadge]);
 
@@ -131,6 +100,15 @@ export function PoolInviteNotificationsProvider({ children }) {
       refreshPoolInviteBadge();
     }, 500);
   }, [refreshPoolInviteBadge]);
+
+  // Marca todas las notificaciones de quedadas como vistas — se llama al
+  // entrar en el menú Quedadas (PoolsPage.jsx), y limpia el badge del dock
+  // inferior Y el del tab "Activos" a la vez, porque ambos leen `count`.
+  const markPoolNotificationsSeen = useCallback(() => {
+    if (!profile?.id) return;
+    saveLastSeen(profile.id, new Date().toISOString());
+    setCount(0);
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -157,6 +135,7 @@ export function PoolInviteNotificationsProvider({ children }) {
     // broadcast personal `pool-notif-{userId}` (mismo canal que usa el push
     // del servidor, sin depender de RLS). No abrimos un canal de Supabase
     // aquí a propósito — ver comentario del bloque de arriba del archivo.
+    // Se dispara tanto para quedadas públicas como privadas.
     const handleInviteBroadcast = () => scheduleRefresh();
     window.addEventListener('sb-pool-invite', handleInviteBroadcast);
 
@@ -176,9 +155,9 @@ export function PoolInviteNotificationsProvider({ children }) {
   return (
     <PoolInviteNotificationsContext.Provider
       value={{
-        poolInviteBadgeCount,
+        poolInviteBadgeCount: count,
         refreshPoolInviteBadge,
-        markPoolInvitesSeen,
+        markPoolNotificationsSeen,
       }}
     >
       {children}
