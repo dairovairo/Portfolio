@@ -143,6 +143,9 @@ function filterTable() {
 </html>
 """
 
+# Nombres de las columnas de tiradas, en orden de aparición en la tabla (S1 -> S8)
+SERIES_COLS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+
 def format_elapsed(delta_seconds):
     delta_seconds = int(delta_seconds)
     if delta_seconds < 60:
@@ -162,22 +165,20 @@ def view_data():
     df = pd.read_csv(CSV_URL, skiprows=5)
     df = df.dropna(how="all")
 
-    # Columnas esperadas con hasta 5 tiradas
-    expected_cols = ['Numero', 'Dorsal', 'Tirador', 'Categoria',
-                     'S1', 'S2', 'S3', 'S4', 'S5',
-                     'Total', 'Final', 'Total2']
+    # Columnas esperadas con hasta 8 tiradas
+    expected_cols = ['Numero', 'Dorsal', 'Tirador', 'Categoria'] + SERIES_COLS + ['Total', 'Final', 'Total2']
     df.columns = expected_cols[:len(df.columns)]
     df = df.fillna("")
 
     # Conversión a int de Total y tiradas
     if "Total" in df.columns:
         df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(int)
-    for s in ['S1', 'S2', 'S3', 'S4', 'S5']:
+    for s in SERIES_COLS:
         if s in df.columns:
             df[s] = pd.to_numeric(df[s], errors='coerce').fillna(0).astype(int)
 
-    # Tiradas realmente presentes con datos
-    tiradas = [s for s in ['S5', 'S4', 'S3', 'S2', 'S1']
+    # Tiradas realmente presentes con datos (de la más reciente a la más antigua, para desempates)
+    tiradas = [s for s in reversed(SERIES_COLS)
                if s in df.columns and df[s].sum() > 0]
 
     df_sorted = (
@@ -196,7 +197,7 @@ def view_data():
 
     # Columnas visibles → ocultamos tiradas sin datos
     columnas_visibles = [c for c in df_sorted.columns
-                         if not (c in ['S1','S2','S3','S4','S5'] and df_sorted[c].sum() == 0)]
+                         if not (c in SERIES_COLS and df_sorted[c].sum() == 0)]
 
     filas = df_sorted[columnas_visibles].to_numpy().tolist()
     categoria_idx = columnas_visibles.index('Categoria')
@@ -216,7 +217,3 @@ def view_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001)
-
-
-
-
