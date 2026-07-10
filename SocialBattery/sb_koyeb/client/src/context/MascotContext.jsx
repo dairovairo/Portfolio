@@ -1052,9 +1052,9 @@ export const MASCOT_ACCESSORIES = [
     rinonOffsetY: -10,
     // El PNG de esta riñonera deja más margen interno que el resto y se
     // veía más pequeña en la tienda: +4% de tamaño (recentrado) y 2% más
-    // a la izquierda.
+    // a la izquierda. Ajustada 1% más a la derecha (-2 → -1).
     rinonScale: 1.04,
-    rinonOffsetX: -2,
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_negra',
@@ -1068,9 +1068,9 @@ export const MASCOT_ACCESSORIES = [
     // Subida un 10% respecto al top base del grupo.
     rinonOffsetY: -10,
     // Mismo ajuste que la riñonera blanca: +4% de tamaño (recentrado) y
-    // 2% más a la izquierda.
+    // 2% más a la izquierda. Ajustada 1% más a la derecha (-2 → -1).
     rinonScale: 1.04,
-    rinonOffsetX: -2,
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_roja',

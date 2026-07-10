@@ -592,10 +592,10 @@ function CreateEventModal({ onClose, onCreate }) {
   }
 
   async function handleSubmit() {
-    if (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim()) {
-      setError('Introduce todos los campos obligatorios primero');
-      return;
-    }
+    if (!form.title.trim()) { setError('El título es obligatorio'); return; }
+    if (!form.event_date) { setError('La fecha es obligatoria'); return; }
+    if (!form.ends_at) { setError('La fecha fin es obligatoria'); return; }
+    if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
     if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
@@ -1025,6 +1025,10 @@ function CreateEventModal({ onClose, onCreate }) {
             <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">
               {error}
             </p>
+          )}
+
+          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())) && (
+            <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
           )}
 
           <button

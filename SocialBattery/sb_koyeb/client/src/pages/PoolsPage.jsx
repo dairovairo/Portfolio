@@ -1027,10 +1027,9 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const hasPrivateTarget = !form.is_public && (form.group_id || form.invited_user_ids.length > 0);
 
   async function handleSubmit() {
-    if (!form.activity.trim() || !form.scheduled_at || !form.location_hint.trim()) {
-      setError('Introduce todos los campos obligatorios primero');
-      return;
-    }
+    if (!form.activity.trim()) { setError('La actividad es obligatoria'); return; }
+    if (!form.scheduled_at) { setError('La fecha es obligatoria'); return; }
+    if (!form.location_hint.trim()) { setError('La ubicacion es obligatoria'); return; }
     if (form.ends_at && new Date(form.ends_at) <= new Date(form.scheduled_at)) {
       setError('La fecha fin debe ser posterior al inicio');
       return;
@@ -1255,6 +1254,10 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
           )}
 
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
+
+          {!error && (!form.activity.trim() || !form.location_hint.trim()) && (
+            <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
+          )}
 
           <button onClick={handleSubmit} disabled={saving || !form.activity.trim() || !form.location_hint.trim()}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text font-display font-bold text-sm transition-all disabled:opacity-50">
