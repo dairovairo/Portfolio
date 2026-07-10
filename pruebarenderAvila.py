@@ -4,8 +4,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBdLOhcSFwA9NF_FIQ2bVbmOmr5g6pnGJXmqzn9pwc8T1fkR7qdATo0A7i2C4Vmg/pub?gid=110548680&single=true&output=csv"
-
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwfK4QWU_HiIjo3c5B0Q5lvxBTDugYzFkqRfgUZuleAPwtdul_TQS6Oj7WVfUc8g/pub?gid=1697421060&single=true&output=csv"
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
