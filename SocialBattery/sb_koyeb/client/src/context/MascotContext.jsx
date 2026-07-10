@@ -62,9 +62,38 @@ function saveSkinState(userId, state) {
   } catch {}
 }
 
-function loadFeetCustomizations() {
+// ── Migración de las claves de personalización a "por usuario" ─────────────
+// BUG (arreglado): FEET/HEAD/OUTFIT/ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY y
+// SAVED_OUTFITS_STORAGE_KEY se guardaban SIN sufijo de usuario (a diferencia
+// de SKIN_STATE_STORAGE_KEY, que sí lo lleva) — es decir, todo el mundo que
+// usara el mismo navegador/dispositivo (varias cuentas de prueba, un
+// ordenador compartido…) leía y escribía literalmente el mismo hueco de
+// localStorage. Resultado: el apartado "Prendas personalizadas" de la tienda
+// mostraba las personalizaciones de cualquier usuario que hubiera tocado ese
+// navegador, y los "outfits guardados" también se mezclaban entre cuentas.
+//
+// Cada clave pasa ahora a `${BASE_KEY}_${userId}`, igual que el skin. Para no
+// borrarle de golpe sus personalizaciones a quien ya las tuviera guardadas
+// bajo la clave antigua (compartida), la primera vez que un usuario entra
+// tras esta actualización se migran una única vez a su propia clave y la
+// clave antigua se borra — así deja de "filtrarse" a la siguiente cuenta que
+// abra la app en ese mismo dispositivo.
+function migrateLegacyStorageKey(baseKey, userId) {
+  if (!userId) return;
+  const scopedKey = `${baseKey}_${userId}`;
   try {
-    const raw = localStorage.getItem(FEET_CUSTOMIZATIONS_STORAGE_KEY);
+    if (localStorage.getItem(scopedKey) !== null) return; // ya migrado
+    const legacy = localStorage.getItem(baseKey);
+    if (legacy === null) return;
+    localStorage.setItem(scopedKey, legacy);
+    localStorage.removeItem(baseKey);
+  } catch { /* non-fatal */ }
+}
+
+function loadFeetCustomizations(userId) {
+  if (!userId) return {};
+  try {
+    const raw = localStorage.getItem(`${FEET_CUSTOMIZATIONS_STORAGE_KEY}_${userId}`);
     const parsed = raw ? JSON.parse(raw) : {};
     // Migración silenciosa desde el formato antiguo (donde la clave era el
     // id del modelo ORIGINAL y el valor era directamente el array de zonas:
@@ -83,9 +112,10 @@ function loadFeetCustomizations() {
   }
 }
 
-function loadHeadCustomizations() {
+function loadStoredCustomizations(storageKey, userId) {
+  if (!userId) return {};
   try {
-    const raw    = localStorage.getItem(HEAD_CUSTOMIZATIONS_STORAGE_KEY);
+    const raw = localStorage.getItem(`${storageKey}_${userId}`);
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
@@ -93,25 +123,17 @@ function loadHeadCustomizations() {
   }
 }
 
-function loadStoredCustomizations(storageKey) {
+function loadSavedOutfits(userId) {
+  if (!userId) return [];
   try {
-    const raw = localStorage.getItem(storageKey);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function loadSavedOutfits() {
-  try {
-    const raw = localStorage.getItem(SAVED_OUTFITS_STORAGE_KEY);
+    const raw = localStorage.getItem(`${SAVED_OUTFITS_STORAGE_KEY}_${userId}`);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
   } catch {
     return [];
   }
 }
+
 
 // ── Catálogo de OUTFITS / TORSO (capa 3: encima de pies, debajo de cabeza) ─────
 export const MASCOT_OUTFITS = [
@@ -2074,27 +2096,45 @@ export function MascotProvider({ children }) {
     activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
   ]);
 
-  // Personalización extrema de color — receta de zonas por ítem de
-  // calzado (ver comentario junto a FEET_CUSTOMIZATIONS_STORAGE_KEY).
-  const [feetCustomizations, setFeetCustomizations] = useState(loadFeetCustomizations);
+  // Personalización extrema de color — receta de zonas por ítem de calzado,
+  // gorros/cabeza, torso y accesorios, más los outfits guardados. Todo esto
+  // es "estado de cuenta" igual que el skin (ver SKIN_STATE_STORAGE_KEY): no
+  // puede leerse de forma síncrona en el primer render porque profile.id
+  // tarda en resolverse (sesión de Supabase async), así que arranca vacío y
+  // se hidrata en el efecto de abajo en cuanto profile.id está listo — y se
+  // re-hidrata igual si cambia de usuario (logout/login en el mismo
+  // dispositivo), para no arrastrar en memoria las personalizaciones de la
+  // cuenta anterior ni un instante.
+  const [feetCustomizations, setFeetCustomizations] = useState({});
+  const [headCustomizations, setHeadCustomizations] = useState({});
+  const [outfitCustomizations, setOutfitCustomizations] = useState({});
+  const [accessoryCustomizations, setAccessoryCustomizations] = useState({});
+  const [savedOutfits, setSavedOutfits] = useState([]);
 
-  // Personalización extrema de color — gorros/prendas de cabeza.
-  // Misma arquitectura que feetCustomizations: cada personalización es un
-  // ítem independiente con id `head_custom_<timestamp>`, no una receta
-  // aplicada sobre el modelo original del catálogo.
-  const [headCustomizations, setHeadCustomizations] = useState(loadHeadCustomizations);
+  useEffect(() => {
+    if (!profile?.id) {
+      setFeetCustomizations({});
+      setHeadCustomizations({});
+      setOutfitCustomizations({});
+      setAccessoryCustomizations({});
+      setSavedOutfits([]);
+      return;
+    }
 
-  // Personalización extrema de color — torso (camisetas/camisas).
-  const [outfitCustomizations, setOutfitCustomizations] = useState(
-    () => loadStoredCustomizations(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY)
-  );
+    // Migración única de las claves antiguas (sin sufijo de usuario, ver
+    // comentario junto a migrateLegacyStorageKey arriba del archivo).
+    migrateLegacyStorageKey(FEET_CUSTOMIZATIONS_STORAGE_KEY, profile.id);
+    migrateLegacyStorageKey(HEAD_CUSTOMIZATIONS_STORAGE_KEY, profile.id);
+    migrateLegacyStorageKey(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY, profile.id);
+    migrateLegacyStorageKey(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY, profile.id);
+    migrateLegacyStorageKey(SAVED_OUTFITS_STORAGE_KEY, profile.id);
 
-  // Personalización extrema de color — accesorios.
-  const [accessoryCustomizations, setAccessoryCustomizations] = useState(
-    () => loadStoredCustomizations(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY)
-  );
-
-  const [savedOutfits, setSavedOutfits] = useState(loadSavedOutfits);
+    setFeetCustomizations(loadFeetCustomizations(profile.id));
+    setHeadCustomizations(loadStoredCustomizations(HEAD_CUSTOMIZATIONS_STORAGE_KEY, profile.id));
+    setOutfitCustomizations(loadStoredCustomizations(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY, profile.id));
+    setAccessoryCustomizations(loadStoredCustomizations(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY, profile.id));
+    setSavedOutfits(loadSavedOutfits(profile.id));
+  }, [profile?.id]);
 
   const customAccessoryItems = Object.values(accessoryCustomizations);
   const allAccessories = [...MASCOT_ACCESSORIES, ...customAccessoryItems];
@@ -2244,7 +2284,7 @@ export function MascotProvider({ children }) {
     };
     setFeetCustomizations(prev => {
       const next = { ...prev, [id]: entry };
-      try { localStorage.setItem(FEET_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${FEET_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     // El ítem personalizado se desbloquea automáticamente: el usuario ya
@@ -2262,7 +2302,7 @@ export function MascotProvider({ children }) {
       if (!prev[id]) return prev;
       const next = { ...prev };
       delete next[id];
-      try { localStorage.setItem(FEET_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${FEET_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     setActiveFeet(current => (current === id ? 'feet_none' : current));
@@ -2322,7 +2362,7 @@ export function MascotProvider({ children }) {
     };
     setHeadCustomizations(prev => {
       const next = { ...prev, [id]: entry };
-      try { localStorage.setItem(HEAD_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${HEAD_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     // Se desbloquea automáticamente (el usuario ya tenía el original).
@@ -2337,7 +2377,7 @@ export function MascotProvider({ children }) {
       if (!prev[id]) return prev;
       const next = { ...prev };
       delete next[id];
-      try { localStorage.setItem(HEAD_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${HEAD_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     setActiveHead(current => (current === id ? 'head_none' : current));
@@ -2379,7 +2419,7 @@ export function MascotProvider({ children }) {
     };
     setOutfitCustomizations(prev => {
       const next = { ...prev, [id]: entry };
-      try { localStorage.setItem(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${OUTFIT_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     setUnlockedOutfits(prev => new Set([...prev, id]));
@@ -2391,7 +2431,7 @@ export function MascotProvider({ children }) {
       if (!prev[id]) return prev;
       const next = { ...prev };
       delete next[id];
-      try { localStorage.setItem(OUTFIT_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${OUTFIT_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     setActiveOutfit(current => (current === id ? 'out_none' : current));
@@ -2436,7 +2476,7 @@ export function MascotProvider({ children }) {
     };
     setAccessoryCustomizations(prev => {
       const next = { ...prev, [id]: entry };
-      try { localStorage.setItem(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     setUnlockedAccessories(prev => new Set([...prev, id]));
@@ -2448,7 +2488,7 @@ export function MascotProvider({ children }) {
       if (!prev[id]) return prev;
       const next = { ...prev };
       delete next[id];
-      try { localStorage.setItem(ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${ACCESSORY_CUSTOMIZATIONS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
     setActiveAccessories(prev => {
@@ -2488,7 +2528,7 @@ export function MascotProvider({ children }) {
 
     setSavedOutfits(prev => {
       const next = [outfit, ...prev].slice(0, 20);
-      try { localStorage.setItem(SAVED_OUTFITS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${SAVED_OUTFITS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
 
@@ -2516,7 +2556,7 @@ export function MascotProvider({ children }) {
   function removeSavedOutfit(id) {
     setSavedOutfits(prev => {
       const next = prev.filter(outfit => outfit.id !== id);
-      try { localStorage.setItem(SAVED_OUTFITS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { if (profile?.id) localStorage.setItem(`${SAVED_OUTFITS_STORAGE_KEY}_${profile.id}`, JSON.stringify(next)); } catch {}
       return next;
     });
   }
