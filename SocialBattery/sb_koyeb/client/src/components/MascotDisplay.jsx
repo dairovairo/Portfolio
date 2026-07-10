@@ -445,6 +445,8 @@ export default function MascotDisplay({
         // Ajuste 2: otros 3% a la derecha y +5% tamaño más (recentrado desde
         // el centro del ajuste 1, 70,81.5 → tras mover 73,81.5). Resultado:
         // left=-3.0725, top=51.91625, width=152.145, height=59.1675.
+        // Ajuste 3: otros 3% a la derecha (solo traslación, sin cambio de
+        // tamaño). left=-3.0725+3=-0.0725; top/width/height sin cambios.
         // top base final=51.91625%; las variantes con rinonOffsetY suman ese
         // valor al top.
         if (acc.isRinon) {
@@ -458,7 +460,7 @@ export default function MascotDisplay({
               draggable={false}
               className="absolute select-none pointer-events-none"
               style={{
-                left: '-3.0725%',
+                left: '-0.0725%',
                 width: '152.145%',
                 top: `${rinonTop}%`,
                 height: '59.1675%',

@@ -270,12 +270,12 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
       );
     } else if (acc.isRinon) {
       // Ver comentario detallado en components/MascotDisplay.jsx:
-      // ajuste 2 (otros 3% a la derecha, +5% tamaño más, recentrado):
-      // left=-3.0725, top base=51.91625, width=152.145, height=59.1675.
+      // ajuste 3 (otros 3% a la derecha, sin cambio de tamaño):
+      // left=-0.0725, top base=51.91625, width=152.145, height=59.1675.
       const rinonTop = 51.91625 + (acc.rinonOffsetY ?? 0);
       drawContain(
         ctx, img,
-        boxX + pctToPx(-3.0725, boxSize), boxY + pctToPx(rinonTop, boxSize),
+        boxX + pctToPx(-0.0725, boxSize), boxY + pctToPx(rinonTop, boxSize),
         pctToPx(152.145, boxSize), pctToPx(59.1675, boxSize)
       );
     } else if (acc.scale) {

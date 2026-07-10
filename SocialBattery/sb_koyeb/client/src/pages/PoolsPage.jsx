@@ -963,7 +963,11 @@ function buildPoolFormData(form) {
 }
 
 // ── Create Pool Modal ─────────────────────────────────────────────────────────
-function CreatePoolModal({ onClose, onCreate }) {
+// initialGroupId — cuando se abre desde el atajo "Quedada" del chat de un
+// grupo (ver GroupChatPage.jsx), llega el id de ese grupo aquí y el
+// formulario arranca ya en modo "Privado" con ese grupo marcado, en vez de
+// los valores por defecto (público, sin grupo).
+function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const minDate = formatInputDateTime(new Date(Date.now() + 30 * 60 * 1000));
   const coverInputRef = useRef(null);
   const coverCameraRef = useRef(null);
@@ -975,8 +979,8 @@ function CreatePoolModal({ onClose, onCreate }) {
     scheduled_at: minDate,
     ends_at: '',
     max_people: null,
-    is_public: true,
-    group_id: null,
+    is_public: !initialGroupId,
+    group_id: initialGroupId,
     invited_user_ids: [],
   });
   const [coverFile, setCoverFile] = useState(null);
@@ -1282,6 +1286,7 @@ export default function PoolsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('active');
   const [showCreate, setShowCreate] = useState(false);
+  const [createInitialGroupId, setCreateInitialGroupId] = useState(null);
   const [joining, setJoining] = useState(null);
   const [leaving, setLeaving] = useState(null);
   const [reminderSaving, setReminderSaving] = useState(null);
@@ -1365,6 +1370,24 @@ export default function PoolsPage() {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.delete('pool');
+      return next;
+    }, { replace: true });
+  }, [searchParams]);
+
+  // Deep-link desde el atajo "Quedada" del chat de un grupo (ver
+  // GroupChatPage.jsx): ?createPool=1&groupId=<id> abre directamente el
+  // modal de crear quedada con "Privada" y ese grupo ya preseleccionados.
+  useEffect(() => {
+    if (searchParams.get('createPool') !== '1') return;
+    const groupId = searchParams.get('groupId') || null;
+
+    setCreateInitialGroupId(groupId);
+    setShowCreate(true);
+
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('createPool');
+      next.delete('groupId');
       return next;
     }, { replace: true });
   }, [searchParams]);
@@ -1660,7 +1683,8 @@ export default function PoolsPage() {
       {/* Create Pool Modal */}
       {showCreate && (
         <CreatePoolModal
-          onClose={() => setShowCreate(false)}
+          initialGroupId={createInitialGroupId}
+          onClose={() => { setShowCreate(false); setCreateInitialGroupId(null); }}
           onCreate={handleCreate}
         />
       )}

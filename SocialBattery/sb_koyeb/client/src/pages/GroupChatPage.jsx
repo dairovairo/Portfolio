@@ -944,6 +944,19 @@ export default function GroupChatPage() {
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
           ) : null}
 
+          {/* Botón "Quedada" — atajo para crear una quedada privada con este
+              grupo ya preseleccionado, sin tener que ir al menú Quedadas y
+              rellenar el grupo a mano. Va a la izquierda del menú (⋯). */}
+          {group && (
+            <button
+              onClick={() => navigate(`/pools?createPool=1&groupId=${group.id}`)}
+              className="flex-shrink-0 px-3 h-9 rounded-xl text-xs font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/20 hover:bg-accent-primary/20 transition-all flex items-center gap-1.5"
+              title="Crear una quedada con este grupo"
+            >
+              <span>🗓️</span> Quedada
+            </button>
+          )}
+
           {/* Menú de opciones (⋯) — mismo patrón que en el chat individual
               (MessagesPage.jsx). Sustituye a los botones sueltos de fondo
               (🖼️) e info (ℹ️): el nombre del grupo ya abre el panel de
