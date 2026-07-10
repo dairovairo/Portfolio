@@ -920,6 +920,14 @@ export default function CommunityDetailPage() {
               {community.member_count || 0} miembros{community.is_admin ? ' · admin' : ''}
             </p>
           </div>
+          <button
+            onClick={() => navigate(`/messages/community/${communityId}`)}
+            className="w-9 h-9 flex-shrink-0 rounded-xl border border-surface-border text-surface-text flex items-center justify-center hover:bg-surface-card transition-colors"
+            title="Chat de la comunidad"
+          >
+            💬
+          </button>
+
           {community.is_admin && (
             <button
               onClick={() => setShowCreateEvent(true)}

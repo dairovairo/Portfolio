@@ -13,6 +13,9 @@ const { addYears, addMonths } = require('../lib/dateRangeLimits');
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const eventUpdateImageUpload = createImageUpload({ maxSizeMb: 8 });
+// Multer instance for community chat image uploads (8 MB max) — mismo
+// límite que el chat de grupos (groups.js).
+const _communityChatImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 
 function uploadEventCover(req, res, next) {
   eventCoverUpload.single('cover')(req, res, err => {
@@ -122,10 +125,16 @@ async function getCommunityAdminState(communityId, userId) {
     .eq('user_id', userId)
     .maybeSingle();
 
+  const isAdmin = community.creator_id === userId || membership?.role === 'admin';
+  const isModerator = membership?.role === 'moderator';
+
   return {
     community,
     membership,
-    isAdmin: community.creator_id === userId || membership?.role === 'admin',
+    isAdmin,
+    isModerator,
+    // admin o moderador: puede cambiar el fondo del chat de la comunidad
+    isStaff: isAdmin || isModerator,
   };
 }
 
@@ -1525,6 +1534,395 @@ router.delete('/events/:id/updates/:updateId', requireAuth, async (req, res) => 
   } catch (err) {
     console.error('[community] DELETE /events/:id/updates/:updateId error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al eliminar actualización') });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  Chat de comunidad — mismo patrón que groups.js, pero con community_id
+//  y comprobando membership en community_members. El fondo (wallpaper) se
+//  gestiona en el cliente (localStorage) igual que en grupos; lo único que
+//  cambia es que aquí solo admin/moderador puede abrir esa opción del menú.
+// ════════════════════════════════════════════════════════════════════════
+
+async function broadcastCommunityMessage({ communityId, senderId, senderName, content, type }) {
+  try {
+    const [{ data: community }, { data: members }] = await Promise.all([
+      supabase.from('communities').select('name').eq('id', communityId).single(),
+      supabase
+        .from('community_members')
+        .select('user_id')
+        .eq('community_id', communityId)
+        .neq('user_id', senderId),
+    ]);
+
+    const communityName = community?.name || 'Comunidad';
+    const recipientIds = (members || []).map(m => m.user_id);
+    if (!recipientIds.length) return;
+
+    const broadcastPayload = {
+      community_id:   communityId,
+      community_name: communityName,
+      sender_id:      senderId,
+      sender_name:    senderName,
+      content,
+      type,
+    };
+
+    await Promise.allSettled(
+      recipientIds.map(recipientId =>
+        supabase
+          .channel(`community-msg-notif-${recipientId}`)
+          .send({ type: 'broadcast', event: 'new_community_message', payload: broadcastPayload })
+      )
+    );
+
+    const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
+    await notifyUsers(supabase, recipientIds, senderId, {
+      title: communityName,
+      body:  `${senderName}: ${previewText}`,
+      url:   `/messages/community/${communityId}`,
+      tag:   `community-${communityId}`,
+    });
+  } catch (err) {
+    console.error('[community] broadcastCommunityMessage error:', err);
+  }
+}
+
+async function requireCommunityMembership(communityId, userId) {
+  const { data } = await supabase
+    .from('community_members')
+    .select('community_id')
+    .eq('community_id', communityId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!data;
+}
+
+// ── GET /api/community/communities/:id/messages ─────────────────────────────
+router.get('/communities/:id/messages', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  const limit = parseInt(req.query.limit) || 60;
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data, error } = await supabase
+      .from('community_messages')
+      .select(`
+        id, content, type, poll_options, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .eq('community_id', communityId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (error) throw error;
+
+    const pollMessages = (data || []).filter(m => m.type === 'poll');
+    if (pollMessages.length) {
+      const pollIds = pollMessages.map(m => m.id);
+      const { data: voteRows } = await supabase
+        .from('community_message_poll_votes')
+        .select('message_id, user_id, option_index')
+        .in('message_id', pollIds);
+
+      const votesByMessage = new Map();
+      for (const v of voteRows || []) {
+        if (!votesByMessage.has(v.message_id)) votesByMessage.set(v.message_id, []);
+        votesByMessage.get(v.message_id).push(v);
+      }
+      for (const m of pollMessages) {
+        m.poll = buildPollSummary(m.poll_options, votesByMessage.get(m.id) || [], userId);
+      }
+    }
+
+    const { data: clearData } = await supabase
+      .from('community_conversation_clears')
+      .select('cleared_at')
+      .eq('user_id', userId)
+      .eq('community_id', communityId)
+      .maybeSingle();
+
+    const { isStaff } = await getCommunityAdminState(communityId, userId);
+
+    res.json({
+      messages: (data || []).map(message => ({ ...message, sender: applyBatteryExpiry(message.sender) })),
+      cleared_at: clearData?.cleared_at || null,
+      can_manage_wallpaper: isStaff,
+    });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/messages', err);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── POST /api/community/communities/:id/clear — vaciar chat (solo para mí) ──
+router.post('/communities/:id/clear', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+    const clearedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('community_conversation_clears')
+      .upsert(
+        { user_id: userId, community_id: communityId, cleared_at: clearedAt },
+        { onConflict: 'user_id,community_id' }
+      );
+    if (error) throw error;
+    res.json({ success: true, cleared_at: clearedAt });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/clear', err);
+    res.status(500).json({ error: 'Failed to clear chat' });
+  }
+});
+
+// ── POST /api/community/communities/:id/messages ────────────────────────────
+router.post('/communities/:id/messages', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  const { content, type = 'text' } = req.body;
+
+  if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
+  if (type !== 'text') return res.status(400).json({ error: 'Invalid type' });
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data, error } = await supabase
+      .from('community_messages')
+      .insert({ community_id: communityId, sender_id: userId, content: content.trim(), type })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ message: { ...data, sender: applyBatteryExpiry(data.sender) } });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastCommunityMessage({ communityId, senderId: userId, senderName, content: data.content, type: data.type }).catch(() => {});
+  } catch (err) {
+    console.error('[community] POST /communities/:id/messages', err);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── POST /api/community/communities/:id/messages/image ──────────────────────
+router.post('/communities/:id/messages/image', requireAuth, (req, res, next) => {
+  _communityChatImageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+
+  if (!req.file) return res.status(400).json({ error: 'Se requiere una imagen' });
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const imageUrl = await storeImage({
+      file: req.file,
+      bucket: 'chat-images',
+      objectName: `community/${communityId}/${Date.now()}`,
+      fallbackMaxLength: 8_000_000,
+    });
+
+    const { data, error } = await supabase
+      .from('community_messages')
+      .insert({ community_id: communityId, sender_id: userId, content: imageUrl, type: 'image' })
+      .select(`
+        id, content, type, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ message: { ...data, sender: applyBatteryExpiry(data.sender) } });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastCommunityMessage({ communityId, senderId: userId, senderName, content: data.content, type: 'image' }).catch(() => {});
+  } catch (e) {
+    console.error('[community] image upload error:', e);
+    res.status(e.status || 500).json({ error: e.message || 'Error al subir la imagen' });
+  }
+});
+
+// ── POST /api/community/communities/:id/polls — crear encuesta ──────────────
+router.post('/communities/:id/polls', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  const question = (req.body?.question || '').trim();
+  const rawOptions = Array.isArray(req.body?.options) ? req.body.options : [];
+  const options = rawOptions.map(o => (o || '').trim()).filter(Boolean);
+
+  if (!question) return res.status(400).json({ error: 'Escribe una pregunta para la encuesta' });
+  if (question.length > 200) return res.status(400).json({ error: 'La pregunta es demasiado larga (máx. 200)' });
+  if (options.length < 2) return res.status(400).json({ error: 'Añade al menos 2 opciones' });
+  if (options.length > 4) return res.status(400).json({ error: 'Máximo 4 opciones' });
+  if (options.some(o => o.length > 60)) return res.status(400).json({ error: 'Cada opción debe tener máx. 60 caracteres' });
+  if (new Set(options.map(o => o.toLowerCase())).size !== options.length) {
+    return res.status(400).json({ error: 'Las opciones no pueden repetirse' });
+  }
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data, error } = await supabase
+      .from('community_messages')
+      .insert({ community_id: communityId, sender_id: userId, content: question, type: 'poll', poll_options: options })
+      .select(`
+        id, content, type, poll_options, created_at,
+        sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
+      `)
+      .single();
+
+    if (error) throw error;
+    data.poll = buildPollSummary(options, [], userId);
+
+    res.status(201).json({ message: { ...data, sender: applyBatteryExpiry(data.sender) } });
+
+    const senderName = data.sender?.username || 'Alguien';
+    broadcastCommunityMessage({ communityId, senderId: userId, senderName, content: `📊 ${question}`, type: 'poll' }).catch(() => {});
+  } catch (err) {
+    console.error('[community] POST /communities/:id/polls', err);
+    res.status(500).json({ error: 'Failed to create poll' });
+  }
+});
+
+// ── GET /api/community/communities/:id/messages/:messageId/poll ─────────────
+router.get('/communities/:id/messages/:messageId/poll', requireAuth, async (req, res) => {
+  const communityId = req.params.id;
+  const messageId = req.params.messageId;
+  const userId = req.user.id;
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data: message, error: msgErr } = await supabase
+      .from('community_messages')
+      .select('id, poll_options')
+      .eq('id', messageId)
+      .eq('community_id', communityId)
+      .eq('type', 'poll')
+      .single();
+
+    if (msgErr || !message) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const { data: voteRows, error: votesErr } = await supabase
+      .from('community_message_poll_votes')
+      .select('message_id, user_id, option_index')
+      .eq('message_id', messageId);
+
+    if (votesErr) throw votesErr;
+
+    res.json({ poll: buildPollSummary(message.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/messages/:messageId/poll', err);
+    res.status(500).json({ error: 'Failed to fetch poll' });
+  }
+});
+
+// ── POST /api/community/communities/:id/messages/:messageId/vote ───────────
+router.post('/communities/:id/messages/:messageId/vote', requireAuth, async (req, res) => {
+  const communityId = req.params.id;
+  const messageId = req.params.messageId;
+  const userId = req.user.id;
+  const optionIndex = Number(req.body?.optionIndex);
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data: message, error: msgErr } = await supabase
+      .from('community_messages')
+      .select('id, poll_options')
+      .eq('id', messageId)
+      .eq('community_id', communityId)
+      .eq('type', 'poll')
+      .single();
+
+    if (msgErr || !message) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const optionCount = Array.isArray(message.poll_options) ? message.poll_options.length : 0;
+    if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= optionCount) {
+      return res.status(400).json({ error: 'Opción no válida' });
+    }
+
+    const { error } = await supabase
+      .from('community_message_poll_votes')
+      .upsert(
+        { message_id: messageId, community_id: communityId, user_id: userId, option_index: optionIndex, created_at: new Date().toISOString() },
+        { onConflict: 'message_id,user_id' }
+      );
+
+    if (error) throw error;
+
+    const { data: voteRows } = await supabase
+      .from('community_message_poll_votes')
+      .select('message_id, user_id, option_index')
+      .eq('message_id', messageId);
+
+    res.json({ poll: buildPollSummary(message.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/messages/:messageId/vote', err);
+    res.status(500).json({ error: 'Failed to vote' });
+  }
+});
+
+// ── DELETE /api/community/communities/:id/messages/:messageId/vote ─────────
+router.delete('/communities/:id/messages/:messageId/vote', requireAuth, async (req, res) => {
+  const communityId = req.params.id;
+  const messageId = req.params.messageId;
+  const userId = req.user.id;
+
+  try {
+    const { data: message, error: msgErr } = await supabase
+      .from('community_messages')
+      .select('id, poll_options')
+      .eq('id', messageId)
+      .eq('community_id', communityId)
+      .eq('type', 'poll')
+      .single();
+
+    if (msgErr || !message) return res.status(404).json({ error: 'Encuesta no encontrada' });
+
+    const { error } = await supabase
+      .from('community_message_poll_votes')
+      .delete()
+      .eq('message_id', messageId)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    const { data: voteRows } = await supabase
+      .from('community_message_poll_votes')
+      .select('message_id, user_id, option_index')
+      .eq('message_id', messageId);
+
+    res.json({ poll: buildPollSummary(message.poll_options, voteRows || [], userId) });
+  } catch (err) {
+    console.error('[community] DELETE /communities/:id/messages/:messageId/vote', err);
+    res.status(500).json({ error: 'Failed to remove vote' });
   }
 });
 
