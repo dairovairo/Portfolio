@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
+import { usePoolInviteNotifications } from '../context/PoolInviteNotificationsContext';
 import MascotDisplay from '../components/MascotDisplay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
@@ -1288,6 +1289,23 @@ export default function PoolsPage() {
   const [detailPool, setDetailPool] = useState(null); // pool for participants sheet
   const visiblePoolIdsRef = useRef(new Set());
   const poolsRefreshTimerRef = useRef(null);
+  const { poolInviteBadgeCount, refreshPoolInviteBadge, markPoolInvitesSeen } = usePoolInviteNotifications();
+
+  // Al entrar a la sección de Quedadas se marcan como vistas las
+  // invitaciones pendientes — así desaparecen tanto el badge del dock
+  // inferior como el del tab "Activos" (ambos leen de
+  // PoolInviteNotificationsContext, ver ese archivo). Si llega una
+  // invitación nueva después, el badge vuelve a aparecer. Se refresca antes
+  // de marcar para no depender de un fetch anterior que pueda estar
+  // desactualizado (p. ej. justo tras iniciar sesión).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await refreshPoolInviteBadge();
+      if (!cancelled) markPoolInvitesSeen();
+    })();
+    return () => { cancelled = true; };
+  }, [refreshPoolInviteBadge, markPoolInvitesSeen]);
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -1468,10 +1486,13 @@ export default function PoolsPage() {
   const activePools = sortByDate(pools.filter(isActive));
   const pastPools   = pools.filter(p => !isActive(p));
   const myplansEmpty = myCreated.length === 0 && myJoined.length === 0;
-  // Nº de quedadas a las que te han invitado y aún no te has unido — badge
-  // en el tab "Activos" (el mismo dato alimenta el badge del dock inferior,
-  // ver PoolInviteNotificationsContext).
-  const invitedActiveCount = pools.filter(p => p.is_invited).length;
+  // Nº de quedadas a las que te han invitado, aún no te has unido y no has
+  // "visto" todavía — mismo dato que alimenta el badge del dock inferior,
+  // ver PoolInviteNotificationsContext. Antes se recalculaba aquí a partir
+  // de `pools.filter(p => p.is_invited)`, por lo que nunca desaparecía al
+  // entrar en la página (mostraba invitaciones ya vistas). Usar el valor
+  // del contexto directamente mantiene ambos badges sincronizados.
+  const invitedActiveCount = poolInviteBadgeCount;
 
   return (
     <div className="min-h-screen bg-surface-bg pb-24">

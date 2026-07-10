@@ -308,7 +308,12 @@ router.get('/', requireAuth, async (req, res) => {
 // Cuenta las quedadas privadas donde el usuario ha sido invitado
 // (pool_invitees) pero aún no se ha unido y la quedada sigue abierta/futura.
 // Usado por PoolInviteNotificationsContext para el badge del dock inferior
-// y del tab "Activos" cuando la página de Quedadas no está montada.
+// y del tab "Activos".
+//
+// Devuelve también `ids` (los pool_id concretos, no solo el nº total) para
+// que el cliente pueda marcar invitaciones individuales como "vistas" al
+// entrar en la sección de Quedadas, sin perder el badge de una invitación
+// nueva que llegue después. Ver PoolInviteNotificationsContext.
 router.get('/invites/count', requireAuth, async (req, res) => {
   const userId = req.user.id;
   try {
@@ -317,7 +322,7 @@ router.get('/invites/count', requireAuth, async (req, res) => {
       .select('pool_id')
       .eq('user_id', userId);
     const poolIds = [...new Set((invites || []).map(i => i.pool_id))];
-    if (!poolIds.length) return res.json({ count: 0 });
+    if (!poolIds.length) return res.json({ count: 0, ids: [] });
 
     const { data: joined } = await supabase
       .from('pool_participants')
@@ -326,16 +331,17 @@ router.get('/invites/count', requireAuth, async (req, res) => {
       .in('pool_id', poolIds);
     const joinedIds = new Set((joined || []).map(j => j.pool_id));
     const pendingIds = poolIds.filter(id => !joinedIds.has(id));
-    if (!pendingIds.length) return res.json({ count: 0 });
+    if (!pendingIds.length) return res.json({ count: 0, ids: [] });
 
-    const { count } = await supabase
+    const { data: openPools } = await supabase
       .from('hangout_pools')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .in('id', pendingIds)
       .in('status', ['open', 'full'])
       .gt('scheduled_at', new Date().toISOString());
 
-    res.json({ count: count || 0 });
+    const activeIds = (openPools || []).map(p => p.id);
+    res.json({ count: activeIds.length, ids: activeIds });
   } catch (err) {
     console.error('[POOLS] GET /invites/count', err);
     res.status(500).json({ error: 'Failed to fetch invite count' });
