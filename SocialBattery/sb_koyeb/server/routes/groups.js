@@ -417,16 +417,119 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .eq('group_id', req.params.id)
       .maybeSingle();
 
+    const pinnedMessage = await fetchPinnedGroupMessage(req.params.id, data || []);
+
     res.json({
       messages: (data || []).map(message => ({
         ...message,
         sender: applyBatteryExpiry(message.sender),
       })),
       cleared_at: clearData?.cleared_at || null,
+      pinned_message: pinnedMessage,
     });
   } catch (err) {
     console.error('[GROUPS] GET /:id/messages', err);
     res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── Helper: resuelve el mensaje fijado de un grupo (si lo hay) ───────────────
+async function fetchPinnedGroupMessage(groupId, loadedMessages = []) {
+  const { data: grp } = await supabase
+    .from('friend_groups')
+    .select('pinned_message_id, pinned_at, pinned_by:pinned_by(id, username, avatar_url)')
+    .eq('id', groupId)
+    .maybeSingle();
+
+  if (!grp?.pinned_message_id) return null;
+
+  const alreadyLoaded = loadedMessages.find(m => m.id === grp.pinned_message_id);
+  let base = alreadyLoaded;
+  if (!base) {
+    const { data: msgRow } = await supabase
+      .from('group_messages')
+      .select(`id, content, type, created_at, sender:sender_id(id, username, avatar_url)`)
+      .eq('id', grp.pinned_message_id)
+      .maybeSingle();
+    base = msgRow;
+  }
+  if (!base) return null;
+
+  return {
+    id: base.id,
+    content: base.content,
+    type: base.type,
+    created_at: base.created_at,
+    sender: base.sender,
+    pinned_at: grp.pinned_at,
+    pinned_by: grp.pinned_by || null,
+  };
+}
+
+// ── POST /api/groups/:id/messages/:messageId/pin — fijar mensaje (solo dueño) ──
+router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: groupId, messageId } = req.params;
+
+  try {
+    const { data: grp } = await supabase
+      .from('friend_groups')
+      .select('id, owner_id')
+      .eq('id', groupId)
+      .maybeSingle();
+    if (!grp) return res.status(404).json({ error: 'Group not found' });
+    if (grp.owner_id !== userId) {
+      return res.status(403).json({ error: 'Solo el administrador del grupo puede fijar mensajes' });
+    }
+
+    const { data: msg } = await supabase
+      .from('group_messages')
+      .select('id')
+      .eq('id', messageId)
+      .eq('group_id', groupId)
+      .maybeSingle();
+    if (!msg) return res.status(404).json({ error: 'Mensaje no encontrado' });
+
+    const pinnedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('friend_groups')
+      .update({ pinned_message_id: messageId, pinned_by: userId, pinned_at: pinnedAt })
+      .eq('id', groupId);
+    if (error) throw error;
+
+    res.json({ success: true, pinned_message_id: messageId, pinned_at: pinnedAt });
+  } catch (err) {
+    console.error('[GROUPS] POST /:id/messages/:messageId/pin', err);
+    res.status(500).json({ error: 'Failed to pin message' });
+  }
+});
+
+// ── DELETE /api/groups/:id/pin — desfijar mensaje (solo dueño) ──────────────
+router.delete('/:id/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const groupId = req.params.id;
+
+  try {
+    const { data: grp } = await supabase
+      .from('friend_groups')
+      .select('id, owner_id')
+      .eq('id', groupId)
+      .maybeSingle();
+    if (!grp) return res.status(404).json({ error: 'Group not found' });
+    if (grp.owner_id !== userId) {
+      return res.status(403).json({ error: 'Solo el administrador del grupo puede desfijar mensajes' });
+    }
+
+    const { error } = await supabase
+      .from('friend_groups')
+      .update({ pinned_message_id: null, pinned_by: null, pinned_at: null })
+      .eq('id', groupId);
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[GROUPS] DELETE /:id/pin', err);
+    res.status(500).json({ error: 'Failed to unpin message' });
   }
 });
 

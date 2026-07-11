@@ -922,10 +922,10 @@ export default function CommunityDetailPage() {
           </div>
           <button
             onClick={() => navigate(`/messages/community/${communityId}`)}
-            className="w-9 h-9 flex-shrink-0 rounded-xl border border-surface-border text-surface-text flex items-center justify-center hover:bg-surface-card transition-colors"
             title="Chat de la comunidad"
+            className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
           >
-            💬
+            <span>💬</span> Chat
           </button>
 
           {community.is_admin && (

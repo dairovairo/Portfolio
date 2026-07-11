@@ -1647,15 +1647,111 @@ router.get('/communities/:id/messages', requireAuth, async (req, res) => {
       .maybeSingle();
 
     const { isStaff } = await getCommunityAdminState(communityId, userId);
+    const pinnedMessage = await fetchPinnedCommunityMessage(communityId, data || []);
 
     res.json({
       messages: (data || []).map(message => ({ ...message, sender: applyBatteryExpiry(message.sender) })),
       cleared_at: clearData?.cleared_at || null,
       can_manage_wallpaper: isStaff,
+      can_pin_messages: isStaff,
+      pinned_message: pinnedMessage,
     });
   } catch (err) {
     console.error('[community] GET /communities/:id/messages', err);
     res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── Helper: resuelve el mensaje fijado de una comunidad (si lo hay) ─────────
+async function fetchPinnedCommunityMessage(communityId, loadedMessages = []) {
+  const { data: community } = await supabase
+    .from('communities')
+    .select('pinned_message_id, pinned_at, pinned_by:pinned_by(id, username, avatar_url)')
+    .eq('id', communityId)
+    .maybeSingle();
+
+  if (!community?.pinned_message_id) return null;
+
+  const alreadyLoaded = loadedMessages.find(m => m.id === community.pinned_message_id);
+  let base = alreadyLoaded;
+  if (!base) {
+    const { data: msgRow } = await supabase
+      .from('community_messages')
+      .select(`id, content, type, created_at, sender:sender_id(id, username, avatar_url)`)
+      .eq('id', community.pinned_message_id)
+      .maybeSingle();
+    base = msgRow;
+  }
+  if (!base) return null;
+
+  return {
+    id: base.id,
+    content: base.content,
+    type: base.type,
+    created_at: base.created_at,
+    sender: base.sender,
+    pinned_at: community.pinned_at,
+    pinned_by: community.pinned_by || null,
+  };
+}
+
+// ── POST /api/community/communities/:id/messages/:messageId/pin ────────────
+// Fijar mensaje: solo admin o moderador de la comunidad.
+router.post('/communities/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  const messageId = req.params.messageId;
+
+  try {
+    const { isStaff } = await getCommunityAdminState(communityId, userId);
+    if (!isStaff) {
+      return res.status(403).json({ error: 'Solo un administrador o moderador puede fijar mensajes' });
+    }
+
+    const { data: msg } = await supabase
+      .from('community_messages')
+      .select('id')
+      .eq('id', messageId)
+      .eq('community_id', communityId)
+      .maybeSingle();
+    if (!msg) return res.status(404).json({ error: 'Mensaje no encontrado' });
+
+    const pinnedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('communities')
+      .update({ pinned_message_id: messageId, pinned_by: userId, pinned_at: pinnedAt })
+      .eq('id', communityId);
+    if (error) throw error;
+
+    res.json({ success: true, pinned_message_id: messageId, pinned_at: pinnedAt });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/messages/:messageId/pin', err);
+    res.status(500).json({ error: 'Failed to pin message' });
+  }
+});
+
+// ── DELETE /api/community/communities/:id/pin — desfijar mensaje ────────────
+// Solo admin o moderador de la comunidad.
+router.delete('/communities/:id/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+
+  try {
+    const { isStaff } = await getCommunityAdminState(communityId, userId);
+    if (!isStaff) {
+      return res.status(403).json({ error: 'Solo un administrador o moderador puede desfijar mensajes' });
+    }
+
+    const { error } = await supabase
+      .from('communities')
+      .update({ pinned_message_id: null, pinned_by: null, pinned_at: null })
+      .eq('id', communityId);
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[community] DELETE /communities/:id/pin', err);
+    res.status(500).json({ error: 'Failed to unpin message' });
   }
 });
 

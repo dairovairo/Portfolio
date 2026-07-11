@@ -115,10 +115,10 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, canPin, isPinned, onTogglePin }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   return (
-    <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div id={`msg-${msg.id}`} className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       {!isMe && <Avatar user={msg.sender} />}
       <div className="flex items-end gap-1.5 max-w-[75%]">
         <div className="min-w-0">
@@ -132,8 +132,18 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
             style={bubbleStyle}
           >
             <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
-            <div className="text-xs mt-1 opacity-60">
-              {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+            <div className="text-xs mt-1 opacity-60 flex items-center justify-between gap-2">
+              <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+              {canPin && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onTogglePin(msg.id, isPinned); }}
+                  title={isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}
+                  className="leading-none hover:opacity-100"
+                >
+                  {isPinned ? '📌' : '📍'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -145,14 +155,14 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
   );
 }
 
-function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, canPin, isPinned, onTogglePin }) {
   const [lightbox, setLightbox] = useState(false);
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
 
   return (
     <>
-      <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div id={`msg-${msg.id}`} className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
         {!isMe && <Avatar user={msg.sender} />}
         <div className="flex items-end gap-1.5 max-w-[75%]">
           <div className="min-w-0">
@@ -178,8 +188,18 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
                   </div>
                 )}
               </div>
-              <div className="text-xs px-3 pb-2 pt-1 opacity-60">
-                {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              <div className="text-xs px-3 pb-2 pt-1 opacity-60 flex items-center justify-between gap-2">
+                <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+                {canPin && !isOptimistic && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onTogglePin(msg.id, isPinned); }}
+                    title={isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}
+                    className="leading-none hover:opacity-100"
+                  >
+                    {isPinned ? '📌' : '📍'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -213,7 +233,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity }) {
 }
 
 // ── Poll bubble — mensaje de encuesta con votación en vivo ───────────────────
-function PollBubble({ msg, isMe, identity, onVote, voting }) {
+function PollBubble({ msg, isMe, identity, onVote, voting, canPin, isPinned, onTogglePin }) {
   const poll = msg.poll || {
     options: msg.poll_options || [],
     votes: (msg.poll_options || []).map(() => 0),
@@ -223,7 +243,7 @@ function PollBubble({ msg, isMe, identity, onVote, voting }) {
   const isVoting = voting === msg.id;
 
   return (
-    <div className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div id={`msg-${msg.id}`} className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       {!isMe && <Avatar user={msg.sender} />}
       <div className="flex items-end gap-1.5 max-w-[85%]">
         <div className="min-w-0 w-full">
@@ -265,9 +285,21 @@ function PollBubble({ msg, isMe, identity, onVote, voting }) {
                 );
               })}
             </div>
-            <div className="text-[10px] font-mono text-surface-muted mt-2">
-              {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'} · {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-              {poll.myVote != null ? ' · toca tu opción para quitar el voto' : ''}
+            <div className="text-[10px] font-mono text-surface-muted mt-2 flex items-center justify-between gap-2">
+              <span>
+                {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'} · {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                {poll.myVote != null ? ' · toca tu opción para quitar el voto' : ''}
+              </span>
+              {canPin && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onTogglePin(msg.id, isPinned); }}
+                  title={isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}
+                  className="leading-none hover:opacity-100 flex-shrink-0"
+                >
+                  {isPinned ? '📌' : '📍'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -420,6 +452,36 @@ function DateDivider({ date }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+// ── Pinned message banner ────────────────────────────────────────────────────
+function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
+  if (!pinned) return null;
+  const preview = pinned.type === 'image' ? '📷 Foto' : pinned.type === 'poll' ? `📊 ${pinned.content}` : pinned.content;
+  return (
+    <div
+      className="sticky top-0 z-10 -mx-4 mb-2 px-4 py-2 bg-surface-card/95 backdrop-blur-xl border-b border-surface-border flex items-center gap-2 cursor-pointer"
+      onClick={onJumpTo}
+    >
+      <span className="text-base flex-shrink-0">📌</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-mono text-surface-muted">
+          Fijado por {pinned.pinned_by?.username || pinned.sender?.username || 'alguien'}
+        </div>
+        <div className="text-sm text-surface-text truncate">{preview}</div>
+      </div>
+      {canUnpin && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onUnpin(); }}
+          className="flex-shrink-0 text-surface-muted hover:text-surface-text text-lg leading-none px-1"
+          title="Desfijar mensaje"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function PoolChatPage() {
   const { poolId } = useParams();
   const navigate = useNavigate();
@@ -430,6 +492,7 @@ export default function PoolChatPage() {
   const [pool, setPool] = useState(null);
   const [messages, setMessages] = useState([]);
   const [clearedAt, setClearedAt] = useState(null);
+  const [pinnedMessage, setPinnedMessage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [badgeData, setBadgeData] = useState({ assignments: [] });
   const [input, setInput] = useState('');
@@ -483,6 +546,7 @@ export default function PoolChatPage() {
         setPool(poolResult.pool);
         setMessages(messagesResult.messages || []);
         setClearedAt(messagesResult.cleared_at || null);
+        setPinnedMessage(messagesResult.pinned_message || null);
         setBadgeData({ assignments: badgesResult.assignments || [] });
       } catch (e) {
         console.error(e);
@@ -558,6 +622,57 @@ export default function PoolChatPage() {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [poolId]);
+
+  // Realtime: mensaje fijado/desfijado por el creador de la quedada
+  useEffect(() => {
+    if (!poolId) return;
+    const channel = supabase
+      .channel(`pool-pin-${poolId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'hangout_pools',
+        filter: `id=eq.${poolId}`,
+      }, async () => {
+        try {
+          const data = await api.get(`/pools/${poolId}/messages`);
+          setPinnedMessage(data.pinned_message || null);
+        } catch {
+          // non-critical
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [poolId]);
+
+  const isCreator = Boolean(pool?.is_creator);
+  const isPinnedMessage = (messageId) => pinnedMessage?.id === messageId;
+
+  async function handleTogglePin(messageId, isPinned) {
+    try {
+      if (isPinned) {
+        await api.delete(`/pools/${poolId}/pin`);
+        setPinnedMessage(null);
+        showToast('Mensaje desfijado');
+      } else {
+        const target = messages.find(m => m.id === messageId);
+        const result = await api.post(`/pools/${poolId}/messages/${messageId}/pin`);
+        setPinnedMessage(target ? {
+          ...target,
+          pinned_at: result.pinned_at,
+          pinned_by: { id: profile?.id, username: profile?.username },
+        } : null);
+        showToast('Mensaje fijado');
+      }
+    } catch (e) {
+      showToast('Error al fijar el mensaje', 'error');
+    }
+  }
+
+  function jumpToPinnedMessage() {
+    if (!pinnedMessage) return;
+    document.getElementById(`msg-${pinnedMessage.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   async function clearChat() {
     setClearingChat(true);
@@ -741,7 +856,15 @@ export default function PoolChatPage() {
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
             Cargando mensajes...
           </div>
-        ) : visibleMessages.length === 0 ? (
+        ) : (
+          <>
+            <PinnedBanner
+              pinned={pinnedMessage}
+              canUnpin={isCreator}
+              onUnpin={() => handleTogglePin(pinnedMessage.id, true)}
+              onJumpTo={jumpToPinnedMessage}
+            />
+            {visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <div className="text-4xl">🤝</div>
             <p className="text-slate-500 text-sm text-center">
@@ -766,6 +889,9 @@ export default function PoolChatPage() {
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
                   identity={identity}
+                  canPin={isCreator}
+                  isPinned={isPinnedMessage(msg.id)}
+                  onTogglePin={handleTogglePin}
                 />
               );
             }
@@ -779,6 +905,9 @@ export default function PoolChatPage() {
                   identity={identity}
                   onVote={handleVote}
                   voting={votingMessageId}
+                  canPin={isCreator}
+                  isPinned={isPinnedMessage(msg.id)}
+                  onTogglePin={handleTogglePin}
                 />
               );
             }
@@ -791,9 +920,14 @@ export default function PoolChatPage() {
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
                 identity={identity}
+                canPin={isCreator}
+                isPinned={isPinnedMessage(msg.id)}
+                onTogglePin={handleTogglePin}
               />
             );
           })
+        )}
+          </>
         )}
         <div ref={bottomRef} />
       </div>

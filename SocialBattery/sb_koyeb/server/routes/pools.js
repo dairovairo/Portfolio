@@ -1346,16 +1346,119 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .eq('pool_id', poolId)
       .maybeSingle();
 
+    const pinnedMessage = await fetchPinnedPoolMessage(poolId, data || []);
+
     res.json({
       messages: (data || []).map(message => ({
         ...message,
         sender: applyBatteryExpiry(message.sender),
       })),
       cleared_at: clearData?.cleared_at || null,
+      pinned_message: pinnedMessage,
     });
   } catch (err) {
     console.error('[POOLS] GET /:id/messages', err);
     res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ── Helper: resuelve el mensaje fijado de una quedada (si lo hay) ───────────
+async function fetchPinnedPoolMessage(poolId, loadedMessages = []) {
+  const { data: pool } = await supabase
+    .from('hangout_pools')
+    .select('pinned_message_id, pinned_at, pinned_by:pinned_by(id, username, avatar_url)')
+    .eq('id', poolId)
+    .maybeSingle();
+
+  if (!pool?.pinned_message_id) return null;
+
+  const alreadyLoaded = loadedMessages.find(m => m.id === pool.pinned_message_id);
+  let base = alreadyLoaded;
+  if (!base) {
+    const { data: msgRow } = await supabase
+      .from('pool_messages')
+      .select(`id, content, type, created_at, sender:sender_id(id, username, avatar_url)`)
+      .eq('id', pool.pinned_message_id)
+      .maybeSingle();
+    base = msgRow;
+  }
+  if (!base) return null;
+
+  return {
+    id: base.id,
+    content: base.content,
+    type: base.type,
+    created_at: base.created_at,
+    sender: base.sender,
+    pinned_at: pool.pinned_at,
+    pinned_by: pool.pinned_by || null,
+  };
+}
+
+// ── POST /api/pools/:id/messages/:messageId/pin — fijar mensaje (solo creador) ──
+router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: poolId, messageId } = req.params;
+
+  try {
+    const { data: pool } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id')
+      .eq('id', poolId)
+      .maybeSingle();
+    if (!pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la quedada puede fijar mensajes' });
+    }
+
+    const { data: msg } = await supabase
+      .from('pool_messages')
+      .select('id')
+      .eq('id', messageId)
+      .eq('pool_id', poolId)
+      .maybeSingle();
+    if (!msg) return res.status(404).json({ error: 'Mensaje no encontrado' });
+
+    const pinnedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('hangout_pools')
+      .update({ pinned_message_id: messageId, pinned_by: userId, pinned_at: pinnedAt })
+      .eq('id', poolId);
+    if (error) throw error;
+
+    res.json({ success: true, pinned_message_id: messageId, pinned_at: pinnedAt });
+  } catch (err) {
+    console.error('[POOLS] POST /:id/messages/:messageId/pin', err);
+    res.status(500).json({ error: 'Failed to pin message' });
+  }
+});
+
+// ── DELETE /api/pools/:id/pin — desfijar mensaje (solo creador) ─────────────
+router.delete('/:id/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+
+  try {
+    const { data: pool } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id')
+      .eq('id', poolId)
+      .maybeSingle();
+    if (!pool) return res.status(404).json({ error: 'Pool not found' });
+    if (pool.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la quedada puede desfijar mensajes' });
+    }
+
+    const { error } = await supabase
+      .from('hangout_pools')
+      .update({ pinned_message_id: null, pinned_by: null, pinned_at: null })
+      .eq('id', poolId);
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[POOLS] DELETE /:id/pin', err);
+    res.status(500).json({ error: 'Failed to unpin message' });
   }
 });
 
