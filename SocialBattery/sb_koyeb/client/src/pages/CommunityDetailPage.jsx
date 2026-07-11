@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
 import { shareOrDownloadBlob } from '../lib/instagramStory';
+import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
 
 function normalizeText(value = '') {
   return String(value ?? '')
@@ -17,42 +18,11 @@ function normalizeText(value = '') {
     .trim();
 }
 
-function getEventEmoji(category = '') {
-  const c = normalizeText(category);
-  // Se añade el selector de variación U+FE0F a cada emoji para forzar su
-  // presentación a color (el CSS global usa font-variant-emoji: text para
-  // dar un estilo mono a los iconos por defecto; sin este selector solo los
-  // emojis que ya lo llevaban incorporado, como el de Comida, salían a color).
-  if (/musica|concierto|concert/.test(c)) return '🎵️';
-  if (/deporte|sport|futbol|tenis|running/.test(c)) return '⚽️';
-  if (/arte|art|exposicion|museo/.test(c)) return '🎨️';
-  if (/tecnologia|tech|hacking|codigo/.test(c)) return '💻️';
-  if (/comida|food|gastro|cocina|cena/.test(c)) return '🍽️';
-  if (/fiesta|party|celebracion/.test(c)) return '🎉️';
-  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿️';
-  if (/cine|film|pelicula|movie/.test(c)) return '🎬️';
-  if (/juego|gaming|videojuego/.test(c)) return '🎮️';
-  if (/yoga|meditacion|bienestar|wellness/.test(c)) return '🧘️';
-  if (/fotografia|photo/.test(c)) return '📷️';
-  if (/lectura|libro|book|literatura/.test(c)) return '📚️';
-  return '🌐️';
-}
-
-function getCommunityEmoji(category = '') {
-  const c = normalizeText(category);
-  // Mismo motivo que en getEventEmoji: se añade el selector U+FE0F para
-  // forzar la presentación a color pese al font-variant-emoji: text global.
-  if (/musica/.test(c)) return '🎵️';
-  if (/deporte|sport/.test(c)) return '⚽️';
-  if (/tecnologia|tech|codigo/.test(c)) return '💻️';
-  if (/arte|art/.test(c)) return '🎨️';
-  if (/viajes|travel/.test(c)) return '✈️';
-  if (/cocina|food/.test(c)) return '👨\u200d🍳️';
-  if (/juego|gaming/.test(c)) return '🎮️';
-  if (/bienestar|yoga/.test(c)) return '🧘️';
-  if (/fotografia|photo/.test(c)) return '📷️';
-  return '👥️';
-}
+// Mismo listado y mismos emojis que en CommunityPage (ver
+// src/constants/categories.js), para que categorías e intereses coincidan
+// en toda la app.
+const getEventEmoji = getCategoryEmoji;
+const getCommunityEmoji = getCategoryEmoji;
 
 function formatEventDate(dateStr) {
   if (!dateStr) return '—';
@@ -114,9 +84,9 @@ function sortEventsByProximity(eventList = []) {
   });
 }
 
-const OTHER_CATEGORY = 'Otro';
 const MAX_CATEGORIES = 3;
-const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', OTHER_CATEGORY];
+// Mismo listado que en CommunityPage (ver src/constants/categories.js).
+const EVENT_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {

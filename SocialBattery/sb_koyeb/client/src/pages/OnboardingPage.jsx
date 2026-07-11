@@ -5,26 +5,12 @@ import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
 import LogoWordmark from '../components/LogoWordmark';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import { CATEGORIES } from '../constants/categories';
 
 // ── Categorías compartidas con Comunidades y Eventos ─────────────────────────
-// U+FE0F (️) after each emoji forces full-color emoji presentation on all platforms
-export const ALL_INTERESTS = [
-  { id: 'Música',       emoji: '🎵️' },
-  { id: 'Deporte',      emoji: '⚽️' },
-  { id: 'Arte',         emoji: '🎨️' },
-  { id: 'Tecnología',   emoji: '💻️' },
-  { id: 'Comida',       emoji: '🍽️' },
-  { id: 'Viajes',       emoji: '✈️' },
-  { id: 'Cine',         emoji: '🎬️' },
-  { id: 'Juego',        emoji: '🎮️' },
-  { id: 'Yoga',         emoji: '🧘️' },
-  { id: 'Fotografía',   emoji: '📷️' },
-  { id: 'Lectura',      emoji: '📚️' },
-  { id: 'Naturaleza',   emoji: '🌿️' },
-  { id: 'Fiesta',       emoji: '🎉️' },
-  { id: 'Bienestar',    emoji: '💆️' },
-  { id: 'Cocina',       emoji: '👨‍🍳️' },
-];
+// Fuente única: src/constants/categories.js. Se re-exporta con este nombre
+// porque ProfilePage y UserProfilePage ya importan ALL_INTERESTS desde aquí.
+export const ALL_INTERESTS = CATEGORIES;
 
 const STEPS = [
   { id: 'welcome',   label: '¡Hola!' },

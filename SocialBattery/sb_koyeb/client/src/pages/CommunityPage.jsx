@@ -9,6 +9,7 @@ import { useUserLocation } from '../context/UserLocationContext';
 import { api } from '../lib/api';
 import TutorialOverlay from '../components/TutorialOverlay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -20,42 +21,11 @@ function normalizeText(value = '') {
     .trim();
 }
 
-function getEventEmoji(category = '') {
-  const c = normalizeText(category);
-  // Se añade el selector de variación U+FE0F a cada emoji para forzar su
-  // presentación a color (el CSS global usa font-variant-emoji: text para
-  // dar un estilo mono a los iconos por defecto; sin este selector solo los
-  // emojis que ya lo llevaban incorporado, como el de Comida, salían a color).
-  if (/música|musica|concierto|concert/.test(c)) return '🎵️';
-  if (/deporte|sport|fútbol|futbol|tenis|running/.test(c)) return '⚽️';
-  if (/arte|art|exposición|exposicion|museo/.test(c)) return '🎨️';
-  if (/tecnología|tecnologia|tech|hacking|código/.test(c)) return '💻️';
-  if (/comida|food|gastro|cocina|cena/.test(c)) return '🍽️';
-  if (/fiesta|party|celebración/.test(c)) return '🎉️';
-  if (/naturaleza|nature|senderismo|hiking/.test(c)) return '🌿️';
-  if (/cine|film|película|movie/.test(c)) return '🎬️';
-  if (/juego|gaming|videojuego/.test(c)) return '🎮️';
-  if (/yoga|meditación|bienestar|wellness/.test(c)) return '🧘️';
-  if (/fotografía|fotografia|photo/.test(c)) return '📷️';
-  if (/lectura|libro|book|literatura/.test(c)) return '📚️';
-  return '🌐️';
-}
-
-function getCommunityEmoji(category = '') {
-  const c = normalizeText(category);
-  // Mismo motivo que en getEventEmoji: se añade el selector U+FE0F para
-  // forzar la presentación a color pese al font-variant-emoji: text global.
-  if (/música|musica/.test(c)) return '🎵️';
-  if (/deporte|sport/.test(c)) return '⚽️';
-  if (/tecnología|tech|código/.test(c)) return '💻️';
-  if (/arte|art/.test(c)) return '🎨️';
-  if (/viajes|travel/.test(c)) return '✈️';
-  if (/cocina|food/.test(c)) return '👨\u200d🍳️';
-  if (/juego|gaming/.test(c)) return '🎮️';
-  if (/bienestar|yoga/.test(c)) return '🧘️';
-  if (/fotografía|photo/.test(c)) return '📷️';
-  return '👥️';
-}
+// Eventos y comunidades comparten el mismo listado de categorías (ver
+// src/constants/categories.js), así que también comparten el mismo emoji
+// por categoría.
+const getEventEmoji = getCategoryEmoji;
+const getCommunityEmoji = getCategoryEmoji;
 
 function formatEventDate(dateStr) {
   if (!dateStr) return '—';
@@ -689,9 +659,11 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
 }
 
 // ── Create Event Modal ────────────────────────────────────────────────────────
-const OTHER_CATEGORY = 'Otro';
 const MAX_CATEGORIES = 3;
-const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', OTHER_CATEGORY];
+// Mismo listado que las comunidades y que los intereses del onboarding
+// (ver src/constants/categories.js), para que los filtros "afines a mis
+// intereses" comparen siempre contra el mismo universo de categorías.
+const EVENT_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 
 function CreateEventModal({ onClose, onCreate }) {
   const now = new Date();
@@ -1255,7 +1227,8 @@ function CreateEventModal({ onClose, onCreate }) {
 }
 
 // ── Create Community Modal ────────────────────────────────────────────────────
-const COMMUNITY_CATEGORIES = ['Música', 'Deporte', 'Tecnología', 'Arte', 'Viajes', 'Cocina', 'Juego', 'Bienestar', 'Fotografía', OTHER_CATEGORY];
+// Mismo listado que los eventos (ver src/constants/categories.js).
+const COMMUNITY_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 const ALL_COMMUNITY_CATEGORIES = 'Todo';
 const COMMUNITY_CATEGORY_FILTERS = [ALL_COMMUNITY_CATEGORIES, ...COMMUNITY_CATEGORIES];
 const KNOWN_COMMUNITY_CATEGORIES = COMMUNITY_CATEGORIES.filter(cat => cat !== OTHER_CATEGORY);
