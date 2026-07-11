@@ -2393,7 +2393,7 @@ export default function CommunityPage() {
                 }`}>
                   {communityRaffleOnly ? '✓' : ''}
                 </span>
-                🎟️ Promoción en marcha
+                🎟️ Sorteo en marcha
               </button>
 
               <button
