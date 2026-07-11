@@ -62,6 +62,20 @@ router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req,
         objectName: `mascot-previews/${req.user.id}`,
         fallbackMaxLength: 3000000,
       });
+      // `objectName` es fijo por usuario (mismo archivo se sobreescribe con
+      // upsert:true en storeImage), así que la URL pública NUNCA cambia
+      // entre subidas. Sin un cache-buster, el navegador de cada amigo (o
+      // el CDN de Supabase Storage) sigue sirviendo indefinidamente los
+      // bytes de la PRIMERA imagen que se cacheó bajo esa URL, aunque la
+      // subida en sí se complete correctamente — la mascota corregida
+      // nunca "llega a verse" aunque sí haya llegado al bucket. Se añade
+      // ?v=<timestamp> a la URL guardada para que cada resubida sea una
+      // URL distinta y fuerce a recargar la imagen nueva. No aplica al
+      // fallback data:URL de storeImage (no es una URL cacheable por
+      // navegador/CDN, y añadirle "?v=" corrompería el base64).
+      if (!url.startsWith('data:')) {
+        url += `${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      }
     }
 
     const { error } = await supabase
