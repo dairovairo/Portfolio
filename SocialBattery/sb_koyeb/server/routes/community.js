@@ -2122,4 +2122,197 @@ router.delete('/communities/:id/messages/:messageId/vote', requireAuth, async (r
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// SORTEOS DE COMUNIDAD
+
+const raffleImageUpload = createImageUpload({ maxSizeMb: 5 });
+function uploadRaffleImage(req, res, next) {
+  raffleImageUpload.single('image')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
+  });
+}
+
+async function getRaffleParticipantCount(communityId) {
+  const { count } = await supabase
+    .from('community_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('community_id', communityId)
+    .neq('role', 'admin');
+  return count || 0;
+}
+
+function serializeRaffle(raffle, { participantCount, currentUserId } = {}) {
+  return {
+    id: raffle.id,
+    community_id: raffle.community_id,
+    title: raffle.title,
+    description: raffle.description,
+    image_url: raffle.image_url,
+    ends_at: raffle.ends_at,
+    created_at: raffle.created_at,
+    drawn_at: raffle.drawn_at,
+    winner: raffle.winner || null,
+    participant_count: participantCount ?? null,
+    is_creator: currentUserId ? raffle.creator_id === currentUserId : undefined,
+    can_participate: currentUserId ? raffle.creator_id !== currentUserId : undefined,
+  };
+}
+
+// ── GET /api/community/communities/:id/raffles — listar sorteos ────────────
+router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data, error } = await supabase
+      .from('community_raffles')
+      .select(`
+        id, community_id, creator_id, title, description, image_url,
+        ends_at, drawn_at, created_at,
+        winner:winner_id(id, username, avatar_url)
+      `)
+      .eq('community_id', communityId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const participantCount = await getRaffleParticipantCount(communityId);
+    res.json({
+      raffles: (data || []).map(r => serializeRaffle(r, { participantCount, currentUserId: userId })),
+    });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/raffles', err);
+    res.status(500).json({ error: `Failed to fetch raffles: ${err.message || err}` });
+  }
+});
+
+// ── POST /api/community/communities/:id/raffles — crear sorteo ─────────────
+// Solo el CREADOR de la comunidad (no vale con ser admin/moderador promovido).
+router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  const { title, description, ends_at } = req.body;
+
+  if (!title?.trim()) return res.status(400).json({ error: 'El título es obligatorio' });
+  if (!ends_at) return res.status(400).json({ error: 'La fecha de fin es obligatoria' });
+
+  const endsAtDate = new Date(ends_at);
+  if (Number.isNaN(endsAtDate.getTime())) {
+    return res.status(400).json({ error: 'La fecha de fin no es válida' });
+  }
+  if (endsAtDate <= new Date()) {
+    return res.status(400).json({ error: 'La fecha de fin debe ser en el futuro' });
+  }
+
+  try {
+    const { data: community } = await supabase
+      .from('communities')
+      .select('id, creator_id')
+      .eq('id', communityId)
+      .maybeSingle();
+
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (community.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la comunidad puede crear un sorteo' });
+    }
+
+    let imageUrl = null;
+    if (req.file) {
+      imageUrl = await storeImage({
+        file: req.file,
+        objectName: `raffle-images/${communityId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 6000000,
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('community_raffles')
+      .insert({
+        community_id: communityId,
+        creator_id: userId,
+        title: title.trim(),
+        description: description?.trim() || null,
+        image_url: imageUrl,
+        ends_at: endsAtDate.toISOString(),
+      })
+      .select('id, community_id, creator_id, title, description, image_url, ends_at, drawn_at, created_at')
+      .single();
+
+    if (error) throw error;
+
+    const participantCount = await getRaffleParticipantCount(communityId);
+    res.status(201).json({ raffle: serializeRaffle({ ...data, winner: null }, { participantCount, currentUserId: userId }) });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/raffles', err);
+    res.status(500).json({ error: err.message || 'Failed to create raffle' });
+  }
+});
+
+// ── POST /api/community/communities/:id/raffles/:raffleId/draw — sortear ───
+// Solo el creador, y solo una vez pasada la fecha de fin.
+router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: communityId, raffleId } = req.params;
+
+  try {
+    const { data: raffle, error: fetchErr } = await supabase
+      .from('community_raffles')
+      .select('id, community_id, creator_id, ends_at, drawn_at, winner_id')
+      .eq('id', raffleId)
+      .eq('community_id', communityId)
+      .single();
+
+    if (fetchErr || !raffle) return res.status(404).json({ error: 'Sorteo no encontrado' });
+    if (raffle.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la comunidad puede sortear' });
+    }
+    if (raffle.drawn_at || raffle.winner_id) {
+      return res.status(400).json({ error: 'Este sorteo ya tiene ganador' });
+    }
+    if (new Date(raffle.ends_at) > new Date()) {
+      return res.status(400).json({ error: 'El sorteo todavía no ha terminado' });
+    }
+
+    // Participan todos los miembros de la comunidad salvo el/los admin.
+    const { data: eligibleMembers, error: membersErr } = await supabase
+      .from('community_members')
+      .select('user_id')
+      .eq('community_id', communityId)
+      .neq('role', 'admin');
+
+    if (membersErr) throw membersErr;
+    if (!eligibleMembers?.length) {
+      return res.status(400).json({ error: 'No hay participantes para sortear' });
+    }
+
+    const winnerEntry = eligibleMembers[Math.floor(Math.random() * eligibleMembers.length)];
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('community_raffles')
+      .update({ winner_id: winnerEntry.user_id, drawn_at: new Date().toISOString() })
+      .eq('id', raffleId)
+      .select(`
+        id, community_id, creator_id, title, description, image_url,
+        ends_at, drawn_at, created_at,
+        winner:winner_id(id, username, avatar_url)
+      `)
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    const participantCount = await getRaffleParticipantCount(communityId);
+    res.json({ raffle: serializeRaffle(updated, { participantCount, currentUserId: userId }) });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/raffles/:raffleId/draw', err);
+    res.status(500).json({ error: err.message || 'Failed to draw raffle winner' });
+  }
+});
+
+
 module.exports = router;

@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
+import { shareOrDownloadBlob } from '../lib/instagramStory';
 
 function normalizeText(value = '') {
   return String(value ?? '')
@@ -753,6 +754,281 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   );
 }
 
+function formatRaffleEndLabel(dateStr) {
+  if (!dateStr) return '';
+  const time = new Date(dateStr).getTime();
+  if (Number.isNaN(time)) return '';
+  const diffMs = time - Date.now();
+  if (diffMs <= 0) return 'Terminado';
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return 'Termina hoy';
+  if (days === 1) return 'Termina mañana';
+  return `Termina en ${days} días`;
+}
+
+function RaffleAvatar({ user }) {
+  if (user?.avatar_url) {
+    return <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-surface-border" />;
+  }
+  return (
+    <div className="w-8 h-8 rounded-full bg-accent-primary/20 border border-accent-primary/30 flex items-center justify-center text-xs font-display font-bold text-accent-glow">
+      {(user?.username || '?').charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
+  const [drawing, setDrawing] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const hasEnded = new Date(raffle.ends_at) <= new Date();
+  const isDrawn = Boolean(raffle.winner);
+
+  async function runDraw() {
+    setDrawing(true);
+    try { await onDraw(raffle.id); } finally { setDrawing(false); }
+  }
+
+  async function runShare() {
+    setSharing(true);
+    try { await onShare(raffle); } finally { setSharing(false); }
+  }
+
+  return (
+    <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden">
+      {raffle.image_url && (
+        <div className="aspect-[16/9] bg-surface-bg">
+          <img src={raffle.image_url} alt={raffle.title} className="w-full h-full object-cover" />
+        </div>
+      )}
+      <div className="p-4 space-y-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-lg flex-shrink-0">🎁</span>
+            <h3 className="font-display font-bold text-surface-text text-sm truncate">{raffle.title}</h3>
+          </div>
+          <button
+            onClick={runShare}
+            disabled={sharing}
+            title="Compartir sorteo"
+            className="flex-shrink-0 w-8 h-8 rounded-lg border border-surface-border flex items-center justify-center text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-colors disabled:opacity-50"
+          >
+            {sharing ? '⏳' : '📤'}
+          </button>
+        </div>
+
+        {raffle.description && (
+          <p className="text-xs text-surface-muted leading-relaxed">{raffle.description}</p>
+        )}
+
+        <div className="flex items-center gap-3 text-[11px] font-mono text-surface-muted">
+          <span className={isDrawn ? 'text-surface-muted' : hasEnded ? 'text-amber-400' : 'text-accent-glow'}>
+            {isDrawn ? `Terminó el ${new Date(raffle.ends_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : formatRaffleEndLabel(raffle.ends_at)}
+          </span>
+          <span>·</span>
+          <span>{raffle.participant_count ?? 0} participantes</span>
+        </div>
+
+        {isDrawn ? (
+          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 mt-1">
+            <RaffleAvatar user={raffle.winner} />
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono text-amber-400/80">Ganador</p>
+              <p className="text-sm font-display font-bold text-surface-text truncate">{raffle.winner?.username}</p>
+            </div>
+          </div>
+        ) : isCreator && hasEnded ? (
+          <button
+            onClick={runDraw}
+            disabled={drawing}
+            className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-surface-bg font-display font-bold text-xs transition-all disabled:opacity-50"
+          >
+            {drawing ? 'Sorteando...' : '🎉 Sortear ganador'}
+          </button>
+        ) : !hasEnded ? (
+          <p className="text-[11px] text-surface-muted italic">
+            {isCreator ? 'Podrás sortear al ganador cuando termine el plazo.' : 'Participas automáticamente por ser miembro de la comunidad.'}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CreateRaffleModal({ onClose, onCreate, communityName }) {
+  const minDate = new Date(Date.now() + 60 * 60 * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
+  const imageInputRef = useRef(null);
+  const imageCameraRef = useRef(null);
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [endsAt, setEndsAt] = useState(defaultDate);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleImageChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError('La foto no puede superar 5MB');
+      e.target.value = '';
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(await readFileAsDataUrl(file));
+    setError('');
+  }
+
+  function clearImage() {
+    setImageFile(null);
+    setImagePreview('');
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (imageCameraRef.current) imageCameraRef.current.value = '';
+  }
+
+  async function handleSubmit() {
+    if (!title.trim()) { setError('El título es obligatorio'); return; }
+    if (!endsAt) { setError('La fecha de fin es obligatoria'); return; }
+    if (new Date(endsAt) <= new Date()) { setError('La fecha de fin debe ser en el futuro'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      await onCreate({
+        title: title.trim(),
+        description: description.trim(),
+        ends_at: new Date(endsAt).toISOString(),
+        image_file: imageFile,
+      });
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Error al crear el sorteo');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
+
+        <div className="flex items-center gap-3 mb-6">
+          <span className="text-3xl">🎁</span>
+          <div>
+            <h2 className="font-display font-bold text-surface-text text-lg">Crear sorteo</h2>
+            <p className="text-xs text-surface-muted">{communityName}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Título *</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Ej: Sorteamos una camiseta oficial"
+              maxLength={120}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Descripción <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="¿En qué consiste el premio? ¿Alguna condición?"
+              rows={3}
+              maxLength={1000}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha de fin *</label>
+            <input
+              type="datetime-local"
+              value={endsAt}
+              onChange={e => setEndsAt(e.target.value)}
+              min={defaultDate}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Foto <span className="text-slate-600">(opcional)</span>
+            </label>
+            {imagePreview ? (
+              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                <div className="aspect-[16/9]">
+                  <img src={imagePreview} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="truncate text-xs text-surface-muted">{imageFile?.name}</span>
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowPhotoMenu(true)}
+                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
+              >
+                Elegir foto
+              </button>
+            )}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+            <input
+              ref={imageCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => imageCameraRef.current?.click()}
+              onGallery={() => imageInputRef.current?.click()}
+            />
+          </div>
+
+          <p className="text-[11px] text-surface-muted italic">
+            Participan todos los miembros de la comunidad salvo el admin.
+          </p>
+
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          <button
+            onClick={handleSubmit}
+            disabled={saving || !title.trim() || !endsAt}
+            className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-surface-bg font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
+          >
+            {saving ? 'Creando...' : 'Crear sorteo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, onLike }) {
   const sortedEvents = sortEventsByProximity(events);
 
@@ -793,6 +1069,17 @@ export default function CommunityDetailPage() {
   const [pastEvents, setPastEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [raffles, setRaffles] = useState([]);
+  const [showCreateRaffle, setShowCreateRaffle] = useState(false);
+
+  const loadRaffles = useCallback(async () => {
+    try {
+      const data = await api.get(`/community/communities/${communityId}/raffles`);
+      setRaffles(data.raffles || []);
+    } catch (e) {
+      // No bloqueamos la carga de la comunidad si fallan los sorteos.
+    }
+  }, [communityId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -812,6 +1099,10 @@ export default function CommunityDetailPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    loadRaffles();
+  }, [loadRaffles]);
+
   // Limpiar el badge SOLO después de que la página haya cargado y se muestre al usuario
   useEffect(() => {
     if (!loading && community) {
@@ -823,6 +1114,44 @@ export default function CommunityDetailPage() {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
     showToast('Evento publicado', 'success');
     await load();
+  }
+
+  async function handleCreateRaffle(form) {
+    const formData = new FormData();
+    formData.append('title', form.title);
+    if (form.description?.trim()) formData.append('description', form.description.trim());
+    formData.append('ends_at', form.ends_at);
+    if (form.image_file) formData.append('image', form.image_file);
+    await api.postForm(`/community/communities/${communityId}/raffles`, formData);
+    showToast('¡Sorteo creado! 🎁', 'success');
+    await loadRaffles();
+  }
+
+  async function handleDrawRaffle(raffleId) {
+    try {
+      await api.post(`/community/communities/${communityId}/raffles/${raffleId}/draw`, {});
+      showToast('¡Ganador sorteado! 🎉', 'success');
+      await loadRaffles();
+    } catch (e) {
+      showToast(e.message || 'Error al sortear', 'error');
+    }
+  }
+
+  async function handleShareRaffle(raffle) {
+    try {
+      if (raffle.image_url) {
+        const res = await fetch(raffle.image_url);
+        const blob = await res.blob();
+        const result = await shareOrDownloadBlob(blob, 'sorteo-sb.png', `${raffle.title} · SocialBattery`);
+        if (result.method === 'download') showToast('Imagen descargada. ¡Compártela! 📸', 'success');
+      } else if (navigator.share) {
+        await navigator.share({ title: raffle.title, text: `${raffle.title} · SocialBattery` });
+      } else {
+        showToast('Este sorteo no tiene foto para compartir', 'error');
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') showToast('Error al compartir', 'error');
+    }
   }
 
   async function handleJoinCommunity() {
@@ -928,6 +1257,16 @@ export default function CommunityDetailPage() {
             <span>💬</span> Chat
           </button>
 
+          {community.creator_id === profile?.id && (
+            <button
+              onClick={() => setShowCreateRaffle(true)}
+              title="Crear sorteo"
+              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/25 hover:bg-amber-500/25 hover:border-amber-500/40 hover:text-amber-300 transition-colors"
+            >
+              <span>🎁</span> Sorteo
+            </button>
+          )}
+
           {community.is_admin && (
             <button
               onClick={() => setShowCreateEvent(true)}
@@ -985,6 +1324,23 @@ export default function CommunityDetailPage() {
           </div>
         </section>
 
+        {raffles.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="font-display font-bold text-surface-text text-sm px-1">Sorteos</h2>
+            <div className="space-y-3">
+              {raffles.map(raffle => (
+                <RaffleCard
+                  key={raffle.id}
+                  raffle={raffle}
+                  isCreator={community.creator_id === profile?.id}
+                  onDraw={handleDrawRaffle}
+                  onShare={handleShareRaffle}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         <EventSection
           title="Eventos actuales"
           empty="No hay eventos activos en esta comunidad."
@@ -1011,6 +1367,14 @@ export default function CommunityDetailPage() {
           communityOrganization={community.organization}
           onClose={() => setShowCreateEvent(false)}
           onCreate={handleCreateEvent}
+        />
+      )}
+
+      {showCreateRaffle && (
+        <CreateRaffleModal
+          communityName={community.name}
+          onClose={() => setShowCreateRaffle(false)}
+          onCreate={handleCreateRaffle}
         />
       )}
 
