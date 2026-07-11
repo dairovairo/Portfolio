@@ -159,23 +159,56 @@ function matchesUserInterests(event, userInterests = []) {
   return eventCats.some(cat => normalizedInterests.includes(cat));
 }
 
-function sortEventsBy(eventList = [], sortKey = 'app', { userCoords, userInterests = [] } = {}) {
-  if (sortKey === 'cercania') {
-    return sortEventsByDistance(eventList, userCoords);
+function rankScoreOf(event, rankKey) {
+  if (rankKey === 'likes') return event.like_count || 0;
+  if (rankKey === 'planificaciones') return event.attendee_count || 0;
+  // 'app': todos los eventos compiten por igual, por puntuación ponderada
+  return promotionScore(event);
+}
+
+// Las dos secciones del selector (cercanía / cercanía e intereses) y (app /
+// planificaciones / likes) son compatibles entre sí: se puede tener una
+// opción activa en cada una a la vez. Sin criterio de cercanía se ordena solo
+// por el criterio elegido; sin criterio de "otros" se ordena solo por
+// cercanía; con ambos activos se combina un 50/50 (normalizado) de cercanía
+// y puntuación del criterio elegido.
+function sortEventsBy(eventList = [], { proximityKey = null, rankKey = 'app', userCoords, userInterests = [] } = {}) {
+  let list = eventList;
+  if (proximityKey === 'cercania_intereses') {
+    list = list.filter(event => matchesUserInterests(event, userInterests));
   }
-  if (sortKey === 'cercania_intereses') {
-    return sortEventsByDistance(eventList.filter(event => matchesUserInterests(event, userInterests)), userCoords);
+
+  if (!proximityKey) {
+    return [...list].sort((a, b) => rankScoreOf(b, rankKey) - rankScoreOf(a, rankKey));
   }
-  return [...eventList].sort((a, b) => {
-    if (sortKey === 'likes') {
-      return (b.like_count || 0) - (a.like_count || 0);
-    }
-    if (sortKey === 'planificaciones') {
-      return (b.attendee_count || 0) - (a.attendee_count || 0);
-    }
-    // 'app': todos los eventos compiten por igual, por puntuación ponderada
-    return promotionScore(b) - promotionScore(a);
-  });
+
+  if (!rankKey) {
+    return sortEventsByDistance(list, userCoords);
+  }
+
+  // Eventos sin distancia calculable (sin ubicación de usuario o del evento)
+  // van siempre al final, igual que en el ordenamiento por cercanía puro.
+  const withDistance = [];
+  const withoutDistance = [];
+  for (const event of list) {
+    const distance = getEventDistanceKm(event, userCoords);
+    if (distance === null) withoutDistance.push(event);
+    else withDistance.push({ event, distance });
+  }
+
+  const maxDistance = Math.max(0, ...withDistance.map(e => e.distance));
+  const maxRankScore = Math.max(0, ...withDistance.map(e => rankScoreOf(e.event, rankKey)));
+
+  const combined = withDistance
+    .map(({ event, distance }) => {
+      const proximityScore = maxDistance > 0 ? 1 - distance / maxDistance : 1;
+      const normalizedRankScore = maxRankScore > 0 ? rankScoreOf(event, rankKey) / maxRankScore : 0;
+      return { event, score: proximityScore * 0.5 + normalizedRankScore * 0.5 };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ event }) => event);
+
+  return [...combined, ...withoutDistance];
 }
 
 // Filtro de fecha de inicio: 'week' (esta semana), 'month' (este mes) o
@@ -198,25 +231,21 @@ function matchesEventDateFilter(event, dateFilter) {
 // escritorio. Se sustituye por un menú propio (mismo patrón que el menú ⋯ de
 // GroupChatPage: botón + panel absoluto + cierre al hacer click fuera) para
 // que se vea exactamente igual en cualquier dispositivo.
-const EVENT_SORT_GROUPS = [
-  {
-    label: 'Cercanía',
-    options: [
-      { key: 'cercania', label: '📍 Cercanía' },
-      { key: 'cercania_intereses', label: '📍✨ Cercanía e intereses' },
-    ],
-  },
-  {
-    label: 'Otros',
-    options: [
-      { key: 'app', label: '✨ Selección' },
-      { key: 'planificaciones', label: '📅 Planificaciones' },
-      { key: 'likes', label: '♥ Likes' },
-    ],
-  },
+// Las dos secciones son compatibles entre sí: se puede tener una opción
+// activa en "Cercanía" y otra en "Otros" a la vez (ver sortEventsBy). Por
+// eso cada grupo lleva su propio value/onChange, en vez de un único value
+// plano como antes.
+const EVENT_PROXIMITY_OPTIONS = [
+  { key: 'cercania', label: '📍 Cercanía' },
+  { key: 'cercania_intereses', label: '📍✨ Cercanía e intereses' },
+];
+const EVENT_RANK_OPTIONS = [
+  { key: 'app', label: '✨ Selección' },
+  { key: 'planificaciones', label: '📅 Planificaciones' },
+  { key: 'likes', label: '♥ Likes' },
 ];
 
-function EventSortDropdown({ value, onChange }) {
+function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRankChange }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -228,9 +257,9 @@ function EventSortDropdown({ value, onChange }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  const currentLabel = EVENT_SORT_GROUPS
-    .flatMap(group => group.options)
-    .find(opt => opt.key === value)?.label || 'Ordenar';
+  const proximityLabel = EVENT_PROXIMITY_OPTIONS.find(opt => opt.key === proximityValue)?.label;
+  const rankLabel = EVENT_RANK_OPTIONS.find(opt => opt.key === rankValue)?.label;
+  const currentLabel = [proximityLabel, rankLabel].filter(Boolean).join(' + ') || 'Ordenar';
 
   return (
     <div className="relative flex-shrink-0" ref={menuRef}>
@@ -243,28 +272,45 @@ function EventSortDropdown({ value, onChange }) {
         <span className={`text-[9px] leading-none transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[210px] py-1.5 overflow-hidden animate-fade-in">
-          {EVENT_SORT_GROUPS.map(group => (
-            <div key={group.label}>
-              <p className="px-4 pt-2 pb-1 text-[10px] font-display font-bold uppercase tracking-wide text-surface-muted/70">
-                {group.label}
-              </p>
-              {group.options.map(opt => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => { onChange(opt.key); setOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
-                    value === opt.key
-                      ? 'text-accent-glow bg-accent-primary/10'
-                      : 'text-surface-text hover:bg-surface-hover'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          ))}
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[230px] py-1.5 overflow-hidden animate-fade-in">
+          <div>
+            <p className="px-4 pt-2 pb-1 text-[10px] font-display font-bold uppercase tracking-wide text-surface-muted/70">
+              Cercanía
+            </p>
+            {EVENT_PROXIMITY_OPTIONS.map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => onProximityChange(proximityValue === opt.key ? null : opt.key)}
+                className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
+                  proximityValue === opt.key
+                    ? 'text-accent-glow bg-accent-primary/10'
+                    : 'text-surface-text hover:bg-surface-hover'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div>
+            <p className="px-4 pt-2 pb-1 text-[10px] font-display font-bold uppercase tracking-wide text-surface-muted/70">
+              Otros
+            </p>
+            {EVENT_RANK_OPTIONS.map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => onRankChange(rankValue === opt.key ? null : opt.key)}
+                className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
+                  rankValue === opt.key
+                    ? 'text-accent-glow bg-accent-primary/10'
+                    : 'text-surface-text hover:bg-surface-hover'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -1749,7 +1795,10 @@ export default function CommunityPage() {
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
   const [eventDateFilter, setEventDateFilter] = useState('all'); // 'week' | 'month' | 'all'
-  const [eventSort, setEventSort] = useState('cercania'); // 'cercania' | 'cercania_intereses' | 'app' | 'planificaciones' | 'likes'
+  // Dos secciones compatibles entre sí (ver sortEventsBy): se puede tener una
+  // opción activa en cada una a la vez, o solo en una, o en ninguna.
+  const [eventProximitySort, setEventProximitySort] = useState('cercania'); // null | 'cercania' | 'cercania_intereses'
+  const [eventRankSort, setEventRankSort] = useState(null); // null | 'app' | 'planificaciones' | 'likes'
   const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
@@ -1877,7 +1926,12 @@ export default function CommunityPage() {
 
   // ── Event search + filter ──────────────────────────────────────────────────
   const normalizedEventSearch = normalizeText(eventSearch);
-  const filteredSortedEvents = sortEventsBy(events, eventSort, { userCoords, userInterests: profile?.interests })
+  const filteredSortedEvents = sortEventsBy(events, {
+    proximityKey: eventProximitySort,
+    rankKey: eventRankSort,
+    userCoords,
+    userInterests: profile?.interests,
+  })
     .filter(event => {
       if (!isUpcomingEvent(event)) return false;
       const matchesSearch = !normalizedEventSearch || normalizeText([
@@ -2026,7 +2080,12 @@ export default function CommunityPage() {
                 >
                   🏆
                 </button>
-                <EventSortDropdown value={eventSort} onChange={setEventSort} />
+                <EventSortDropdown
+                  proximityValue={eventProximitySort}
+                  onProximityChange={setEventProximitySort}
+                  rankValue={eventRankSort}
+                  onRankChange={setEventRankSort}
+                />
               </div>
             </div>
 
@@ -2037,7 +2096,7 @@ export default function CommunityPage() {
                 cacheadas de una concesión de permiso anterior a que el
                 usuario desactivase la ubicación. requestLocation reintenta
                 la petición nativa. */}
-            {(eventSort === 'cercania' || eventSort === 'cercania_intereses') && (!userCoords || locationStatus === 'denied') && (
+            {(eventProximitySort === 'cercania' || eventProximitySort === 'cercania_intereses') && (!userCoords || locationStatus === 'denied') && (
               <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
                 <span>
                   📍 {locationStatus === 'denied'
@@ -2060,7 +2119,7 @@ export default function CommunityPage() {
 
             {/* Aviso de intereses: "cercanía e intereses" sin intereses
                 configurados en el perfil no tiene nada que comparar. */}
-            {eventSort === 'cercania_intereses' && !(profile?.interests?.length > 0) && (
+            {eventProximitySort === 'cercania_intereses' && !(profile?.interests?.length > 0) && (
               <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-accent-primary/10 border border-accent-primary/25 text-accent-glow rounded-xl px-3 py-2.5">
                 <span>✨ Añade tus intereses en el perfil para afinar este filtro.</span>
                 <button
@@ -2168,7 +2227,8 @@ export default function CommunityPage() {
                     setEventCategoryFilter(ALL_EVENT_CATEGORIES);
                     setEventPriceFilter('all');
                     setEventDateFilter('all');
-                    setEventSort('cercania');
+                    setEventProximitySort('cercania');
+                    setEventRankSort(null);
                   }}
                   className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                 >
@@ -2181,7 +2241,7 @@ export default function CommunityPage() {
                   <EventCard
                     key={event.id}
                     event={{ ...event, attendees: event.attendee_ids || [] }}
-                    rank={!isEventFiltered && eventSort === 'app' ? i + 1 : undefined}
+                    rank={!isEventFiltered && eventRankSort === 'app' && !eventProximitySort ? i + 1 : undefined}
                     onJoin={handleJoinEvent}
                     onLeave={handleLeaveEvent}
                     onLike={handleLikeEvent}

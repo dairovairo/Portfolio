@@ -270,12 +270,12 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
       );
     } else if (acc.isRinon) {
       // Ver comentario detallado en components/MascotDisplay.jsx:
-      // ajuste 4 (otro 2% a la derecha sobre el ajuste 3, sin cambio de
-      // tamaño): left=-0.0725+2=1.9275, top base=51.91625, width=152.145,
-      // height=59.1675. rinonScale/rinonOffsetX (por ítem) recentran y
-      // desplazan la caja base para colores cuyo PNG tiene más margen
-      // interno — misma fórmula que en MascotDisplay.jsx.
-      const baseLeft = 1.9275;
+      // ajuste 3 (otros 3% a la derecha, sin cambio de tamaño):
+      // left=-0.0725, top base=51.91625, width=152.145, height=59.1675.
+      // rinonScale/rinonOffsetX (por ítem) recentran y desplazan la caja
+      // base para colores cuyo PNG tiene más margen interno — misma
+      // fórmula que en MascotDisplay.jsx.
+      const baseLeft = -0.0725;
       const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
       const baseWidth = 152.145;
       const baseHeight = 59.1675;

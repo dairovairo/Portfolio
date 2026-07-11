@@ -1081,6 +1081,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_rosa',
@@ -1091,6 +1093,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_azul',
@@ -1101,6 +1105,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_morada',
@@ -1111,6 +1117,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_verde',
@@ -1121,6 +1129,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_naranja',
@@ -1133,6 +1143,8 @@ export const MASCOT_ACCESSORIES = [
     isRinon: true,
     // Subida un 10% respecto al top base del grupo.
     rinonOffsetY: -10,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_amarilla',
@@ -1143,6 +1155,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_marron',
@@ -1153,6 +1167,8 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
   {
     id: 'acc_rinon_gris',
@@ -1166,6 +1182,8 @@ export const MASCOT_ACCESSORIES = [
     // Ítem de partida fijo para personalizar cualquier color del carrusel
     // de Riñoneras (ver pickAccessoryTarget en ShopPage.jsx).
     isCustomizeBase: true,
+    // Movida un 1% a la izquierda.
+    rinonOffsetX: -1,
   },
 ];
 

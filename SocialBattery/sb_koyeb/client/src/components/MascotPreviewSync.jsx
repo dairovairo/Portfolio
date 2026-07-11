@@ -26,16 +26,6 @@ import { api } from '../lib/api';
 // cada click mientras está probándose ítems.
 const SYNC_DEBOUNCE_MS = 1200;
 
-// Se incrementa cada vez que cambia la LÓGICA de posicionamiento/composición
-// en mascotRenderer.js (p. ej. al corregir el offset de la riñonera). El
-// "signature" de abajo solo cambia cuando cambia el equipado, así que sin
-// esto una corrección de fórmula nunca se resubiría para quien ya tuviera
-// ese ítem puesto desde antes: el signature seguiría siendo idéntico. Al
-// incluir esta versión en el signature, cualquier bump fuerza una
-// regeneración + resubida en el siguiente login de TODOS los usuarios, sin
-// que tengan que reequipar nada.
-const RENDER_LOGIC_VERSION = 2; // v2: fix offset riñonera (ajuste 4, +2% derecha)
-
 export default function MascotPreviewSync() {
   const { profile } = useAuth();
   const {
@@ -47,20 +37,6 @@ export default function MascotPreviewSync() {
   const timerRef = useRef(null);
   const lastSignatureRef = useRef(null);
 
-  // getMascotLayers/getFeetZones/getHeadZones/getOutfitZones/
-  // getAccessoryZones se recrean en CADA render de MascotProvider (no están
-  // memoizadas con useCallback). Si entraran en el array de dependencias
-  // del efecto de abajo, cualquier re-render ajeno del provider (navegar de
-  // página, un toast, el heartbeat de presencia, cualquier contexto por
-  // encima de MascotProvider actualizándose…) reiniciaría el debounce una y
-  // otra vez — y si esos re-renders eran más frecuentes que
-  // SYNC_DEBOUNCE_MS, la subida de la imagen corregida podía no llegar a
-  // completarse NUNCA. Guardamos las funciones en un ref (actualizado en
-  // cada render, sin ser dependencia) para usar siempre la versión más
-  // reciente al disparar, sin que su cambio de identidad reinicie el timer.
-  const mascotApiRef = useRef(null);
-  mascotApiRef.current = { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones };
-
   useEffect(() => {
     if (!profile?.id || !skinHydrated) return;
 
@@ -68,7 +44,6 @@ export default function MascotPreviewSync() {
     // afecta al aspecto visual): si no cambió desde la última subida, no
     // hace falta volver a generar ni subir nada.
     const signature = JSON.stringify({
-      v: RENDER_LOGIC_VERSION,
       activeActivity,
       activeOutfit,
       activeFeet,
@@ -81,7 +56,9 @@ export default function MascotPreviewSync() {
     timerRef.current = setTimeout(async () => {
       lastSignatureRef.current = signature;
       try {
-        const overlayBlob = await renderMascotOverlayBlob(mascotApiRef.current);
+        const overlayBlob = await renderMascotOverlayBlob({
+          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
+        });
 
         const formData = new FormData();
         // Sin capas equipadas (mascota base): se envía sin adjuntar
@@ -97,12 +74,10 @@ export default function MascotPreviewSync() {
     }, SYNC_DEBOUNCE_MS);
 
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-    // getMascotLayers/getFeetZones/... deliberadamente fuera del array (ver
-    // comentario de mascotApiRef arriba): dependen solo del equipado real.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     profile?.id, skinHydrated,
     activeActivity, activeOutfit, activeFeet, activeHead, activeAccessories,
+    getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
   ]);
 
   return null;
