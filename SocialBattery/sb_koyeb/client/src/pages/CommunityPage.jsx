@@ -1047,7 +1047,6 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-sm font-display font-bold text-surface-text">Basic Promotion</span>
                     <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Listado estándar en la sección de eventos de la comunidad.</p>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'basic' ? null : 'basic'); }}
@@ -1088,7 +1087,6 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
                     <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Etiqueta ⚡ Premium · Notificación push a usuarios seleccionados de la app al publicar.</p>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'premium' ? null : 'premium'); }}
@@ -1104,6 +1102,7 @@ function CreateEventModal({ onClose, onCreate }) {
                       <li>· Aparición en lista de eventos</li>
                       <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
                       <li>· Notificaciones a número de usuarios contratado</li>
+                      <li>· Insignia premium</li>
                     </ul>
                   )}
                 </div>
@@ -1130,7 +1129,6 @@ function CreateEventModal({ onClose, onCreate }) {
                     <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
                     <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
                   </div>
-                  <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'ultra' ? null : 'ultra'); }}
@@ -1146,7 +1144,8 @@ function CreateEventModal({ onClose, onCreate }) {
                       <li>· Aparición en lista de eventos</li>
                       <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
                       <li>· Notificaciones a número de usuarios contratado</li>
-                      <li>· Apariciones en banner menú principal</li>
+                      <li>· Apariciones en banner menú principal a número de usuarios contratado</li>
+                      <li>· Insignia ultra</li>
                     </ul>
                   )}
                 </div>
