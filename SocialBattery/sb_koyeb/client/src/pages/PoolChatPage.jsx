@@ -646,6 +646,8 @@ export default function PoolChatPage() {
   }, [poolId]);
 
   const isCreator = Boolean(pool?.is_creator);
+  // Cualquier apuntado a la quedada puede fijar/desfijar mensajes, no solo el creador.
+  const canPinMessages = true;
   const isPinnedMessage = (messageId) => pinnedMessage?.id === messageId;
 
   async function handleTogglePin(messageId, isPinned) {
@@ -860,7 +862,7 @@ export default function PoolChatPage() {
           <>
             <PinnedBanner
               pinned={pinnedMessage}
-              canUnpin={isCreator}
+              canUnpin={canPinMessages}
               onUnpin={() => handleTogglePin(pinnedMessage.id, true)}
               onJumpTo={jumpToPinnedMessage}
             />
@@ -889,7 +891,7 @@ export default function PoolChatPage() {
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
                   identity={identity}
-                  canPin={isCreator}
+                  canPin={canPinMessages}
                   isPinned={isPinnedMessage(msg.id)}
                   onTogglePin={handleTogglePin}
                 />
@@ -905,7 +907,7 @@ export default function PoolChatPage() {
                   identity={identity}
                   onVote={handleVote}
                   voting={votingMessageId}
-                  canPin={isCreator}
+                  canPin={canPinMessages}
                   isPinned={isPinnedMessage(msg.id)}
                   onTogglePin={handleTogglePin}
                 />
@@ -920,7 +922,7 @@ export default function PoolChatPage() {
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
                 identity={identity}
-                canPin={isCreator}
+                canPin={canPinMessages}
                 isPinned={isPinnedMessage(msg.id)}
                 onTogglePin={handleTogglePin}
               />

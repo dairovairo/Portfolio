@@ -1061,6 +1061,8 @@ export default function GroupChatPage() {
   }, [groupId]);
 
   const isOwner = group?.owner?.id === profile?.id;
+  // Cualquier miembro del grupo puede fijar/desfijar mensajes, no solo el admin.
+  const canPinMessages = true;
   const isPinnedMessage = (messageId) => pinnedMessage?.id === messageId;
 
   async function handleTogglePin(messageId, isPinned) {
@@ -1381,7 +1383,7 @@ export default function GroupChatPage() {
           <>
             <PinnedBanner
               pinned={pinnedMessage}
-              canUnpin={isOwner}
+              canUnpin={canPinMessages}
               onUnpin={() => handleTogglePin(pinnedMessage.id, true)}
               onJumpTo={jumpToPinnedMessage}
             />
@@ -1407,7 +1409,7 @@ export default function GroupChatPage() {
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
                   identity={identityByUserId[msg.sender_id || msg.sender?.id]}
-                  canPin={isOwner}
+                  canPin={canPinMessages}
                   isPinned={isPinnedMessage(msg.id)}
                   onTogglePin={handleTogglePin}
                 />
@@ -1423,7 +1425,7 @@ export default function GroupChatPage() {
                   identity={identityByUserId[msg.sender_id || msg.sender?.id]}
                   onVote={handleVote}
                   voting={votingMessageId}
-                  canPin={isOwner}
+                  canPin={canPinMessages}
                   isPinned={isPinnedMessage(msg.id)}
                   onTogglePin={handleTogglePin}
                 />
@@ -1438,7 +1440,7 @@ export default function GroupChatPage() {
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
                 identity={identityByUserId[msg.sender_id || msg.sender?.id]}
-                canPin={isOwner}
+                canPin={canPinMessages}
                 isPinned={isPinnedMessage(msg.id)}
                 onTogglePin={handleTogglePin}
               />

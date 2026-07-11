@@ -22,6 +22,57 @@ const MESSAGE_FIELDS_WITH_REPLY = `
   reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone)
 `;
 
+// Busca la amistad (aceptada) entre dos usuarios — identifica de forma única
+// la conversación 1:1, independientemente de quién fue el requester/addressee.
+async function findFriendship(userA, userB) {
+  const { data } = await supabase
+    .from('friendships')
+    .select('id')
+    .eq('status', 'accepted')
+    .or(
+      `and(requester_id.eq.${userA},addressee_id.eq.${userB}),` +
+      `and(requester_id.eq.${userB},addressee_id.eq.${userA})`
+    )
+    .maybeSingle();
+  return data || null;
+}
+
+// ── Helper: resuelve el mensaje fijado de una conversación 1:1 (si lo hay) ───
+async function fetchPinnedDirectMessage(friendshipId, loadedMessages = []) {
+  if (!friendshipId) return null;
+
+  const { data: pin } = await supabase
+    .from('conversation_pins')
+    .select('pinned_message_id, pinned_at, pinned_by:pinned_by(id, username, avatar_url)')
+    .eq('friendship_id', friendshipId)
+    .maybeSingle();
+
+  if (!pin?.pinned_message_id) return null;
+
+  const alreadyLoaded = loadedMessages.find(m => m.id === pin.pinned_message_id);
+  let base = alreadyLoaded;
+  if (!base) {
+    const { data: msgRow } = await supabase
+      .from('messages')
+      .select(`id, sender_id, receiver_id, content, type, created_at, deleted_for_everyone`)
+      .eq('id', pin.pinned_message_id)
+      .maybeSingle();
+    base = msgRow;
+  }
+  if (!base || base.deleted_for_everyone) return null;
+
+  return {
+    id: base.id,
+    content: base.content,
+    type: base.type,
+    created_at: base.created_at,
+    sender_id: base.sender_id,
+    receiver_id: base.receiver_id,
+    pinned_at: pin.pinned_at,
+    pinned_by: pin.pinned_by || null,
+  };
+}
+
 // Verifies that `messageId` belongs to the 1:1 conversation between userA and userB.
 // Returns the message row or null if it doesn't exist / isn't part of that conversation.
 async function findReplyTarget(messageId, userA, userB) {
@@ -230,12 +281,82 @@ router.get('/:friendId', requireAuth, async (req, res) => {
 
   const { aBlockedB: blockedByMe, bBlockedA: blockedByThem } = await getBlockStatus(userId, friendId);
 
+  const friendship = await findFriendship(userId, friendId);
+  const pinnedMessage = await fetchPinnedDirectMessage(friendship?.id, data || []);
+
   res.json({
     messages: data,
     cleared_at: clearData?.cleared_at || null,
     blocked_by_me: blockedByMe,
     blocked_by_them: blockedByThem,
+    pinned_message: pinnedMessage,
+    friendship_id: friendship?.id || null,
   });
+});
+
+// ── POST /api/messages/chat/:friendId/messages/:messageId/pin — fijar mensaje ──
+// Cualquiera de los dos amigos puede fijar/desfijar el mensaje fijado del chat.
+router.post('/chat/:friendId/messages/:messageId/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId, messageId } = req.params;
+
+  try {
+    const friendship = await findFriendship(userId, friendId);
+    if (!friendship) {
+      return res.status(403).json({ error: 'Solo puedes fijar mensajes con tus amigos' });
+    }
+
+    const { data: msg } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('id', messageId)
+      .or(
+        `and(sender_id.eq.${userId},receiver_id.eq.${friendId}),` +
+        `and(sender_id.eq.${friendId},receiver_id.eq.${userId})`
+      )
+      .maybeSingle();
+    if (!msg) return res.status(404).json({ error: 'Mensaje no encontrado' });
+
+    const pinnedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('conversation_pins')
+      .upsert({
+        friendship_id: friendship.id,
+        pinned_message_id: messageId,
+        pinned_by: userId,
+        pinned_at: pinnedAt,
+      }, { onConflict: 'friendship_id' });
+    if (error) throw error;
+
+    res.json({ success: true, pinned_message_id: messageId, pinned_at: pinnedAt });
+  } catch (err) {
+    console.error('[MESSAGES] POST /chat/:friendId/messages/:messageId/pin', err);
+    res.status(500).json({ error: 'Failed to pin message' });
+  }
+});
+
+// ── DELETE /api/messages/chat/:friendId/pin — desfijar mensaje ──────────────
+router.delete('/chat/:friendId/pin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { friendId } = req.params;
+
+  try {
+    const friendship = await findFriendship(userId, friendId);
+    if (!friendship) {
+      return res.status(403).json({ error: 'Solo puedes desfijar mensajes con tus amigos' });
+    }
+
+    const { error } = await supabase
+      .from('conversation_pins')
+      .delete()
+      .eq('friendship_id', friendship.id);
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[MESSAGES] DELETE /chat/:friendId/pin', err);
+    res.status(500).json({ error: 'Failed to unpin message' });
+  }
 });
 
 // ── POST /api/messages — send message ────────────────────────────────────────

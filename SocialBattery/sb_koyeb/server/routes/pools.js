@@ -1395,7 +1395,7 @@ async function fetchPinnedPoolMessage(poolId, loadedMessages = []) {
   };
 }
 
-// ── POST /api/pools/:id/messages/:messageId/pin — fijar mensaje (solo creador) ──
+// ── POST /api/pools/:id/messages/:messageId/pin — fijar mensaje (cualquier apuntado) ──
 router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const { id: poolId, messageId } = req.params;
@@ -1407,8 +1407,15 @@ router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
       .eq('id', poolId)
       .maybeSingle();
     if (!pool) return res.status(404).json({ error: 'Pool not found' });
-    if (pool.creator_id !== userId) {
-      return res.status(403).json({ error: 'Solo el creador de la quedada puede fijar mensajes' });
+
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!membership) {
+      return res.status(403).json({ error: 'Tienes que estar apuntado para fijar mensajes' });
     }
 
     const { data: msg } = await supabase
@@ -1433,7 +1440,7 @@ router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
   }
 });
 
-// ── DELETE /api/pools/:id/pin — desfijar mensaje (solo creador) ─────────────
+// ── DELETE /api/pools/:id/pin — desfijar mensaje (cualquier apuntado) ───────
 router.delete('/:id/pin', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const poolId = req.params.id;
@@ -1445,8 +1452,15 @@ router.delete('/:id/pin', requireAuth, async (req, res) => {
       .eq('id', poolId)
       .maybeSingle();
     if (!pool) return res.status(404).json({ error: 'Pool not found' });
-    if (pool.creator_id !== userId) {
-      return res.status(403).json({ error: 'Solo el creador de la quedada puede desfijar mensajes' });
+
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!membership) {
+      return res.status(403).json({ error: 'Tienes que estar apuntado para desfijar mensajes' });
     }
 
     const { error } = await supabase

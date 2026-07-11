@@ -466,7 +466,7 @@ async function fetchPinnedGroupMessage(groupId, loadedMessages = []) {
   };
 }
 
-// ── POST /api/groups/:id/messages/:messageId/pin — fijar mensaje (solo dueño) ──
+// ── POST /api/groups/:id/messages/:messageId/pin — fijar mensaje (cualquier miembro) ──
 router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const { id: groupId, messageId } = req.params;
@@ -478,8 +478,15 @@ router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
       .eq('id', groupId)
       .maybeSingle();
     if (!grp) return res.status(404).json({ error: 'Group not found' });
-    if (grp.owner_id !== userId) {
-      return res.status(403).json({ error: 'Solo el administrador del grupo puede fijar mensajes' });
+
+    const { data: membership } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!membership) {
+      return res.status(403).json({ error: 'Solo los miembros del grupo pueden fijar mensajes' });
     }
 
     const { data: msg } = await supabase
@@ -504,7 +511,7 @@ router.post('/:id/messages/:messageId/pin', requireAuth, async (req, res) => {
   }
 });
 
-// ── DELETE /api/groups/:id/pin — desfijar mensaje (solo dueño) ──────────────
+// ── DELETE /api/groups/:id/pin — desfijar mensaje (cualquier miembro) ───────
 router.delete('/:id/pin', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const groupId = req.params.id;
@@ -516,8 +523,15 @@ router.delete('/:id/pin', requireAuth, async (req, res) => {
       .eq('id', groupId)
       .maybeSingle();
     if (!grp) return res.status(404).json({ error: 'Group not found' });
-    if (grp.owner_id !== userId) {
-      return res.status(403).json({ error: 'Solo el administrador del grupo puede desfijar mensajes' });
+
+    const { data: membership } = await supabase
+      .from('friend_group_members')
+      .select('group_id')
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!membership) {
+      return res.status(403).json({ error: 'Solo los miembros del grupo pueden desfijar mensajes' });
     }
 
     const { error } = await supabase

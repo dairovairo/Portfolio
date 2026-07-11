@@ -94,8 +94,35 @@ function LikeBadge({ liked, isMe }) {
   );
 }
 
+// ── PinnedBanner — mensaje fijado del chat, visible arriba y pinchable ────────
+function PinnedBanner({ pinned, currentUserId, friendName, onUnpin, onJumpTo }) {
+  if (!pinned) return null;
+  const preview = pinned.type === 'image' ? '📷 Foto' : pinned.content;
+  const pinnedByName = pinned.pinned_by?.id === currentUserId ? 'ti' : (pinned.pinned_by?.username || friendName || 'alguien');
+  return (
+    <div
+      className="sticky top-0 z-10 -mx-4 mb-2 px-4 py-2 bg-surface-card/95 backdrop-blur-xl border-b border-surface-border flex items-center gap-2 cursor-pointer"
+      onClick={onJumpTo}
+    >
+      <span className="text-base flex-shrink-0">📌</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-mono text-surface-muted">Fijado por {pinnedByName}</div>
+        <div className="text-sm text-surface-text truncate">{preview}</div>
+      </div>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onUnpin(); }}
+        className="flex-shrink-0 text-surface-muted hover:text-surface-text text-lg leading-none px-1"
+        title="Desfijar mensaje"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isMe, isLiked, onClose, onReply, onToggleLike, onDeleteForMe, onDeleteForEveryone }) {
+function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -127,6 +154,21 @@ function MessageContextMenu({ msg, isMe, isLiked, onClose, onReply, onToggleLike
                 <div>{isLiked ? 'Quitar me gusta' : 'Me gusta'}</div>
                 <div className="text-xs text-surface-muted font-normal">
                   {isLiked ? 'Deja de destacar este mensaje' : 'Destaca este mensaje con un corazón'}
+                </div>
+              </div>
+            </button>
+          )}
+
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onTogglePin}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">{isPinned ? '📌' : '📍'}</span>
+              <div>
+                <div>{isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}</div>
+                <div className="text-xs text-surface-muted font-normal">
+                  {isPinned ? 'Deja de destacarlo arriba del chat' : 'Lo destaca arriba del chat'}
                 </div>
               </div>
             </button>
@@ -613,6 +655,10 @@ export default function MessagesPage() {
   const [respondingId, setRespondingId] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // Mensaje fijado del chat
+  const [pinnedMessage, setPinnedMessage] = useState(null);
+  const [friendshipId, setFriendshipId] = useState(null);
+
   // Context menu (responder / eliminar mensaje)
   const [contextMenu, setContextMenu] = useState(null); // { msg }
 
@@ -670,7 +716,7 @@ export default function MessagesPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [{ user }, { messages: msgs, cleared_at, blocked_by_me, blocked_by_them }] = await Promise.all([
+        const [{ user }, { messages: msgs, cleared_at, blocked_by_me, blocked_by_them, pinned_message, friendship_id }] = await Promise.all([
           api.get(`/users/${friendId}`),
           api.get(`/messages/${friendId}`),
         ]);
@@ -679,6 +725,8 @@ export default function MessagesPage() {
         setClearedAt(cleared_at || null);
         setBlockedByMe(!!blocked_by_me);
         setBlockedByThem(!!blocked_by_them);
+        setPinnedMessage(pinned_message || null);
+        setFriendshipId(friendship_id || null);
         if (readReceipts) api.patch(`/messages/${friendId}/read`).catch(() => {});
       } catch (e) {
         console.error(e);
@@ -780,6 +828,28 @@ export default function MessagesPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, [friendId, profile?.id]);
+
+  // Realtime: mensaje fijado/desfijado en la conversación (por cualquiera de los dos)
+  useEffect(() => {
+    if (!friendshipId) return;
+    const channel = supabase
+      .channel(`dm-pin-${friendshipId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'conversation_pins',
+        filter: `friendship_id=eq.${friendshipId}`,
+      }, async () => {
+        try {
+          const data = await api.get(`/messages/${friendId}`);
+          setPinnedMessage(data.pinned_message || null);
+        } catch {
+          // non-critical
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [friendshipId, friendId]);
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -917,6 +987,35 @@ export default function MessagesPage() {
     }
   }
 
+  const isPinnedMessage = (messageId) => pinnedMessage?.id === messageId;
+
+  async function handleTogglePin(msg) {
+    setContextMenu(null);
+    const alreadyPinned = isPinnedMessage(msg.id);
+    try {
+      if (alreadyPinned) {
+        await api.delete(`/messages/chat/${friendId}/pin`);
+        setPinnedMessage(null);
+        showToast('Mensaje desfijado');
+      } else {
+        const result = await api.post(`/messages/chat/${friendId}/messages/${msg.id}/pin`);
+        setPinnedMessage({
+          ...msg,
+          pinned_at: result.pinned_at,
+          pinned_by: { id: profile?.id, username: profile?.username },
+        });
+        showToast('Mensaje fijado');
+      }
+    } catch (e) {
+      showToast(e.message || 'Error al fijar el mensaje', 'error');
+    }
+  }
+
+  function jumpToPinnedMessage() {
+    if (!pinnedMessage) return;
+    scrollToMessage(pinnedMessage.id);
+  }
+
   async function deleteMessage(msg, scope) {
     setContextMenu(null);
     try {
@@ -1026,6 +1125,7 @@ export default function MessagesPage() {
           msg={contextMenu}
           isMe={contextMenu.sender_id === profile?.id}
           isLiked={Array.isArray(contextMenu.liked_by) && contextMenu.liked_by.includes(profile?.id)}
+          isPinned={isPinnedMessage(contextMenu.id)}
           onClose={() => setContextMenu(null)}
           onReply={() => {
             setReplyingTo(contextMenu);
@@ -1033,6 +1133,7 @@ export default function MessagesPage() {
             setTimeout(() => inputRef.current?.focus(), 50);
           }}
           onToggleLike={() => toggleLike(contextMenu)}
+          onTogglePin={() => handleTogglePin(contextMenu)}
           onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
         />
@@ -1144,6 +1245,13 @@ export default function MessagesPage() {
         } : {}}
         onClick={() => setShowHeaderMenu(false)}
       >
+        <PinnedBanner
+          pinned={pinnedMessage}
+          currentUserId={profile?.id}
+          friendName={friend?.username}
+          onUnpin={() => handleTogglePin(pinnedMessage)}
+          onJumpTo={jumpToPinnedMessage}
+        />
         {loading ? (
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
             Cargando mensajes...
