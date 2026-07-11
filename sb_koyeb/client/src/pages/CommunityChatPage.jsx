@@ -58,10 +58,26 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, canPin, isPinned, onTogglePin }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
+  const longPressTimer = useRef(null);
+
+  function handleTouchStart() {
+    longPressTimer.current = setTimeout(() => onLongPress(msg), 500);
+  }
+  function handleTouchEnd() {
+    clearTimeout(longPressTimer.current);
+  }
+
   return (
-    <div id={`msg-${msg.id}`} className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
+    <div
+      id={`msg-${msg.id}`}
+      className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
+      onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
+    >
       {!isMe && <Avatar user={msg.sender} />}
       <div className="min-w-0 max-w-[75%]">
         {!isMe && (
@@ -70,22 +86,12 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, canPin, isPinn
           </div>
         )}
         <div
-          className={`rounded-2xl px-4 py-2.5 ${!isMe ? 'border border-surface-border' : ''}`}
+          className={`rounded-2xl px-4 py-2.5 select-none ${!isMe ? 'border border-surface-border' : ''}`}
           style={bubbleStyle}
         >
           <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
-          <div className="text-xs mt-1 opacity-60 flex items-center justify-between gap-2">
+          <div className="text-xs mt-1 opacity-60">
             <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
-            {canPin && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onTogglePin(msg.id, isPinned); }}
-                title={isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}
-                className="leading-none hover:opacity-100"
-              >
-                {isPinned ? '📌' : '📍'}
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -93,14 +99,29 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, canPin, isPinn
   );
 }
 
-function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, canPin, isPinned, onTogglePin }) {
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress }) {
   const [lightbox, setLightbox] = useState(false);
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
+  const longPressTimer = useRef(null);
+
+  function handleTouchStart() {
+    longPressTimer.current = setTimeout(() => { if (!isOptimistic) onLongPress(msg); }, 500);
+  }
+  function handleTouchEnd() {
+    clearTimeout(longPressTimer.current);
+  }
 
   return (
     <>
-      <div id={`msg-${msg.id}`} className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
+      <div
+        id={`msg-${msg.id}`}
+        className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchEnd}
+        onContextMenu={e => { e.preventDefault(); if (!isOptimistic) onLongPress(msg); }}
+      >
         {!isMe && <Avatar user={msg.sender} />}
         <div className="min-w-0 max-w-[75%]">
           {!isMe && (
@@ -109,7 +130,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, canPin, isPin
             </div>
           )}
           <div
-            className={`rounded-2xl overflow-hidden ${!isMe ? 'border border-surface-border' : ''}`}
+            className={`rounded-2xl overflow-hidden select-none ${!isMe ? 'border border-surface-border' : ''}`}
             style={bubbleStyle}
           >
             <div className="relative">
@@ -125,18 +146,8 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, canPin, isPin
                 </div>
               )}
             </div>
-            <div className="text-xs px-3 pb-2 pt-1 opacity-60 flex items-center justify-between gap-2">
+            <div className="text-xs px-3 pb-2 pt-1 opacity-60">
               <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
-              {canPin && !isOptimistic && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onTogglePin(msg.id, isPinned); }}
-                  title={isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}
-                  className="leading-none hover:opacity-100"
-                >
-                  {isPinned ? '📌' : '📍'}
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -166,7 +177,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, canPin, isPin
 }
 
 // ── Poll bubble — mensaje de encuesta con votación en vivo ───────────────────
-function PollBubble({ msg, isMe, onVote, voting, canPin, isPinned, onTogglePin }) {
+function PollBubble({ msg, isMe, onVote, voting, onLongPress }) {
   const poll = msg.poll || {
     options: msg.poll_options || [],
     votes: (msg.poll_options || []).map(() => 0),
@@ -174,9 +185,24 @@ function PollBubble({ msg, isMe, onVote, voting, canPin, isPinned, onTogglePin }
     myVote: null,
   };
   const isVoting = voting === msg.id;
+  const longPressTimer = useRef(null);
+
+  function handleTouchStart() {
+    longPressTimer.current = setTimeout(() => onLongPress(msg), 500);
+  }
+  function handleTouchEnd() {
+    clearTimeout(longPressTimer.current);
+  }
 
   return (
-    <div id={`msg-${msg.id}`} className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
+    <div
+      id={`msg-${msg.id}`}
+      className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
+      onContextMenu={e => { e.preventDefault(); onLongPress(msg); }}
+    >
       {!isMe && <Avatar user={msg.sender} />}
       <div className="min-w-0 w-full max-w-[85%]">
         {!isMe && (
@@ -217,21 +243,11 @@ function PollBubble({ msg, isMe, onVote, voting, canPin, isPinned, onTogglePin }
               );
             })}
           </div>
-          <div className="text-[10px] font-mono text-surface-muted mt-2 flex items-center justify-between gap-2">
+          <div className="text-[10px] font-mono text-surface-muted mt-2">
             <span>
               {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'} · {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
               {poll.myVote != null ? ' · toca tu opción para quitar el voto' : ''}
             </span>
-            {canPin && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onTogglePin(msg.id, isPinned); }}
-                title={isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}
-                className="leading-none hover:opacity-100 flex-shrink-0"
-              >
-                {isPinned ? '📌' : '📍'}
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -474,6 +490,54 @@ function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
   );
 }
 
+// ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
+function MessageContextMenu({ msg, isPinned, canPin, onClose, onTogglePin }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="relative bg-surface-card border border-surface-border rounded-t-3xl w-full max-w-lg pb-safe"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="w-10 h-1 bg-surface-border rounded-full mx-auto mt-3 mb-3" />
+
+        {/* Preview */}
+        <p className="text-xs text-surface-muted font-mono text-center truncate px-8 mb-3 opacity-60">
+          {msg.type === 'image' ? '📷 Imagen' : msg.type === 'poll' ? `📊 ${msg.content}` : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
+        </p>
+
+        <div className="px-4 pb-4 space-y-1.5">
+          {canPin && (
+            <button
+              onClick={onTogglePin}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">{isPinned ? '📌' : '📍'}</span>
+              <div>
+                <div>{isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}</div>
+                <div className="text-xs text-surface-muted font-normal">
+                  {isPinned ? 'Deja de destacarlo arriba del chat' : 'Lo destaca arriba del chat'}
+                </div>
+              </div>
+            </button>
+          )}
+
+          <button
+            onClick={onClose}
+            className="w-full text-center py-3.5 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CommunityChatPage() {
   const { communityId } = useParams();
   const navigate = useNavigate();
@@ -634,6 +698,7 @@ export default function CommunityChatPage() {
   }, [communityId]);
 
   const isPinnedMessage = (messageId) => pinnedMessage?.id === messageId;
+  const [contextMenu, setContextMenu] = useState(null); // { msg }
 
   async function handleTogglePin(messageId, isPinned) {
     try {
@@ -894,9 +959,7 @@ export default function CommunityChatPage() {
                   isMe={isMe}
                   myBubbleStyle={myBubbleStyle}
                   otherBubbleStyle={otherBubbleStyle}
-                  canPin={canManageWallpaper}
-                  isPinned={isPinnedMessage(msg.id)}
-                  onTogglePin={handleTogglePin}
+                  onLongPress={setContextMenu}
                 />
               );
             }
@@ -909,9 +972,7 @@ export default function CommunityChatPage() {
                   isMe={isMe}
                   onVote={handleVote}
                   voting={votingMessageId}
-                  canPin={canManageWallpaper}
-                  isPinned={isPinnedMessage(msg.id)}
-                  onTogglePin={handleTogglePin}
+                  onLongPress={setContextMenu}
                 />
               );
             }
@@ -923,9 +984,7 @@ export default function CommunityChatPage() {
                 isMe={isMe}
                 myBubbleStyle={myBubbleStyle}
                 otherBubbleStyle={otherBubbleStyle}
-                canPin={canManageWallpaper}
-                isPinned={isPinnedMessage(msg.id)}
-                onTogglePin={handleTogglePin}
+                onLongPress={setContextMenu}
               />
             );
           })
@@ -934,6 +993,19 @@ export default function CommunityChatPage() {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {contextMenu && (
+        <MessageContextMenu
+          msg={contextMenu}
+          isPinned={isPinnedMessage(contextMenu.id)}
+          canPin={canManageWallpaper}
+          onClose={() => setContextMenu(null)}
+          onTogglePin={() => {
+            handleTogglePin(contextMenu.id, isPinnedMessage(contextMenu.id));
+            setContextMenu(null);
+          }}
+        />
+      )}
 
       {/* Input */}
       <div className="flex-shrink-0 border-t border-surface-border bg-surface-bg/95 backdrop-blur-xl">
