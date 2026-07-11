@@ -644,6 +644,16 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
           <h3 className="font-display font-bold text-surface-text text-sm truncate flex-1">
             {community.name}
           </h3>
+          {community.has_active_raffle && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/40 flex-shrink-0">
+              🎟️ Sorteo activo
+            </span>
+          )}
+          {community.has_upcoming_event && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/40 flex-shrink-0">
+              📅 Evento próximo
+            </span>
+          )}
           {communityCategories.map(cat => (
             <span
               key={cat}
@@ -1791,6 +1801,8 @@ export default function CommunityPage() {
   const [communityCategoryFilter, setCommunityCategoryFilter] = useState(ALL_COMMUNITY_CATEGORIES);
   const [communityMembershipFilter, setCommunityMembershipFilter] = useState('all'); // 'all' | 'mine'
   const [communityInterestsOnly, setCommunityInterestsOnly] = useState(false);
+  const [communityRaffleOnly, setCommunityRaffleOnly] = useState(false);
+  const [communityUpcomingEventOnly, setCommunityUpcomingEventOnly] = useState(false);
   const [eventSearch, setEventSearch] = useState('');
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
@@ -1976,12 +1988,14 @@ export default function CommunityPage() {
       const matchesInterests = communityInterestsOnly
         ? matchesUserInterests(community, profile?.interests)
         : true;
+      const matchesRaffle = communityRaffleOnly ? Boolean(community.has_active_raffle) : true;
+      const matchesUpcomingEvent = communityUpcomingEventOnly ? Boolean(community.has_upcoming_event) : true;
 
-      return matchesSearch && matchesCommunityCategory(community, communityCategoryFilter) && matchesMembership && matchesInterests;
+      return matchesSearch && matchesCommunityCategory(community, communityCategoryFilter) && matchesMembership && matchesInterests && matchesRaffle && matchesUpcomingEvent;
     })
     // Todas las vistas se ordenan igual, por número de participantes.
     .sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
-  const isCommunityFiltered = normalizedCommunitySearch || communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES || communityMembershipFilter !== 'all' || communityInterestsOnly;
+  const isCommunityFiltered = normalizedCommunitySearch || communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES || communityMembershipFilter !== 'all' || communityInterestsOnly || communityRaffleOnly || communityUpcomingEventOnly;
   const communityCountLabel = isCommunityFiltered
     ? `${filteredCommunities.length}/${communities.length} comunidades`
     : `${communities.length} comunidades`;
@@ -2361,6 +2375,47 @@ export default function CommunityPage() {
                 </div>
               )}
 
+              {/* Checks de sorteo activo / evento próximo */}
+              <button
+                type="button"
+                onClick={() => setCommunityRaffleOnly(v => !v)}
+                aria-pressed={communityRaffleOnly}
+                className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                  communityRaffleOnly
+                    ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                    : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                }`}
+              >
+                <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
+                  communityRaffleOnly
+                    ? 'border-accent-primary bg-accent-primary text-white'
+                    : 'border-surface-border'
+                }`}>
+                  {communityRaffleOnly ? '✓' : ''}
+                </span>
+                🎟️ Promoción en marcha
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCommunityUpcomingEventOnly(v => !v)}
+                aria-pressed={communityUpcomingEventOnly}
+                className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                  communityUpcomingEventOnly
+                    ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                    : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                }`}
+              >
+                <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
+                  communityUpcomingEventOnly
+                    ? 'border-accent-primary bg-accent-primary text-white'
+                    : 'border-surface-border'
+                }`}>
+                  {communityUpcomingEventOnly ? '✓' : ''}
+                </span>
+                📅 Evento próximo
+              </button>
+
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                 {COMMUNITY_CATEGORY_FILTERS.map(cat => (
                   <button
@@ -2404,6 +2459,8 @@ export default function CommunityPage() {
                         setCommunityCategoryFilter(ALL_COMMUNITY_CATEGORIES);
                         setCommunityMembershipFilter('all');
                         setCommunityInterestsOnly(false);
+                        setCommunityRaffleOnly(false);
+                        setCommunityUpcomingEventOnly(false);
                       }}
                       className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                     >

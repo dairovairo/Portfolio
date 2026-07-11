@@ -956,6 +956,35 @@ router.get('/communities', requireAuth, async (req, res) => {
       allMembers = membersData || [];
     }
 
+    // Sorteo activo: aún no sorteado (drawn_at IS NULL) y no ha llegado su
+    // fecha de cierre. Evento próximo: al menos un evento de la comunidad
+    // que todavía no ha terminado (mismo criterio que isUpcomingEvent en
+    // el frontend: ends_at si existe, si no event_date).
+    const nowIso = new Date().toISOString();
+    const communitiesWithActiveRaffle = new Set();
+    const communitiesWithUpcomingEvent = new Set();
+    if (communityIds.length > 0) {
+      const { data: activeRaffles, error: rErr } = await db
+        .from('community_raffles')
+        .select('community_id')
+        .in('community_id', communityIds)
+        .is('drawn_at', null)
+        .gt('ends_at', nowIso);
+      if (rErr) throw rErr;
+      (activeRaffles || []).forEach(r => communitiesWithActiveRaffle.add(r.community_id));
+
+      const { data: upcomingEvents, error: eErr } = await db
+        .from('community_events')
+        .select('community_id, event_date, ends_at')
+        .in('community_id', communityIds);
+      if (eErr) throw eErr;
+      const now = Date.now();
+      (upcomingEvents || []).forEach(ev => {
+        const endTime = ev.ends_at ? new Date(ev.ends_at).getTime() : new Date(ev.event_date).getTime();
+        if (!Number.isNaN(endTime) && endTime >= now) communitiesWithUpcomingEvent.add(ev.community_id);
+      });
+    }
+
     // Group members by community_id in JS
     const membersByCommunity = allMembers.reduce((acc, m) => {
       if (!acc[m.community_id]) acc[m.community_id] = [];
@@ -975,6 +1004,8 @@ router.get('/communities', requireAuth, async (req, res) => {
         admin_ids: members.filter(m => m.role === 'admin').map(m => m.user_id),
         current_user_role: comm.creator_id === userId ? 'admin' : currentMembership?.role || null,
         is_admin: comm.creator_id === userId || currentMembership?.role === 'admin',
+        has_active_raffle: communitiesWithActiveRaffle.has(comm.id),
+        has_upcoming_event: communitiesWithUpcomingEvent.has(comm.id),
       };
     });
 
