@@ -438,24 +438,26 @@ export default function MascotDisplay({
         // PNG 900×900 normalizado: la riñonera ocupa aprox. el 93% del ancho
         // del lienzo y está centrada. Se escala y posiciona para quedar en
         // la cadera de la mascota.
-        // Tamaño base original: width=126%, height=49%, left=-13%, top=62%.
-        // Ajuste 1: subida 5%, derecha 20%, +15% tamaño (recentrado desde el
-        // centro anterior 50,86.5 → nuevo centro 70,81.5). Resultado:
-        // left=-2.45, top=53.325, width=144.9, height=56.35.
-        // Ajuste 2: otros 3% a la derecha y +5% tamaño más (recentrado desde
-        // el centro del ajuste 1, 70,81.5 → tras mover 73,81.5). Resultado:
-        // left=-3.0725, top=51.91625, width=152.145, height=59.1675.
-        // Ajuste 3: otros 3% a la derecha (solo traslación, sin cambio de
-        // tamaño). left=-3.0725+3=-0.0725; top/width/height sin cambios.
-        // Ajuste 4: otro 2% a la derecha (solo traslación). left=-0.0725+2=1.9275.
+        // Tamaño base original: width=126%, height=49%, left=-13%, top=62%
+        // (centro X=50, el centro real del cuerpo de la mascota).
+        // Ajustes 1-4 (sesiones anteriores) fueron desplazando el centro X
+        // acumulativamente hasta 78 (+20, +3, +3, +2) comparando siempre
+        // contra la vista con un outfit ancho puesto (mangas que ensanchan
+        // la silueta y disimulaban el desfase). Sin outfit — p. ej. la
+        // mascota base o la tarjeta de amigo — la riñonera quedaba flotando
+        // fuera del cuerpo, muy a la derecha. Recentrado a centerX=50 (el
+        // centro real del bbox del PNG base, comprobado con
+        // mascot-mid.png: bbox 198–702 de 900 = centro exacto en 450/900 =
+        // 50%), manteniendo el resto de la caja (top/width/height) igual.
         // top base final=51.91625%; las variantes con rinonOffsetY suman ese
         // valor al top.
         if (acc.isRinon) {
           // Caja base compartida por todas las riñoneras.
-          const baseLeft = 1.9275;
-          const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
           const baseWidth = 152.145;
           const baseHeight = 59.1675;
+          const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
+          const baseCenterX = 50;
+          const baseLeft = baseCenterX - baseWidth / 2;
 
           // Algunos colores (p. ej. blanca/negra) tienen más margen interno
           // en el PNG y se ven más pequeños con la caja base: rinonScale

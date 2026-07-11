@@ -269,18 +269,18 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
         pctToPx(49.5, boxSize), pctToPx(19.8, boxSize)
       );
     } else if (acc.isRinon) {
-      // Ver comentario detallado en components/MascotDisplay.jsx:
-      // ajuste 4 (otro 2% a la derecha, sin cambio de tamaño):
-      // left=1.9275, top base=51.91625, width=152.145, height=59.1675.
-      // rinonScale/rinonOffsetX (por ítem) recentran y desplazan la caja
-      // base para colores cuyo PNG tiene más margen interno — misma
-      // fórmula que en MascotDisplay.jsx. (Antes este renderer se había
-      // quedado en el ajuste 3 -0.0725, sin el último +2%, lo que
-      // desalineaba la riñonera respecto a la vista del menú principal.)
-      const baseLeft = 1.9275;
-      const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
+      // Ver comentario detallado en components/MascotDisplay.jsx: la caja
+      // se recentró en centerX=50 (el centro real del cuerpo de la
+      // mascota), tras detectar que los ajustes acumulados de sesiones
+      // anteriores (hasta centerX=78) solo se veían bien con un outfit
+      // ancho puesto encima, y dejaban la riñonera flotando fuera del
+      // cuerpo en cualquier vista sin outfit (mascota base, tarjeta de
+      // amigo…). Misma fórmula que en MascotDisplay.jsx.
       const baseWidth = 152.145;
       const baseHeight = 59.1675;
+      const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
+      const baseCenterX = 50;
+      const baseLeft = baseCenterX - baseWidth / 2;
       const scale = acc.rinonScale ?? 1;
       const rinonWidth = baseWidth * scale;
       const rinonHeight = baseHeight * scale;
