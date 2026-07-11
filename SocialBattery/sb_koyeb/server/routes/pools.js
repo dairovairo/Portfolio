@@ -1359,7 +1359,7 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[POOLS] GET /:id/messages', err);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    res.status(500).json({ error: `Failed to fetch messages: ${err.message || err}` });
   }
 });
 

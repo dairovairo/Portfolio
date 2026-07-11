@@ -1100,7 +1100,7 @@ export default function GroupChatPage() {
         markGroupRead(groupId);
       } catch (e) {
         console.error(e);
-        showToast('Error al cargar el chat', 'error');
+        showToast(e.message || 'Error al cargar el chat', 'error');
       } finally {
         setLoading(false);
         setLoadingIdentities(false);

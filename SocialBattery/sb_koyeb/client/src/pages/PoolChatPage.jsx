@@ -685,7 +685,7 @@ export default function PoolChatPage() {
         setBadgeData({ assignments: badgesResult.assignments || [] });
       } catch (e) {
         console.error(e);
-        showToast('Error al cargar el chat', 'error');
+        showToast(e.message || 'Error al cargar el chat', 'error');
       } finally {
         setLoading(false);
       }

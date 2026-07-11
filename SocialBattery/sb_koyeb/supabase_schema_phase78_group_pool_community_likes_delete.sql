@@ -47,3 +47,9 @@ CREATE INDEX IF NOT EXISTS idx_community_messages_liked_by ON public.community_m
 -- columnas nuevas, y el UPDATE (like/delete) se hace server-side con el
 -- cliente de servicio (bypassa RLS), igual que el resto de endpoints de
 -- estos routers.
+
+-- Fuerza a PostgREST a refrescar su caché de esquema para que reconozca
+-- las columnas nuevas inmediatamente (si no, el API puede seguir devolviendo
+-- "column does not exist" durante un rato tras el ALTER TABLE).
+NOTIFY pgrst, 'reload schema';
+

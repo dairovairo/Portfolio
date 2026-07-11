@@ -1659,7 +1659,7 @@ router.get('/communities/:id/messages', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[community] GET /communities/:id/messages', err);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    res.status(500).json({ error: `Failed to fetch messages: ${err.message || err}` });
   }
 });
 
