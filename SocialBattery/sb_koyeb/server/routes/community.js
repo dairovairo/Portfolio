@@ -79,6 +79,39 @@ function fallbackUsername(user) {
   return `user_${idPart}`;
 }
 
+const MAX_CATEGORIES = 3;
+
+// El cliente manda `categories` como un string JSON dentro del FormData
+// (p.ej. '["Música","Arte"]'), ya que FormData solo admite valores string.
+// Devuelve un array de strings ya recortados y sin vacíos/duplicados.
+function parseCategories(raw) {
+  if (raw === undefined || raw === null || raw === '') return [];
+
+  let list;
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else {
+    try {
+      const parsed = JSON.parse(raw);
+      list = Array.isArray(parsed) ? parsed : [raw];
+    } catch {
+      list = [raw];
+    }
+  }
+
+  const seen = new Set();
+  const cleaned = [];
+  for (const item of list) {
+    const value = String(item ?? '').trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push(value);
+  }
+  return cleaned;
+}
+
 async function ensurePublicProfile(user) {
   const { data: existing, error: selectError } = await supabase
     .from('users')
@@ -233,7 +266,7 @@ router.get('/events', requireAuth, async (req, res) => {
     const { data: events, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
+        id, title, description, category, categories, event_date, ends_at, location, lat, lng, organization, cover_image_url,
         url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan, notification_count,
         creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
@@ -257,6 +290,11 @@ router.get('/events', requireAuth, async (req, res) => {
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
   const userId = req.user.id;
+
+  const categories = parseCategories(req.body.categories ?? category);
+  if (categories.length > MAX_CATEGORIES) {
+    return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
+  }
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
   if (!event_date) return res.status(400).json({ error: 'La fecha es obligatoria' });
@@ -336,7 +374,8 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
       .insert({
         title: title.trim(),
         description: description?.trim() || null,
-        category: category?.trim() || null,
+        category: categories[0] || null,
+        categories,
         event_date: eventDate.toISOString(),
         ends_at: endDateIso,
         location: eventLocation,
@@ -866,7 +905,7 @@ router.get('/communities', requireAuth, async (req, res) => {
     const { data: communities, error } = await db
       .from('communities')
       .select(`
-        id, name, description, category, organization, creator_id, created_at,
+        id, name, description, category, categories, organization, creator_id, created_at,
         creator:users!communities_creator_id_fkey(username)
       `)
       .order('created_at', { ascending: false });
@@ -925,7 +964,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: community, error } = await db
       .from('communities')
       .select(`
-        id, name, description, category, organization, creator_id, created_at,
+        id, name, description, category, categories, organization, creator_id, created_at,
         creator:users!communities_creator_id_fkey(username)
       `)
       .eq('id', id)
@@ -942,7 +981,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: events, error: eventsError } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, lat, lng, organization, cover_image_url,
+        id, title, description, category, categories, event_date, ends_at, location, lat, lng, organization, cover_image_url,
         max_attendees, creator_id, community_id, created_at,
         creator:users!community_events_creator_id_fkey(username),
         community:communities!community_events_community_id_fkey(id, name, organization)
@@ -979,6 +1018,11 @@ router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) 
   const { name, description, category, organization, url } = req.body;
   const userId = req.user.id;
 
+  const categories = parseCategories(req.body.categories ?? category);
+  if (categories.length > MAX_CATEGORIES) {
+    return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
+  }
+
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
   try {
@@ -998,7 +1042,8 @@ router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) 
       .insert({
         name: name.trim(),
         description: description?.trim() || null,
-        category: category?.trim() || null,
+        category: categories[0] || null,
+        categories,
         organization: organization?.trim() || null,
         url: url?.trim() || null,
         cover_image_url: coverImageUrl,
@@ -1121,7 +1166,7 @@ router.get('/events/:id', requireAuth, async (req, res) => {
     const { data: event, error } = await db
       .from('community_events')
       .select(`
-        id, title, description, category, event_date, ends_at, location, lat, lng, organization,
+        id, title, description, category, categories, event_date, ends_at, location, lat, lng, organization,
         cover_image_url, url, price, additional_info, max_attendees, creator_id, community_id, created_at,
         promotion_plan, notification_count, notification_sent_count,
         creator:users!community_events_creator_id_fkey(username),

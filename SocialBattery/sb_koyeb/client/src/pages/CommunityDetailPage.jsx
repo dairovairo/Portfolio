@@ -40,16 +40,18 @@ function getEventEmoji(category = '') {
 
 function getCommunityEmoji(category = '') {
   const c = normalizeText(category);
-  if (/musica/.test(c)) return '🎵';
-  if (/deporte|sport/.test(c)) return '⚽';
-  if (/tecnologia|tech|codigo/.test(c)) return '💻';
-  if (/arte|art/.test(c)) return '🎨';
+  // Mismo motivo que en getEventEmoji: se añade el selector U+FE0F para
+  // forzar la presentación a color pese al font-variant-emoji: text global.
+  if (/musica/.test(c)) return '🎵️';
+  if (/deporte|sport/.test(c)) return '⚽️';
+  if (/tecnologia|tech|codigo/.test(c)) return '💻️';
+  if (/arte|art/.test(c)) return '🎨️';
   if (/viajes|travel/.test(c)) return '✈️';
-  if (/cocina|food/.test(c)) return '👨‍🍳';
-  if (/juego|gaming/.test(c)) return '🎮';
-  if (/bienestar|yoga/.test(c)) return '🧘';
-  if (/fotografia|photo/.test(c)) return '📷';
-  return '👥';
+  if (/cocina|food/.test(c)) return '👨\u200d🍳️';
+  if (/juego|gaming/.test(c)) return '🎮️';
+  if (/bienestar|yoga/.test(c)) return '🧘️';
+  if (/fotografia|photo/.test(c)) return '📷️';
+  return '👥️';
 }
 
 function formatEventDate(dateStr) {
@@ -113,6 +115,7 @@ function sortEventsByProximity(eventList = []) {
 }
 
 const OTHER_CATEGORY = 'Otro';
+const MAX_CATEGORIES = 3;
 const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', OTHER_CATEGORY];
 
 function readFileAsDataUrl(file) {
@@ -130,13 +133,23 @@ function buildEventFormData(form, extra = {}) {
 
   Object.entries(payload).forEach(([key, value]) => {
     if (key === 'cover_file' || key === 'custom_category') return;
-    if (value !== undefined && value !== null && value !== '') {
-      formData.append(key, String(value));
+    if (value === undefined || value === null || value === '') return;
+    // Los arrays (p.ej. categories) van como JSON, ya que FormData solo
+    // admite valores string; el servidor los parsea con JSON.parse.
+    if (Array.isArray(value)) {
+      if (value.length) formData.append(key, JSON.stringify(value));
+      return;
     }
+    formData.append(key, String(value));
   });
 
   if (form.cover_file) formData.append('cover', form.cover_file);
   return formData;
+}
+
+function getEntityCategories(entity) {
+  if (Array.isArray(entity?.categories) && entity.categories.length) return entity.categories;
+  return entity?.category ? [entity.category] : [];
 }
 
 function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
@@ -145,7 +158,8 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
   const isJoined = event.attendee_ids?.includes(currentUserId);
   const isPast = new Date(event.ends_at || event.event_date) < new Date();
   const isLiked = Boolean(event.liked_by_current_user);
-  const emoji = getEventEmoji(event.category);
+  const eventCategories = getEntityCategories(event);
+  const emoji = getEventEmoji(eventCategories[0]);
   const daysLabel = getDaysUntilLabel(event.event_date);
 
   async function run(action, e) {
@@ -192,11 +206,14 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
             <h3 className="font-display font-bold text-surface-text text-sm leading-snug flex-1">
               {event.title}
             </h3>
-            {event.category && (
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
-                {event.category}
+            {eventCategories.map(cat => (
+              <span
+                key={cat}
+                className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20"
+              >
+                {cat}
               </span>
-            )}
+            ))}
           </div>
           <p className="text-xs text-surface-muted mt-0.5">
             por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
@@ -272,7 +289,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   const [form, setForm] = useState({
     title: '',
     description: '',
-    category: '',
+    categories: [],
     custom_category: '',
     organization: communityOrganization || '',
     event_date: defaultDate,
@@ -290,16 +307,25 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   const [coverPreview, setCoverPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
+  const resolvedCategories = form.categories
+    .map(cat => (cat === OTHER_CATEGORY ? form.custom_category.trim() : cat))
+    .filter(Boolean);
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
 
   function selectCategory(cat) {
-    setForm(f => ({
-      ...f,
-      category: f.category === cat ? '' : cat,
-      custom_category: cat === OTHER_CATEGORY && f.category !== cat ? f.custom_category : '',
-    }));
+    setForm(f => {
+      const isSelected = f.categories.includes(cat);
+      if (isSelected) {
+        return {
+          ...f,
+          categories: f.categories.filter(c => c !== cat),
+          custom_category: cat === OTHER_CATEGORY ? '' : f.custom_category,
+        };
+      }
+      if (f.categories.length >= MAX_CATEGORIES) return f;
+      return { ...f, categories: [...f.categories, cat] };
+    });
   }
 
   async function handleCoverChange(e) {
@@ -327,7 +353,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     if (!form.event_date) { setError('La fecha es obligatoria'); return; }
     if (!form.ends_at) { setError('La fecha fin es obligatoria'); return; }
     if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
-    if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
+    if (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
     }
@@ -340,7 +366,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     try {
       await onCreate({
         ...form,
-        category: resolvedCategory,
+        categories: resolvedCategories,
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
@@ -360,7 +386,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
 
         <div className="flex items-center gap-3 mb-6">
-          <span className="text-3xl">{getEventEmoji(resolvedCategory || form.category)}</span>
+          <span className="text-3xl">{getEventEmoji(resolvedCategories[0])}</span>
           <div>
             <h2 className="font-display font-bold text-surface-text text-lg">Publicar evento</h2>
             <p className="text-xs text-surface-muted">{communityName}</p>
@@ -379,24 +405,33 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             />
           </div>
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Categoría</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Categoría <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+            </label>
             <div className="flex flex-wrap gap-2">
-              {EVENT_CATEGORIES.map(cat => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => selectCategory(cat)}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-                    form.category === cat
-                      ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
-                      : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                  }`}
-                >
-                  {getEventEmoji(cat)} {cat}
-                </button>
-              ))}
+              {EVENT_CATEGORIES.map(cat => {
+                const selected = form.categories.includes(cat);
+                const disabled = !selected && form.categories.length >= MAX_CATEGORIES;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => selectCategory(cat)}
+                    disabled={disabled}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      selected
+                        ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
+                        : disabled
+                          ? 'border-surface-border text-slate-700 opacity-40 cursor-not-allowed'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {getEventEmoji(cat)} {cat}
+                  </button>
+                );
+              })}
             </div>
-            {form.category === OTHER_CATEGORY && (
+            {form.categories.includes(OTHER_CATEGORY) && (
               <input
                 type="text"
                 value={form.custom_category}
@@ -738,12 +773,12 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           </div>
 
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
-          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())) && (
+          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())) && (
             <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
           )}
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
+            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : 'Publicar evento'}
@@ -1226,7 +1261,8 @@ export default function CommunityDetailPage() {
     );
   }
 
-  const emoji = getCommunityEmoji(community.category);
+  const communityCategories = getEntityCategories(community);
+  const emoji = getCommunityEmoji(communityCategories[0]);
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -1286,11 +1322,14 @@ export default function CommunityDetailPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                {community.category && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border">
-                    {community.category}
+                {communityCategories.map(cat => (
+                  <span
+                    key={cat}
+                    className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border"
+                  >
+                    {cat}
                   </span>
-                )}
+                ))}
                 {community.organization && (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
                     {community.organization}

@@ -97,6 +97,11 @@ function getEventEmoji(category = '') {
   return '🌐️';
 }
 
+function getEntityCategories(entity) {
+  if (Array.isArray(entity?.categories) && entity.categories.length) return entity.categories;
+  return entity?.category ? [entity.category] : [];
+}
+
 // ── Info Row ──────────────────────────────────────────────────────────────────
 function InfoRow({ icon, label, children }) {
   return (
@@ -944,7 +949,8 @@ export default function EventDetailPage() {
 
   if (!event) return null;
 
-  const emoji = getEventEmoji(event.category);
+  const eventCategories = getEntityCategories(event);
+  const emoji = getEventEmoji(eventCategories[0]);
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -960,7 +966,7 @@ export default function EventDetailPage() {
           <div className="flex-1 min-w-0">
             <h1 className="font-display font-bold text-surface-text text-base truncate">{event.title}</h1>
             <p className="text-xs font-mono text-surface-muted truncate">
-              {event.category ? `${emoji} ${event.category}` : emoji}
+              {eventCategories.length ? `${emoji} ${eventCategories.join(' · ')}` : emoji}
               {daysLabel && <span className="text-amber-300/80"> · {daysLabel}</span>}
             </p>
           </div>
@@ -1003,11 +1009,14 @@ export default function EventDetailPage() {
                 )}
               </p>
               <div className="flex flex-wrap gap-2 mt-2">
-                {event.category && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
-                    {event.category}
+                {eventCategories.map(cat => (
+                  <span
+                    key={cat}
+                    className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20"
+                  >
+                    {cat}
                   </span>
-                )}
+                ))}
                 {isFree ? (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
                     ✓ Gratis

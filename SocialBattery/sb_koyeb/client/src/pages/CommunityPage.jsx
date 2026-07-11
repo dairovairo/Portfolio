@@ -42,16 +42,18 @@ function getEventEmoji(category = '') {
 
 function getCommunityEmoji(category = '') {
   const c = normalizeText(category);
-  if (/música|musica/.test(c)) return '🎵';
-  if (/deporte|sport/.test(c)) return '⚽';
-  if (/tecnología|tech|código/.test(c)) return '💻';
-  if (/arte|art/.test(c)) return '🎨';
+  // Mismo motivo que en getEventEmoji: se añade el selector U+FE0F para
+  // forzar la presentación a color pese al font-variant-emoji: text global.
+  if (/música|musica/.test(c)) return '🎵️';
+  if (/deporte|sport/.test(c)) return '⚽️';
+  if (/tecnología|tech|código/.test(c)) return '💻️';
+  if (/arte|art/.test(c)) return '🎨️';
   if (/viajes|travel/.test(c)) return '✈️';
-  if (/cocina|food/.test(c)) return '👨‍🍳';
-  if (/juego|gaming/.test(c)) return '🎮';
-  if (/bienestar|yoga/.test(c)) return '🧘';
-  if (/fotografía|photo/.test(c)) return '📷';
-  return '👥';
+  if (/cocina|food/.test(c)) return '👨\u200d🍳️';
+  if (/juego|gaming/.test(c)) return '🎮️';
+  if (/bienestar|yoga/.test(c)) return '🧘️';
+  if (/fotografía|photo/.test(c)) return '📷️';
+  return '👥️';
 }
 
 function formatEventDate(dateStr) {
@@ -170,13 +172,23 @@ function buildEventFormData(form, extra = {}) {
 
   Object.entries(payload).forEach(([key, value]) => {
     if (key === 'cover_file' || key === 'custom_category') return;
-    if (value !== undefined && value !== null && value !== '') {
-      formData.append(key, String(value));
+    if (value === undefined || value === null || value === '') return;
+    // Los arrays (p.ej. categories) van como JSON, ya que FormData solo
+    // admite valores string; el servidor los parsea con JSON.parse.
+    if (Array.isArray(value)) {
+      if (value.length) formData.append(key, JSON.stringify(value));
+      return;
     }
+    formData.append(key, String(value));
   });
 
   if (form.cover_file) formData.append('cover', form.cover_file);
   return formData;
+}
+
+function getEntityCategories(entity) {
+  if (Array.isArray(entity?.categories) && entity.categories.length) return entity.categories;
+  return entity?.category ? [entity.category] : [];
 }
 
 function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId, hasUnreadUpdate }) {
@@ -186,7 +198,8 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
   const isJoined = event.attendees?.includes(currentUserId);
   const isPast = new Date(event.ends_at || event.event_date) < new Date();
   const isLiked = Boolean(event.liked_by_current_user);
-  const emoji = getEventEmoji(event.category);
+  const eventCategories = getEntityCategories(event);
+  const emoji = getEventEmoji(eventCategories[0]);
   const daysLabel = getDaysUntilLabel(event.event_date);
   const attendeeCount = event.attendee_count || 0;
   const likeCount = event.like_count || 0;
@@ -324,11 +337,14 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             📍 {event.location}
           </span>
         )}
-        {event.category && (
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
-            {event.category}
+        {eventCategories.map(cat => (
+          <span
+            key={cat}
+            className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20"
+          >
+            {cat}
           </span>
-        )}
+        ))}
         {event.price != null && parseFloat(event.price) > 0 ? (
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300">
             💳 {parseFloat(event.price).toFixed(2)}€
@@ -417,7 +433,8 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const isMember = community.members?.includes(currentUserId);
-  const emoji = getCommunityEmoji(community.category);
+  const communityCategories = getEntityCategories(community);
+  const emoji = getCommunityEmoji(communityCategories[0]);
 
   async function handleJoin() {
     if (isMember || joining) return;
@@ -466,11 +483,14 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
           <h3 className="font-display font-bold text-surface-text text-sm truncate flex-1">
             {community.name}
           </h3>
-          {community.category && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border flex-shrink-0">
-              {community.category}
+          {communityCategories.map(cat => (
+            <span
+              key={cat}
+              className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border flex-shrink-0"
+            >
+              {cat}
             </span>
-          )}
+          ))}
         </div>
         {community.description && (
           <p className="text-xs text-surface-muted mt-0.5 line-clamp-1">{community.description}</p>
@@ -525,6 +545,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
 
 // ── Create Event Modal ────────────────────────────────────────────────────────
 const OTHER_CATEGORY = 'Otro';
+const MAX_CATEGORIES = 3;
 const EVENT_CATEGORIES = ['Música', 'Deporte', 'Arte', 'Tecnología', 'Comida', 'Fiesta', 'Naturaleza', 'Cine', 'Juego', 'Yoga', 'Fotografía', 'Lectura', OTHER_CATEGORY];
 
 function CreateEventModal({ onClose, onCreate }) {
@@ -545,7 +566,7 @@ function CreateEventModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
     title: '',
     description: '',
-    category: '',
+    categories: [],
     custom_category: '',
     organization: '',
     event_date: defaultDate,
@@ -563,8 +584,10 @@ function CreateEventModal({ onClose, onCreate }) {
   const [coverPreview, setCoverPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
-  const emoji = getEventEmoji(resolvedCategory || form.category);
+  const resolvedCategories = form.categories
+    .map(cat => (cat === OTHER_CATEGORY ? form.custom_category.trim() : cat))
+    .filter(Boolean);
+  const emoji = getEventEmoji(resolvedCategories[0]);
   // La fecha de fin no puede ser más de un mes después de la fecha de inicio elegida.
   const eventStartForEnd = form.event_date ? new Date(form.event_date) : minDate;
   const maxEndDate = new Date(eventStartForEnd);
@@ -574,11 +597,18 @@ function CreateEventModal({ onClose, onCreate }) {
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
 
   function selectCategory(cat) {
-    setForm(f => ({
-      ...f,
-      category: f.category === cat ? '' : cat,
-      custom_category: cat === OTHER_CATEGORY && f.category !== cat ? f.custom_category : '',
-    }));
+    setForm(f => {
+      const isSelected = f.categories.includes(cat);
+      if (isSelected) {
+        return {
+          ...f,
+          categories: f.categories.filter(c => c !== cat),
+          custom_category: cat === OTHER_CATEGORY ? '' : f.custom_category,
+        };
+      }
+      if (f.categories.length >= MAX_CATEGORIES) return f;
+      return { ...f, categories: [...f.categories, cat] };
+    });
   }
 
   async function handleCoverChange(e) {
@@ -606,7 +636,7 @@ function CreateEventModal({ onClose, onCreate }) {
     if (!form.event_date) { setError('La fecha es obligatoria'); return; }
     if (!form.ends_at) { setError('La fecha fin es obligatoria'); return; }
     if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
-    if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
+    if (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
     }
@@ -627,7 +657,7 @@ function CreateEventModal({ onClose, onCreate }) {
     try {
       await onCreate({
         ...form,
-        category: resolvedCategory,
+        categories: resolvedCategories,
         cover_file: coverFile,
         event_date: new Date(form.event_date).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
@@ -670,24 +700,33 @@ function CreateEventModal({ onClose, onCreate }) {
 
           {/* Category */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Categoría</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Categoría <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+            </label>
             <div className="flex flex-wrap gap-2">
-              {EVENT_CATEGORIES.map(cat => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => selectCategory(cat)}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-                    form.category === cat
-                      ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
-                      : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                  }`}
-                >
-                  {getEventEmoji(cat)} {cat}
-                </button>
-              ))}
+              {EVENT_CATEGORIES.map(cat => {
+                const selected = form.categories.includes(cat);
+                const disabled = !selected && form.categories.length >= MAX_CATEGORIES;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => selectCategory(cat)}
+                    disabled={disabled}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      selected
+                        ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
+                        : disabled
+                          ? 'border-surface-border text-slate-700 opacity-40 cursor-not-allowed'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {getEventEmoji(cat)} {cat}
+                  </button>
+                );
+              })}
             </div>
-            {form.category === OTHER_CATEGORY && (
+            {form.categories.includes(OTHER_CATEGORY) && (
               <input
                 type="text"
                 value={form.custom_category}
@@ -1053,13 +1092,13 @@ function CreateEventModal({ onClose, onCreate }) {
             </p>
           )}
 
-          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())) && (
+          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())) && (
             <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
           )}
 
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
+            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '🌐 Publicar evento'}
@@ -1082,31 +1121,31 @@ const KNOWN_EVENT_CATEGORIES = EVENT_CATEGORIES.filter(cat => cat !== OTHER_CATE
 
 function matchesEventCategory(event, selectedCategory) {
   if (selectedCategory === ALL_EVENT_CATEGORIES) return true;
-  const category = (event.category || '').trim();
+  const categories = getEntityCategories(event).map(c => c.trim()).filter(Boolean);
   if (selectedCategory === OTHER_CATEGORY) {
-    if (!category) return true;
-    return !KNOWN_EVENT_CATEGORIES.some(cat => normalizeText(cat) === normalizeText(category));
+    if (!categories.length) return true;
+    return categories.some(category => !KNOWN_EVENT_CATEGORIES.some(cat => normalizeText(cat) === normalizeText(category)));
   }
-  return normalizeText(category) === normalizeText(selectedCategory);
+  return categories.some(category => normalizeText(category) === normalizeText(selectedCategory));
 }
 
 function matchesCommunityCategory(community, selectedCategory) {
   if (selectedCategory === ALL_COMMUNITY_CATEGORIES) return true;
 
-  const category = (community.category || '').trim();
+  const categories = getEntityCategories(community).map(c => c.trim()).filter(Boolean);
   if (selectedCategory === OTHER_CATEGORY) {
-    if (!category) return true;
-    return !KNOWN_COMMUNITY_CATEGORIES.some(cat => normalizeText(cat) === normalizeText(category));
+    if (!categories.length) return true;
+    return categories.some(category => !KNOWN_COMMUNITY_CATEGORIES.some(cat => normalizeText(cat) === normalizeText(category)));
   }
 
-  return normalizeText(category) === normalizeText(selectedCategory);
+  return categories.some(category => normalizeText(category) === normalizeText(selectedCategory));
 }
 
 function CreateCommunityModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
     name: '',
     description: '',
-    category: '',
+    categories: [],
     custom_category: '',
     organization: '',
     url: '',
@@ -1116,17 +1155,26 @@ function CreateCommunityModal({ onClose, onCreate }) {
   const coverInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const resolvedCategory = form.category === OTHER_CATEGORY ? form.custom_category.trim() : form.category;
-  const emoji = getCommunityEmoji(resolvedCategory || form.category);
+  const resolvedCategories = form.categories
+    .map(cat => (cat === OTHER_CATEGORY ? form.custom_category.trim() : cat))
+    .filter(Boolean);
+  const emoji = getCommunityEmoji(resolvedCategories[0]);
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
 
   function selectCategory(cat) {
-    setForm(f => ({
-      ...f,
-      category: f.category === cat ? '' : cat,
-      custom_category: cat === OTHER_CATEGORY && f.category !== cat ? f.custom_category : '',
-    }));
+    setForm(f => {
+      const isSelected = f.categories.includes(cat);
+      if (isSelected) {
+        return {
+          ...f,
+          categories: f.categories.filter(c => c !== cat),
+          custom_category: cat === OTHER_CATEGORY ? '' : f.custom_category,
+        };
+      }
+      if (f.categories.length >= MAX_CATEGORIES) return f;
+      return { ...f, categories: [...f.categories, cat] };
+    });
   }
 
   async function handleCoverChange(e) {
@@ -1150,7 +1198,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
   async function handleSubmit() {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
-    if (form.category === OTHER_CATEGORY && !form.custom_category.trim()) {
+    if (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
     }
@@ -1160,7 +1208,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
       const formData = new FormData();
       formData.append('name', form.name.trim());
       if (form.description.trim()) formData.append('description', form.description.trim());
-      if (resolvedCategory) formData.append('category', resolvedCategory);
+      if (resolvedCategories.length) formData.append('categories', JSON.stringify(resolvedCategories));
       if (form.organization.trim()) formData.append('organization', form.organization.trim());
       if (form.url.trim()) formData.append('url', form.url.trim());
       if (coverFile) formData.append('cover', coverFile);
@@ -1203,24 +1251,33 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
           {/* Category */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Categoría</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Categoría <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+            </label>
             <div className="flex flex-wrap gap-2">
-              {COMMUNITY_CATEGORIES.map(cat => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => selectCategory(cat)}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-                    form.category === cat
-                      ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                      : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                  }`}
-                >
-                  {getCommunityEmoji(cat)} {cat}
-                </button>
-              ))}
+              {COMMUNITY_CATEGORIES.map(cat => {
+                const selected = form.categories.includes(cat);
+                const disabled = !selected && form.categories.length >= MAX_CATEGORIES;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => selectCategory(cat)}
+                    disabled={disabled}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      selected
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : disabled
+                          ? 'border-surface-border text-slate-700 opacity-40 cursor-not-allowed'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {getCommunityEmoji(cat)} {cat}
+                  </button>
+                );
+              })}
             </div>
-            {form.category === OTHER_CATEGORY && (
+            {form.categories.includes(OTHER_CATEGORY) && (
               <input
                 type="text"
                 value={form.custom_category}
@@ -1331,7 +1388,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.name.trim() || (form.category === OTHER_CATEGORY && !form.custom_category.trim())}
+            disabled={saving || !form.name.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '👥 Crear comunidad'}
@@ -1459,7 +1516,7 @@ function RankingModal({ events, onClose, onOpen }) {
         {/* Info */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-surface-text truncate group-hover:text-accent-glow transition-colors">
-            {getEventEmoji(event.category)} {event.title}
+            {getEventEmoji(getEntityCategories(event)[0])} {event.title}
           </p>
           {event.location && (
             <p className="text-xs text-slate-500 font-mono truncate">📍 {event.location}</p>
@@ -1682,7 +1739,7 @@ export default function CommunityPage() {
     const matchesSearch = !normalizedEventSearch || normalizeText([
       event.title,
       event.description,
-      event.category,
+      ...getEntityCategories(event),
       event.location,
       event.organization,
       event.creator_name,
@@ -1711,7 +1768,7 @@ export default function CommunityPage() {
       const matchesSearch = !normalizedCommunitySearch || normalizeText([
         community.name,
         community.description,
-        community.category,
+        ...getEntityCategories(community),
         community.organization,
         community.creator_name,
       ].filter(Boolean).join(' ')).includes(normalizedCommunitySearch);
