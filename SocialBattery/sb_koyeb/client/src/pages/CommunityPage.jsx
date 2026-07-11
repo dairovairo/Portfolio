@@ -1589,7 +1589,7 @@ function medalEmoji(i) {
   return null;
 }
 
-function RankingModal({ events, onClose, onOpen }) {
+function RankingModal({ events, loading, onClose, onOpen }) {
   const [metric, setMetric]   = useState('combined');
   const [view,   setView]     = useState('current');
 
@@ -1730,7 +1730,12 @@ function RankingModal({ events, onClose, onOpen }) {
 
         {/* List */}
         <div className="overflow-y-auto flex-1 px-3 pb-4">
-          {list.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3 animate-pulse">🏆</div>
+              <p className="text-sm text-surface-muted font-mono">Cargando ranking...</p>
+            </div>
+          ) : list.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-4xl mb-3">🏆</div>
               <p className="text-sm text-surface-muted font-mono">{emptyLabel}</p>
@@ -1759,6 +1764,8 @@ export default function CommunityPage() {
   const [events, setEvents] = useState([]);
   const [communities, setCommunities] = useState([]);
   const [showRanking, setShowRanking] = useState(false);
+  const [rankingEvents, setRankingEvents] = useState([]);
+  const [rankingLoading, setRankingLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showCreateCommunity, setShowCreateCommunity] = useState(false);
@@ -1789,6 +1796,21 @@ export default function CommunityPage() {
       setCommunities(data.communities || []);
     } catch (e) {
       showToast('Error cargando comunidades', 'error');
+    }
+  }, [showToast]);
+
+  // El endpoint /community/events solo trae eventos activos/futuros, así
+  // que el ranking (que necesita también el histórico) usa su propio
+  // endpoint y se carga solo cuando se abre el modal.
+  const fetchRankingEvents = useCallback(async () => {
+    setRankingLoading(true);
+    try {
+      const data = await api.get('/community/events/ranking');
+      setRankingEvents(data.events || []);
+    } catch (e) {
+      showToast('Error cargando el ranking', 'error');
+    } finally {
+      setRankingLoading(false);
     }
   }, [showToast]);
 
@@ -2026,7 +2048,7 @@ export default function CommunityPage() {
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowRanking(true)}
+                  onClick={() => { setShowRanking(true); fetchRankingEvents(); }}
                   title="Rankings históricos"
                   className="text-lg leading-none px-2 py-1.5 rounded-lg border border-surface-border bg-surface-card hover:border-accent-primary/50 hover:bg-surface-bg transition-colors"
                 >
@@ -2376,7 +2398,8 @@ export default function CommunityPage() {
       {/* Modals */}
       {showRanking && (
         <RankingModal
-          events={events}
+          events={rankingEvents}
+          loading={rankingLoading}
           onClose={() => setShowRanking(false)}
           onOpen={(id) => { setShowRanking(false); navigate(`/community/event/${id}`); }}
         />

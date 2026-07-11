@@ -286,6 +286,37 @@ router.get('/events', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/community/events/ranking
+// Devuelve eventos para los rankings, incluyendo eventos ya finalizados
+// (a diferencia de GET /events, que solo trae eventos activos/futuros).
+// Se ordena por fecha descendente y se limita a 300 para evitar escaneos
+// sin control, priorizando los eventos más recientes si hay overflow.
+router.get('/events/ranking', requireAuth, async (req, res) => {
+  const db = getUserSupabase(req);
+
+  try {
+    const { data: events, error } = await db
+      .from('community_events')
+      .select(`
+        id, title, description, category, categories, event_date, ends_at, location, lat, lng, organization, cover_image_url,
+        url, price, additional_info, max_attendees, creator_id, community_id, created_at, promotion_plan, notification_count,
+        creator:users!community_events_creator_id_fkey(username),
+        community:communities!community_events_community_id_fkey(id, name, organization)
+      `)
+      .order('event_date', { ascending: false })
+      .limit(300);
+
+    if (error) throw error;
+
+    const enriched = await enrichEvents(db, events || [], req.user.id);
+
+    res.json({ events: enriched });
+  } catch (err) {
+    console.error('[community] GET /events/ranking error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener el ranking de eventos') });
+  }
+});
+
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
