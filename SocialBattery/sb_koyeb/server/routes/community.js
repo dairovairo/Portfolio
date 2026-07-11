@@ -2282,10 +2282,9 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
   const communityId = req.params.id;
 
   try {
-    if (!(await requireCommunityMembership(communityId, userId))) {
-      return res.status(403).json({ error: 'Not a member' });
-    }
-
+    // Los sorteos deben verse al entrar en la comunidad aunque no seas
+    // miembro todavía (para animar a unirse); solo crear/sortear requiere
+    // pertenecer/ser el creador, y eso ya se comprueba en esas rutas.
     const { data, error } = await supabase
       .from('community_raffles')
       .select(`
