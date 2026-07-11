@@ -222,6 +222,85 @@ function matchesEventDateFilter(event, dateFilter) {
   return true;
 }
 
+// ── Event sort dropdown ──────────────────────────────────────────────────────
+// Un <select> nativo delega su menú al sistema operativo, así que en móvil
+// (picker nativo de iOS/Android) queda con un aspecto muy distinto al de
+// escritorio. Se sustituye por un menú propio (mismo patrón que el menú ⋯ de
+// GroupChatPage: botón + panel absoluto + cierre al hacer click fuera) para
+// que se vea exactamente igual en cualquier dispositivo.
+const EVENT_SORT_GROUPS = [
+  {
+    label: 'Cercanía',
+    options: [
+      { key: 'cercania', label: '📍 Cercanía' },
+      { key: 'cercania_intereses', label: '📍✨ Cercanía e intereses' },
+    ],
+  },
+  {
+    label: 'Otros',
+    options: [
+      { key: 'app', label: '✨ Selección' },
+      { key: 'planificaciones', label: '📅 Planificaciones' },
+      { key: 'likes', label: '♥ Likes' },
+    ],
+  },
+];
+
+function EventSortDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const currentLabel = EVENT_SORT_GROUPS
+    .flatMap(group => group.options)
+    .find(opt => opt.key === value)?.label || 'Ordenar';
+
+  return (
+    <div className="relative flex-shrink-0" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 text-xs bg-surface-card border border-surface-border rounded-lg pl-2.5 pr-2 py-1.5 text-surface-muted hover:border-accent-primary/50 transition-colors cursor-pointer"
+      >
+        <span className="truncate max-w-[130px]">{currentLabel}</span>
+        <span className={`text-[9px] leading-none transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[210px] py-1.5 overflow-hidden animate-fade-in">
+          {EVENT_SORT_GROUPS.map(group => (
+            <div key={group.label}>
+              <p className="px-4 pt-2 pb-1 text-[10px] font-display font-bold uppercase tracking-wide text-surface-muted/70">
+                {group.label}
+              </p>
+              {group.options.map(opt => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => { onChange(opt.key); setOpen(false); }}
+                  className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
+                    value === opt.key
+                      ? 'text-accent-glow bg-accent-primary/10'
+                      : 'text-surface-text hover:bg-surface-hover'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Event Card ────────────────────────────────────────────────────────────────
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -1685,6 +1764,8 @@ export default function CommunityPage() {
   const [showCreateCommunity, setShowCreateCommunity] = useState(false);
   const [communitySearch, setCommunitySearch] = useState('');
   const [communityCategoryFilter, setCommunityCategoryFilter] = useState(ALL_COMMUNITY_CATEGORIES);
+  const [communityMembershipFilter, setCommunityMembershipFilter] = useState('all'); // 'all' | 'mine'
+  const [communityInterestsOnly, setCommunityInterestsOnly] = useState(false);
   const [eventSearch, setEventSearch] = useState('');
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
@@ -1841,11 +1922,18 @@ export default function CommunityPage() {
         community.organization,
         community.creator_name,
       ].filter(Boolean).join(' ')).includes(normalizedCommunitySearch);
+      const matchesMembership = communityMembershipFilter === 'mine'
+        ? Boolean(community.member_ids?.includes(profile?.id))
+        : true;
+      const matchesInterests = communityInterestsOnly
+        ? matchesUserInterests(community, profile?.interests)
+        : true;
 
-      return matchesSearch && matchesCommunityCategory(community, communityCategoryFilter);
+      return matchesSearch && matchesCommunityCategory(community, communityCategoryFilter) && matchesMembership && matchesInterests;
     })
+    // Todas las vistas se ordenan igual, por número de participantes.
     .sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
-  const isCommunityFiltered = normalizedCommunitySearch || communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES;
+  const isCommunityFiltered = normalizedCommunitySearch || communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES || communityMembershipFilter !== 'all' || communityInterestsOnly;
   const communityCountLabel = isCommunityFiltered
     ? `${filteredCommunities.length}/${communities.length} comunidades`
     : `${communities.length} comunidades`;
@@ -1944,21 +2032,7 @@ export default function CommunityPage() {
                 >
                   🏆
                 </button>
-                <select
-                  value={eventSort}
-                  onChange={e => setEventSort(e.target.value)}
-                  className="text-xs bg-surface-card border border-surface-border rounded-lg px-2 py-1.5 text-surface-muted focus:outline-none focus:border-accent-primary/50 transition-colors cursor-pointer"
-                >
-                  <optgroup label="Cercanía">
-                    <option value="cercania">📍 Cercanía</option>
-                    <option value="cercania_intereses">📍✨ Cercanía e intereses</option>
-                  </optgroup>
-                  <optgroup label="Otros">
-                    <option value="app">✨ Selección</option>
-                    <option value="planificaciones">📅 Planificaciones</option>
-                    <option value="likes">♥ Likes</option>
-                  </optgroup>
-                </select>
+                <EventSortDropdown value={eventSort} onChange={setEventSort} />
               </div>
             </div>
 
@@ -2173,6 +2247,62 @@ export default function CommunityPage() {
                 className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
 
+              {/* Todas / Tus comunidades — ambas vistas se ordenan igual, por
+                  número de participantes. */}
+              <div className="flex gap-2">
+                {[
+                  { key: 'all', label: '🌐 Todas' },
+                  { key: 'mine', label: '👤 Tus comunidades' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setCommunityMembershipFilter(key)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
+                      communityMembershipFilter === key
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Check de intereses en común (categorías compartidas con el perfil) */}
+              <button
+                type="button"
+                onClick={() => setCommunityInterestsOnly(v => !v)}
+                aria-pressed={communityInterestsOnly}
+                className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                  communityInterestsOnly
+                    ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                    : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                }`}
+              >
+                <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
+                  communityInterestsOnly
+                    ? 'border-accent-primary bg-accent-primary text-white'
+                    : 'border-surface-border'
+                }`}>
+                  {communityInterestsOnly ? '✓' : ''}
+                </span>
+                ✨ Solo con intereses en común
+              </button>
+
+              {communityInterestsOnly && !(profile?.interests?.length > 0) && (
+                <div className="flex items-center justify-between gap-3 text-xs bg-accent-primary/10 border border-accent-primary/25 text-accent-glow rounded-xl px-3 py-2.5">
+                  <span>✨ Añade tus intereses en el perfil para usar este filtro.</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/profile')}
+                    className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:brightness-125 transition-colors"
+                  >
+                    Ir al perfil
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                 {COMMUNITY_CATEGORY_FILTERS.map(cat => (
                   <button
@@ -2214,6 +2344,8 @@ export default function CommunityPage() {
                       onClick={() => {
                         setCommunitySearch('');
                         setCommunityCategoryFilter(ALL_COMMUNITY_CATEGORIES);
+                        setCommunityMembershipFilter('all');
+                        setCommunityInterestsOnly(false);
                       }}
                       className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                     >
