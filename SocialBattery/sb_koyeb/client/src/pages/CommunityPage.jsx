@@ -5,6 +5,7 @@ import LocationPicker from '../components/LocationPicker';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
+import { useUserLocation } from '../context/UserLocationContext';
 import { api } from '../lib/api';
 import TutorialOverlay from '../components/TutorialOverlay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
@@ -137,13 +138,64 @@ function sortEventsByProximity(eventList = []) {
   });
 }
 
-// 'app'            → puntuación ponderada (likes + apuntados), sin distinción de plan
-// 'planificaciones'→ más apuntados primero
-// 'likes'          → más likes primero
+// 'app'                → puntuación ponderada (likes + apuntados), sin distinción de plan
+// 'planificaciones'    → más apuntados primero
+// 'likes'              → más likes primero
+// 'cercania'            → más cerca del usuario primero (por lat/lng del evento)
+// 'cercania_intereses'  → igual que cercania, pero solo eventos con alguna
+//                         categoría que coincida con los intereses del usuario
 function promotionScore(event) {
   return (event.attendee_count || 0) * 1.5 + (event.like_count || 0);
 }
-function sortEventsBy(eventList = [], sortKey = 'app') {
+
+// Distancia entre dos coordenadas (fórmula de Haversine), en kilómetros.
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// null → no se puede calcular (falta la ubicación del usuario o el evento no
+// tiene coordenadas, ya que son opcionales — se pusieron en la fase 27).
+function getEventDistanceKm(event, userCoords) {
+  if (!userCoords || typeof event.lat !== 'number' || typeof event.lng !== 'number') return null;
+  return distanceKm(userCoords.lat, userCoords.lng, event.lat, event.lng);
+}
+
+// Los eventos sin distancia calculable van al final, pero mantienen su orden
+// relativo (el array ya viene ordenado por fecha desde el backend), para que
+// mientras no haya permiso de ubicación la lista no quede "revuelta".
+function sortEventsByDistance(eventList = [], userCoords) {
+  return [...eventList].sort((a, b) => {
+    const da = getEventDistanceKm(a, userCoords);
+    const db = getEventDistanceKm(b, userCoords);
+    if (da === null && db === null) return 0;
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return da - db;
+  });
+}
+
+// Si el usuario no tiene intereses configurados no hay nada que comparar, así
+// que no se filtra nada (mejor mostrar todo que dejar la lista vacía).
+function matchesUserInterests(event, userInterests = []) {
+  if (!userInterests.length) return true;
+  const eventCats = getEntityCategories(event).map(normalizeText);
+  const normalizedInterests = userInterests.map(normalizeText);
+  return eventCats.some(cat => normalizedInterests.includes(cat));
+}
+
+function sortEventsBy(eventList = [], sortKey = 'app', { userCoords, userInterests = [] } = {}) {
+  if (sortKey === 'cercania') {
+    return sortEventsByDistance(eventList, userCoords);
+  }
+  if (sortKey === 'cercania_intereses') {
+    return sortEventsByDistance(eventList.filter(event => matchesUserInterests(event, userInterests)), userCoords);
+  }
   return [...eventList].sort((a, b) => {
     if (sortKey === 'likes') {
       return (b.like_count || 0) - (a.like_count || 0);
@@ -154,6 +206,20 @@ function sortEventsBy(eventList = [], sortKey = 'app') {
     // 'app': todos los eventos compiten por igual, por puntuación ponderada
     return promotionScore(b) - promotionScore(a);
   });
+}
+
+// Filtro de fecha de inicio: 'week' (esta semana), 'month' (este mes) o
+// 'all' (todo el tiempo, sin filtrar). Ventanas móviles desde ahora, no por
+// mes/semana natural, para mantenerlo simple y consistente con el resto de
+// la app (p.ej. el límite diario de push pasó a ventana móvil de 24h).
+function matchesEventDateFilter(event, dateFilter) {
+  if (dateFilter === 'all') return true;
+  const startTime = new Date(event.event_date).getTime();
+  if (Number.isNaN(startTime)) return true;
+  const now = Date.now();
+  if (dateFilter === 'week') return startTime <= now + 7 * 24 * 60 * 60 * 1000;
+  if (dateFilter === 'month') return startTime <= now + 30 * 24 * 60 * 60 * 1000;
+  return true;
 }
 
 // ── Event Card ────────────────────────────────────────────────────────────────
@@ -1622,7 +1688,9 @@ export default function CommunityPage() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
-  const [eventSort, setEventSort] = useState('app'); // 'app' | 'planificaciones' | 'likes'
+  const [eventDateFilter, setEventDateFilter] = useState('all'); // 'week' | 'month' | 'all'
+  const [eventSort, setEventSort] = useState('cercania'); // 'cercania' | 'cercania_intereses' | 'app' | 'planificaciones' | 'likes'
+  const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
@@ -1734,25 +1802,26 @@ export default function CommunityPage() {
 
   // ── Event search + filter ──────────────────────────────────────────────────
   const normalizedEventSearch = normalizeText(eventSearch);
-  const filteredSortedEvents = sortEventsBy(events, eventSort).filter(event => {
-    if (!isUpcomingEvent(event)) return false;
-    const matchesSearch = !normalizedEventSearch || normalizeText([
-      event.title,
-      event.description,
-      ...getEntityCategories(event),
-      event.location,
-      event.organization,
-      event.creator_name,
-      event.community_name,
-    ].filter(Boolean).join(' ')).includes(normalizedEventSearch);
-    const matchesPrice = eventPriceFilter === 'all'
-      ? true
-      : eventPriceFilter === 'free'
-        ? (!event.price || parseFloat(event.price) === 0)
-        : (event.price && parseFloat(event.price) > 0);
-    return matchesSearch && matchesEventCategory(event, eventCategoryFilter) && matchesPrice;
-  });
-  const isEventFiltered = normalizedEventSearch || eventCategoryFilter !== ALL_EVENT_CATEGORIES || eventPriceFilter !== 'all';
+  const filteredSortedEvents = sortEventsBy(events, eventSort, { userCoords, userInterests: profile?.interests })
+    .filter(event => {
+      if (!isUpcomingEvent(event)) return false;
+      const matchesSearch = !normalizedEventSearch || normalizeText([
+        event.title,
+        event.description,
+        ...getEntityCategories(event),
+        event.location,
+        event.organization,
+        event.creator_name,
+        event.community_name,
+      ].filter(Boolean).join(' ')).includes(normalizedEventSearch);
+      const matchesPrice = eventPriceFilter === 'all'
+        ? true
+        : eventPriceFilter === 'free'
+          ? (!event.price || parseFloat(event.price) === 0)
+          : (event.price && parseFloat(event.price) > 0);
+      return matchesSearch && matchesEventCategory(event, eventCategoryFilter) && matchesPrice && matchesEventDateFilter(event, eventDateFilter);
+    });
+  const isEventFiltered = normalizedEventSearch || eventCategoryFilter !== ALL_EVENT_CATEGORIES || eventPriceFilter !== 'all' || eventDateFilter !== 'all';
   const upcomingEventsTotal = events.filter(isUpcomingEvent).length;
   const eventCountLabel = isEventFiltered
     ? `${filteredSortedEvents.length}/${upcomingEventsTotal} eventos`
@@ -1880,12 +1949,57 @@ export default function CommunityPage() {
                   onChange={e => setEventSort(e.target.value)}
                   className="text-xs bg-surface-card border border-surface-border rounded-lg px-2 py-1.5 text-surface-muted focus:outline-none focus:border-accent-primary/50 transition-colors cursor-pointer"
                 >
-                  <option value="app">✨ Selección</option>
-                  <option value="planificaciones">📅 Planificaciones</option>
-                  <option value="likes">♥ Likes</option>
+                  <optgroup label="Cercanía">
+                    <option value="cercania">📍 Cercanía</option>
+                    <option value="cercania_intereses">📍✨ Cercanía e intereses</option>
+                  </optgroup>
+                  <optgroup label="Otros">
+                    <option value="app">✨ Selección</option>
+                    <option value="planificaciones">📅 Planificaciones</option>
+                    <option value="likes">♥ Likes</option>
+                  </optgroup>
                 </select>
               </div>
             </div>
+
+            {/* Aviso de ubicación: solo si el orden activo la necesita y aún
+                no tenemos coordenadas (permiso pendiente, denegado o no
+                soportado). requestLocation reintenta la petición nativa. */}
+            {(eventSort === 'cercania' || eventSort === 'cercania_intereses') && !userCoords && (
+              <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
+                <span>
+                  📍 {locationStatus === 'denied'
+                    ? 'Has denegado la ubicación: activa el permiso para ordenar por cercanía.'
+                    : locationStatus === 'unsupported'
+                      ? 'Tu navegador no permite compartir ubicación.'
+                      : 'Activa tu ubicación para ordenar los eventos por cercanía.'}
+                </span>
+                {locationStatus !== 'unsupported' && (
+                  <button
+                    type="button"
+                    onClick={requestLocation}
+                    className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:text-amber-200 transition-colors"
+                  >
+                    Activar
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Aviso de intereses: "cercanía e intereses" sin intereses
+                configurados en el perfil no tiene nada que comparar. */}
+            {eventSort === 'cercania_intereses' && !(profile?.interests?.length > 0) && (
+              <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-accent-primary/10 border border-accent-primary/25 text-accent-glow rounded-xl px-3 py-2.5">
+                <span>✨ Añade tus intereses en el perfil para afinar este filtro.</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/profile')}
+                  className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:brightness-125 transition-colors"
+                >
+                  Ir al perfil
+                </button>
+              </div>
+            )}
 
             {/* Search + category filter */}
             <div className="space-y-3 mb-4">
@@ -1910,6 +2024,28 @@ export default function CommunityPage() {
                     onClick={() => setEventPriceFilter(key)}
                     className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
                       eventPriceFilter === key
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Fecha de inicio: Esta semana / Este mes / Todo el tiempo */}
+              <div className="flex gap-2">
+                {[
+                  { key: 'week', label: '🗓️ Esta semana' },
+                  { key: 'month', label: '📆 Este mes' },
+                  { key: 'all', label: '♾️ Todo el tiempo' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setEventDateFilter(key)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
+                      eventDateFilter === key
                         ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
                         : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
                     }`}
@@ -1959,7 +2095,8 @@ export default function CommunityPage() {
                     setEventSearch('');
                     setEventCategoryFilter(ALL_EVENT_CATEGORIES);
                     setEventPriceFilter('all');
-                    setEventSort('app');
+                    setEventDateFilter('all');
+                    setEventSort('cercania');
                   }}
                   className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                 >

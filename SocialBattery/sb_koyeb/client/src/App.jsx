@@ -28,11 +28,23 @@ import { PoolChatNotificationsProvider } from './context/PoolChatNotificationsCo
 import { PoolInviteNotificationsProvider } from './context/PoolInviteNotificationsContext';
 import { TutorialProvider } from './context/TutorialContext';
 import { MascotProvider } from './context/MascotContext';
+import { UserLocationProvider, useUserLocation } from './context/UserLocationContext';
 import MascotPreviewSync from './components/MascotPreviewSync';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
   const navigate = useNavigate();
+  const { requestLocationOnce } = useUserLocation();
+
+  // Se pide el permiso de ubicación una única vez, nada más entrar en la app
+  // ya autenticado y con el perfil completo (no tiene sentido pedirlo en el
+  // login ni durante el onboarding). Se usa para ordenar/filtrar eventos por
+  // cercanía en el menú Comunidad — ver CommunityPage.jsx.
+  useEffect(() => {
+    if (isAuthenticated && hasProfile) {
+      requestLocationOnce();
+    }
+  }, [isAuthenticated, hasProfile, requestLocationOnce]);
 
   // El Service Worker (sw.js → notificationclick) nos manda esta URL cuando
   // el usuario toca una notificación con la app ya abierta, en vez de hacer
@@ -126,6 +138,7 @@ export default function App() {
         <SettingsProvider>
           <ToastProvider>
             <AuthProvider>
+              <UserLocationProvider>
               <TutorialProvider>
                 <MascotProvider>
                 <CommunityNotificationsProvider>
@@ -137,6 +150,7 @@ export default function App() {
                 </CommunityNotificationsProvider>
                 </MascotProvider>
               </TutorialProvider>
+              </UserLocationProvider>
             </AuthProvider>
           </ToastProvider>
         </SettingsProvider>
