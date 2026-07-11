@@ -978,7 +978,11 @@ router.get('/communities', requireAuth, async (req, res) => {
       if (rErr) throw rErr;
       (activeRaffles || []).forEach(r => communitiesWithActiveRaffle.add(r.community_id));
 
-      const { data: upcomingEvents, error: eErr } = await db
+      // community_events es pública (cualquiera puede ver eventos de
+      // cualquier comunidad, sea o no miembro), pero se usa igualmente el
+      // cliente de servicio aquí para no depender de la política RLS y
+      // mantener el mismo criterio que la consulta de sorteos de arriba.
+      const { data: upcomingEvents, error: eErr } = await supabase
         .from('community_events')
         .select('community_id, event_date, ends_at')
         .in('community_id', communityIds);
