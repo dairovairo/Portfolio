@@ -2030,19 +2030,21 @@ export default function CommunityPage() {
               </div>
             </div>
 
-            {/* Aviso de ubicación: se muestra siempre que falten coordenadas
-                (permiso pendiente, denegado o no soportado), sin importar el
-                orden activo — sin ubicación el usuario podría estar viendo
-                eventos lejanos sin saberlo. requestLocation reintenta la
-                petición nativa. */}
-            {!userCoords && (
+            {/* Aviso de ubicación: solo si el orden activo la necesita y aún
+                no tenemos coordenadas (permiso pendiente, denegado o no
+                soportado). Se comprueba también locationStatus === 'denied'
+                explícitamente (no solo !userCoords) por si quedaran coords
+                cacheadas de una concesión de permiso anterior a que el
+                usuario desactivase la ubicación. requestLocation reintenta
+                la petición nativa. */}
+            {(eventSort === 'cercania' || eventSort === 'cercania_intereses') && (!userCoords || locationStatus === 'denied') && (
               <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
                 <span>
                   📍 {locationStatus === 'denied'
-                    ? 'Has denegado la ubicación: los eventos pueden no ser cercanos a ti.'
+                    ? 'Has denegado la ubicación: activa el permiso para ordenar por cercanía.'
                     : locationStatus === 'unsupported'
-                      ? 'Tu navegador no permite compartir ubicación: los eventos pueden no ser cercanos a ti.'
-                      : 'Activa tu ubicación: sin ella, los eventos que ves pueden no ser cercanos a ti.'}
+                      ? 'Tu navegador no permite compartir ubicación.'
+                      : 'Activa tu ubicación para ordenar los eventos por cercanía.'}
                 </span>
                 {locationStatus !== 'unsupported' && (
                   <button
@@ -2055,7 +2057,6 @@ export default function CommunityPage() {
                 )}
               </div>
             )}
-
 
             {/* Aviso de intereses: "cercanía e intereses" sin intereses
                 configurados en el perfil no tiene nada que comparar. */}
