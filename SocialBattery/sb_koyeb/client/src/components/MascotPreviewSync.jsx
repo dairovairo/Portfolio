@@ -37,6 +37,20 @@ export default function MascotPreviewSync() {
   const timerRef = useRef(null);
   const lastSignatureRef = useRef(null);
 
+  // getMascotLayers/getFeetZones/getHeadZones/getOutfitZones/
+  // getAccessoryZones se recrean en CADA render de MascotProvider (no están
+  // memoizadas con useCallback). Si entraran en el array de dependencias
+  // del efecto de abajo, cualquier re-render ajeno del provider (navegar de
+  // página, un toast, el heartbeat de presencia, cualquier contexto por
+  // encima de MascotProvider actualizándose…) reiniciaría el debounce una y
+  // otra vez — y si esos re-renders eran más frecuentes que
+  // SYNC_DEBOUNCE_MS, la subida de la imagen corregida podía no llegar a
+  // completarse NUNCA. Guardamos las funciones en un ref (actualizado en
+  // cada render, sin ser dependencia) para usar siempre la versión más
+  // reciente al disparar, sin que su cambio de identidad reinicie el timer.
+  const mascotApiRef = useRef(null);
+  mascotApiRef.current = { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones };
+
   useEffect(() => {
     if (!profile?.id || !skinHydrated) return;
 
@@ -56,9 +70,7 @@ export default function MascotPreviewSync() {
     timerRef.current = setTimeout(async () => {
       lastSignatureRef.current = signature;
       try {
-        const overlayBlob = await renderMascotOverlayBlob({
-          getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
-        });
+        const overlayBlob = await renderMascotOverlayBlob(mascotApiRef.current);
 
         const formData = new FormData();
         // Sin capas equipadas (mascota base): se envía sin adjuntar
@@ -74,10 +86,12 @@ export default function MascotPreviewSync() {
     }, SYNC_DEBOUNCE_MS);
 
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    // getMascotLayers/getFeetZones/... deliberadamente fuera del array (ver
+    // comentario de mascotApiRef arriba): dependen solo del equipado real.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     profile?.id, skinHydrated,
     activeActivity, activeOutfit, activeFeet, activeHead, activeAccessories,
-    getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones,
   ]);
 
   return null;
