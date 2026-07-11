@@ -964,7 +964,12 @@ router.get('/communities', requireAuth, async (req, res) => {
     const communitiesWithActiveRaffle = new Set();
     const communitiesWithUpcomingEvent = new Set();
     if (communityIds.length > 0) {
-      const { data: activeRaffles, error: rErr } = await db
+      // community_raffles solo es legible por RLS para miembros de esa
+      // comunidad (ver phase79); aquí necesitamos el flag para TODAS las
+      // comunidades listadas, incluidas las que el usuario aún no se ha
+      // unido, así que se usa el cliente de servicio (bypassa RLS), igual
+      // que el resto de rutas de sorteos.
+      const { data: activeRaffles, error: rErr } = await supabase
         .from('community_raffles')
         .select('community_id')
         .in('community_id', communityIds)
