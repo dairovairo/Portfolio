@@ -26,6 +26,16 @@ import { api } from '../lib/api';
 // cada click mientras está probándose ítems.
 const SYNC_DEBOUNCE_MS = 1200;
 
+// Se incrementa cada vez que cambia la LÓGICA de posicionamiento/composición
+// en mascotRenderer.js (p. ej. al corregir el offset de la riñonera). El
+// "signature" de abajo solo cambia cuando cambia el equipado, así que sin
+// esto una corrección de fórmula nunca se resubiría para quien ya tuviera
+// ese ítem puesto desde antes: el signature seguiría siendo idéntico. Al
+// incluir esta versión en el signature, cualquier bump fuerza una
+// regeneración + resubida en el siguiente login de TODOS los usuarios, sin
+// que tengan que reequipar nada.
+const RENDER_LOGIC_VERSION = 2; // v2: fix offset riñonera (ajuste 4, +2% derecha)
+
 export default function MascotPreviewSync() {
   const { profile } = useAuth();
   const {
@@ -58,6 +68,7 @@ export default function MascotPreviewSync() {
     // afecta al aspecto visual): si no cambió desde la última subida, no
     // hace falta volver a generar ni subir nada.
     const signature = JSON.stringify({
+      v: RENDER_LOGIC_VERSION,
       activeActivity,
       activeOutfit,
       activeFeet,
