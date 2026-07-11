@@ -62,6 +62,20 @@ router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req,
         objectName: `mascot-previews/${req.user.id}`,
         fallbackMaxLength: 3000000,
       });
+      // El nombre de objeto es fijo (siempre el mismo por usuario, con
+      // upsert:true), así que la URL pública nunca cambiaba entre subidas.
+      // Eso hacía que un navegador (o el CDN delante de Supabase Storage)
+      // que ya hubiese cargado esa URL una vez se quedara SIEMPRE con esa
+      // versión cacheada, aunque el usuario cambiase de accesorio/color
+      // después: los amigos veían una mascota "congelada" en una versión
+      // vieja de la personalización (p. ej. la riñonera en una posición ya
+      // corregida hace tiempo en el código, pero nunca reflejada aquí).
+      // Se añade un parámetro de versión (timestamp) para que cada subida
+      // tenga una URL distinta y fuerce a recargar la imagen real.
+      // No aplica a URLs data: (fallback base64), que ya son únicas.
+      if (!url.startsWith('data:')) {
+        url += `${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      }
     }
 
     const { error } = await supabase
