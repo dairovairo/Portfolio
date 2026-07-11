@@ -49,17 +49,7 @@ export function UserLocationProvider({ children }) {
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
       },
       (err) => {
-        const denied = err?.code === 1; /* PERMISSION_DENIED */
-        setStatus(denied ? 'denied' : 'error');
-        if (denied) {
-          // Si el permiso está realmente denegado, la última posición
-          // cacheada ya no es de fiar (el usuario pudo desactivar la
-          // ubicación tiempo después de concederla). La borramos para que
-          // el resto de la UI (p.ej. el aviso en Comunidad) refleje el
-          // estado real en vez de quedarse con coords obsoletas.
-          setCoords(null);
-          try { localStorage.removeItem(CACHE_KEY); } catch {}
-        }
+        setStatus(err?.code === 1 /* PERMISSION_DENIED */ ? 'denied' : 'error');
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 5 * 60 * 1000 }
     );
