@@ -115,6 +115,31 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
   );
 }
 
+function DeletedBubble({ isMe, msgId }) {
+  return (
+    <div id={msgId ? `msg-${msgId}` : undefined} className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className="max-w-[75%] rounded-2xl px-4 py-2.5 border border-surface-border bg-surface-card/50">
+        <p className="text-sm italic text-surface-muted flex items-center gap-1.5">
+          <span className="text-base">🚫</span>
+          {isMe ? 'Eliminaste este mensaje' : 'Este mensaje ha sido eliminado'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function LikeBadge({ liked, isMe }) {
+  if (!liked) return null;
+  return (
+    <span
+      className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} w-5 h-5 rounded-full bg-surface-bg border border-surface-border flex items-center justify-center text-[11px] shadow-md z-10 leading-none animate-scale-in`}
+      title="Le gusta este mensaje"
+    >
+      ❤️
+    </span>
+  );
+}
+
 function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLongPress }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
@@ -144,13 +169,14 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLo
             </div>
           )}
           <div
-            className={`rounded-2xl px-4 py-2.5 select-none ${!isMe ? 'border border-surface-border' : ''}`}
+            className={`relative rounded-2xl px-4 py-2.5 select-none ${!isMe ? 'border border-surface-border' : ''}`}
             style={bubbleStyle}
           >
             <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
             <div className="text-xs mt-1 opacity-60">
               <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
+            <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
           </div>
         </div>
         {identity && (
@@ -193,7 +219,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
               </div>
             )}
             <div
-              className={`rounded-2xl overflow-hidden select-none ${!isMe ? 'border border-surface-border' : ''}`}
+              className={`relative rounded-2xl overflow-hidden select-none ${!isMe ? 'border border-surface-border' : ''}`}
               style={bubbleStyle}
             >
               <div className="relative">
@@ -212,6 +238,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
               <div className="text-xs px-3 pb-2 pt-1 opacity-60">
                 <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
+              <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
             </div>
           </div>
           {identity && (
@@ -278,7 +305,7 @@ function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress }) {
               {msg.sender?.username}
             </div>
           )}
-          <div className="w-full min-w-[220px] bg-surface-card border border-surface-border rounded-2xl px-4 py-3">
+          <div className="relative w-full min-w-[220px] bg-surface-card border border-surface-border rounded-2xl px-4 py-3">
             <p className="text-sm font-display font-semibold text-surface-text mb-2 flex items-center gap-1.5">
               📊 {msg.content}
             </p>
@@ -317,6 +344,7 @@ function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress }) {
                 {poll.myVote != null ? ' · toca tu opción para quitar el voto' : ''}
               </span>
             </div>
+            <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
           </div>
         </div>
         {identity && (
@@ -499,7 +527,7 @@ function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
 }
 
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isPinned, canPin, onClose, onTogglePin }) {
+function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -514,12 +542,29 @@ function MessageContextMenu({ msg, isPinned, canPin, onClose, onTogglePin }) {
         <div className="w-10 h-1 bg-surface-border rounded-full mx-auto mt-3 mb-3" />
 
         {/* Preview */}
-        <p className="text-xs text-surface-muted font-mono text-center truncate px-8 mb-3 opacity-60">
-          {msg.type === 'image' ? '📷 Imagen' : msg.type === 'poll' ? `📊 ${msg.content}` : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
-        </p>
+        {!msg.deleted_for_everyone && (
+          <p className="text-xs text-surface-muted font-mono text-center truncate px-8 mb-3 opacity-60">
+            {msg.type === 'image' ? '📷 Imagen' : msg.type === 'poll' ? `📊 ${msg.content}` : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
+          </p>
+        )}
 
         <div className="px-4 pb-4 space-y-1.5">
-          {canPin && (
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onToggleLike}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">❤️</span>
+              <div>
+                <div>{isLiked ? 'Quitar me gusta' : 'Me gusta'}</div>
+                <div className="text-xs text-surface-muted font-normal">
+                  {isLiked ? 'Deja de destacar este mensaje' : 'Destaca este mensaje con un corazón'}
+                </div>
+              </div>
+            </button>
+          )}
+
+          {canPin && !msg.deleted_for_everyone && (
             <button
               onClick={onTogglePin}
               className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
@@ -530,6 +575,32 @@ function MessageContextMenu({ msg, isPinned, canPin, onClose, onTogglePin }) {
                 <div className="text-xs text-surface-muted font-normal">
                   {isPinned ? 'Deja de destacarlo arriba del chat' : 'Lo destaca arriba del chat'}
                 </div>
+              </div>
+            </button>
+          )}
+
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onDeleteForMe}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">🗑️</span>
+              <div>
+                <div>Eliminar para mí</div>
+                <div className="text-xs text-surface-muted font-normal">Solo desaparece de tu vista</div>
+              </div>
+            </button>
+          )}
+
+          {isMe && !msg.deleted_for_everyone && (
+            <button
+              onClick={onDeleteForEveryone}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/15 text-red-400 text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">❌</span>
+              <div>
+                <div>Eliminar para todos</div>
+                <div className="text-xs text-red-400/60 font-normal">Queda rastro en la conversación</div>
               </div>
             </button>
           )}
@@ -736,6 +807,31 @@ export default function PoolChatPage() {
     }
   }
 
+  async function toggleLike(msg) {
+    setContextMenu(null);
+    try {
+      const { message: updated } = await api.patch(`/pools/${poolId}/messages/${msg.id}/like`);
+      setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
+    } catch (e) {
+      showToast(e.message || 'Error al reaccionar', 'error');
+    }
+  }
+
+  async function deleteMessage(msg, scope) {
+    setContextMenu(null);
+    try {
+      const { message: updated } = await api.patch(`/pools/${poolId}/messages/${msg.id}`, { scope });
+      if (scope === 'me') {
+        setMessages(m => m.filter(x => x.id !== msg.id));
+      } else {
+        setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
+      }
+      showToast(scope === 'me' ? 'Mensaje eliminado' : 'Mensaje eliminado para todos');
+    } catch (e) {
+      showToast(e.message || 'Error al eliminar', 'error');
+    }
+  }
+
   function jumpToPinnedMessage() {
     if (!pinnedMessage) return;
     document.getElementById(`msg-${pinnedMessage.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -840,6 +936,7 @@ export default function PoolChatPage() {
 
   const visibleMessages = messages.filter(msg => {
     if (clearedAt && new Date(msg.created_at) <= new Date(clearedAt)) return false;
+    if (Array.isArray(msg.deleted_for_self) && msg.deleted_for_self.includes(profile?.id)) return false;
     return true;
   });
 
@@ -947,6 +1044,10 @@ export default function PoolChatPage() {
             const isMe = msg.sender_id === profile?.id || msg.sender?.id === profile?.id;
             const identity = identityByUserId[msg.sender_id || msg.sender?.id] || null;
 
+            if (msg.deleted_for_everyone) {
+              return <DeletedBubble key={item.key} isMe={isMe} msgId={msg.id} />;
+            }
+
             if (msg.type === 'image') {
               return (
                 <ImageBubble
@@ -996,13 +1097,18 @@ export default function PoolChatPage() {
       {contextMenu && (
         <MessageContextMenu
           msg={contextMenu}
+          isMe={contextMenu.sender_id === profile?.id || contextMenu.sender?.id === profile?.id}
+          isLiked={Array.isArray(contextMenu.liked_by) && contextMenu.liked_by.includes(profile?.id)}
           isPinned={isPinnedMessage(contextMenu.id)}
           canPin={canPinMessages}
           onClose={() => setContextMenu(null)}
+          onToggleLike={() => toggleLike(contextMenu)}
           onTogglePin={() => {
             handleTogglePin(contextMenu.id, isPinnedMessage(contextMenu.id));
             setContextMenu(null);
           }}
+          onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
+          onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
         />
       )}
 

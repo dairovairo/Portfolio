@@ -1311,6 +1311,7 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .from('pool_messages')
       .select(`
         id, content, type, poll_options, created_at,
+        liked_by, deleted_for_self, deleted_for_everyone, deleted_for_everyone_at,
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('pool_id', poolId)
@@ -1556,6 +1557,114 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[POOLS] POST /:id/messages', err);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── PATCH /api/pools/:id/messages/:messageId/like — alternar "me gusta" ─────
+router.patch('/:id/messages/:messageId/like', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: poolId, messageId } = req.params;
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para ver el chat' });
+
+    const { data: msg, error: fetchErr } = await supabase
+      .from('pool_messages')
+      .select('id, sender_id, deleted_for_everyone, liked_by')
+      .eq('id', messageId)
+      .eq('pool_id', poolId)
+      .single();
+
+    if (fetchErr || !msg) return res.status(404).json({ error: 'Message not found' });
+    if (msg.deleted_for_everyone) {
+      return res.status(400).json({ error: 'No puedes reaccionar a un mensaje eliminado' });
+    }
+
+    const current = Array.isArray(msg.liked_by) ? msg.liked_by : [];
+    const alreadyLiked = current.includes(userId);
+    const nextLikedBy = alreadyLiked ? current.filter(id => id !== userId) : [...current, userId];
+
+    const { data, error } = await supabase
+      .from('pool_messages')
+      .update({ liked_by: nextLikedBy })
+      .eq('id', messageId)
+      .select('id, liked_by')
+      .single();
+
+    if (error) throw error;
+    res.json({ message: data });
+  } catch (err) {
+    console.error('[POOLS] PATCH /:id/messages/:messageId/like', err);
+    res.status(500).json({ error: 'Failed to update like' });
+  }
+});
+
+// ── PATCH /api/pools/:id/messages/:messageId — eliminar mensaje ─────────────
+router.patch('/:id/messages/:messageId', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: poolId, messageId } = req.params;
+  const { scope } = req.body;
+
+  if (!['me', 'everyone'].includes(scope)) {
+    return res.status(400).json({ error: 'scope must be "me" or "everyone"' });
+  }
+
+  try {
+    const { data: membership } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para ver el chat' });
+
+    const { data: msg, error: fetchErr } = await supabase
+      .from('pool_messages')
+      .select('id, sender_id, deleted_for_self')
+      .eq('id', messageId)
+      .eq('pool_id', poolId)
+      .single();
+
+    if (fetchErr || !msg) return res.status(404).json({ error: 'Message not found' });
+
+    if (scope === 'everyone') {
+      if (msg.sender_id !== userId) {
+        return res.status(403).json({ error: 'Solo puedes eliminar para todos tus propios mensajes' });
+      }
+      const { data, error } = await supabase
+        .from('pool_messages')
+        .update({ deleted_for_everyone: true, deleted_for_everyone_at: new Date().toISOString() })
+        .eq('id', messageId)
+        .select('id, deleted_for_everyone, deleted_for_everyone_at')
+        .single();
+
+      if (error) throw error;
+      return res.json({ message: data });
+    } else {
+      const current = Array.isArray(msg.deleted_for_self) ? msg.deleted_for_self : [];
+      if (!current.includes(userId)) current.push(userId);
+
+      const { data, error } = await supabase
+        .from('pool_messages')
+        .update({ deleted_for_self: current })
+        .eq('id', messageId)
+        .select('id, deleted_for_self')
+        .single();
+
+      if (error) throw error;
+      return res.json({ message: data });
+    }
+  } catch (err) {
+    console.error('[POOLS] PATCH /:id/messages/:messageId', err);
+    res.status(500).json({ error: 'Failed to delete message' });
   }
 });
 
