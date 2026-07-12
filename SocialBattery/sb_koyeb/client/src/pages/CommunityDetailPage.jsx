@@ -1801,16 +1801,6 @@ export default function CommunityDetailPage() {
 
           {community.creator_id === profile?.id && (
             <button
-              onClick={() => setShowEditCommunity(true)}
-              title="Editar comunidad"
-              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-surface-bg text-surface-muted border border-surface-border hover:border-accent-primary/40 hover:text-accent-glow transition-colors"
-            >
-              <span>⚙️</span> Editar
-            </button>
-          )}
-
-          {community.creator_id === profile?.id && (
-            <button
               onClick={() => setShowCreateRaffle(true)}
               title="Crear sorteo"
               className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/25 hover:bg-amber-500/25 hover:border-amber-500/40 hover:text-amber-300 transition-colors"
@@ -1860,7 +1850,7 @@ export default function CommunityDetailPage() {
               </p>
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex items-center justify-between gap-2">
             {community.is_member ? (
               <button
                 onClick={handleLeaveCommunity}
@@ -1874,6 +1864,16 @@ export default function CommunityDetailPage() {
                 className="px-4 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-semibold transition-all"
               >
                 Unirse
+              </button>
+            )}
+
+            {community.creator_id === profile?.id && (
+              <button
+                onClick={() => setShowEditCommunity(true)}
+                title="Editar comunidad"
+                className="flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-surface-bg text-surface-muted border border-surface-border hover:border-accent-primary/40 hover:text-accent-glow transition-colors"
+              >
+                <span>⚙️</span> Editar
               </button>
             )}
           </div>
