@@ -86,6 +86,37 @@ async function sendPushToSubscription(sub, payload) {
 
 
 /**
+ * Devuelve el subconjunto de `userIds` que tiene silenciada esta conversación
+ * concreta (grupo/quedada/comunidad), consultando muted_conversations
+ * (fase 88). Se usa para no mandar el web-push a quien la silenció — la
+ * notificación in-app instantánea (broadcast de Realtime) no se ve afectada,
+ * solo el push que llega con la app en segundo plano/cerrada.
+ *
+ * @param {object} supabase
+ * @param {'group'|'pool'|'community'} conversationType
+ * @param {string} conversationId
+ * @param {string[]} userIds — candidatos a filtrar (destinatarios del mensaje)
+ * @returns {Promise<Set<string>>}
+ */
+async function getMutedUserIds(supabase, conversationType, conversationId, userIds) {
+  if (!conversationType || !conversationId || !userIds?.length) return new Set();
+  try {
+    const { data, error } = await supabase
+      .from('muted_conversations')
+      .select('user_id')
+      .eq('conversation_type', conversationType)
+      .eq('conversation_id', conversationId)
+      .in('user_id', userIds);
+
+    if (error || !data) return new Set();
+    return new Set(data.map(r => r.user_id));
+  } catch (err) {
+    console.warn('[webpush] getMutedUserIds error:', err.message);
+    return new Set();
+  }
+}
+
+/**
  * Send a push notification to a list of user IDs, excluding one user.
  * Handles subscription lookup and expired endpoint cleanup automatically.
  *
@@ -304,4 +335,4 @@ async function notifyAllUsers(supabase, excludeId, payload) {
   }
 }
 
-module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers, sendPushToSubscription };
+module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers, sendPushToSubscription, getMutedUserIds };

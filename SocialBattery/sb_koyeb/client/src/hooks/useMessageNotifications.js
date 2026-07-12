@@ -66,6 +66,15 @@ function shouldNotify(currentPath, chatPath) {
   return !currentPath.startsWith(chatPath);
 }
 
+// ── mute por conversación ─────────────────────────────────────────────────
+// Lee el mismo localStorage que gestionan isConversationMuted/setConversationMuted
+// en SettingsContext.jsx — no hace falta pasarlo por props porque solo se
+// consulta en el momento de decidir si se dispara la notificación.
+function isConvMuted(type, id) {
+  if (!id) return false;
+  try { return localStorage.getItem(`sb-mute-conv-${type}-${id}`) === 'true'; } catch { return false; }
+}
+
 function formatReminderLead(minutes) {
   const value = Number.parseInt(minutes, 10);
   if (value >= 24 * 60 && value % (24 * 60) === 0) {
@@ -196,6 +205,7 @@ export function useMessageNotifications(profile, settings) {
           const data = msg.payload;
           if (!data?.group_id) return;
           if (data.sender_id === profile.id) return;
+          if (isConvMuted('group', data.group_id)) return;
 
           const chatPath = `/messages/group/${data.group_id}`;
           if (!shouldNotify(locationRef.current, chatPath)) return;
@@ -236,6 +246,7 @@ export function useMessageNotifications(profile, settings) {
 
           const s = settingsRef.current;
           if (s.muteAllNotifications) return;
+          if (isConvMuted('pool', data.pool_id)) return;
           if (!shouldNotify(locationRef.current, chatPath)) return;
 
           const activityLabel = data.activity || 'la quedada';
@@ -253,6 +264,40 @@ export function useMessageNotifications(profile, settings) {
         })
         .subscribe();
       channels.push(poolMsgBroadcastCh);
+
+      // ── 4c. Community chat messages — broadcast per-user channel ────────────
+      // El servidor emite un broadcast a `community-msg-notif-{userId}` para
+      // cada miembro de la comunidad (broadcastCommunityMessage en
+      // server/routes/community.js), mismo patrón que grupos y quedadas.
+      const communityMsgBroadcastCh = supabase
+        .channel(`community-msg-notif-${profile.id}`)
+        .on('broadcast', { event: 'new_community_message' }, (msg) => {
+          const data = msg.payload;
+          if (!data?.community_id) return;
+          if (data.sender_id === profile.id) return;
+
+          const s = settingsRef.current;
+          if (s.muteAllNotifications) return;
+          if (isConvMuted('community', data.community_id)) return;
+
+          const chatPath = `/messages/community/${data.community_id}`;
+          if (!shouldNotify(locationRef.current, chatPath)) return;
+
+          const communityName = data.community_name || 'Comunidad';
+          const senderName = data.sender_name || 'Alguien';
+          const body = data.type === 'image'
+            ? `${senderName}: 📷 Imagen`
+            : `${senderName}: ${data.content?.slice(0, 80) || '📩 Nuevo mensaje'}`;
+
+          fireNotification({
+            title:      communityName,
+            body,
+            tag:        `community-${data.community_id}`,
+            navigateTo: chatPath,
+          });
+        })
+        .subscribe();
+      channels.push(communityMsgBroadcastCh);
 
       // ── 5. Battery changes ──────────────────────────────────────────────────
       // Listen to updates on the users table and filter by preloaded friend IDs.

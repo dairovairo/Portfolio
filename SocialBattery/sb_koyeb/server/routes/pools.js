@@ -4,7 +4,7 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { checkOrganizerBadgeForUser } = require('../jobs/badges');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
-const { notifyUsers } = require('../lib/webpush');
+const { notifyUsers, getMutedUserIds } = require('../lib/webpush');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const {
   DEFAULT_POOL_REMINDER_MINUTES,
@@ -161,8 +161,11 @@ async function broadcastPoolChatMessage({ poolId, senderId, senderName, content,
       )
     );
 
+    // No mandar el push a quien haya silenciado este chat de quedada (fase 88).
+    const mutedIds = await getMutedUserIds(supabase, 'pool', poolId, recipientIds);
+    const pushRecipientIds = recipientIds.filter(id => !mutedIds.has(id));
     const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
-    await notifyUsers(supabase, recipientIds, senderId, {
+    await notifyUsers(supabase, pushRecipientIds, senderId, {
       title: `💬 ${activityLabel}`,
       body: `${senderName}: ${previewText}`,
       url: `/pools/${poolId}/chat`,

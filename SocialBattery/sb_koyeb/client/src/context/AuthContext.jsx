@@ -31,7 +31,16 @@ function MessageNotificationsBroadcaster({ profile }) {
     muteEventReminders,
     mutePoolReminders,
     muteBatteryChanges,
+    hydrateMutedConversations,
   } = useSettings();
+
+  // Trae los chats silenciados desde el servidor una vez por sesión, para que
+  // un silencio hecho en otro dispositivo (o antes de limpiar datos locales)
+  // también se respete aquí — ver hydrateMutedConversations en SettingsContext.
+  useEffect(() => {
+    if (profile?.id) hydrateMutedConversations();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   useMessageNotifications(profile, {
     muteAllNotifications,

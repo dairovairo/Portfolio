@@ -5,7 +5,7 @@ const supabase = require('../lib/supabase');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyUsers } = require('../lib/webpush');
+const { notifyUsers, getMutedUserIds } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 const { getNotificationDayKey } = require('../lib/notificationDay');
 const { runEventPromoPacingTick, FREE_THRESHOLD } = require('../jobs/eventPromoPacing');
@@ -1937,8 +1937,11 @@ async function broadcastCommunityMessage({ communityId, senderId, senderName, co
       )
     );
 
+    // No mandar el push a quien haya silenciado este chat de comunidad (fase 88).
+    const mutedIds = await getMutedUserIds(supabase, 'community', communityId, recipientIds);
+    const pushRecipientIds = recipientIds.filter(id => !mutedIds.has(id));
     const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
-    await notifyUsers(supabase, recipientIds, senderId, {
+    await notifyUsers(supabase, pushRecipientIds, senderId, {
       title: communityName,
       body:  `${senderName}: ${previewText}`,
       url:   `/messages/community/${communityId}`,

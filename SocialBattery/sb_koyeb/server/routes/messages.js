@@ -150,6 +150,61 @@ async function broadcastMessageLike({ messageId, authorId, likerId, messageType,
 // ── GET /api/messages/unread-count — lightweight unread badge count ───────────
 // Returns a single integer. Used by HomePage/BottomNav to show the badge.
 // Replaces the old pattern of GET /messages (300 rows) just to reduce to a number.
+// ── Chats silenciados (grupo/quedada/comunidad) ─────────────────────────────
+// El toggle "Silenciar notificaciones" del menú de 3 puntos ya funcionaba en
+// primer plano guardando el estado solo en localStorage (lo lee
+// useMessageNotifications.js antes de disparar la notificación local). Pero
+// el web-push que llega con la app en segundo plano/cerrada lo manda el
+// servidor sin tener ni idea de ese localStorage — de ahí que siguiera
+// sonando. Estas dos rutas son la fuente de verdad server-side (tabla
+// muted_conversations, fase 88) que consulta getMutedUserIds() en
+// server/lib/webpush.js antes de enviar el push de cada chat.
+router.get('/mutes', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('muted_conversations')
+      .select('conversation_type, conversation_id')
+      .eq('user_id', req.user.id);
+
+    if (error) throw error;
+    res.json({ mutes: data || [] });
+  } catch (err) {
+    console.error('[messages] GET /mutes error:', err);
+    res.status(500).json({ error: 'No se pudieron cargar los chats silenciados' });
+  }
+});
+
+router.post('/mutes', requireAuth, async (req, res) => {
+  const { type, id, muted } = req.body || {};
+  if (!['group', 'pool', 'community'].includes(type) || !id) {
+    return res.status(400).json({ error: 'type e id son obligatorios' });
+  }
+
+  try {
+    if (muted) {
+      const { error } = await supabase
+        .from('muted_conversations')
+        .upsert(
+          { user_id: req.user.id, conversation_type: type, conversation_id: id },
+          { onConflict: 'user_id,conversation_type,conversation_id' }
+        );
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('muted_conversations')
+        .delete()
+        .eq('user_id', req.user.id)
+        .eq('conversation_type', type)
+        .eq('conversation_id', id);
+      if (error) throw error;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[messages] POST /mutes error:', err);
+    res.status(500).json({ error: 'No se pudo actualizar el silencio del chat' });
+  }
+});
+
 router.get('/unread-count', requireAuth, async (req, res) => {
   const userId = req.user.id;
 

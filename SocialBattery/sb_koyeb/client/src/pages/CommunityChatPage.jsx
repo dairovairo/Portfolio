@@ -686,7 +686,7 @@ export default function CommunityChatPage() {
   const { communityId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { getGroupWallpaper, setGroupWallpaper, myBubbleStyle, otherBubbleStyle } = useSettings();
+  const { getGroupWallpaper, setGroupWallpaper, myBubbleStyle, otherBubbleStyle, isConversationMuted, setConversationMuted } = useSettings();
 
   const [community, setCommunity] = useState(null);
   const [canManageWallpaper, setCanManageWallpaper] = useState(false);
@@ -712,6 +712,7 @@ export default function CommunityChatPage() {
   const [votingMessageId, setVotingMessageId] = useState(null);
   const headerMenuRef = useRef(null);
   const [replyingTo, setReplyingTo] = useState(null); // msg | null
+  const [chatMuted, setChatMuted] = useState(() => isConversationMuted('community', communityId));
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -721,6 +722,13 @@ export default function CommunityChatPage() {
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
   }, []);
+
+  const handleToggleMute = () => {
+    const next = !chatMuted;
+    setConversationMuted('community', communityId, next);
+    setChatMuted(next);
+    showToast(next ? 'Notificaciones silenciadas' : 'Notificaciones activadas');
+  };
 
   useEffect(() => {
     function handleClick(e) {
@@ -1111,6 +1119,12 @@ export default function CommunityChatPage() {
                       <span>🖼️</span> Fondo de la comunidad{communityWallpaper ? ' (activo)' : ''}
                     </button>
                   )}
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); handleToggleMute(); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
+                  >
+                    <span>{chatMuted ? '🔔' : '🔕'}</span> {chatMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+                  </button>
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"

@@ -4,7 +4,7 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
-const { notifyUsers } = require('../lib/webpush');
+const { notifyUsers, getMutedUserIds } = require('../lib/webpush');
 
 // Multer instance for group chat image uploads (8 MB max)
 const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
@@ -63,9 +63,12 @@ async function broadcastGroupMessage({ groupId, senderId, senderName, content, t
       )
     );
 
-    // Web-push for recipients who have a push subscription (background / closed app)
+    // Web-push for recipients who have a push subscription (background / closed
+    // app) — pero no a quien haya silenciado este chat de grupo (fase 88).
+    const mutedIds = await getMutedUserIds(supabase, 'group', groupId, recipientIds);
+    const pushRecipientIds = recipientIds.filter(id => !mutedIds.has(id));
     const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
-    await notifyUsers(supabase, recipientIds, senderId, {
+    await notifyUsers(supabase, pushRecipientIds, senderId, {
       title: groupName,
       body:  `${senderName}: ${previewText}`,
       url:   `/messages/group/${groupId}`,

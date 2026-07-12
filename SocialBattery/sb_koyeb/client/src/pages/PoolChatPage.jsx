@@ -694,7 +694,7 @@ export default function PoolChatPage() {
   const { poolId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { myBubbleStyle, otherBubbleStyle } = useSettings();
+  const { myBubbleStyle, otherBubbleStyle, isConversationMuted, setConversationMuted } = useSettings();
   const { clearPoolChatBadge } = usePoolChatNotifications();
 
   const [pool, setPool] = useState(null);
@@ -719,6 +719,7 @@ export default function PoolChatPage() {
   const [votingMessageId, setVotingMessageId] = useState(null);
   const headerMenuRef = useRef(null);
   const [replyingTo, setReplyingTo] = useState(null); // msg | null
+  const [chatMuted, setChatMuted] = useState(() => isConversationMuted('pool', poolId));
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -728,6 +729,13 @@ export default function PoolChatPage() {
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
   }, []);
+
+  const handleToggleMute = () => {
+    const next = !chatMuted;
+    setConversationMuted('pool', poolId, next);
+    setChatMuted(next);
+    showToast(next ? 'Notificaciones silenciadas' : 'Notificaciones activadas');
+  };
 
   // Cierra el menú de opciones (⋯) al hacer click fuera — mismo patrón que en GroupChatPage.jsx
   useEffect(() => {
@@ -1112,6 +1120,12 @@ export default function PoolChatPage() {
               </button>
               {showHeaderMenu && (
                 <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[180px] py-1.5 overflow-hidden">
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); handleToggleMute(); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
+                  >
+                    <span>{chatMuted ? '🔔' : '🔕'}</span> {chatMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+                  </button>
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"

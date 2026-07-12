@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useTheme } from './ThemeContext';
+import { api } from '../lib/api';
 
 const SettingsContext = createContext(null);
 
@@ -548,6 +549,47 @@ export function SettingsProvider({ children }) {
     } catch {}
   }, []);
 
+  // ── mute por conversación ─────────────────────────────────────────────────
+  // Silenciar un chat concreto (grupo, quedada o comunidad) sin tocar el resto
+  // de ajustes globales de notificaciones. `type` es 'group' | 'pool' |
+  // 'community' y `id` el id de esa conversación. Se guarda en localStorage
+  // para lectura instantánea (lo consulta useMessageNotifications.js antes de
+  // disparar la notificación local en primer plano), Y se sincroniza contra
+  // el servidor (tabla muted_conversations, fase 88) para que el web-push que
+  // llega con la app en segundo plano/cerrada también respete el silencio —
+  // ese envío lo decide el servidor, que no tiene acceso a este localStorage.
+
+  const isConversationMuted = useCallback((type, id) => {
+    if (!type || !id) return false;
+    try { return localStorage.getItem(`sb-mute-conv-${type}-${id}`) === 'true'; } catch { return false; }
+  }, []);
+
+  const setConversationMuted = useCallback((type, id, muted) => {
+    if (!type || !id) return;
+    try {
+      if (muted) localStorage.setItem(`sb-mute-conv-${type}-${id}`, 'true');
+      else localStorage.removeItem(`sb-mute-conv-${type}-${id}`);
+    } catch {}
+    // Fire-and-forget: si falla por estar offline, el próximo hydrateMutedConversations
+    // (login/arranque) no lo sobrescribirá porque localStorage ya quedó actualizado,
+    // pero el push en segundo plano no se filtrará hasta que la petición llegue a
+    // buen puerto. Silenciosamente reintentable por el propio usuario reabriendo el menú.
+    api.post('/messages/mutes', { type, id, muted }).catch(() => {});
+  }, []);
+
+  // Trae desde el servidor los chats que este usuario tiene silenciados y
+  // rellena el localStorage local — así un silencio hecho desde otro
+  // dispositivo (o antes de reinstalar/limpiar datos) también aplica aquí.
+  // Se llama una vez al iniciar sesión (ver useMessageNotifications.js).
+  const hydrateMutedConversations = useCallback(async () => {
+    try {
+      const { mutes } = await api.get('/messages/mutes');
+      (mutes || []).forEach(({ conversation_type, conversation_id }) => {
+        try { localStorage.setItem(`sb-mute-conv-${conversation_type}-${conversation_id}`, 'true'); } catch {}
+      });
+    } catch {}
+  }, []);
+
   // ── derived styles (include text color so bubbles inherit it) ─────────────
 
   const myBubbleStyle = {
@@ -570,6 +612,8 @@ export function SettingsProvider({ children }) {
       chatWallpaper, setChatWallpaper,
       // group wallpapers
       getGroupWallpaper, setGroupWallpaper,
+      // mute por conversación (grupo/quedada/comunidad)
+      isConversationMuted, setConversationMuted, hydrateMutedConversations,
       // bubble colours
       myBubbleColor, setMyBubbleColor,
       myBubbleOpacity, setMyBubbleOpacity,
