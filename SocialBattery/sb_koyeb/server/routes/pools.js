@@ -106,6 +106,19 @@ async function canAccessPool(pool, userId, friendIds) {
   return !!invite;
 }
 
+// Verifica que `messageId` pertenece a esta quedada (mismo patrón que
+// findReplyTarget en routes/messages.js para las respuestas en DMs).
+async function findPoolReplyTarget(messageId, poolId) {
+  if (!messageId) return null;
+  const { data } = await supabase
+    .from('pool_messages')
+    .select('id, sender_id')
+    .eq('id', messageId)
+    .eq('pool_id', poolId)
+    .maybeSingle();
+  return data || null;
+}
+
 /**
  * Broadcasts a new pool chat message to every participant's personal channel
  * (service key, bypasses RLS) so anyone with the app open gets an instant
@@ -1311,7 +1324,8 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .from('pool_messages')
       .select(`
         id, content, type, poll_options, created_at,
-        liked_by, deleted_for_self, deleted_for_everyone, deleted_for_everyone_at,
+        liked_by, deleted_for_self, deleted_for_everyone, deleted_for_everyone_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('pool_id', poolId)
@@ -1512,7 +1526,7 @@ router.post('/:id/clear', requireAuth, async (req, res) => {
 router.post('/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const poolId = req.params.id;
-  const { content, type = 'text' } = req.body;
+  const { content, type = 'text', reply_to_id } = req.body;
 
   if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
   if (!['text'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
@@ -1527,11 +1541,18 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 
     if (!membership) return res.status(403).json({ error: 'Tienes que estar apuntado para escribir en el chat' });
 
+    const insertData = { pool_id: poolId, sender_id: userId, content: content.trim(), type };
+    if (reply_to_id) {
+      const target = await findPoolReplyTarget(reply_to_id, poolId);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
     const { data, error } = await supabase
       .from('pool_messages')
-      .insert({ pool_id: poolId, sender_id: userId, content: content.trim(), type })
+      .insert(insertData)
       .select(`
-        id, content, type, created_at,
+        id, content, type, created_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
@@ -1699,16 +1720,23 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       fallbackMaxLength: 8_000_000,
     });
 
+    const insertData = {
+      pool_id: poolId,
+      sender_id: userId,
+      content: imageUrl,
+      type: 'image',
+    };
+    if (req.body.reply_to_id) {
+      const target = await findPoolReplyTarget(req.body.reply_to_id, poolId);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
     const { data, error } = await supabase
       .from('pool_messages')
-      .insert({
-        pool_id: poolId,
-        sender_id: userId,
-        content: imageUrl,
-        type: 'image',
-      })
+      .insert(insertData)
       .select(`
-        id, content, type, created_at,
+        id, content, type, created_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();

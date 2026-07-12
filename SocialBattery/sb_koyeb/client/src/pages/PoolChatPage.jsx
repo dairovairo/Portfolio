@@ -30,6 +30,59 @@ function getActivityEmoji(activity = '') {
 
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
+// ── Reply preview helpers — mismo patrón que en MessagesPage.jsx ────────────
+function replyPreviewText(replyTo) {
+  if (!replyTo) return '';
+  if (replyTo.deleted_for_everyone) return '🚫 Mensaje eliminado';
+  if (replyTo.type === 'image') return '📷 Imagen';
+  if (replyTo.type === 'poll') return `📊 ${replyTo.content}`;
+  return replyTo.content;
+}
+
+// ── ReplyQuote — cita renderizada dentro de una burbuja de mensaje ────────────
+function ReplyQuote({ replyTo, currentUserId, onClick }) {
+  if (!replyTo) return null;
+  const label = replyTo.sender_id === currentUserId ? 'Tú' : (replyTo.sender?.username || 'Alguien');
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onClick?.(replyTo.id); }}
+      className="w-full text-left flex flex-col gap-0.5 mb-1.5 px-2.5 py-1.5 rounded-lg bg-black/20 border-l-2 border-accent-primary/70 hover:bg-black/30 transition-colors active:scale-[0.99]"
+    >
+      <span className="text-[11px] font-display font-bold text-accent-glow leading-tight truncate">
+        {label}
+      </span>
+      <span className="text-xs opacity-80 leading-tight truncate">
+        {replyPreviewText(replyTo)}
+      </span>
+    </button>
+  );
+}
+
+// ── ReplyComposerPreview — barra sobre el input mientras se redacta la respuesta
+function ReplyComposerPreview({ replyingTo, label, onCancel }) {
+  return (
+    <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-xl px-3 py-2 mb-2 animate-slide-up">
+      <div className="w-1 self-stretch rounded-full bg-accent-primary flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-display font-bold text-accent-glow truncate">
+          Respondiendo a {label}
+        </div>
+        <div className="text-xs text-surface-muted truncate">
+          {replyPreviewText(replyingTo)}
+        </div>
+      </div>
+      <button
+        onClick={onCancel}
+        className="flex-shrink-0 w-7 h-7 rounded-full text-surface-muted hover:text-surface-text hover:bg-surface-hover flex items-center justify-center text-lg leading-none transition-colors"
+        title="Cancelar respuesta"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 function Avatar({ user, size = 'sm' }) {
   const color = getBatteryColor(user?.battery_level ?? 50);
   const sz = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-sm';
@@ -140,7 +193,7 @@ function LikeBadge({ liked, isMe }) {
   );
 }
 
-function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLongPress }) {
+function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLongPress, onQuoteClick, currentUserId }) {
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
 
@@ -172,6 +225,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLo
             className={`relative rounded-2xl px-4 py-2.5 select-none ${!isMe ? 'border border-surface-border' : ''}`}
             style={bubbleStyle}
           >
+            <ReplyQuote replyTo={msg.reply_to} currentUserId={currentUserId} onClick={onQuoteClick} />
             <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
             <div className="text-xs mt-1 opacity-60">
               <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -187,7 +241,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLo
   );
 }
 
-function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLongPress }) {
+function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLongPress, onQuoteClick, currentUserId }) {
   const [lightbox, setLightbox] = useState(false);
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
@@ -222,6 +276,11 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
               className={`relative rounded-2xl overflow-hidden select-none ${!isMe ? 'border border-surface-border' : ''}`}
               style={bubbleStyle}
             >
+              {msg.reply_to && (
+                <div className="px-3 pt-2">
+                  <ReplyQuote replyTo={msg.reply_to} currentUserId={currentUserId} onClick={onQuoteClick} />
+                </div>
+              )}
               <div className="relative">
                 <img
                   src={msg.content}
@@ -271,7 +330,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
 }
 
 // ── Poll bubble — mensaje de encuesta con votación en vivo ───────────────────
-function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress }) {
+function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress, onQuoteClick, currentUserId }) {
   const poll = msg.poll || {
     options: msg.poll_options || [],
     votes: (msg.poll_options || []).map(() => 0),
@@ -306,6 +365,7 @@ function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress }) {
             </div>
           )}
           <div className="relative w-full min-w-[220px] bg-surface-card border border-surface-border rounded-2xl px-4 py-3">
+            <ReplyQuote replyTo={msg.reply_to} currentUserId={currentUserId} onClick={onQuoteClick} />
             <p className="text-sm font-display font-semibold text-surface-text mb-2 flex items-center gap-1.5">
               📊 {msg.content}
             </p>
@@ -527,7 +587,7 @@ function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
 }
 
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone }) {
+function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -575,6 +635,19 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onT
                 <div className="text-xs text-surface-muted font-normal">
                   {isPinned ? 'Deja de destacarlo arriba del chat' : 'Lo destaca arriba del chat'}
                 </div>
+              </div>
+            </button>
+          )}
+
+          {!msg.deleted_for_everyone && (
+            <button
+              onClick={onReply}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-surface-hover text-surface-text text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">↩️</span>
+              <div>
+                <div>Responder</div>
+                <div className="text-xs text-surface-muted font-normal">Cita este mensaje en tu respuesta</div>
               </div>
             </button>
           )}
@@ -645,6 +718,7 @@ export default function PoolChatPage() {
   const [showPollModal, setShowPollModal] = useState(false);
   const [votingMessageId, setVotingMessageId] = useState(null);
   const headerMenuRef = useRef(null);
+  const [replyingTo, setReplyingTo] = useState(null); // msg | null
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -720,7 +794,7 @@ export default function PoolChatPage() {
         if (payload.new?.sender_id === profile.id) return;
         const { data } = await supabase
           .from('pool_messages')
-          .select(`id, pool_id, sender_id, content, type, poll_options, created_at, sender:sender_id(id, username, avatar_url, battery_level)`)
+          .select(`id, pool_id, sender_id, content, type, poll_options, created_at, reply_to_id, reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)), sender:sender_id(id, username, avatar_url, battery_level)`)
           .eq('id', payload.new.id)
           .single();
         if (data) {
@@ -832,9 +906,19 @@ export default function PoolChatPage() {
     }
   }
 
+  // Salta al mensaje original al tocar una cita (como en MessagesPage.jsx).
+  // Si el mensaje ya no está cargado en pantalla, no hace nada.
+  const scrollToMessage = useCallback((messageId) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ring-2', 'ring-accent-primary/70', 'rounded-2xl');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-accent-primary/70', 'rounded-2xl'), 1000);
+  }, []);
+
   function jumpToPinnedMessage() {
     if (!pinnedMessage) return;
-    document.getElementById(`msg-${pinnedMessage.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    scrollToMessage(pinnedMessage.id);
   }
 
   async function clearChat() {
@@ -854,7 +938,9 @@ export default function PoolChatPage() {
   async function sendText() {
     if (!input.trim() || sending) return;
     const content = input.trim();
+    const replyTarget = replyingTo;
     setInput('');
+    setReplyingTo(null);
     setSending(true);
 
     const optimistic = {
@@ -864,15 +950,28 @@ export default function PoolChatPage() {
       content,
       type: 'text',
       created_at: new Date().toISOString(),
+      reply_to_id: replyTarget?.id || null,
+      reply_to: replyTarget ? {
+        id: replyTarget.id,
+        sender_id: replyTarget.sender_id,
+        content: replyTarget.content,
+        type: replyTarget.type,
+        deleted_for_everyone: replyTarget.deleted_for_everyone,
+        sender: replyTarget.sender,
+      } : null,
     };
     setMessages(m => [...m, optimistic]);
 
     try {
-      const { message } = await api.post(`/pools/${poolId}/messages`, { content, type: 'text' });
+      const { message } = await api.post(`/pools/${poolId}/messages`, {
+        content, type: 'text',
+        ...(replyTarget?.id ? { reply_to_id: replyTarget.id } : {}),
+      });
       setMessages(m => m.map(msg => msg.id === optimistic.id ? message : msg));
     } catch (e) {
       setMessages(m => m.filter(msg => msg.id !== optimistic.id));
       setInput(content);
+      setReplyingTo(replyTarget);
       showToast('Error al enviar', 'error');
     } finally {
       setSending(false);
@@ -884,7 +983,9 @@ export default function PoolChatPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    const replyTarget = replyingTo;
     setSendingImage(true);
+    setReplyingTo(null);
 
     const localUrl = URL.createObjectURL(file);
     const optimisticId = `opt-img-${Date.now()}`;
@@ -895,12 +996,22 @@ export default function PoolChatPage() {
       content: localUrl,
       type: 'image',
       created_at: new Date().toISOString(),
+      reply_to_id: replyTarget?.id || null,
+      reply_to: replyTarget ? {
+        id: replyTarget.id,
+        sender_id: replyTarget.sender_id,
+        content: replyTarget.content,
+        type: replyTarget.type,
+        deleted_for_everyone: replyTarget.deleted_for_everyone,
+        sender: replyTarget.sender,
+      } : null,
     };
     setMessages(m => [...m, optimistic]);
 
     try {
       const formData = new FormData();
       formData.append('image', file);
+      if (replyTarget?.id) formData.append('reply_to_id', replyTarget.id);
       const { message } = await api.postForm(`/pools/${poolId}/messages/image`, formData);
       URL.revokeObjectURL(localUrl);
       setMessages(m => m.map(msg => msg.id === optimisticId ? message : msg));
@@ -1058,6 +1169,8 @@ export default function PoolChatPage() {
                   otherBubbleStyle={otherBubbleStyle}
                   identity={identity}
                   onLongPress={setContextMenu}
+                  onQuoteClick={scrollToMessage}
+                  currentUserId={profile?.id}
                 />
               );
             }
@@ -1072,6 +1185,8 @@ export default function PoolChatPage() {
                   onVote={handleVote}
                   voting={votingMessageId}
                   onLongPress={setContextMenu}
+                  onQuoteClick={scrollToMessage}
+                  currentUserId={profile?.id}
                 />
               );
             }
@@ -1085,6 +1200,8 @@ export default function PoolChatPage() {
                 otherBubbleStyle={otherBubbleStyle}
                 identity={identity}
                 onLongPress={setContextMenu}
+                onQuoteClick={scrollToMessage}
+                currentUserId={profile?.id}
               />
             );
           })
@@ -1102,6 +1219,11 @@ export default function PoolChatPage() {
           isPinned={isPinnedMessage(contextMenu.id)}
           canPin={canPinMessages}
           onClose={() => setContextMenu(null)}
+          onReply={() => {
+            setReplyingTo(contextMenu);
+            setContextMenu(null);
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }}
           onToggleLike={() => toggleLike(contextMenu)}
           onTogglePin={() => {
             handleTogglePin(contextMenu.id, isPinnedMessage(contextMenu.id));
@@ -1115,6 +1237,13 @@ export default function PoolChatPage() {
       {/* Input */}
       <div className="flex-shrink-0 border-t border-surface-border bg-surface-bg/95 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-4 py-3">
+          {replyingTo && (
+            <ReplyComposerPreview
+              replyingTo={replyingTo}
+              label={replyingTo.sender_id === profile?.id ? 'ti mismo' : (replyingTo.sender?.username || 'este usuario')}
+              onCancel={() => setReplyingTo(null)}
+            />
+          )}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowPhotoMenu(true)}
