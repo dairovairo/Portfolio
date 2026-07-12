@@ -95,24 +95,6 @@ export function useMessageNotifications(profile, settings) {
     let cancelled = false;
     const channels = [];
 
-    // Grupos y quedadas silenciados individualmente por este usuario (⋯ →
-    // Silenciar grupo/quedada). Viven en el scope del efecto para que tanto
-    // 'setup()' como el cleanup puedan acceder a ellos.
-    const mutedGroupIds = new Set();
-    const mutedPoolIds  = new Set();
-    function handleGroupMutedEvent(e) {
-      const { group_id, muted } = e.detail || {};
-      if (!group_id) return;
-      if (muted) mutedGroupIds.add(group_id); else mutedGroupIds.delete(group_id);
-    }
-    function handlePoolMutedEvent(e) {
-      const { pool_id, muted } = e.detail || {};
-      if (!pool_id) return;
-      if (muted) mutedPoolIds.add(pool_id); else mutedPoolIds.delete(pool_id);
-    }
-    window.addEventListener('sb-group-muted', handleGroupMutedEvent);
-    window.addEventListener('sb-pool-muted', handlePoolMutedEvent);
-
     async function setup() {
       // ── 1. Request permission ───────────────────────────────────────────────
       const permissionGranted = await ensurePermission();
@@ -133,28 +115,6 @@ export function useMessageNotifications(profile, settings) {
           friendIds.add(f.requester_id === profile.id ? f.addressee_id : f.requester_id);
         });
       } catch (e) { console.warn('[notif] could not load friends:', e); }
-
-      if (cancelled) return;
-
-      // Precarga los grupos/quedadas silenciados existentes; los cambios
-      // posteriores llegan en caliente vía los listeners ya registrados
-      // arriba ('sb-group-muted' / 'sb-pool-muted').
-      try {
-        const { data } = await supabase
-          .from('friend_group_members')
-          .select('group_id')
-          .eq('user_id', profile.id)
-          .eq('muted', true);
-        (data || []).forEach(row => mutedGroupIds.add(row.group_id));
-      } catch (e) { console.warn('[notif] could not load muted groups:', e); }
-      try {
-        const { data } = await supabase
-          .from('pool_participants')
-          .select('pool_id')
-          .eq('user_id', profile.id)
-          .eq('muted', true);
-        (data || []).forEach(row => mutedPoolIds.add(row.pool_id));
-      } catch (e) { console.warn('[notif] could not load muted pools:', e); }
 
       if (cancelled) return;
 
@@ -236,7 +196,6 @@ export function useMessageNotifications(profile, settings) {
           const data = msg.payload;
           if (!data?.group_id) return;
           if (data.sender_id === profile.id) return;
-          if (mutedGroupIds.has(data.group_id)) return;
 
           const chatPath = `/messages/group/${data.group_id}`;
           if (!shouldNotify(locationRef.current, chatPath)) return;
@@ -277,7 +236,6 @@ export function useMessageNotifications(profile, settings) {
 
           const s = settingsRef.current;
           if (s.muteAllNotifications) return;
-          if (mutedPoolIds.has(data.pool_id)) return;
           if (!shouldNotify(locationRef.current, chatPath)) return;
 
           const activityLabel = data.activity || 'la quedada';
@@ -437,8 +395,6 @@ export function useMessageNotifications(profile, settings) {
     return () => {
       cancelled = true;
       channels.forEach(ch => supabase.removeChannel(ch));
-      window.removeEventListener('sb-group-muted', handleGroupMutedEvent);
-      window.removeEventListener('sb-pool-muted', handlePoolMutedEvent);
     };
   }, [profile?.id]);
 }

@@ -236,7 +236,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     // Check membership
     const { data: membership } = await supabase
       .from('friend_group_members')
-      .select('group_id, muted')
+      .select('group_id')
       .eq('group_id', req.params.id)
       .eq('user_id', userId)
       .maybeSingle();
@@ -266,7 +266,6 @@ router.get('/:id', requireAuth, async (req, res) => {
         members,
         member_count: members.length,
         is_owner: group.owner?.id === userId,
-        is_muted: Boolean(membership.muted),
       }
     });
   } catch (err) {
@@ -294,30 +293,6 @@ router.patch('/:id', requireAuth, async (req, res) => {
     res.json({ group: data });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update group' });
-  }
-});
-
-// ── PATCH /api/groups/:id/mute — silenciar/activar notificaciones (por usuario) ──
-router.patch('/:id/mute', requireAuth, async (req, res) => {
-  const userId = req.user.id;
-  const muted = Boolean(req.body?.muted);
-
-  try {
-    const { data: updated, error } = await supabase
-      .from('friend_group_members')
-      .update({ muted })
-      .eq('group_id', req.params.id)
-      .eq('user_id', userId)
-      .select('muted')
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!updated) return res.status(403).json({ error: 'Not a member of this group' });
-
-    res.json({ is_muted: Boolean(updated.muted) });
-  } catch (err) {
-    console.error('[GROUPS] PATCH /:id/mute', err);
-    res.status(500).json({ error: 'Failed to update mute state' });
   }
 });
 

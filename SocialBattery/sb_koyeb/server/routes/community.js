@@ -1082,7 +1082,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
 
     const { data: members, count } = await db
       .from('community_members')
-      .select('user_id, role, joined_at, muted')
+      .select('user_id, role, joined_at')
       .eq('community_id', id);
     const currentMembership = (members || []).find(m => m.user_id === userId);
 
@@ -1124,7 +1124,6 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
         is_member: Boolean(currentMembership),
         is_admin: community.creator_id === userId || currentMembership?.role === 'admin',
         has_collaborated: hasCollaborated,
-        is_muted: Boolean(currentMembership?.muted),
       },
       ...splitEvents,
     });
@@ -1371,31 +1370,6 @@ router.post('/communities/:id/leave', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /communities/:id/leave error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al salir de la comunidad') });
-  }
-});
-
-// PATCH /api/community/communities/:id/mute — silenciar/activar notificaciones (por usuario)
-router.patch('/communities/:id/mute', requireAuth, async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id;
-  const muted = Boolean(req.body?.muted);
-
-  try {
-    const { data: updated, error } = await supabase
-      .from('community_members')
-      .update({ muted })
-      .eq('community_id', id)
-      .eq('user_id', userId)
-      .select('muted')
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!updated) return res.status(403).json({ error: 'No eres miembro de esta comunidad' });
-
-    res.json({ is_muted: Boolean(updated.muted) });
-  } catch (err) {
-    console.error('[community] PATCH /communities/:id/mute error:', err);
-    res.status(500).json({ error: communityErrorMessage(err, 'Error al cambiar el silencio') });
   }
 });
 

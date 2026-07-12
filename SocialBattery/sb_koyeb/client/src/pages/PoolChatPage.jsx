@@ -935,19 +935,6 @@ export default function PoolChatPage() {
     }
   }
 
-  async function handleToggleMute() {
-    const next = !pool?.current_user_muted;
-    setPool(prev => prev ? { ...prev, current_user_muted: next } : prev); // optimista
-    try {
-      await api.patch(`/pools/${poolId}/mute`, { muted: next });
-      window.dispatchEvent(new CustomEvent('sb-pool-muted', { detail: { pool_id: poolId, muted: next } }));
-      showToast(next ? 'Quedada silenciada' : 'Notificaciones activadas');
-    } catch (e) {
-      setPool(prev => prev ? { ...prev, current_user_muted: !next } : prev); // revertir
-      showToast('Error al cambiar el silencio de la quedada', 'error');
-    }
-  }
-
   async function sendText() {
     if (!input.trim() || sending) return;
     const content = input.trim();
@@ -1125,14 +1112,6 @@ export default function PoolChatPage() {
               </button>
               {showHeaderMenu && (
                 <div className="absolute right-0 top-11 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[180px] py-1.5 overflow-hidden">
-                  {pool.has_joined && (
-                    <button
-                      onClick={() => { setShowHeaderMenu(false); handleToggleMute(); }}
-                      className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
-                    >
-                      <span>{pool.current_user_muted ? '🔔' : '🔕'}</span> {pool.current_user_muted ? 'Activar notificaciones' : 'Silenciar quedada'}
-                    </button>
-                  )}
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
