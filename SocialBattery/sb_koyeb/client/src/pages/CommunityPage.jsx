@@ -317,7 +317,57 @@ function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRan
   );
 }
 
-// ── Event Card ────────────────────────────────────────────────────────────────
+// ── Generic filter dropdown ──────────────────────────────────────────────────
+// Mismo patrón que EventSortDropdown (botón + panel absoluto + cierre al
+// hacer click fuera), pero de propósito genérico: agrupa dentro los filtros
+// que antes iban sueltos en la pantalla (precio/tiempo/categoría en Eventos,
+// y todos los de Comunidades), para no saturar la vista con filas de chips.
+function FilterDropdown({ label = 'Filtrar', active = false, children }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  return (
+    <div className="relative flex-shrink-0" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="relative flex items-center gap-1.5 text-xs bg-surface-card border border-surface-border rounded-lg pl-2.5 pr-2 py-1.5 text-surface-muted hover:border-accent-primary/50 transition-colors cursor-pointer"
+      >
+        <span>🔎 {label}</span>
+        <span className={`text-[9px] leading-none transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+        {active && (
+          <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent-primary rounded-full ring-2 ring-surface-card" />
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 w-80 max-w-[85vw] max-h-[70vh] overflow-y-auto py-3 px-3 space-y-3 animate-fade-in">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilterDropdownSection({ title, children }) {
+  return (
+    <div>
+      <p className="px-1 pb-1.5 text-[10px] font-display font-bold uppercase tracking-wide text-surface-muted/70">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -2011,6 +2061,7 @@ export default function CommunityPage() {
       return matchesSearch && matchesEventCategory(event, eventCategoryFilter) && matchesPrice && matchesEventDateFilter(event, eventDateFilter);
     });
   const isEventFiltered = normalizedEventSearch || eventCategoryFilter !== ALL_EVENT_CATEGORIES || eventPriceFilter !== 'all' || eventDateFilter !== 'all';
+  const isEventFilterActive = eventCategoryFilter !== ALL_EVENT_CATEGORIES || eventPriceFilter !== 'all' || eventDateFilter !== 'all';
   const upcomingEventsTotal = events.filter(isUpcomingEvent).length;
   const eventCountLabel = isEventFiltered
     ? `${filteredSortedEvents.length}/${upcomingEventsTotal} eventos`
@@ -2044,6 +2095,7 @@ export default function CommunityPage() {
     // Todas las vistas se ordenan igual, por número de participantes.
     .sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
   const isCommunityFiltered = normalizedCommunitySearch || communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES || communityMembershipFilter !== 'all' || communityInterestsOnly || communityRaffleOnly || communityUpcomingEventOnly;
+  const isCommunityFilterActive = communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES || communityMembershipFilter !== 'all' || communityInterestsOnly || communityRaffleOnly || communityUpcomingEventOnly;
   const communityCountLabel = isCommunityFiltered
     ? `${filteredCommunities.length}/${communities.length} comunidades`
     : `${communities.length} comunidades`;
@@ -2131,7 +2183,7 @@ export default function CommunityPage() {
           </div>
         ) : tab === 'events' ? (
           <div id="tutorial-events-section" className="rounded-2xl transition-all duration-300">
-            {/* Events title + sort selector */}
+            {/* Events title + filter/sort selectors */}
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
               <div className="flex items-center gap-2">
@@ -2142,6 +2194,72 @@ export default function CommunityPage() {
                 >
                   🏆
                 </button>
+                <FilterDropdown label="Filtrar" active={isEventFilterActive}>
+                  <FilterDropdownSection title="Precio">
+                    <div className="flex gap-2">
+                      {[
+                        { key: 'all', label: '🌐 Todos' },
+                        { key: 'free', label: '✓ Gratis' },
+                        { key: 'paid', label: '💳 De pago' },
+                      ].map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setEventPriceFilter(key)}
+                          className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
+                            eventPriceFilter === key
+                              ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                              : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </FilterDropdownSection>
+
+                  <FilterDropdownSection title="Tiempo">
+                    <div className="flex flex-col gap-2">
+                      {[
+                        { key: 'week', label: '🗓️ Esta semana' },
+                        { key: 'month', label: '📆 Este mes' },
+                        { key: 'all', label: '♾️ Todo el tiempo' },
+                      ].map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setEventDateFilter(key)}
+                          className={`w-full text-left py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                            eventDateFilter === key
+                              ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                              : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </FilterDropdownSection>
+
+                  <FilterDropdownSection title="Categoría">
+                    <div className="flex flex-wrap gap-2">
+                      {EVENT_CATEGORY_FILTERS.map(cat => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setEventCategoryFilter(cat)}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                            eventCategoryFilter === cat
+                              ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                              : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                          }`}
+                        >
+                          {cat === ALL_EVENT_CATEGORIES ? '🌐' : getEventEmoji(cat)} {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </FilterDropdownSection>
+                </FilterDropdown>
                 <EventSortDropdown
                   proximityValue={eventProximitySort}
                   onProximityChange={setEventProximitySort}
@@ -2194,7 +2312,7 @@ export default function CommunityPage() {
               </div>
             )}
 
-            {/* Search + category filter */}
+            {/* Search */}
             <div className="space-y-3 mb-4">
               <input
                 type="search"
@@ -2203,67 +2321,6 @@ export default function CommunityPage() {
                 placeholder="Buscar eventos..."
                 className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
-
-              {/* Free / Paid sub-tabs */}
-              <div className="flex gap-2">
-                {[
-                  { key: 'all', label: '🌐 Todos' },
-                  { key: 'free', label: '✓ Gratis' },
-                  { key: 'paid', label: '💳 De pago' },
-                ].map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setEventPriceFilter(key)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
-                      eventPriceFilter === key
-                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Fecha de inicio: Esta semana / Este mes / Todo el tiempo */}
-              <div className="flex gap-2">
-                {[
-                  { key: 'week', label: '🗓️ Esta semana' },
-                  { key: 'month', label: '📆 Este mes' },
-                  { key: 'all', label: '♾️ Todo el tiempo' },
-                ].map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setEventDateFilter(key)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
-                      eventDateFilter === key
-                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                {EVENT_CATEGORY_FILTERS.map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setEventCategoryFilter(cat)}
-                    className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-all ${
-                      eventCategoryFilter === cat
-                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                    }`}
-                  >
-                    {cat === ALL_EVENT_CATEGORIES ? '🌐' : getEventEmoji(cat)} {cat}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {events.length === 0 ? (
@@ -2352,10 +2409,131 @@ export default function CommunityPage() {
           </>
         ) : (
           <div id="tutorial-communities-section" className="rounded-2xl transition-all duration-300">
-            {/* Communities title */}
-            <div className="mb-4">
-              <h2 className="font-display font-bold text-surface-text text-lg">Comunidades</h2>
-              <p className="text-xs text-surface-muted">Grupos de interés abiertos a todos</p>
+            {/* Communities title + filter selector */}
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display font-bold text-surface-text text-lg">Comunidades</h2>
+                <p className="text-xs text-surface-muted">Grupos de interés abiertos a todos</p>
+              </div>
+              <FilterDropdown label="Filtrar" active={isCommunityFilterActive}>
+                <FilterDropdownSection title="Membresía">
+                  <div className="flex gap-2">
+                    {[
+                      { key: 'all', label: '🌐 Todas' },
+                      { key: 'mine', label: '👤 Tus comunidades' },
+                    ].map(({ key, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setCommunityMembershipFilter(key)}
+                        className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
+                          communityMembershipFilter === key
+                            ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                            : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </FilterDropdownSection>
+
+                <FilterDropdownSection title="Otros">
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCommunityInterestsOnly(v => !v)}
+                      aria-pressed={communityInterestsOnly}
+                      className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                        communityInterestsOnly
+                          ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                      }`}
+                    >
+                      <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
+                        communityInterestsOnly
+                          ? 'border-accent-primary bg-accent-primary text-white'
+                          : 'border-surface-border'
+                      }`}>
+                        {communityInterestsOnly ? '✓' : ''}
+                      </span>
+                      ✨ Solo con intereses en común
+                    </button>
+
+                    {communityInterestsOnly && !(profile?.interests?.length > 0) && (
+                      <div className="flex items-center justify-between gap-3 text-xs bg-accent-primary/10 border border-accent-primary/25 text-accent-glow rounded-xl px-3 py-2.5">
+                        <span>✨ Añade tus intereses en el perfil para usar este filtro.</span>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/profile')}
+                          className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:brightness-125 transition-colors"
+                        >
+                          Ir al perfil
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setCommunityRaffleOnly(v => !v)}
+                      aria-pressed={communityRaffleOnly}
+                      className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                        communityRaffleOnly
+                          ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                      }`}
+                    >
+                      <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
+                        communityRaffleOnly
+                          ? 'border-accent-primary bg-accent-primary text-white'
+                          : 'border-surface-border'
+                      }`}>
+                        {communityRaffleOnly ? '✓' : ''}
+                      </span>
+                      🎟️ Sorteo en marcha
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCommunityUpcomingEventOnly(v => !v)}
+                      aria-pressed={communityUpcomingEventOnly}
+                      className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                        communityUpcomingEventOnly
+                          ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                      }`}
+                    >
+                      <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
+                        communityUpcomingEventOnly
+                          ? 'border-accent-primary bg-accent-primary text-white'
+                          : 'border-surface-border'
+                      }`}>
+                        {communityUpcomingEventOnly ? '✓' : ''}
+                      </span>
+                      📅 Evento próximo
+                    </button>
+                  </div>
+                </FilterDropdownSection>
+
+                <FilterDropdownSection title="Categoría">
+                  <div className="flex flex-wrap gap-2">
+                    {COMMUNITY_CATEGORY_FILTERS.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCommunityCategoryFilter(cat)}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                          communityCategoryFilter === cat
+                            ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                            : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                        }`}
+                      >
+                        {cat === ALL_COMMUNITY_CATEGORIES ? '🌐' : getCommunityEmoji(cat)} {cat}
+                      </button>
+                    ))}
+                  </div>
+                </FilterDropdownSection>
+              </FilterDropdown>
             </div>
 
             <div className="space-y-3 mb-4">
@@ -2366,120 +2544,6 @@ export default function CommunityPage() {
                 placeholder="Buscar comunidades..."
                 className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
-
-              {/* Todas / Tus comunidades — ambas vistas se ordenan igual, por
-                  número de participantes. */}
-              <div className="flex gap-2">
-                {[
-                  { key: 'all', label: '🌐 Todas' },
-                  { key: 'mine', label: '👤 Tus comunidades' },
-                ].map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setCommunityMembershipFilter(key)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-all ${
-                      communityMembershipFilter === key
-                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Check de intereses en común (categorías compartidas con el perfil) */}
-              <button
-                type="button"
-                onClick={() => setCommunityInterestsOnly(v => !v)}
-                aria-pressed={communityInterestsOnly}
-                className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
-                  communityInterestsOnly
-                    ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                    : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                }`}
-              >
-                <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
-                  communityInterestsOnly
-                    ? 'border-accent-primary bg-accent-primary text-white'
-                    : 'border-surface-border'
-                }`}>
-                  {communityInterestsOnly ? '✓' : ''}
-                </span>
-                ✨ Solo con intereses en común
-              </button>
-
-              {communityInterestsOnly && !(profile?.interests?.length > 0) && (
-                <div className="flex items-center justify-between gap-3 text-xs bg-accent-primary/10 border border-accent-primary/25 text-accent-glow rounded-xl px-3 py-2.5">
-                  <span>✨ Añade tus intereses en el perfil para usar este filtro.</span>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/profile')}
-                    className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:brightness-125 transition-colors"
-                  >
-                    Ir al perfil
-                  </button>
-                </div>
-              )}
-
-              {/* Checks de sorteo activo / evento próximo */}
-              <button
-                type="button"
-                onClick={() => setCommunityRaffleOnly(v => !v)}
-                aria-pressed={communityRaffleOnly}
-                className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
-                  communityRaffleOnly
-                    ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                    : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                }`}
-              >
-                <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
-                  communityRaffleOnly
-                    ? 'border-accent-primary bg-accent-primary text-white'
-                    : 'border-surface-border'
-                }`}>
-                  {communityRaffleOnly ? '✓' : ''}
-                </span>
-                🎟️ Sorteo en marcha
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCommunityUpcomingEventOnly(v => !v)}
-                aria-pressed={communityUpcomingEventOnly}
-                className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
-                  communityUpcomingEventOnly
-                    ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                    : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                }`}
-              >
-                <span className={`flex-shrink-0 w-4 h-4 rounded flex items-center justify-center border text-[10px] leading-none ${
-                  communityUpcomingEventOnly
-                    ? 'border-accent-primary bg-accent-primary text-white'
-                    : 'border-surface-border'
-                }`}>
-                  {communityUpcomingEventOnly ? '✓' : ''}
-                </span>
-                📅 Evento próximo
-              </button>
-
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                {COMMUNITY_CATEGORY_FILTERS.map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCommunityCategoryFilter(cat)}
-                    className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border transition-all ${
-                      communityCategoryFilter === cat
-                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
-                        : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                    }`}
-                  >
-                    {cat === ALL_COMMUNITY_CATEGORIES ? '🌐' : getCommunityEmoji(cat)} {cat}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {communities.length === 0 ? (

@@ -1767,14 +1767,13 @@ export default function CommunityDetailPage() {
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
+              <p className="text-xs text-surface-muted font-mono">
+                {community.member_count || 0} miembros{community.is_admin ? ' · admin' : ''}
+              </p>
               {communitiesWithEvents.has(communityId) && (
                 <span className="flex-shrink-0 w-2.5 h-2.5 bg-red-500 rounded-full" />
               )}
             </div>
-            <p className="text-xs text-surface-muted font-mono">
-              {community.member_count || 0} miembros{community.is_admin ? ' · admin' : ''}
-            </p>
           </div>
           <button
             onClick={() => navigate(`/messages/community/${communityId}`)}
@@ -1827,7 +1826,8 @@ export default function CommunityDetailPage() {
               {emoji}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
+              <div className="flex items-center gap-2 flex-wrap mt-1.5">
                 {communityCategories.map(cat => (
                   <span
                     key={cat}
