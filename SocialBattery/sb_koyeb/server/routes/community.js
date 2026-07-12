@@ -1922,6 +1922,19 @@ async function requireCommunityMembership(communityId, userId) {
   return !!data;
 }
 
+// Verifica que `messageId` pertenece a esta comunidad (mismo patrón que
+// findReplyTarget en routes/messages.js y findPoolReplyTarget en routes/pools.js).
+async function findCommunityReplyTarget(messageId, communityId) {
+  if (!messageId) return null;
+  const { data } = await supabase
+    .from('community_messages')
+    .select('id, sender_id')
+    .eq('id', messageId)
+    .eq('community_id', communityId)
+    .maybeSingle();
+  return data || null;
+}
+
 // ── GET /api/community/communities/:id/messages ─────────────────────────────
 router.get('/communities/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
@@ -1937,7 +1950,8 @@ router.get('/communities/:id/messages', requireAuth, async (req, res) => {
       .from('community_messages')
       .select(`
         id, content, type, poll_options, created_at,
-        liked_by, deleted_for_self, deleted_for_everyone, deleted_for_everyone_at,
+        liked_by, deleted_for_self, deleted_for_everyone, deleted_for_everyone_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('community_id', communityId)
@@ -2107,7 +2121,7 @@ router.post('/communities/:id/clear', requireAuth, async (req, res) => {
 router.post('/communities/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const communityId = req.params.id;
-  const { content, type = 'text' } = req.body;
+  const { content, type = 'text', reply_to_id } = req.body;
 
   if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
   if (type !== 'text') return res.status(400).json({ error: 'Invalid type' });
@@ -2117,11 +2131,18 @@ router.post('/communities/:id/messages', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Not a member' });
     }
 
+    const insertData = { community_id: communityId, sender_id: userId, content: content.trim(), type };
+    if (reply_to_id) {
+      const target = await findCommunityReplyTarget(reply_to_id, communityId);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
     const { data, error } = await supabase
       .from('community_messages')
-      .insert({ community_id: communityId, sender_id: userId, content: content.trim(), type })
+      .insert(insertData)
       .select(`
-        id, content, type, created_at,
+        id, content, type, created_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
@@ -2260,11 +2281,18 @@ router.post('/communities/:id/messages/image', requireAuth, (req, res, next) => 
       fallbackMaxLength: 8_000_000,
     });
 
+    const insertData = { community_id: communityId, sender_id: userId, content: imageUrl, type: 'image' };
+    if (req.body.reply_to_id) {
+      const target = await findCommunityReplyTarget(req.body.reply_to_id, communityId);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
     const { data, error } = await supabase
       .from('community_messages')
-      .insert({ community_id: communityId, sender_id: userId, content: imageUrl, type: 'image' })
+      .insert(insertData)
       .select(`
-        id, content, type, created_at,
+        id, content, type, created_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();

@@ -1130,7 +1130,7 @@ export default function EventDetailPage() {
             ) : isJoined ? (
               <div className="flex gap-2">
                 <div className="flex-1 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center text-sm font-display font-semibold text-green-400">
-                  📅 Apuntado
+                  📅 Planificado
                 </div>
                 <ReminderBellButton
                   value={event.current_user_reminder_minutes_before}
