@@ -1056,8 +1056,8 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
         .select('id')
         .eq('community_id', id)
         .eq('user_id', userId)
-        .maybeSingle();
-      hasCollaborated = Boolean(existingCollab);
+        .limit(1);
+      hasCollaborated = Boolean(existingCollab?.length);
     }
 
     const { data: events, error: eventsError } = await db
@@ -1297,12 +1297,7 @@ router.post('/communities/:id/collaborate', requireAuth, async (req, res) => {
       .select()
       .single();
 
-    if (error) {
-      if (error.code === '23505') {
-        return res.status(400).json({ error: 'Ya has colaborado con esta comunidad' });
-      }
-      throw error;
-    }
+    if (error) throw error;
 
     res.status(201).json({ collaboration });
   } catch (err) {

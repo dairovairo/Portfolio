@@ -1145,7 +1145,7 @@ function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, on
   );
 }
 
-function CollaborateModal({ communityName, amountCents, onClose, onConfirm, confirming }) {
+function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onClose, onConfirm, confirming }) {
   const amountLabel = (amountCents / 100).toFixed(2);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
@@ -1161,13 +1161,20 @@ function CollaborateModal({ communityName, amountCents, onClose, onConfirm, conf
           </div>
         </div>
 
+        {alreadyCollaborator && (
+          <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2 mb-4">
+            <span className="text-emerald-400">✓</span>
+            <p className="text-xs text-emerald-400 font-mono">Ya eres colaborador de esta comunidad. Puedes volver a colaborar si quieres.</p>
+          </div>
+        )}
+
         <div className="bg-surface-bg border border-surface-border rounded-xl p-4 text-center mb-4">
           <p className="text-xs text-surface-muted font-mono mb-1">Importe de colaboración</p>
           <p className="text-3xl font-display font-bold text-surface-text">{amountLabel} €</p>
         </div>
 
         <p className="text-xs text-surface-muted leading-relaxed mb-5">
-          Este importe va destinado a la comunidad. <strong className="text-surface-text">SocialBattery no obtiene nada por este pago.</strong> Solo puedes colaborar una vez por comunidad.
+          Este importe va destinado a la comunidad. <strong className="text-surface-text">SocialBattery no obtiene nada por este pago.</strong> Puedes colaborar tantas veces como quieras.
         </p>
 
         <div className="flex gap-2">
@@ -1427,16 +1434,15 @@ export default function CommunityDetailPage() {
           {community.is_member && !community.is_admin && community.collab_amount_cents && (
             <button
               onClick={() => setShowCollabModal(true)}
-              disabled={community.has_collaborated}
-              title={community.has_collaborated ? 'Ya has colaborado' : 'Colaborar con la comunidad'}
+              title={community.has_collaborated ? 'Ya eres colaborador · colaborar de nuevo' : 'Colaborar con la comunidad'}
               className={`relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl border transition-colors ${
                 community.has_collaborated
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25 cursor-default'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20 hover:border-emerald-500/40'
                   : 'bg-amber-500/15 text-amber-400 border-amber-500/25 hover:bg-amber-500/25 hover:border-amber-500/40 hover:text-amber-300'
               }`}
             >
               <span>{community.has_collaborated ? '✓' : '🤝'}</span>
-              {community.has_collaborated ? 'Colaboraste' : 'Colaborar'}
+              {community.has_collaborated ? 'Colaborador' : 'Colaborar'}
             </button>
           )}
 
@@ -1604,6 +1610,7 @@ export default function CommunityDetailPage() {
         <CollaborateModal
           communityName={community.name}
           amountCents={community.collab_amount_cents}
+          alreadyCollaborator={community.has_collaborated}
           onClose={() => setShowCollabModal(false)}
           onConfirm={handleConfirmCollaborate}
           confirming={collaborating}
