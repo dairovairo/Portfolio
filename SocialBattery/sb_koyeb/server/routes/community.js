@@ -1082,7 +1082,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
 
     const { data: members, count } = await db
       .from('community_members')
-      .select('user_id, role, joined_at')
+      .select('user_id, role, joined_at, muted')
       .eq('community_id', id);
     const currentMembership = (members || []).find(m => m.user_id === userId);
 
@@ -1124,6 +1124,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
         is_member: Boolean(currentMembership),
         is_admin: community.creator_id === userId || currentMembership?.role === 'admin',
         has_collaborated: hasCollaborated,
+        is_muted: Boolean(currentMembership?.muted),
       },
       ...splitEvents,
     });
@@ -1370,6 +1371,31 @@ router.post('/communities/:id/leave', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /communities/:id/leave error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al salir de la comunidad') });
+  }
+});
+
+// PATCH /api/community/communities/:id/mute — silenciar/activar notificaciones (por usuario)
+router.patch('/communities/:id/mute', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const muted = Boolean(req.body?.muted);
+
+  try {
+    const { data: updated, error } = await supabase
+      .from('community_members')
+      .update({ muted })
+      .eq('community_id', id)
+      .eq('user_id', userId)
+      .select('muted')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!updated) return res.status(403).json({ error: 'No eres miembro de esta comunidad' });
+
+    res.json({ is_muted: Boolean(updated.muted) });
+  } catch (err) {
+    console.error('[community] PATCH /communities/:id/mute error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al cambiar el silencio') });
   }
 });
 
@@ -1911,7 +1937,7 @@ async function broadcastCommunityMessage({ communityId, senderId, senderName, co
       supabase.from('communities').select('name').eq('id', communityId).single(),
       supabase
         .from('community_members')
-        .select('user_id')
+        .select('user_id, muted')
         .eq('community_id', communityId)
         .neq('user_id', senderId),
     ]);
@@ -1929,6 +1955,9 @@ async function broadcastCommunityMessage({ communityId, senderId, senderName, co
       type,
     };
 
+    // Realtime broadcast — se manda a todos los miembros (silenciados o no);
+    // el filtro de "silenciado" lo aplica el cliente en useMessageNotifications
+    // (mutedCommunityIds) para no disparar la notificación local en foreground.
     await Promise.allSettled(
       recipientIds.map(recipientId =>
         supabase
@@ -1937,8 +1966,16 @@ async function broadcastCommunityMessage({ communityId, senderId, senderName, co
       )
     );
 
+    // Web-push (background / app cerrada) — aquí SÍ hay que excluir a los
+    // miembros que hayan silenciado la comunidad, porque no hay ningún filtro
+    // de cliente posible una vez que el push ya se ha enviado al SO.
+    const pushRecipientIds = (members || [])
+      .filter(m => !m.muted)
+      .map(m => m.user_id);
+    if (!pushRecipientIds.length) return;
+
     const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
-    await notifyUsers(supabase, recipientIds, senderId, {
+    await notifyUsers(supabase, pushRecipientIds, senderId, {
       title: communityName,
       body:  `${senderName}: ${previewText}`,
       url:   `/messages/community/${communityId}`,

@@ -230,7 +230,7 @@ router.get('/', requireAuth, async (req, res) => {
         max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
         creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
-          joined_at, reminder_minutes_before,
+          joined_at, reminder_minutes_before, muted,
           user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url, mascot_name)
         )
       `)
@@ -323,6 +323,7 @@ router.get('/', requireAuth, async (req, res) => {
         current_user_reminder_minutes_before: hasJoined
           ? currentParticipant?.reminder_minutes_before || DEFAULT_POOL_REMINDER_MINUTES
           : null,
+        current_user_muted: hasJoined ? Boolean(currentParticipant?.muted) : false,
       };
     });
 
@@ -489,7 +490,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
         creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url),
         pool_participants(
-          joined_at, reminder_minutes_before,
+          joined_at, reminder_minutes_before, muted,
           user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, last_seen_at, mascot_preview_url)
         )
       `)
@@ -1231,6 +1232,31 @@ router.patch('/:id/reminder', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[POOLS] PATCH /:id/reminder', err);
     res.status(500).json({ error: 'Failed to update pool reminder' });
+  }
+});
+
+// ── PATCH /api/pools/:id/mute — silenciar/activar notificaciones (por usuario) ──
+router.patch('/:id/mute', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const poolId = req.params.id;
+  const muted = Boolean(req.body?.muted);
+
+  try {
+    const { data: updated, error } = await supabase
+      .from('pool_participants')
+      .update({ muted })
+      .eq('pool_id', poolId)
+      .eq('user_id', userId)
+      .select('muted')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!updated) return res.status(403).json({ error: 'Tienes que estar apuntado para silenciar este pool' });
+
+    res.json({ is_muted: Boolean(updated.muted) });
+  } catch (err) {
+    console.error('[POOLS] PATCH /:id/mute', err);
+    res.status(500).json({ error: 'Failed to update mute state' });
   }
 });
 

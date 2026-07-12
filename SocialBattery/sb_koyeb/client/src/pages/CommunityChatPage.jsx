@@ -932,6 +932,19 @@ export default function CommunityChatPage() {
     }
   }
 
+  async function handleToggleMute() {
+    const next = !community?.is_muted;
+    setCommunity(prev => prev ? { ...prev, is_muted: next } : prev); // optimista
+    try {
+      await api.patch(`/community/communities/${communityId}/mute`, { muted: next });
+      window.dispatchEvent(new CustomEvent('sb-community-muted', { detail: { community_id: communityId, muted: next } }));
+      showToast(next ? 'Comunidad silenciada' : 'Notificaciones activadas');
+    } catch (e) {
+      setCommunity(prev => prev ? { ...prev, is_muted: !next } : prev); // revertir
+      showToast('Error al cambiar el silencio de la comunidad', 'error');
+    }
+  }
+
   async function sendText() {
     if (!input.trim() || sending) return;
     const content = input.trim();
@@ -1111,6 +1124,12 @@ export default function CommunityChatPage() {
                       <span>🖼️</span> Fondo de la comunidad{communityWallpaper ? ' (activo)' : ''}
                     </button>
                   )}
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); handleToggleMute(); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
+                  >
+                    <span>{community.is_muted ? '🔔' : '🔕'}</span> {community.is_muted ? 'Activar notificaciones' : 'Silenciar comunidad'}
+                  </button>
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"

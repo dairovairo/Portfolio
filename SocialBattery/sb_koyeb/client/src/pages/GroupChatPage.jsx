@@ -1360,6 +1360,19 @@ export default function GroupChatPage() {
     }
   }
 
+  async function handleToggleMute() {
+    const next = !group?.is_muted;
+    setGroup(prev => prev ? { ...prev, is_muted: next } : prev); // optimista
+    try {
+      await api.patch(`/groups/${groupId}/mute`, { muted: next });
+      window.dispatchEvent(new CustomEvent('sb-group-muted', { detail: { group_id: groupId, muted: next } }));
+      showToast(next ? 'Grupo silenciado' : 'Notificaciones activadas');
+    } catch (e) {
+      setGroup(prev => prev ? { ...prev, is_muted: !next } : prev); // revertir
+      showToast('Error al cambiar el silencio del grupo', 'error');
+    }
+  }
+
   function handleMemberAdded(friend) {
     setGroup(prev => {
       if (!prev) return prev;
@@ -1610,6 +1623,12 @@ export default function GroupChatPage() {
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
                   >
                     <span>🖼️</span> Fondo del grupo{groupWallpaper ? ' (activo)' : ''}
+                  </button>
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); handleToggleMute(); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
+                  >
+                    <span>{group.is_muted ? '🔔' : '🔕'}</span> {group.is_muted ? 'Activar notificaciones' : 'Silenciar grupo'}
                   </button>
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
