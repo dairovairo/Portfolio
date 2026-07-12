@@ -286,6 +286,43 @@ router.get('/events', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/community/events/calendar
+// Eventos del usuario para la vista de calendario mensual (CalendarPage.jsx):
+// solo los eventos a los que está apuntado (community_event_attendees),
+// sin filtrar por fecha (pasados y futuros), con los campos mínimos.
+router.get('/events/calendar', requireAuth, async (req, res) => {
+  const db = getUserSupabase(req);
+  const userId = req.user.id;
+
+  try {
+    const { data: attending } = await db
+      .from('community_event_attendees')
+      .select('event_id')
+      .eq('user_id', userId);
+    const eventIds = [...new Set((attending || []).map(a => a.event_id))];
+    if (!eventIds.length) return res.json({ events: [] });
+
+    const { data: events, error } = await db
+      .from('community_events')
+      .select('id, title, event_date, ends_at')
+      .in('id', eventIds);
+
+    if (error) throw error;
+
+    res.json({
+      events: (events || []).map(e => ({
+        id: e.id,
+        title: e.title,
+        date: e.event_date,
+        ends_at: e.ends_at,
+      })),
+    });
+  } catch (err) {
+    console.error('[community] GET /events/calendar error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener el calendario de eventos') });
+  }
+});
+
 // GET /api/community/events/ranking
 // Devuelve eventos para los rankings, incluyendo eventos ya finalizados
 // (a diferencia de GET /events, que solo trae eventos activos/futuros).

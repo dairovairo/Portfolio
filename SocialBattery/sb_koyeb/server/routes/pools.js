@@ -333,7 +333,44 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/pools/invites/count — nº de invitaciones pendientes (badge) ────
+// ── GET /api/pools/calendar — quedadas del usuario para la vista de calendario
+// Devuelve, sin paginar ni filtrar por fecha, todas las quedadas donde el
+// usuario es el creador o se ha unido (pasadas y futuras), con los campos
+// mínimos que necesita el calendario mensual (CalendarPage.jsx).
+router.get('/calendar', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data: participations } = await supabase
+      .from('pool_participants')
+      .select('pool_id')
+      .eq('user_id', userId);
+    const participatingIds = (participations || []).map(p => p.pool_id);
+
+    const orParts = [`creator_id.eq.${userId}`];
+    if (participatingIds.length) orParts.push(`id.in.(${participatingIds.join(',')})`);
+
+    const { data: pools, error } = await supabase
+      .from('hangout_pools')
+      .select('id, activity, scheduled_at, ends_at, status')
+      .or(orParts.join(','));
+
+    if (error) throw error;
+
+    res.json({
+      pools: (pools || []).map(p => ({
+        id: p.id,
+        title: p.activity,
+        date: p.scheduled_at,
+        ends_at: p.ends_at,
+      })),
+    });
+  } catch (err) {
+    console.error('[POOLS] GET /calendar', err);
+    res.status(500).json({ error: 'Failed to fetch calendar pools' });
+  }
+});
+
+
 // Cuenta las quedadas privadas donde el usuario ha sido invitado
 // (pool_invitees) pero aún no se ha unido y la quedada sigue abierta/futura.
 // Usado por PoolInviteNotificationsContext para el badge del dock inferior
