@@ -781,6 +781,35 @@ function RaffleAvatar({ user }) {
   );
 }
 
+// Debe coincidir con RAFFLE_TIERS en server/routes/community.js
+const RAFFLE_TIER_OPTIONS = [
+  {
+    key: 'light',
+    label: 'Sorteo Light',
+    priceLabel: '20 €',
+    rules: 'Participan todos los miembros de la comunidad.',
+    emoji: '🎫',
+  },
+  {
+    key: 'volt',
+    label: 'Sorteo Volt',
+    priceLabel: 'Gratis',
+    rules: 'Participan los miembros con suscripción Volt de la app. Incluye publicidad en el menú principal.',
+    emoji: '⚡',
+  },
+  {
+    key: 'comunity',
+    label: 'Sorteo Comunity',
+    priceLabel: '5 €',
+    rules: 'Participan los miembros que han colaborado con la comunidad. Incluye notificaciones a toda la comunidad.',
+    emoji: '🤝',
+  },
+];
+
+function raffleTierMeta(tierKey) {
+  return RAFFLE_TIER_OPTIONS.find(t => t.key === tierKey) || RAFFLE_TIER_OPTIONS[0];
+}
+
 function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
   const [drawing, setDrawing] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -820,6 +849,19 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
           </button>
         </div>
 
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
+            {raffleTierMeta(raffle.tier).emoji} {raffle.tier_label || raffleTierMeta(raffle.tier).label}
+          </span>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border">
+            {raffle.price_cents ? `${(raffle.price_cents / 100).toFixed(2)} €` : 'Gratis'}
+          </span>
+        </div>
+
+        {raffle.tier_rules && (
+          <p className="text-[11px] text-surface-muted/80 italic leading-relaxed">{raffle.tier_rules}</p>
+        )}
+
         {raffle.description && (
           <p className="text-xs text-surface-muted leading-relaxed">{raffle.description}</p>
         )}
@@ -850,7 +892,11 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
           </button>
         ) : !hasEnded ? (
           <p className="text-[11px] text-surface-muted italic">
-            {isCreator ? 'Podrás sortear al ganador cuando termine el plazo.' : 'Participas automáticamente por ser miembro de la comunidad.'}
+            {isCreator
+              ? 'Podrás sortear al ganador cuando termine el plazo.'
+              : raffle.can_participate === false
+                ? 'No cumples los requisitos de participación de este sorteo.'
+                : 'Participas automáticamente por cumplir los requisitos de este sorteo.'}
           </p>
         ) : null}
       </div>
@@ -868,6 +914,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [endsAt, setEndsAt] = useState(defaultDate);
+  const [tier, setTier] = useState('light');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
@@ -904,6 +951,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
         title: title.trim(),
         description: description.trim(),
         ends_at: new Date(endsAt).toISOString(),
+        tier,
         image_file: imageFile,
       });
       onClose();
@@ -929,6 +977,41 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
         </div>
 
         <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Tipo de sorteo *</label>
+            <div className="space-y-2">
+              {RAFFLE_TIER_OPTIONS.map(opt => {
+                const selected = tier === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setTier(opt.key)}
+                    className={`w-full text-left rounded-xl border px-3.5 py-3 transition-all ${
+                      selected
+                        ? 'border-accent-primary/60 bg-accent-primary/10'
+                        : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-sm font-display font-bold text-surface-text">
+                        <span>{opt.emoji}</span> {opt.label}
+                      </span>
+                      <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${
+                        opt.priceLabel === 'Gratis'
+                          ? 'bg-emerald-500/15 text-emerald-400'
+                          : 'bg-surface-card text-surface-muted border border-surface-border'
+                      }`}>
+                        {opt.priceLabel}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-surface-muted leading-relaxed mt-1">{opt.rules}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">Título *</label>
             <input
@@ -1015,7 +1098,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
           </div>
 
           <p className="text-[11px] text-surface-muted italic">
-            Participan todos los miembros de la comunidad salvo el admin.
+            {raffleTierMeta(tier).rules} Los admins nunca participan.
           </p>
 
           {error && <p className="text-xs text-red-400">{error}</p>}
@@ -1174,6 +1257,7 @@ export default function CommunityDetailPage() {
     formData.append('title', form.title);
     if (form.description?.trim()) formData.append('description', form.description.trim());
     formData.append('ends_at', form.ends_at);
+    formData.append('tier', form.tier || 'light');
     if (form.image_file) formData.append('image', form.image_file);
     await api.postForm(`/community/communities/${communityId}/raffles`, formData);
     showToast('¡Sorteo creado! 🎁', 'success');
