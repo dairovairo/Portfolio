@@ -2378,20 +2378,20 @@ function uploadRaffleImage(req, res, next) {
 // ahora (no hay pasarela de cobro conectada todavía, igual que en las
 // colaboraciones de comunidad — ver phase81/phase82).
 const RAFFLE_TIERS = {
-  light: {
-    label: 'Sorteo Light',
-    price_cents: 2000,
-    rules: 'Participan todos los miembros de la comunidad.',
-  },
   volt: {
     label: 'Sorteo Volt',
     price_cents: 0,
-    rules: 'Participan los miembros con suscripción Volt de la app. Incluye publicidad en el menú principal.',
+    rules: 'Participan los miembros de la comunidad con suscripción Volt de la app.',
   },
   comunity: {
     label: 'Sorteo Comunity',
     price_cents: 500,
-    rules: 'Participan los miembros que han colaborado con la comunidad. Incluye notificaciones a toda la comunidad.',
+    rules: 'Participan los miembros que han colaborado con la comunidad.',
+  },
+  light: {
+    label: 'Sorteo Light',
+    price_cents: 2000,
+    rules: 'Participan todos los miembros de la comunidad.',
   },
 };
 const RAFFLE_TIER_KEYS = Object.keys(RAFFLE_TIERS);

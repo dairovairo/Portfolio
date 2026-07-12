@@ -784,25 +784,37 @@ function RaffleAvatar({ user }) {
 // Debe coincidir con RAFFLE_TIERS en server/routes/community.js
 const RAFFLE_TIER_OPTIONS = [
   {
-    key: 'light',
-    label: 'Sorteo Light',
-    priceLabel: '20 €',
-    rules: 'Participan todos los miembros de la comunidad.',
-    emoji: '🎫',
-  },
-  {
     key: 'volt',
     label: 'Sorteo Volt',
     priceLabel: 'Gratis',
-    rules: 'Participan los miembros con suscripción Volt de la app. Incluye publicidad en el menú principal.',
+    rules: 'Participan los miembros de la comunidad con suscripción Volt de la app.',
+    includes: [
+      'Notificaciones a toda la comunidad',
+      'Apariciones de banner esporádico al número de usuarios disponibles',
+      'Duración máxima 2 semanas',
+    ],
     emoji: '⚡',
   },
   {
     key: 'comunity',
     label: 'Sorteo Comunity',
     priceLabel: '5 €',
-    rules: 'Participan los miembros que han colaborado con la comunidad. Incluye notificaciones a toda la comunidad.',
+    rules: 'Participan los miembros que han colaborado con la comunidad.',
+    includes: [
+      'Notificaciones a toda la comunidad',
+    ],
     emoji: '🤝',
+  },
+  {
+    key: 'light',
+    label: 'Sorteo Light',
+    priceLabel: '20 €',
+    rules: 'Participan todos los miembros de la comunidad.',
+    includes: [
+      'Notificaciones a toda la comunidad',
+      'Apariciones de banner esporádico al número de usuarios contratado',
+    ],
+    emoji: '🎫',
   },
 ];
 
@@ -914,7 +926,8 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [endsAt, setEndsAt] = useState(defaultDate);
-  const [tier, setTier] = useState('light');
+  const [tier, setTier] = useState(RAFFLE_TIER_OPTIONS[0].key);
+  const [showTierDetails, setShowTierDetails] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
@@ -978,7 +991,16 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Tipo de sorteo *</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-mono text-surface-muted">Tipo de sorteo *</label>
+              <button
+                type="button"
+                onClick={() => setShowTierDetails(v => !v)}
+                className="text-[11px] font-mono text-accent-glow hover:text-accent-primary transition-colors"
+              >
+                {showTierDetails ? '− ocultar qué incluye' : '+ ver qué incluye en cada una'}
+              </button>
+            </div>
             <div className="space-y-2">
               {RAFFLE_TIER_OPTIONS.map(opt => {
                 const selected = tier === opt.key;
@@ -1006,6 +1028,16 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
                       </span>
                     </div>
                     <p className="text-[11px] text-surface-muted leading-relaxed mt-1">{opt.rules}</p>
+                    {showTierDetails && (
+                      <ul className="mt-2 space-y-1 border-t border-surface-border/60 pt-2">
+                        {opt.includes.map((item, i) => (
+                          <li key={i} className="text-[11px] text-surface-muted/90 flex items-start gap-1.5">
+                            <span className="text-accent-glow flex-shrink-0">✓</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </button>
                 );
               })}
