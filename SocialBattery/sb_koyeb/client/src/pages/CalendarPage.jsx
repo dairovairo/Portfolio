@@ -62,9 +62,9 @@ function formatItemTime(dateStr) {
 // ── Day detail sheet ──────────────────────────────────────────────────────────
 function DayDetailSheet({ date, pools, events, onClose, onOpenPool, onOpenEvent }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="w-full sm:max-w-md bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-3xl max-h-[80vh] overflow-y-auto animate-slide-up"
+        className="w-full sm:max-w-md bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-3xl max-h-[75vh] overflow-y-auto animate-slide-up pb-safe"
         onClick={e => e.stopPropagation()}
       >
         <div className="sticky top-0 bg-surface-card border-b border-surface-border px-5 py-4 flex items-center justify-between">
@@ -77,7 +77,7 @@ function DayDetailSheet({ date, pools, events, onClose, onOpenPool, onOpenEvent 
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 pb-8 space-y-4">
           {pools.length === 0 && events.length === 0 && (
             <p className="text-sm text-surface-muted text-center py-6">Sin quedadas ni eventos este día.</p>
           )}

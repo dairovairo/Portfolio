@@ -335,7 +335,7 @@ function FilterDropdown({ label = 'Filtrar', active = false, children }) {
   }, [open]);
 
   return (
-    <div className="relative flex-shrink-0" ref={menuRef}>
+    <div className="flex-shrink-0" ref={menuRef}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -348,7 +348,7 @@ function FilterDropdown({ label = 'Filtrar', active = false, children }) {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 w-80 max-w-[85vw] max-h-[70vh] overflow-y-auto py-3 px-3 space-y-3 animate-fade-in">
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 max-h-[70vh] overflow-y-auto py-3 px-3 space-y-3 animate-fade-in">
           {children}
         </div>
       )}
@@ -2184,7 +2184,7 @@ export default function CommunityPage() {
         ) : tab === 'events' ? (
           <div id="tutorial-events-section" className="rounded-2xl transition-all duration-300">
             {/* Events title + filter/sort selectors */}
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="relative mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
               <div className="flex items-center gap-2">
                 <button
@@ -2410,7 +2410,7 @@ export default function CommunityPage() {
         ) : (
           <div id="tutorial-communities-section" className="rounded-2xl transition-all duration-300">
             {/* Communities title + filter selector */}
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="relative mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-display font-bold text-surface-text text-lg">Comunidades</h2>
                 <p className="text-xs text-surface-muted">Grupos de interés abiertos a todos</p>
