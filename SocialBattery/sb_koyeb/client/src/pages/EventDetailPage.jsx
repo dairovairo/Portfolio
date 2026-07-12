@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
@@ -645,6 +646,7 @@ export default function EventDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { isConversationMuted, setConversationMuted } = useSettings();
   const { eventsWithUpdates, clearEventUpdateBadge, refreshJoinedCommunities } = useCommunityNotifications();
   const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
 
@@ -659,6 +661,11 @@ export default function EventDetailPage() {
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [showEndPromoModal, setShowEndPromoModal] = useState(false);
 
+  // Silenciar avisos/actualizaciones de este evento (asistente, no organizador)
+  // — mismo patrón que el mute de chats de grupo/quedada/comunidad (fase 88),
+  // reutilizando muted_conversations con conversation_type = 'event' (fase 89).
+  const [updatesMuted, setUpdatesMuted] = useState(() => isConversationMuted('event', eventId));
+
   // update thread composer
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
@@ -671,6 +678,19 @@ export default function EventDetailPage() {
   const [showPhotoMenu, setShowPhotoMenu] = useState(false);
   const [showPollModal, setShowPollModal] = useState(false);
   const [votingUpdateId, setVotingUpdateId] = useState(null);
+
+  // Resincroniza el estado de mute si el usuario navega de un evento a otro
+  // sin desmontar la página (el useState inicial solo corre una vez).
+  useEffect(() => {
+    setUpdatesMuted(isConversationMuted('event', eventId));
+  }, [eventId, isConversationMuted]);
+
+  const handleToggleUpdatesMute = () => {
+    const next = !updatesMuted;
+    setConversationMuted('event', eventId, next);
+    setUpdatesMuted(next);
+    showToast(next ? 'Avisos del evento silenciados 🔕' : 'Avisos del evento activados 🔔', 'success');
+  };
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchEvent = useCallback(async () => {
@@ -970,6 +990,16 @@ export default function EventDetailPage() {
               {daysLabel && <span className="text-amber-300/80"> · {daysLabel}</span>}
             </p>
           </div>
+          {!isCreator && (
+            <button
+              onClick={handleToggleUpdatesMute}
+              title={updatesMuted ? 'Activar avisos del evento' : 'Silenciar avisos del evento'}
+              aria-label={updatesMuted ? 'Activar avisos del evento' : 'Silenciar avisos del evento'}
+              className="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-border text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-all flex-shrink-0 text-base"
+            >
+              {updatesMuted ? '🔔' : '🔕'}
+            </button>
+          )}
         </div>
       </header>
 

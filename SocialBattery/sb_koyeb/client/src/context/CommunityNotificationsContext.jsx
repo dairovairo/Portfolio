@@ -106,7 +106,7 @@ function saveUpdatesSet(set) {
 
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
-  const { muteAllNotifications, muteNewEvents, muteEventRecommendations } = useSettings();
+  const { muteAllNotifications, muteNewEvents, muteEventRecommendations, isConversationMuted } = useSettings();
 
   // eventsByCommunity: { [communityId: string]: number }
   const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
@@ -329,6 +329,7 @@ export function CommunityNotificationsProvider({ children }) {
           // Notificación local en foreground
           const settings = settingsRef.current;
           if (settings.muteAllNotifications) return;
+          if (isConversationMuted('event', newUpdate.event_id)) return;
 
           // Obtener título del evento para la notificación
           let eventTitle = 'Tu evento';

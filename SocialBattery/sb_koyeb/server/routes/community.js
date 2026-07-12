@@ -1676,7 +1676,11 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
           ? hasContent.length > 80 ? hasContent.slice(0, 77) + '…' : hasContent
           : '📷 Se ha publicado una imagen';
 
-        notifyUsers(supabase, attendeeIds, userId, {
+        // No mandar el push a quien haya silenciado los avisos de este evento (fase 89).
+        const mutedIds = await getMutedUserIds(supabase, 'event', id, attendeeIds);
+        const pushAttendeeIds = attendeeIds.filter(uid => !mutedIds.has(uid));
+
+        notifyUsers(supabase, pushAttendeeIds, userId, {
           title: `📣 ${eventFull.title}`,
           body:  notifBody,
           url:   `/community/event/${id}`,
@@ -1748,7 +1752,12 @@ router.post('/events/:id/polls', requireAuth, async (req, res) => {
       .neq('user_id', userId);
 
     if (attendees?.length) {
-      notifyUsers(supabase, attendees.map(a => a.user_id), userId, {
+      // No mandar el push a quien haya silenciado los avisos de este evento (fase 89).
+      const attendeeIds = attendees.map(a => a.user_id);
+      const mutedIds = await getMutedUserIds(supabase, 'event', id, attendeeIds);
+      const pushAttendeeIds = attendeeIds.filter(uid => !mutedIds.has(uid));
+
+      notifyUsers(supabase, pushAttendeeIds, userId, {
         title: `📊 ${event.title}`,
         body:  `Nueva encuesta: ${question.length > 70 ? question.slice(0, 67) + '…' : question}`,
         url:   `/community/event/${id}`,
