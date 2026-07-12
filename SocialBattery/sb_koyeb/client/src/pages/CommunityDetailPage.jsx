@@ -797,8 +797,8 @@ const RAFFLE_TIER_OPTIONS = [
     emoji: '⚡',
   },
   {
-    key: 'comunity',
-    label: 'Sorteo Comunity',
+    key: 'community',
+    label: 'Sorteo Community',
     priceLabel: '5 €',
     rules: 'Participan los miembros que han colaborado con la comunidad.',
     includes: [
@@ -1043,6 +1043,28 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
                 );
               })}
             </div>
+
+            {tier === 'light' && (
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  💳 Se aplicará una retencion al comenzar el sorteo, el pago se efectuará al renovar o finalizar el contrato publicitario, o en su defecto al finalizar el sorteo.
+                </p>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📶 Las apariciones de banners publicitarios tienen preferencia en sorteos Light frente a sorteos Volt.
+                </p>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🎯 A cada usuario se le publicitará el sorteo como mucho 3 veces en cada contrato publicitario.
+                </p>
+              </div>
+            )}
+
+            {tier === 'community' && (
+              <div className="mt-2">
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  ℹ️ Este tipo de sorteos tiene como objetivo la afiliación a la comunidad, no incluye publicidad fuera de la comunidad.
+                </p>
+              </div>
+            )}
           </div>
 
           <div>

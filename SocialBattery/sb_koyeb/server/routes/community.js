@@ -2531,8 +2531,8 @@ const RAFFLE_TIERS = {
     price_cents: 0,
     rules: 'Participan los miembros de la comunidad con suscripción Volt de la app.',
   },
-  comunity: {
-    label: 'Sorteo Comunity',
+  community: {
+    label: 'Sorteo Community',
     price_cents: 500,
     rules: 'Participan los miembros que han colaborado con la comunidad.',
   },
@@ -2570,7 +2570,7 @@ async function getEligibleRaffleMembers(communityId, tier) {
     if (subErr) throw subErr;
     const subIds = new Set((subs || []).map(u => u.id));
     userIds = userIds.filter(id => subIds.has(id));
-  } else if (tier === 'comunity') {
+  } else if (tier === 'community') {
     const { data: collabs, error: collabErr } = await supabase
       .from('community_collaborations')
       .select('user_id')

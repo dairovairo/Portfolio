@@ -924,11 +924,7 @@ function SubscriptionCard({ plan, onSubscribe }) {
 
       <button
         onClick={() => onSubscribe(plan)}
-        className={`w-full py-2.5 rounded-xl text-sm font-display font-semibold transition-all active:scale-95 ${
-          plan.highlight
-            ? 'bg-accent-primary text-white hover:opacity-90'
-            : 'bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40'
-        }`}
+        className="w-full py-2.5 rounded-xl text-sm font-display font-semibold transition-all active:scale-95 bg-accent-primary text-white hover:opacity-90"
       >
         Suscribirse
       </button>

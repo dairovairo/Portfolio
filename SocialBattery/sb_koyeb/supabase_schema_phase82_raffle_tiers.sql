@@ -2,6 +2,10 @@
 -- SocialBattery — Phase 82: Tipos de sorteo (Light / Volt / Comunity)
 -- Run this in Supabase SQL Editor
 -- ============================================================
+-- NOTA: la clave 'comunity' de este archivo tenía un typo. Está
+-- corregida a 'community' en supabase_schema_phase87_rename_community_tier.sql,
+-- que también migra los datos ya guardados. Este archivo se deja tal
+-- cual como registro histórico de lo que se ejecutó originalmente.
 -- Al crear un sorteo, el creador de la comunidad elige uno de 3 tipos,
 -- cada uno con su propia regla de participación y "precio" informativo
 -- (todavía no hay cobro real conectado, igual que en la fase 81 de
