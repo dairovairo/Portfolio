@@ -273,8 +273,15 @@ export function CommunityNotificationsProvider({ children }) {
     };
   }, [profile?.id]);
 
-  // ── Supabase Realtime: escucha inserts en event_updates ──────────────────
-  // Solo notifica si el usuario está apuntado al evento y NO es el creador
+  // ── Supabase Realtime: escucha el broadcast de nuevas actualizaciones ────
+  // Antes escuchaba postgres_changes sobre event_updates directamente, pero
+  // ese patrón ya nos dio problemas de fiabilidad con RLS en los chats de
+  // grupo/quedada/comunidad (el propio Realtime puede ignorar filas
+  // protegidas por RLS sin avisar) — por eso ahí se sustituyó por un
+  // broadcast explícito del servidor con la service key. Aplicamos el mismo
+  // arreglo aquí: el servidor (broadcastEventUpdateToAttendees en
+  // server/routes/community.js) ya comprueba la asistencia y manda el aviso
+  // solo a quien corresponde, así que aquí no hace falta volver a verificarlo.
   useEffect(() => {
     if (!profile?.id) return;
 
@@ -284,76 +291,31 @@ export function CommunityNotificationsProvider({ children }) {
     }
 
     const updateChannel = supabase
-      .channel(`event-updates-badge-${profile.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'event_updates' },
-        async (payload) => {
-          const newUpdate = payload.new;
+      .channel(`event-update-notif-${profile.id}`)
+      .on('broadcast', { event: 'new_event_update' }, (msg) => {
+        const data = msg.payload;
+        if (!data?.event_id) return;
+        if (data.creator_id === profile.id) return;
 
-          // Ignorar si no hay datos o si el propio usuario es quien publica
-          if (!newUpdate?.id || !newUpdate?.event_id) return;
-          if (newUpdate.creator_id === profile.id) return;
+        // Añadir el evento al set de actualizaciones no leídas (badge)
+        setEventsWithUpdates(prev => {
+          const next = new Set(prev);
+          next.add(data.event_id);
+          return next;
+        });
 
-          // Verificar asistencia en tiempo real directamente en Supabase
-          // (evita race condition con attendingEventIdsRef)
-          let isAttending = attendingEventIdsRef.current.has(newUpdate.event_id);
-          if (!isAttending) {
-            try {
-              const { data: att } = await supabase
-                .from('community_event_attendees')
-                .select('event_id')
-                .eq('event_id', newUpdate.event_id)
-                .eq('user_id', profile.id)
-                .maybeSingle();
-              isAttending = !!att;
-              // Actualizar el ref si encontramos asistencia
-              if (isAttending) {
-                attendingEventIdsRef.current = new Set([
-                  ...attendingEventIdsRef.current,
-                  newUpdate.event_id,
-                ]);
-              }
-            } catch { /* non-fatal */ }
-          }
+        // Notificación local en foreground
+        const settings = settingsRef.current;
+        if (settings.muteAllNotifications) return;
+        if (isConversationMuted('event', data.event_id)) return;
 
-          if (!isAttending) return;
-
-          // Añadir el evento al set de actualizaciones no leídas (badge)
-          setEventsWithUpdates(prev => {
-            const next = new Set(prev);
-            next.add(newUpdate.event_id);
-            return next;
-          });
-
-          // Notificación local en foreground
-          const settings = settingsRef.current;
-          if (settings.muteAllNotifications) return;
-          if (isConversationMuted('event', newUpdate.event_id)) return;
-
-          // Obtener título del evento para la notificación
-          let eventTitle = 'Tu evento';
-          try {
-            const { data: ev } = await supabase
-              .from('community_events')
-              .select('title')
-              .eq('id', newUpdate.event_id)
-              .single();
-            if (ev?.title) eventTitle = ev.title;
-          } catch {}
-
-          const body = newUpdate.content
-            ? (newUpdate.content.length > 80 ? newUpdate.content.slice(0, 77) + '…' : newUpdate.content)
-            : '📷 Se ha publicado una imagen';
-
-          fireLocalNotification({
-            title: `📣 ${eventTitle}`,
-            body,
-            tag:   `event-update-${newUpdate.event_id}`,
-            url:   `/community/event/${newUpdate.event_id}`,
-          });
-        }
-      )
+        fireLocalNotification({
+          title: `${data.kind === 'poll' ? '📊' : '📣'} ${data.event_title || 'Tu evento'}`,
+          body:  data.body || 'Nueva actualización',
+          tag:   `event-update-${data.event_id}`,
+          url:   `/community/event/${data.event_id}`,
+        });
+      })
       .subscribe();
 
     updateChannelRef.current = updateChannel;
@@ -362,7 +324,7 @@ export function CommunityNotificationsProvider({ children }) {
       updateChannel.unsubscribe();
       updateChannelRef.current = null;
     };
-  }, [profile?.id]);
+  }, [profile?.id, isConversationMuted]);
 
   // ── Limpia todos los badges de eventos nuevos ─────────────────────────────
   const clearEventBadge = useCallback(() => {

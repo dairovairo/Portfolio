@@ -1599,6 +1599,48 @@ router.get('/events/:id/updates', requireAuth, async (req, res) => {
   }
 });
 
+// ── Broadcast de actualizaciones de evento a los asistentes ─────────────────
+// Antes esto solo se detectaba en el cliente con un listener de
+// postgres_changes sobre event_updates — el mismo patrón que ya dio
+// problemas de fiabilidad con RLS en los chats de grupo/quedada/comunidad
+// (ver comentario en useMessageNotifications.js) y que se sustituyó por un
+// broadcast explícito con la service key. Aplicamos aquí el mismo arreglo:
+// el servidor manda el aviso in-app instantáneo a cada asistente por su
+// canal personal, sin depender de que Realtime respete la RLS de la tabla.
+async function broadcastEventUpdateToAttendees({ eventId, eventTitle, creatorId, body, kind }) {
+  try {
+    const { data: attendees } = await supabase
+      .from('community_event_attendees')
+      .select('user_id')
+      .eq('event_id', eventId)
+      .neq('user_id', creatorId);
+
+    const attendeeIds = (attendees || []).map(a => a.user_id);
+    if (!attendeeIds.length) return attendeeIds;
+
+    const broadcastPayload = {
+      event_id:    eventId,
+      event_title: eventTitle,
+      creator_id:  creatorId,
+      body,
+      kind, // 'update' | 'poll' — decide el emoji del título en el cliente
+    };
+
+    await Promise.allSettled(
+      attendeeIds.map(uid =>
+        supabase
+          .channel(`event-update-notif-${uid}`)
+          .send({ type: 'broadcast', event: 'new_event_update', payload: broadcastPayload })
+      )
+    );
+
+    return attendeeIds;
+  } catch (err) {
+    console.error('[community] broadcastEventUpdateToAttendees error:', err);
+    return [];
+  }
+}
+
 // POST /api/community/events/:id/updates
 router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (req, res) => {
   const { id } = req.params;
@@ -1662,20 +1704,21 @@ router.post('/events/:id/updates', requireAuth, uploadEventUpdateImage, async (r
 
     if (error) throw error;
 
-    // ── Push notifications to all attendees (fire-and-forget) ────────────────
+    // ── Aviso in-app instantáneo (broadcast) + push a los asistentes ─────────
     if (eventFull) {
-      const { data: attendees } = await supabase
-        .from('community_event_attendees')
-        .select('user_id')
-        .eq('event_id', id)
-        .neq('user_id', userId);
+      const notifBody = hasContent
+        ? hasContent.length > 80 ? hasContent.slice(0, 77) + '…' : hasContent
+        : '📷 Se ha publicado una imagen';
 
-      if (attendees?.length) {
-        const attendeeIds = attendees.map(a => a.user_id);
-        const notifBody = hasContent
-          ? hasContent.length > 80 ? hasContent.slice(0, 77) + '…' : hasContent
-          : '📷 Se ha publicado una imagen';
+      const attendeeIds = await broadcastEventUpdateToAttendees({
+        eventId: id,
+        eventTitle: eventFull.title,
+        creatorId: userId,
+        body: notifBody,
+        kind: 'update',
+      });
 
+      if (attendeeIds.length) {
         // No mandar el push a quien haya silenciado los avisos de este evento (fase 89).
         const mutedIds = await getMutedUserIds(supabase, 'event', id, attendeeIds);
         const pushAttendeeIds = attendeeIds.filter(uid => !mutedIds.has(uid));
@@ -1744,22 +1787,24 @@ router.post('/events/:id/polls', requireAuth, async (req, res) => {
     if (error) throw error;
     update.poll = buildPollSummary(options, [], userId);
 
-    // ── Push notifications a los asistentes (fire-and-forget) ────────────────
-    const { data: attendees } = await supabase
-      .from('community_event_attendees')
-      .select('user_id')
-      .eq('event_id', id)
-      .neq('user_id', userId);
+    // ── Aviso in-app instantáneo (broadcast) + push a los asistentes ─────────
+    const pollBody = `Nueva encuesta: ${question.length > 70 ? question.slice(0, 67) + '…' : question}`;
+    const attendeeIds = await broadcastEventUpdateToAttendees({
+      eventId: id,
+      eventTitle: event.title,
+      creatorId: userId,
+      body: pollBody,
+      kind: 'poll',
+    });
 
-    if (attendees?.length) {
+    if (attendeeIds.length) {
       // No mandar el push a quien haya silenciado los avisos de este evento (fase 89).
-      const attendeeIds = attendees.map(a => a.user_id);
       const mutedIds = await getMutedUserIds(supabase, 'event', id, attendeeIds);
       const pushAttendeeIds = attendeeIds.filter(uid => !mutedIds.has(uid));
 
       notifyUsers(supabase, pushAttendeeIds, userId, {
         title: `📊 ${event.title}`,
-        body:  `Nueva encuesta: ${question.length > 70 ? question.slice(0, 67) + '…' : question}`,
+        body:  pollBody,
         url:   `/community/event/${id}`,
         tag:   `event-update-${id}`,
       }).catch(() => {});
