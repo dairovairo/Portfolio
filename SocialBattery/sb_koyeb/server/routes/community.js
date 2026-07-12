@@ -1035,7 +1035,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: community, error } = await db
       .from('communities')
       .select(`
-        id, name, description, category, categories, organization, creator_id, created_at,
+        id, name, description, category, categories, organization, creator_id, created_at, collab_amount_cents,
         creator:users!communities_creator_id_fkey(username)
       `)
       .eq('id', id)
@@ -1048,6 +1048,17 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
       .select('user_id, role, joined_at')
       .eq('community_id', id);
     const currentMembership = (members || []).find(m => m.user_id === userId);
+
+    let hasCollaborated = false;
+    if (community.collab_amount_cents) {
+      const { data: existingCollab } = await db
+        .from('community_collaborations')
+        .select('id')
+        .eq('community_id', id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      hasCollaborated = Boolean(existingCollab);
+    }
 
     const { data: events, error: eventsError } = await db
       .from('community_events')
@@ -1075,6 +1086,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
         current_user_role: community.creator_id === userId ? 'admin' : currentMembership?.role || null,
         is_member: Boolean(currentMembership),
         is_admin: community.creator_id === userId || currentMembership?.role === 'admin',
+        has_collaborated: hasCollaborated,
       },
       ...splitEvents,
     });
@@ -1095,6 +1107,18 @@ router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) 
   }
 
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
+
+  // Importe de colaboración (opcional): el admin lo fija al crear la
+  // comunidad. Debe ser >= 0.99 € si se especifica. SocialBattery no
+  // se queda ningún porcentaje de este importe.
+  let collabAmountCents = null;
+  if (req.body.collab_amount_cents !== undefined && req.body.collab_amount_cents !== '') {
+    const parsed = Number(req.body.collab_amount_cents);
+    if (!Number.isFinite(parsed) || parsed < 99) {
+      return res.status(400).json({ error: 'El importe de colaboración debe ser de al menos 0,99 €' });
+    }
+    collabAmountCents = Math.round(parsed);
+  }
 
   try {
     await ensurePublicProfile(req.user);
@@ -1119,6 +1143,7 @@ router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) 
         url: url?.trim() || null,
         cover_image_url: coverImageUrl,
         creator_id: userId,
+        collab_amount_cents: collabAmountCents,
       })
       .select()
       .single();
@@ -1225,6 +1250,110 @@ router.post('/communities/:id/leave', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /communities/:id/leave error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al salir de la comunidad') });
+  }
+});
+
+// POST /api/community/communities/:id/collaborate
+// Registra la colaboración económica de un miembro no-admin con el
+// importe fijado por el admin. NOTA: de momento no hay cobro real
+// (no hay pasarela de pago conectada); solo queda constancia de quién
+// colabora y con qué importe, para poder enchufar el cobro real más
+// adelante sin cambiar el modelo de datos.
+router.post('/communities/:id/collaborate', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: community, error: commErr } = await supabase
+      .from('communities')
+      .select('id, creator_id, collab_amount_cents')
+      .eq('id', id)
+      .single();
+
+    if (commErr || !community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (!community.collab_amount_cents) {
+      return res.status(400).json({ error: 'Esta comunidad no tiene colaboraciones habilitadas' });
+    }
+
+    const { data: membership } = await supabase
+      .from('community_members')
+      .select('role')
+      .eq('community_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!membership) return res.status(403).json({ error: 'Debes pertenecer a la comunidad para colaborar' });
+
+    const isAdmin = community.creator_id === userId || membership.role === 'admin';
+    if (isAdmin) return res.status(400).json({ error: 'El administrador no puede colaborar en su propia comunidad' });
+
+    const { data: collaboration, error } = await supabase
+      .from('community_collaborations')
+      .insert({
+        community_id: id,
+        user_id: userId,
+        amount_cents: community.collab_amount_cents,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(400).json({ error: 'Ya has colaborado con esta comunidad' });
+      }
+      throw error;
+    }
+
+    res.status(201).json({ collaboration });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/collaborate error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al registrar la colaboración') });
+  }
+});
+
+// GET /api/community/communities/:id/collaborations
+// Solo el admin/creador puede ver el listado de quién ha colaborado.
+router.get('/communities/:id/collaborations', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: community, error: commErr } = await supabase
+      .from('communities')
+      .select('id, creator_id')
+      .eq('id', id)
+      .single();
+
+    if (commErr || !community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+
+    const { data: membership } = await supabase
+      .from('community_members')
+      .select('role')
+      .eq('community_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const isAdmin = community.creator_id === userId || membership?.role === 'admin';
+    if (!isAdmin) return res.status(403).json({ error: 'Solo el administrador puede ver las colaboraciones' });
+
+    const { data: collaborations, error } = await supabase
+      .from('community_collaborations')
+      .select('id, amount_cents, created_at, user:users!community_collaborations_user_id_fkey(id, username)')
+      .eq('community_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const totalCents = (collaborations || []).reduce((sum, c) => sum + (c.amount_cents || 0), 0);
+
+    res.json({
+      collaborations: collaborations || [],
+      total_cents: totalCents,
+      count: (collaborations || []).length,
+    });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/collaborations error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener las colaboraciones') });
   }
 });
 

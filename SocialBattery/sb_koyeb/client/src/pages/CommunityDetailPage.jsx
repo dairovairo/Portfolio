@@ -1062,6 +1062,51 @@ function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, on
   );
 }
 
+function CollaborateModal({ communityName, amountCents, onClose, onConfirm, confirming }) {
+  const amountLabel = (amountCents / 100).toFixed(2);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
+
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-3xl">🤝</span>
+          <div>
+            <h2 className="font-display font-bold text-surface-text text-lg">Colaborar</h2>
+            <p className="text-xs text-surface-muted">con {communityName}</p>
+          </div>
+        </div>
+
+        <div className="bg-surface-bg border border-surface-border rounded-xl p-4 text-center mb-4">
+          <p className="text-xs text-surface-muted font-mono mb-1">Importe de colaboración</p>
+          <p className="text-3xl font-display font-bold text-surface-text">{amountLabel} €</p>
+        </div>
+
+        <p className="text-xs text-surface-muted leading-relaxed mb-5">
+          Este importe va destinado a la comunidad. <strong className="text-surface-text">SocialBattery no obtiene nada por este pago.</strong> Solo puedes colaborar una vez por comunidad.
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 rounded-xl border border-surface-border text-surface-muted text-sm font-display font-semibold transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={confirming}
+            className="flex-1 py-3 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-bold transition-all disabled:opacity-50 active:scale-[0.98]"
+          >
+            {confirming ? 'Confirmando...' : `Colaborar ${amountLabel} €`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CommunityDetailPage() {
   const { communityId } = useParams();
   const navigate = useNavigate();
@@ -1075,6 +1120,10 @@ export default function CommunityDetailPage() {
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [raffles, setRaffles] = useState([]);
   const [showCreateRaffle, setShowCreateRaffle] = useState(false);
+  const [showCollabModal, setShowCollabModal] = useState(false);
+  const [collaborating, setCollaborating] = useState(false);
+  const [collabStats, setCollabStats] = useState(null);
+  const [showCollabList, setShowCollabList] = useState(false);
 
   const loadRaffles = useCallback(async () => {
     try {
@@ -1167,6 +1216,35 @@ export default function CommunityDetailPage() {
       showToast(e.message || 'Error al unirse', 'error');
     }
   }
+
+  async function handleConfirmCollaborate() {
+    setCollaborating(true);
+    try {
+      await api.post(`/community/communities/${communityId}/collaborate`, {});
+      showToast('¡Gracias por colaborar! 🤝', 'success');
+      setShowCollabModal(false);
+      await load();
+    } catch (e) {
+      showToast(e.message || 'Error al colaborar', 'error');
+    } finally {
+      setCollaborating(false);
+    }
+  }
+
+  const loadCollabStats = useCallback(async () => {
+    try {
+      const data = await api.get(`/community/communities/${communityId}/collaborations`);
+      setCollabStats(data);
+    } catch (e) {
+      // Solo aplica para admins; si falla, simplemente no mostramos el panel.
+    }
+  }, [communityId]);
+
+  useEffect(() => {
+    if (community?.is_admin && community?.collab_amount_cents) {
+      loadCollabStats();
+    }
+  }, [community?.is_admin, community?.collab_amount_cents, loadCollabStats]);
 
   async function handleLeaveCommunity() {
     try {
@@ -1262,6 +1340,22 @@ export default function CommunityDetailPage() {
             <span>💬</span> Chat
           </button>
 
+          {community.is_member && !community.is_admin && community.collab_amount_cents && (
+            <button
+              onClick={() => setShowCollabModal(true)}
+              disabled={community.has_collaborated}
+              title={community.has_collaborated ? 'Ya has colaborado' : 'Colaborar con la comunidad'}
+              className={`relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl border transition-colors ${
+                community.has_collaborated
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25 cursor-default'
+                  : 'bg-amber-500/15 text-amber-400 border-amber-500/25 hover:bg-amber-500/25 hover:border-amber-500/40 hover:text-amber-300'
+              }`}
+            >
+              <span>{community.has_collaborated ? '✓' : '🤝'}</span>
+              {community.has_collaborated ? 'Colaboraste' : 'Colaborar'}
+            </button>
+          )}
+
           {community.creator_id === profile?.id && (
             <button
               onClick={() => setShowCreateRaffle(true)}
@@ -1332,6 +1426,42 @@ export default function CommunityDetailPage() {
           </div>
         </section>
 
+        {community.is_admin && community.collab_amount_cents && (
+          <section className="bg-surface-card border border-surface-border rounded-2xl p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display font-bold text-surface-text text-sm">🤝 Colaboraciones</h2>
+                <p className="text-xs text-surface-muted font-mono mt-1">
+                  {collabStats ? `${collabStats.count} colaboración${collabStats.count === 1 ? '' : 'es'} · ${(collabStats.total_cents / 100).toFixed(2)} €` : 'Cargando...'}
+                </p>
+              </div>
+              {collabStats?.count > 0 && (
+                <button
+                  onClick={() => setShowCollabList(v => !v)}
+                  className="text-xs font-display font-semibold text-accent-glow px-3 py-1.5 rounded-xl border border-accent-primary/25 hover:bg-accent-primary/10 transition-colors"
+                >
+                  {showCollabList ? 'Ocultar' : 'Ver'}
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-surface-muted leading-relaxed mt-2">
+              Colaboración fijada: {(community.collab_amount_cents / 100).toFixed(2)} €. SocialBattery no obtiene nada por estos pagos.
+            </p>
+            {showCollabList && collabStats?.collaborations?.length > 0 && (
+              <div className="mt-3 space-y-1.5 max-h-56 overflow-y-auto">
+                {collabStats.collaborations.map(c => (
+                  <div key={c.id} className="flex items-center justify-between text-xs bg-surface-bg border border-surface-border rounded-lg px-3 py-2">
+                    <span className="text-surface-text font-mono truncate">{c.user?.username || 'Usuario'}</span>
+                    <span className="text-surface-muted font-mono flex-shrink-0 ml-2">
+                      {(c.amount_cents / 100).toFixed(2)} € · {new Date(c.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {raffles.length > 0 && (
           <section className="space-y-3">
             <h2 className="font-display font-bold text-surface-text text-sm px-1">Sorteos</h2>
@@ -1383,6 +1513,16 @@ export default function CommunityDetailPage() {
           communityName={community.name}
           onClose={() => setShowCreateRaffle(false)}
           onCreate={handleCreateRaffle}
+        />
+      )}
+
+      {showCollabModal && (
+        <CollaborateModal
+          communityName={community.name}
+          amountCents={community.collab_amount_cents}
+          onClose={() => setShowCollabModal(false)}
+          onConfirm={handleConfirmCollaborate}
+          confirming={collaborating}
         />
       )}
 

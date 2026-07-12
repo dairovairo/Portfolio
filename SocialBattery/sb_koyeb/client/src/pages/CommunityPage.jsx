@@ -1323,6 +1323,8 @@ function CreateCommunityModal({ onClose, onCreate }) {
     organization: '',
     url: '',
   });
+  const [collabEnabled, setCollabEnabled] = useState(false);
+  const [collabAmount, setCollabAmount] = useState('0.99');
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
   const coverInputRef = useRef(null);
@@ -1375,6 +1377,15 @@ function CreateCommunityModal({ onClose, onCreate }) {
       setError('Especifica la categoria');
       return;
     }
+    let collabAmountCents = null;
+    if (collabEnabled) {
+      const parsed = Number(String(collabAmount).replace(',', '.'));
+      if (!Number.isFinite(parsed) || parsed < 0.99) {
+        setError('El importe de colaboración debe ser de al menos 0,99 €');
+        return;
+      }
+      collabAmountCents = Math.round(parsed * 100);
+    }
     setError('');
     setSaving(true);
     try {
@@ -1385,6 +1396,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
       if (form.organization.trim()) formData.append('organization', form.organization.trim());
       if (form.url.trim()) formData.append('url', form.url.trim());
       if (coverFile) formData.append('cover', coverFile);
+      if (collabAmountCents) formData.append('collab_amount_cents', String(collabAmountCents));
       await onCreate(formData);
       onClose();
     } catch (e) {
@@ -1505,6 +1517,41 @@ function CreateCommunityModal({ onClose, onCreate }) {
               maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
+          </div>
+
+          {/* Colaboración económica */}
+          <div className="rounded-xl border border-surface-border bg-surface-bg p-3.5">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="text-xs font-mono text-surface-muted">
+                🤝 Permitir colaboraciones económicas <span className="text-slate-600">(opcional)</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={collabEnabled}
+                onChange={e => setCollabEnabled(e.target.checked)}
+                className="w-4 h-4 accent-accent-primary flex-shrink-0"
+              />
+            </label>
+            {collabEnabled && (
+              <div className="mt-3 space-y-2">
+                <label className="block text-xs font-mono text-surface-muted">Importe por colaboración</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0.99"
+                    step="0.01"
+                    value={collabAmount}
+                    onChange={e => setCollabAmount(e.target.value)}
+                    className="w-28 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                  />
+                  <span className="text-sm text-surface-muted font-mono">€ (mínimo 0,99 €)</span>
+                </div>
+                <p className="text-[11px] text-surface-muted leading-relaxed">
+                  Los miembros de la comunidad (no admins) verán un botón "Colaborar" con este importe.
+                  SocialBattery no obtiene nada por este pago.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Photo */}
