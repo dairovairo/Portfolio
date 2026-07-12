@@ -1143,7 +1143,7 @@ export default function EventDetailPage() {
                   disabled={leaving}
                   className="px-4 py-2.5 rounded-xl border border-red-500/25 text-red-300 text-sm font-display font-semibold hover:bg-red-500/10 transition-all disabled:opacity-50"
                 >
-                  {leaving ? '...' : 'Salir'}
+                  {leaving ? '...' : 'Quitar'}
                 </button>
               </div>
             ) : (
