@@ -1152,7 +1152,7 @@ export default function EventDetailPage() {
                 disabled={joining || (event.attendee_count >= event.max_attendees)}
                 className="w-full py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-bold transition-all disabled:opacity-50 active:scale-[0.98]"
               >
-                {joining ? '...' : event.attendee_count >= event.max_attendees ? 'Completo' : '📅 Apuntarme'}
+                {joining ? '...' : event.attendee_count >= event.max_attendees ? 'Completo' : '📅 Planificar'}
               </button>
             )}
           </div>
