@@ -828,6 +828,164 @@ function CarouselPersonalizeButton({ family, unlockedSet, onOpen, onLocked }) {
   );
 }
 
+// ── App Store — paquetes de Volts y suscripciones ────────────────────────────
+// Nada de esto procesa pagos de verdad: son tarjetas informativas con precio
+// orientativo. Al pulsar "Comprar"/"Suscribirse" solo se muestra un toast —
+// la pasarela de pago se conectará en una fase posterior.
+const VOLT_PACKS = [
+  { id: 'volts_200',   volts: 200,   priceLabel: '0,99 €', emoji: '⚡' },
+  { id: 'volts_500',   volts: 500,   priceLabel: '1,99 €', emoji: '⚡' },
+  { id: 'volts_2000',  volts: 2000,  priceLabel: '4,99 €', emoji: '⚡', highlight: true },
+  { id: 'volts_5000',  volts: 5000,  priceLabel: '9,99 €', emoji: '⚡' },
+];
+
+const SUBSCRIPTION_PLANS = [
+  {
+    id: 'sub_volt',
+    name: 'Suscripción Volt',
+    priceLabel: '1,99 €',
+    period: '/mes',
+    emoji: '⚡',
+    perks: [
+      'Sin anuncios',
+      '150 créditos semanales',
+      'Modo localizador',
+      'Chats de comunidad',
+      'Participación gratuita en sorteos Volt',
+    ],
+  },
+  {
+    id: 'sub_enterprise',
+    name: 'SocialBattery Enterprise',
+    priceLabel: '4,99 €',
+    period: '/mes',
+    emoji: '🏢',
+    perks: [
+      'Sin anuncios',
+      'Creación de comunidades',
+      'Creación de eventos',
+      'Creación de sorteos',
+      'Dashboard de control',
+    ],
+    highlight: true,
+  },
+];
+
+function VoltPackCard({ pack, onBuy }) {
+  return (
+    <button
+      onClick={() => onBuy(pack)}
+      className={`relative flex flex-col items-center gap-1.5 rounded-2xl border p-4 text-center transition-all active:scale-95 ${
+        pack.highlight
+          ? 'border-accent-primary/60 bg-accent-primary/10'
+          : 'border-surface-border bg-surface-card hover:border-accent-primary/30'
+      }`}
+    >
+      {pack.highlight && (
+        <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-display font-bold uppercase tracking-wide text-white bg-accent-primary rounded-full px-2 py-0.5">
+          Popular
+        </span>
+      )}
+      <span className="text-2xl" style={{ fontVariantEmoji: 'emoji' }}>{pack.emoji}</span>
+      <span className="font-display font-bold text-surface-text text-base">{pack.volts.toLocaleString('es-ES')}</span>
+      <span className="text-[10px] text-surface-muted -mt-1">Volts</span>
+      <span className="mt-1 font-display font-semibold text-accent-glow text-sm">{pack.priceLabel}</span>
+    </button>
+  );
+}
+
+function SubscriptionCard({ plan, onSubscribe }) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 flex flex-col gap-3 ${
+        plan.highlight
+          ? 'border-accent-primary/60 bg-accent-primary/10'
+          : 'border-surface-border bg-surface-card'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <span className="text-2xl flex-shrink-0" style={{ fontVariantEmoji: 'emoji' }}>{plan.emoji}</span>
+        <div className="flex-1 min-w-0">
+          <div className="font-display font-bold text-surface-text text-sm">{plan.name}</div>
+          <div className="text-xs text-surface-muted">
+            <span className="font-display font-bold text-accent-glow">{plan.priceLabel}</span> {plan.period}
+          </div>
+        </div>
+      </div>
+
+      <ul className="space-y-1.5">
+        {plan.perks.map(perk => (
+          <li key={perk} className="flex items-start gap-2 text-xs text-surface-text">
+            <span className="text-accent-glow flex-shrink-0 leading-tight">✓</span>
+            <span className="leading-tight">{perk}</span>
+          </li>
+        ))}
+      </ul>
+
+      <button
+        onClick={() => onSubscribe(plan)}
+        className={`w-full py-2.5 rounded-xl text-sm font-display font-semibold transition-all active:scale-95 ${
+          plan.highlight
+            ? 'bg-accent-primary text-white hover:opacity-90'
+            : 'bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40'
+        }`}
+      >
+        Suscribirse
+      </button>
+    </div>
+  );
+}
+
+function AppStoreSection({ coins, showToast }) {
+  function handleBuyVolts(pack) {
+    showToast(`Próximamente: compra de ${pack.volts.toLocaleString('es-ES')} Volts por ${pack.priceLabel}`);
+  }
+  function handleSubscribe(plan) {
+    showToast(`Próximamente: ${plan.name} (${plan.priceLabel}${plan.period})`);
+  }
+
+  return (
+    <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-10 space-y-8">
+      {/* Saldo actual */}
+      <div className="bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl flex-shrink-0">
+          ⚡
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display font-bold text-surface-text text-sm">Tu saldo de Volts</div>
+          <div className="font-mono font-bold text-accent-glow text-xl">{coins}</div>
+        </div>
+      </div>
+
+      {/* Paquetes de Volts */}
+      <div>
+        <h2 className="font-display font-bold text-surface-text text-base mb-1">Comprar Volts</h2>
+        <p className="text-xs text-surface-muted mb-3">La moneda de SocialBattery, para la tienda de la mascota y más.</p>
+        <div className="grid grid-cols-2 gap-3">
+          {VOLT_PACKS.map(pack => (
+            <VoltPackCard key={pack.id} pack={pack} onBuy={handleBuyVolts} />
+          ))}
+        </div>
+      </div>
+
+      {/* Suscripciones */}
+      <div>
+        <h2 className="font-display font-bold text-surface-text text-base mb-1">Suscripciones</h2>
+        <p className="text-xs text-surface-muted mb-3">Desbloquea ventajas extra cada mes.</p>
+        <div className="space-y-3">
+          {SUBSCRIPTION_PLANS.map(plan => (
+            <SubscriptionCard key={plan.id} plan={plan} onSubscribe={handleSubscribe} />
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[10px] text-surface-muted/60 text-center leading-relaxed">
+        Los pagos y las suscripciones estarán disponibles próximamente.
+      </p>
+    </div>
+  );
+}
+
 // ── ShopPage ──────────────────────────────────────────────────────────────────
 export default function ShopPage() {
   const navigate = useNavigate();
@@ -845,6 +1003,7 @@ export default function ShopPage() {
   } = useMascot();
 
   const [tab, setTab]                   = useState('activities');
+  const [shopSection, setShopSection]   = useState('mascota'); // 'mascota' | 'app'
   const [outfitMainTab, setOutfitMainTab] = useState('torso'); // 'pies' | 'torso' | 'cabeza'
   const [outfitSubTab, setOutfitSubTab] = useState('camiseta'); // 'camiseta' | 'camisa'
   const [coins, setCoins]       = useState(() => loadVolts(profile?.id));
@@ -1504,9 +1663,29 @@ export default function ShopPage() {
           >
             ←
           </button>
-          <div className="flex items-center gap-2 flex-1">
-            <span className="text-xl" style={{ fontVariantEmoji: 'emoji' }}>🛒</span>
-            <span className="font-display font-bold text-surface-text">Tienda de la mascota</span>
+          <div className="flex-1 min-w-0 flex items-center bg-surface-card border border-surface-border rounded-xl p-1 gap-1">
+            <button
+              onClick={() => setShopSection('mascota')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-display font-semibold transition-all ${
+                shopSection === 'mascota'
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'text-surface-muted hover:text-surface-text'
+              }`}
+            >
+              <span style={{ fontVariantEmoji: 'emoji' }}>🛒</span>
+              Mascota
+            </button>
+            <button
+              onClick={() => setShopSection('app')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-display font-semibold transition-all ${
+                shopSection === 'app'
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'text-surface-muted hover:text-surface-text'
+              }`}
+            >
+              <span style={{ fontVariantEmoji: 'emoji' }}>⚡</span>
+              App
+            </button>
           </div>
           <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border rounded-xl px-3 py-1.5" title="Volts">
             <span className="text-sm">⚡</span>
@@ -1515,6 +1694,10 @@ export default function ShopPage() {
         </div>
       </nav>
 
+      {shopSection === 'app' ? (
+        <AppStoreSection coins={coins} showToast={showToast} />
+      ) : (
+      <>
       {/* Preview mascota activa con las 6 capas — se le pasan explícitamente
           todos los valores activos (outfit, pies, cabeza, accesorios) para
           que siempre refleje al instante cualquier cambio hecho en la
@@ -2325,6 +2508,9 @@ export default function ShopPage() {
             </button>
           </div>
         </div>
+      )}
+
+      </>
       )}
 
       <BottomNav />
