@@ -936,7 +936,7 @@ router.get('/communities', requireAuth, async (req, res) => {
     const { data: communities, error } = await db
       .from('communities')
       .select(`
-        id, name, description, category, categories, organization, creator_id, created_at,
+        id, name, description, category, categories, organization, creator_id, created_at, cover_image_url,
         creator:users!communities_creator_id_fkey(username)
       `)
       .order('created_at', { ascending: false });
@@ -1035,7 +1035,7 @@ router.get('/communities/:id', requireAuth, async (req, res) => {
     const { data: community, error } = await db
       .from('communities')
       .select(`
-        id, name, description, category, categories, organization, creator_id, created_at, collab_amount_cents,
+        id, name, description, category, categories, organization, url, creator_id, created_at, collab_amount_cents, cover_image_url,
         creator:users!communities_creator_id_fkey(username)
       `)
       .eq('id', id)
@@ -1165,6 +1165,89 @@ router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) 
   } catch (err) {
     console.error('[community] POST /communities error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al crear la comunidad') });
+  }
+});
+
+// PATCH /api/community/communities/:id
+// Permite al creador de la comunidad reconfigurar sus atributos (nombre,
+// descripción, categorías, organización, url, foto, colaboraciones) después
+// de haberla creado. Solo el creador puede editar (no basta con ser admin).
+router.patch('/communities/:id', requireAuth, uploadCommunityCover, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { name, description, category, organization, url } = req.body;
+
+  try {
+    const { data: existing, error: fetchError } = await supabase
+      .from('communities')
+      .select('id, creator_id, cover_image_url')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existing) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (existing.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la comunidad puede editarla' });
+    }
+
+    const updates = {};
+
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
+      updates.name = name.trim();
+    }
+
+    if (description !== undefined) updates.description = description?.trim() || null;
+    if (organization !== undefined) updates.organization = organization?.trim() || null;
+    if (url !== undefined) updates.url = url?.trim() || null;
+
+    if (req.body.categories !== undefined || category !== undefined) {
+      const categories = parseCategories(req.body.categories ?? category);
+      if (categories.length > MAX_CATEGORIES) {
+        return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
+      }
+      updates.categories = categories;
+      updates.category = categories[0] || null;
+    }
+
+    // Colaboraciones económicas: se puede activar, cambiar el importe, o
+    // desactivar mandando remove_collab=true (no se admite bajar de 0.99€).
+    if (req.body.remove_collab === 'true') {
+      updates.collab_amount_cents = null;
+    } else if (req.body.collab_amount_cents !== undefined && req.body.collab_amount_cents !== '') {
+      const parsed = Number(req.body.collab_amount_cents);
+      if (!Number.isFinite(parsed) || parsed < 99) {
+        return res.status(400).json({ error: 'El importe de colaboración debe ser de al menos 0,99 €' });
+      }
+      updates.collab_amount_cents = Math.round(parsed);
+    }
+
+    if (req.file) {
+      updates.cover_image_url = await storeImage({
+        file: req.file,
+        objectName: `community-covers/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fallbackMaxLength: 4500000,
+      });
+    } else if (req.body.remove_cover === 'true') {
+      updates.cover_image_url = null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No hay cambios que guardar' });
+    }
+
+    const { data: community, error } = await supabase
+      .from('communities')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ community });
+  } catch (err) {
+    console.error('[community] PATCH /communities/:id error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al actualizar la comunidad') });
   }
 });
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import LocationPicker from '../components/LocationPicker';
 import { useAuth } from '../context/AuthContext';
@@ -1831,11 +1831,12 @@ function RankingModal({ events, loading, onClose, onOpen }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CommunityPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
 
-  const [tab, setTab] = useState('events'); // 'events' | 'communities'
+  const [tab, setTab] = useState(location.state?.tab || 'events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
   const [communities, setCommunities] = useState([]);
   const [showRanking, setShowRanking] = useState(false);

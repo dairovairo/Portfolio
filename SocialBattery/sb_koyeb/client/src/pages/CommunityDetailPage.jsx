@@ -87,6 +87,7 @@ function sortEventsByProximity(eventList = []) {
 const MAX_CATEGORIES = 3;
 // Mismo listado que en CommunityPage (ver src/constants/categories.js).
 const EVENT_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
+const COMMUNITY_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -1229,6 +1230,319 @@ function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onC
   );
 }
 
+function EditCommunityModal({ community, onClose, onSave }) {
+  const initialCategories = getEntityCategories(community).filter(c => COMMUNITY_CATEGORIES.includes(c));
+  const initialCustom = getEntityCategories(community).find(c => !COMMUNITY_CATEGORIES.includes(c)) || '';
+  const [form, setForm] = useState({
+    name: community.name || '',
+    description: community.description || '',
+    categories: initialCustom ? [...initialCategories, OTHER_CATEGORY] : initialCategories,
+    custom_category: initialCustom,
+    organization: community.organization || '',
+    url: community.url || '',
+  });
+  const [collabEnabled, setCollabEnabled] = useState(Boolean(community.collab_amount_cents));
+  const [collabAmount, setCollabAmount] = useState(
+    community.collab_amount_cents ? (community.collab_amount_cents / 100).toFixed(2) : '0.99'
+  );
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(community.cover_image_url || '');
+  const [removeCover, setRemoveCover] = useState(false);
+  const coverInputRef = useRef(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const resolvedCategories = form.categories
+    .map(cat => (cat === OTHER_CATEGORY ? form.custom_category.trim() : cat))
+    .filter(Boolean);
+  const emoji = getCommunityEmoji(resolvedCategories[0]);
+
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
+
+  function selectCategory(cat) {
+    setForm(f => {
+      const isSelected = f.categories.includes(cat);
+      if (isSelected) {
+        return {
+          ...f,
+          categories: f.categories.filter(c => c !== cat),
+          custom_category: cat === OTHER_CATEGORY ? '' : f.custom_category,
+        };
+      }
+      if (f.categories.length >= MAX_CATEGORIES) return f;
+      return { ...f, categories: [...f.categories, cat] };
+    });
+  }
+
+  async function handleCoverChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setError('La foto no puede superar 3MB');
+      e.target.value = '';
+      return;
+    }
+    setCoverFile(file);
+    setRemoveCover(false);
+    setCoverPreview(await readFileAsDataUrl(file));
+    setError('');
+  }
+
+  function clearCover() {
+    setCoverFile(null);
+    setCoverPreview('');
+    setRemoveCover(true);
+    if (coverInputRef.current) coverInputRef.current.value = '';
+  }
+
+  async function handleSubmit() {
+    if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
+    if (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim()) {
+      setError('Especifica la categoria');
+      return;
+    }
+    let collabAmountCents = null;
+    if (collabEnabled) {
+      const parsed = Number(String(collabAmount).replace(',', '.'));
+      if (!Number.isFinite(parsed) || parsed < 0.99) {
+        setError('El importe de colaboración debe ser de al menos 0,99 €');
+        return;
+      }
+      collabAmountCents = Math.round(parsed * 100);
+    }
+    setError('');
+    setSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', form.name.trim());
+      formData.append('description', form.description.trim());
+      formData.append('categories', JSON.stringify(resolvedCategories));
+      formData.append('organization', form.organization.trim());
+      formData.append('url', form.url.trim());
+      if (coverFile) {
+        formData.append('cover', coverFile);
+      } else if (removeCover) {
+        formData.append('remove_cover', 'true');
+      }
+      if (collabEnabled) {
+        formData.append('collab_amount_cents', String(collabAmountCents));
+      } else {
+        formData.append('remove_collab', 'true');
+      }
+      await onSave(formData);
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Error al guardar los cambios');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
+
+        <div className="flex items-center gap-3 mb-6">
+          <span className="text-3xl">{emoji || '👥'}</span>
+          <div>
+            <h2 className="font-display font-bold text-surface-text text-lg">Editar comunidad</h2>
+            <p className="text-xs text-surface-muted">Cambia los datos de tu comunidad cuando quieras</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Nombre *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+              placeholder="Ej: Runners de Madrid, Amantes del Café..."
+              maxLength={80}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Categoría <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {COMMUNITY_CATEGORIES.map(cat => {
+                const selected = form.categories.includes(cat);
+                const disabled = !selected && form.categories.length >= MAX_CATEGORIES;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => selectCategory(cat)}
+                    disabled={disabled}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      selected
+                        ? 'border-accent-primary/60 bg-accent-primary/20 text-accent-glow'
+                        : disabled
+                          ? 'border-surface-border text-slate-700 opacity-40 cursor-not-allowed'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {getCommunityEmoji(cat)} {cat}
+                  </button>
+                );
+              })}
+            </div>
+            {form.categories.includes(OTHER_CATEGORY) && (
+              <input
+                type="text"
+                value={form.custom_category}
+                onChange={e => set('custom_category', e.target.value)}
+                placeholder="Escribe la categoría"
+                maxLength={60}
+                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            )}
+          </div>
+
+          {/* Organization */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Organización <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={form.organization}
+              onChange={e => set('organization', e.target.value)}
+              placeholder="Ej: Universidad, asociación, club..."
+              maxLength={120}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Descripción <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              placeholder="¿De qué trata tu comunidad? ¿A quién está dirigida?"
+              maxLength={400}
+              rows={3}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
+            />
+          </div>
+
+          {/* URL */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              URL <span className="text-slate-600">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              placeholder="Ej: https://discord.gg/mi-comunidad"
+              maxLength={500}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Colaboración económica */}
+          <div className="rounded-xl border border-surface-border bg-surface-bg p-3.5">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="text-xs font-mono text-surface-muted">
+                🤝 Permitir colaboraciones económicas <span className="text-slate-600">(opcional)</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={collabEnabled}
+                onChange={e => setCollabEnabled(e.target.checked)}
+                className="w-4 h-4 accent-accent-primary flex-shrink-0"
+              />
+            </label>
+            {collabEnabled && (
+              <div className="mt-3 space-y-2">
+                <label className="block text-xs font-mono text-surface-muted">Importe por colaboración</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0.99"
+                    step="0.01"
+                    value={collabAmount}
+                    onChange={e => setCollabAmount(e.target.value)}
+                    className="w-28 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                  />
+                  <span className="text-sm text-surface-muted font-mono">€ (mínimo 0,99 €)</span>
+                </div>
+                <p className="text-[11px] text-surface-muted leading-relaxed">
+                  Los miembros de la comunidad (no admins) verán un botón "Colaborar" con este importe.
+                  SocialBattery no obtiene nada por este pago.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Photo */}
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Foto de la comunidad <span className="text-slate-600">(opcional)</span>
+            </label>
+            {coverPreview ? (
+              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                <div className="aspect-[16/9]">
+                  <img src={coverPreview} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="truncate text-xs text-surface-muted">{coverFile?.name || 'Foto actual'}</span>
+                  <button
+                    type="button"
+                    onClick={clearCover}
+                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
+              >
+                Elegir foto de la galería
+              </button>
+            )}
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+          </div>
+
+          {error && (
+            <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            disabled={saving || !form.name.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
+            className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
+          >
+            {saving ? 'Guardando...' : '💾 Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CommunityDetailPage() {
   const { communityId } = useParams();
   const navigate = useNavigate();
@@ -1246,6 +1560,7 @@ export default function CommunityDetailPage() {
   const [collaborating, setCollaborating] = useState(false);
   const [collabStats, setCollabStats] = useState(null);
   const [showCollabList, setShowCollabList] = useState(false);
+  const [showEditCommunity, setShowEditCommunity] = useState(false);
 
   const loadRaffles = useCallback(async () => {
     try {
@@ -1288,6 +1603,12 @@ export default function CommunityDetailPage() {
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
     showToast('Evento publicado', 'success');
+    await load();
+  }
+
+  async function handleEditCommunity(formData) {
+    await api.patchForm(`/community/communities/${communityId}`, formData);
+    showToast('Comunidad actualizada', 'success');
     await load();
   }
 
@@ -1373,7 +1694,7 @@ export default function CommunityDetailPage() {
     try {
       await api.post(`/community/communities/${communityId}/leave`, {});
       showToast('Has salido de la comunidad', 'success');
-      navigate('/community');
+      navigate('/community', { state: { tab: 'communities' } });
     } catch (e) {
       showToast(e.message || 'Error al salir de la comunidad', 'error');
     }
@@ -1422,7 +1743,7 @@ export default function CommunityDetailPage() {
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center px-4">
         <div className="text-center">
           <p className="font-display font-bold text-surface-text mb-3">Comunidad no encontrada</p>
-          <button onClick={() => navigate('/community')} className="px-5 py-2 rounded-xl bg-accent-primary text-white text-sm font-display font-semibold">
+          <button onClick={() => navigate('/community', { state: { tab: 'communities' } })} className="px-5 py-2 rounded-xl bg-accent-primary text-white text-sm font-display font-semibold">
             Volver
           </button>
         </div>
@@ -1439,7 +1760,7 @@ export default function CommunityDetailPage() {
       <header className="sticky top-0 z-40 bg-surface-bg/90 backdrop-blur-xl border-b border-surface-border pt-safe">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button
-            onClick={() => navigate('/community')}
+            onClick={() => navigate('/community', { state: { tab: 'communities' } })}
             className="w-9 h-9 rounded-xl border border-surface-border text-surface-text flex items-center justify-center"
           >
             ←
@@ -1475,6 +1796,16 @@ export default function CommunityDetailPage() {
             >
               <span>{community.has_collaborated ? '✓' : '🤝'}</span>
               {community.has_collaborated ? 'Colaborador' : 'Colaborar'}
+            </button>
+          )}
+
+          {community.creator_id === profile?.id && (
+            <button
+              onClick={() => setShowEditCommunity(true)}
+              title="Editar comunidad"
+              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-surface-bg text-surface-muted border border-surface-border hover:border-accent-primary/40 hover:text-accent-glow transition-colors"
+            >
+              <span>⚙️</span> Editar
             </button>
           )}
 
@@ -1627,6 +1958,14 @@ export default function CommunityDetailPage() {
           communityOrganization={community.organization}
           onClose={() => setShowCreateEvent(false)}
           onCreate={handleCreateEvent}
+        />
+      )}
+
+      {showEditCommunity && (
+        <EditCommunityModal
+          community={community}
+          onClose={() => setShowEditCommunity(false)}
+          onSave={handleEditCommunity}
         />
       )}
 
