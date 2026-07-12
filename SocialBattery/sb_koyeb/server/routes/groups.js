@@ -9,6 +9,20 @@ const { notifyUsers } = require('../lib/webpush');
 // Multer instance for group chat image uploads (8 MB max)
 const _groupImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
 
+// Verifica que `messageId` pertenece a este grupo (mismo patrón que
+// findPoolReplyTarget en routes/pools.js para las respuestas en el chat de
+// quedadas).
+async function findGroupReplyTarget(messageId, groupId) {
+  if (!messageId) return null;
+  const { data } = await supabase
+    .from('group_messages')
+    .select('id, sender_id')
+    .eq('id', messageId)
+    .eq('group_id', groupId)
+    .maybeSingle();
+  return data || null;
+}
+
 // ── Broadcast helper — same pattern as pools ─────────────────────────────────
 // The service-key supabase client bypasses RLS entirely, so every group member
 // receives an instant in-app notification regardless of their RLS policies.
@@ -382,7 +396,8 @@ router.get('/:id/messages', requireAuth, async (req, res) => {
       .from('group_messages')
       .select(`
         id, content, type, poll_options, created_at,
-        liked_by, deleted_for_self, deleted_for_everyone, deleted_for_everyone_at,
+        liked_by, deleted_for_self, deleted_for_everyone, deleted_for_everyone_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .eq('group_id', req.params.id)
@@ -582,7 +597,7 @@ router.post('/:id/clear', requireAuth, async (req, res) => {
 // ── POST /api/groups/:id/messages ────────────────────────────────────────────
 router.post('/:id/messages', requireAuth, async (req, res) => {
   const userId = req.user.id;
-  const { content, type = 'text' } = req.body;
+  const { content, type = 'text', reply_to_id } = req.body;
 
   if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
   if (!['text', 'hangout_request'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
@@ -598,11 +613,18 @@ router.post('/:id/messages', requireAuth, async (req, res) => {
 
     if (!membership) return res.status(403).json({ error: 'Not a member' });
 
+    const insertData = { group_id: req.params.id, sender_id: userId, content: content.trim(), type };
+    if (reply_to_id) {
+      const target = await findGroupReplyTarget(reply_to_id, req.params.id);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
     const { data, error } = await supabase
       .from('group_messages')
-      .insert({ group_id: req.params.id, sender_id: userId, content: content.trim(), type })
+      .insert(insertData)
       .select(`
-        id, content, type, created_at,
+        id, content, type, created_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
@@ -771,16 +793,23 @@ router.post('/:id/messages/image', requireAuth, (req, res, next) => {
       fallbackMaxLength: 8_000_000,
     });
 
+    const insertData = {
+      group_id: groupId,
+      sender_id: userId,
+      content: imageUrl,
+      type: 'image',
+    };
+    if (req.body.reply_to_id) {
+      const target = await findGroupReplyTarget(req.body.reply_to_id, groupId);
+      if (target) insertData.reply_to_id = target.id;
+    }
+
     const { data, error } = await supabase
       .from('group_messages')
-      .insert({
-        group_id: groupId,
-        sender_id: userId,
-        content: imageUrl,
-        type: 'image',
-      })
+      .insert(insertData)
       .select(`
-        id, content, type, created_at,
+        id, content, type, created_at, reply_to_id,
+        reply_to:reply_to_id(id, sender_id, content, type, deleted_for_everyone, sender:sender_id(username)),
         sender:sender_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at)
       `)
       .single();
