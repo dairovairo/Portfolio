@@ -88,6 +88,25 @@ function rgbTriplet(cssColor, fallback = '45,212,220') {
   return m ? m[1].replace(/\s+/g, '') : fallback;
 }
 
+// ── Tile engine (imagenes reales de mapa sobre la esfera) ───────────────
+// El globo por defecto envuelve una textura estatica de ~2K px (earth-night),
+// que se ve nitida vista entera pero se pixela/difumina en cuanto se hace
+// zoom porque no hay mas resolucion que extraer de esa imagen. Para tener
+// precision real al acercarse, se cubre la esfera con teselas reales tipo
+// "slippy map" (las mismas CARTO usadas en el modo Mapa 2D), que se piden
+// en la resolucion adecuada segun la distancia de la camara — igual que
+// Google Earth. La textura earth-night queda solo como fondo de transicion
+// mientras las teselas cargan o en las zonas aun no cubiertas.
+const TILE_SUBDOMAINS = 'abcd';
+const GLOBE_TILE_MAX_ZOOM = 19;
+
+function buildGlobeTileUrl(x, y, l, isDark) {
+  const s = TILE_SUBDOMAINS[(x + y) % TILE_SUBDOMAINS.length];
+  const style = isDark ? 'dark_all' : 'light_all';
+  const retina = (typeof window !== 'undefined' && window.devicePixelRatio > 1) ? '@2x' : '';
+  return `https://${s}.basemaps.cartocdn.com/${style}/${l}/${x}/${y}${retina}.png`;
+}
+
 // Avatar circular de un miembro del grupo de localización (globo 3D)
 function makeFriendEl(friend) {
   ensurePinStyles();
@@ -108,11 +127,19 @@ function makeFriendEl(friend) {
 }
 
 // ── Modo globo 3D ────────────────────────────────────────────────────────
-function GlobeView({ lat, lng, friends }) {
+function GlobeView({ lat, lng, friends, isDark }) {
   const containerRef = useRef(null);
   const globeRef = useRef(null);
+  const isDarkRef = useRef(isDark);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState('');
+
+  // El estilo de tesela (oscuro/claro) se lee de una ref dentro del callback
+  // del tile engine, para poder cambiar de tema sin tener que reconstruir
+  // el globo entero.
+  useEffect(() => {
+    isDarkRef.current = isDark;
+  }, [isDark]);
 
   // Recalcula los marcadores (pin del evento + avatares en vivo) sin
   // recrear el globo entero cada vez que llega una actualización de
@@ -147,6 +174,12 @@ function GlobeView({ lat, lng, friends }) {
         .globeImageUrl(EARTH_NIGHT_IMG)
         .bumpImageUrl(EARTH_BUMP_IMG)
         .backgroundImageUrl(NIGHT_SKY_IMG)
+        // Teselas de mapa reales sobre la esfera: dan precisión de calle al
+        // acercarse en vez de la textura estática de earth-night (que se
+        // difumina porque no tiene más píxeles que dar). earth-night sigue
+        // sirviendo de fondo mientras las teselas cargan o en zonas sin cubrir.
+        .globeTileEngineUrl((x, y, l) => buildGlobeTileUrl(x, y, l, isDarkRef.current))
+        .globeTileEngineMaxZoom(GLOBE_TILE_MAX_ZOOM)
         .showAtmosphere(true)
         .atmosphereColor(accent)
         .atmosphereAltitude(0.22)
@@ -164,23 +197,39 @@ function GlobeView({ lat, lng, friends }) {
         .width(el.clientWidth)
         .height(el.clientHeight);
 
+      // Renderiza a la densidad de píxeles real de la pantalla (hasta 2x).
+      // Sin esto, en pantallas retina/alta densidad el canvas se dibuja a
+      // 1px lógico = 1px físico y el resultado se ve blando/borroso aunque
+      // la tesela cargada sea nítida.
+      try {
+        world.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      } catch { /* noop */ }
+
       const controls = world.controls();
       controls.autoRotate = true;
       controls.autoRotateSpeed = 0.7;
       controls.enableZoom = true;
-      controls.minDistance = 120;
+      controls.zoomSpeed = 0.7;
+      // Antes se cortaba el zoom a 120 (globo radio 100 ⇒ solo 20 unidades
+      // de margen), lo que impedía acercarse más allá de una vista de país.
+      // Con teselas reales ya podemos dejar acercarse casi a ras de suelo.
+      controls.minDistance = 100.6;
       controls.maxDistance = 420;
 
-      // Vista alejada inicial, luego "vuelo" cinematográfico hacia el pin
+      // Vista alejada inicial, luego "vuelo" cinematográfico hasta un
+      // encuadre cercano (nivel calle) donde ya se aprecian las teselas.
       world.pointOfView({ lat, lng, altitude: 2.4 }, 0);
       const flyTimer = setTimeout(() => {
-        if (!cancelled) world.pointOfView({ lat, lng, altitude: 0.55 }, 2600);
+        if (!cancelled) world.pointOfView({ lat, lng, altitude: 0.25 }, 2600);
       }, 350);
 
       resizeObserver = new ResizeObserver(() => {
         if (!containerRef.current) return;
         world.width(containerRef.current.clientWidth);
         world.height(containerRef.current.clientHeight);
+        try {
+          world.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        } catch { /* noop */ }
       });
       resizeObserver.observe(el);
 
@@ -365,7 +414,7 @@ export default function GlobeLocationView({ lat, lng, label, friends = [] }) {
     <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden">
       <div className="relative" style={{ height: 260 }}>
         {mode === 'globe'
-          ? <GlobeView key="globe" lat={lat} lng={lng} friends={friends} />
+          ? <GlobeView key="globe" lat={lat} lng={lng} friends={friends} isDark={isDark} />
           : <FlatMapView key="map" lat={lat} lng={lng} label={label} isDark={isDark} friends={friends} />}
 
         {liveCount > 0 && (
