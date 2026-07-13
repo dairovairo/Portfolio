@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { useUserLocation } from '../context/UserLocationContext';
-import LocationMapView from '../components/LocationMapView';
+import GlobeLocationView from '../components/GlobeLocationView';
 import { api } from '../lib/api';
 
 function LocatorAvatar({ user }) {
@@ -243,13 +243,13 @@ export default function EventLocatorPage() {
           </button>
         )}
 
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
-          {event.lat != null && event.lng != null ? (
-            <LocationMapView lat={event.lat} lng={event.lng} label={event.location} />
-          ) : (
+        {event.lat != null && event.lng != null ? (
+          <GlobeLocationView lat={event.lat} lng={event.lng} label={event.location} />
+        ) : (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
             <p className="text-sm text-surface-muted text-center py-8">Este evento no tiene ubicación en el mapa.</p>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ── Grupo de localización ──────────────────────────────────────── */}
         {!group && !showPicker && (
