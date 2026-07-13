@@ -850,7 +850,7 @@ const SUBSCRIPTION_PLANS = [
       'Sin anuncios',
       '150 créditos semanales',
       'Modo localizador',
-      'Participación en hilos y chats de comunidades',
+      'Acceso a hilos y chats de comunidades',
       'Participación gratuita en sorteos Volt',
     ],
   },

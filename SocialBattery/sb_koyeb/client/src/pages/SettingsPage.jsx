@@ -913,6 +913,21 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar chat de comunidad
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás notificaciones de mensajes de tus comunidades, ni con la app abierta ni en segundo plano
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteCommunityChats}
+                    onToggle={() => setMuteCommunityChats(!muteCommunityChats)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
                       Silenciar chat de quedadas
                     </div>
                     <div className="text-xs text-surface-muted">
@@ -964,21 +979,6 @@ export default function SettingsPage() {
                   <Toggle
                     enabled={muteEventRecommendations}
                     onToggle={() => setMuteEventRecommendations(!muteEventRecommendations)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-display font-semibold text-surface-text">
-                      Silenciar hilos de comunidad
-                    </div>
-                    <div className="text-xs text-surface-muted">
-                      No recibirás notificaciones de mensajes de tus comunidades, ni con la app abierta ni en segundo plano
-                    </div>
-                  </div>
-                  <Toggle
-                    enabled={muteCommunityChats}
-                    onToggle={() => setMuteCommunityChats(!muteCommunityChats)}
                   />
                 </div>
 
