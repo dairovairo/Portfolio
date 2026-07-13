@@ -2077,7 +2077,7 @@ router.get('/events/:id/locator', requireAuth, async (req, res) => {
 
     const { data: members, error: membersErr } = await supabase
       .from('event_locator_group_members')
-      .select('user_id, status, created_at, responded_at, user:user_id(id, username, avatar_url)')
+      .select('user_id, status, created_at, responded_at, lat, lng, location_updated_at, user:user_id(id, username, avatar_url)')
       .eq('group_id', group.id)
       .order('created_at', { ascending: true });
 
@@ -2201,6 +2201,60 @@ router.post('/events/:id/locator/respond', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] POST /events/:id/locator/respond error:', err);
     res.status(500).json({ error: communityErrorMessage(err, 'Error al responder a la invitación') });
+  }
+});
+
+// POST /api/community/events/:id/locator/location — actualizar mi posición
+// en vivo dentro del grupo de localización. Solo miembros con status
+// 'accepted' pueden compartir ubicación. Persiste la última posición (para
+// quien entra/recarga más tarde) y retransmite un broadcast de Realtime al
+// canal del grupo para que el resto la vea al instante sin refetch.
+router.post('/events/:id/locator/location', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { lat, lng } = req.body;
+
+  if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {
+    return res.status(400).json({ error: 'lat/lng inválidos' });
+  }
+
+  try {
+    const { data: group, error: groupErr } = await supabase
+      .from('event_locator_groups')
+      .select('id')
+      .eq('event_id', id)
+      .maybeSingle();
+
+    if (groupErr) throw groupErr;
+    if (!group) return res.status(404).json({ error: 'Grupo de localización no encontrado' });
+
+    const updatedAt = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('event_locator_group_members')
+      .update({ lat, lng, location_updated_at: updatedAt })
+      .eq('group_id', group.id)
+      .eq('user_id', userId)
+      .eq('status', 'accepted')
+      .select('user_id')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return res.status(403).json({ error: 'Solo los miembros aceptados pueden compartir ubicación' });
+
+    supabase
+      .channel(`locator-group-${group.id}`)
+      .send({
+        type: 'broadcast',
+        event: 'location_update',
+        payload: { user_id: userId, lat, lng, updated_at: updatedAt },
+      })
+      .catch(() => {});
+
+    res.json({ ok: true, updated_at: updatedAt });
+  } catch (err) {
+    console.error('[community] POST /events/:id/locator/location error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al actualizar tu ubicación') });
   }
 });
 

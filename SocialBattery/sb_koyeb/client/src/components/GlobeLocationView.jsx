@@ -88,12 +88,43 @@ function rgbTriplet(cssColor, fallback = '45,212,220') {
   return m ? m[1].replace(/\s+/g, '') : fallback;
 }
 
+// Avatar circular de un miembro del grupo de localización (globo 3D)
+function makeFriendEl(friend) {
+  ensurePinStyles();
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;width:0;height:0;pointer-events:none;';
+  const size = 28;
+  const initial = (friend.username || '?').charAt(0).toUpperCase();
+  const ringColor = friend.isMe ? '#fbbf24' : '#60a5fa';
+  const avatarInner = friend.avatar_url
+    ? `<img src="${friend.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:9999px;display:block;" />`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;background:#1e293b;">${initial}</div>`;
+  wrap.innerHTML = `
+    <div style="position:absolute;left:${-size / 2}px;top:${-size / 2}px;width:${size}px;height:${size}px;border-radius:9999px;border:2px solid ${ringColor};overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.6);"></div>
+    <div style="position:absolute;left:${-size / 2 + 1}px;top:${-size / 2 + 1}px;width:${size - 2}px;height:${size - 2}px;border-radius:9999px;overflow:hidden;">${avatarInner}</div>
+    <div style="position:absolute;left:${size / 2 - 8}px;top:${-size / 2 - 2}px;width:9px;height:9px;border-radius:9999px;background:${ringColor};box-shadow:0 0 0 2px rgba(0,0,0,.55);"></div>
+  `;
+  return wrap;
+}
+
 // ── Modo globo 3D ────────────────────────────────────────────────────────
-function GlobeView({ lat, lng }) {
+function GlobeView({ lat, lng, friends }) {
   const containerRef = useRef(null);
   const globeRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState('');
+
+  // Recalcula los marcadores (pin del evento + avatares en vivo) sin
+  // recrear el globo entero cada vez que llega una actualización de
+  // ubicación — solo se refresca la capa de htmlElements.
+  useEffect(() => {
+    if (!globeRef.current) return;
+    const markers = [
+      { type: 'event', lat, lng },
+      ...friends.filter(f => f.lat != null && f.lng != null).map(f => ({ type: 'friend', ...f })),
+    ];
+    globeRef.current.htmlElementsData(markers);
+  }, [friends, lat, lng]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +137,11 @@ function GlobeView({ lat, lng }) {
       const accent = getComputedStyle(document.documentElement)
         .getPropertyValue('--sb-accent-glow').trim() || 'rgb(45, 212, 220)';
       const triplet = rgbTriplet(accent);
+
+      const initialMarkers = [
+        { type: 'event', lat, lng },
+        ...friends.filter(f => f.lat != null && f.lng != null).map(f => ({ type: 'friend', ...f })),
+      ];
 
       const world = Globe()(el)
         .globeImageUrl(EARTH_NIGHT_IMG)
@@ -123,8 +159,8 @@ function GlobeView({ lat, lng }) {
         .ringMaxRadius(4.5)
         .ringPropagationSpeed(2.2)
         .ringRepeatPeriod(1400)
-        .htmlElementsData([{ lat, lng }])
-        .htmlElement(() => makePinEl(accent))
+        .htmlElementsData(initialMarkers)
+        .htmlElement(d => (d.type === 'event' ? makePinEl(accent) : makeFriendEl(d)))
         .width(el.clientWidth)
         .height(el.clientHeight);
 
@@ -186,12 +222,59 @@ function GlobeView({ lat, lng }) {
   );
 }
 
+function friendMarkerHtml(friend) {
+  const initial = (friend.username || '?').charAt(0).toUpperCase();
+  const ringColor = friend.isMe ? '#fbbf24' : '#60a5fa';
+  const inner = friend.avatar_url
+    ? `<img src="${friend.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:9999px;display:block;" />`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;background:#1e293b;">${initial}</div>`;
+  return `
+    <div style="position:relative;width:30px;height:30px;">
+      <div style="width:28px;height:28px;border-radius:9999px;border:2px solid ${ringColor};overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.55);">${inner}</div>
+    </div>
+  `;
+}
+
 // ── Modo mapa 2D detallado (oscuro/claro según tema) ────────────────────
-function FlatMapView({ lat, lng, label, isDark }) {
+function FlatMapView({ lat, lng, label, isDark, friends }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const friendMarkersRef = useRef(new Map()); // user_id -> L.Marker
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState('');
+
+  // Actualiza/crea/elimina marcadores de amigos sin recrear el mapa
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L) return;
+    const L = window.L;
+    const liveFriends = friends.filter(f => f.lat != null && f.lng != null);
+    const seenIds = new Set();
+
+    liveFriends.forEach(f => {
+      seenIds.add(f.user_id);
+      const existing = friendMarkersRef.current.get(f.user_id);
+      if (existing) {
+        existing.setLatLng([f.lat, f.lng]);
+      } else {
+        const icon = L.divIcon({ html: friendMarkerHtml(f), className: '', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -16] });
+        const marker = L.marker([f.lat, f.lng], { icon, zIndexOffset: 500 }).addTo(map);
+        marker.bindPopup(
+          `<span style="font-size:12px;font-family:monospace;">${f.isMe ? 'Tú' : (f.username || 'Amigo')}</span>`,
+          { maxWidth: 160 }
+        );
+        friendMarkersRef.current.set(f.user_id, marker);
+      }
+    });
+
+    // elimina marcadores de quien ya no comparte ubicación
+    for (const [uid, marker] of friendMarkersRef.current.entries()) {
+      if (!seenIds.has(uid)) {
+        map.removeLayer(marker);
+        friendMarkersRef.current.delete(uid);
+      }
+    }
+  }, [friends, ready]);
 
   useEffect(() => {
     let cancelled = false;
@@ -236,6 +319,7 @@ function FlatMapView({ lat, lng, label, isDark }) {
 
     return () => {
       cancelled = true;
+      friendMarkersRef.current.clear();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -265,18 +349,33 @@ function FlatMapView({ lat, lng, label, isDark }) {
 }
 
 // ── Componente principal ─────────────────────────────────────────────────
-export default function GlobeLocationView({ lat, lng, label }) {
+// friends {Array<{user_id, username, avatar_url, lat, lng, isMe}>} — posición
+// en vivo de los miembros ACEPTADOS del grupo de localización (la gestiona
+// EventLocatorPage con watchPosition + Realtime). Puede venir vacío si aún
+// no hay grupo o nadie ha compartido ubicación todavía.
+export default function GlobeLocationView({ lat, lng, label, friends = [] }) {
   const { isDark } = useTheme();
   const [mode, setMode] = useState('globe'); // 'globe' | 'map'
 
   if (lat == null || lng == null) return null;
 
+  const liveCount = friends.filter(f => f.lat != null && f.lng != null && !f.isMe).length;
+
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden">
       <div className="relative" style={{ height: 260 }}>
         {mode === 'globe'
-          ? <GlobeView key="globe" lat={lat} lng={lng} />
-          : <FlatMapView key="map" lat={lat} lng={lng} label={label} isDark={isDark} />}
+          ? <GlobeView key="globe" lat={lat} lng={lng} friends={friends} />
+          : <FlatMapView key="map" lat={lat} lng={lng} label={label} isDark={isDark} friends={friends} />}
+
+        {liveCount > 0 && (
+          <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-full pl-1.5 pr-2.5 py-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-mono text-white/90">
+              {liveCount} {liveCount === 1 ? 'amigo' : 'amigos'} en vivo
+            </span>
+          </div>
+        )}
 
         <div className="absolute top-2.5 right-2.5 z-20 flex bg-black/40 backdrop-blur-md border border-white/10 rounded-full p-0.5 gap-0.5">
           <button

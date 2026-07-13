@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { useUserLocation } from '../context/UserLocationContext';
 import GlobeLocationView from '../components/GlobeLocationView';
 import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
+
+// Cada cuánto se envía la posición al servidor como máximo mientras
+// watchPosition() está activo (throttle — el navegador puede disparar el
+// callback mucho más a menudo que esto).
+const LOCATION_PUSH_INTERVAL_MS = 15000;
 
 function LocatorAvatar({ user }) {
   if (user?.avatar_url) {
@@ -92,6 +99,7 @@ export default function EventLocatorPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { profile } = useAuth();
   const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
 
   const [event, setEvent] = useState(null);
@@ -107,10 +115,27 @@ export default function EventLocatorPage() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [creatingGroup, setCreatingGroup] = useState(false);
 
+  // Ubicación en vivo de los miembros aceptados del grupo — user_id -> {lat, lng, updated_at}.
+  // Se inicializa con lo que ya trae /locator (última posición persistida) y
+  // se refresca al vuelo con los broadcasts de Realtime + con lo que envía
+  // este mismo dispositivo por watchPosition.
+  const [liveLocations, setLiveLocations] = useState({});
+  const lastPushRef = useRef(0);
+  const watchIdRef = useRef(null);
+
   const fetchGroup = useCallback(async () => {
     try {
       const data = await api.get(`/community/events/${eventId}/locator`);
       setGroup(data.group);
+      setLiveLocations(prev => {
+        const next = { ...prev };
+        for (const m of data.group?.members || []) {
+          if (m.lat != null && m.lng != null) {
+            next[m.user_id] = { lat: m.lat, lng: m.lng, updated_at: m.location_updated_at };
+          }
+        }
+        return next;
+      });
     } catch {
       /* non-fatal: el bloque de creación sigue disponible */
     } finally {
@@ -136,6 +161,59 @@ export default function EventLocatorPage() {
 
   useEffect(() => { fetchGroup(); }, [fetchGroup]);
 
+  // ── Realtime: escucha la ubicación en vivo del resto del grupo ─────────
+  // Cualquier miembro (aceptado, pendiente o rechazado) puede ver el mapa,
+  // así que todo el que tenga la página abierta se suscribe al canal del
+  // grupo — quien no comparte ubicación simplemente no emite broadcasts.
+  useEffect(() => {
+    const groupId = group?.id;
+    if (!groupId) return;
+
+    const channel = supabase
+      .channel(`locator-group-${groupId}`)
+      .on('broadcast', { event: 'location_update' }, (msg) => {
+        const { user_id, lat, lng, updated_at } = msg.payload || {};
+        if (!user_id || lat == null || lng == null) return;
+        setLiveLocations(prev => ({ ...prev, [user_id]: { lat, lng, updated_at } }));
+      })
+      .subscribe();
+
+    return () => { channel.unsubscribe(); };
+  }, [group?.id]);
+
+  // ── Geolocalización: comparte mi posición mientras soy miembro aceptado ──
+  // watchPosition() sigue mi ubicación en segundo plano; el envío al
+  // servidor va con throttle (LOCATION_PUSH_INTERVAL_MS) para no saturar la
+  // API ni la batería. Se para automáticamente si salgo de la página, dejo
+  // el grupo, o mi estado deja de ser 'accepted'.
+  useEffect(() => {
+    const shouldShare = group?.my_status === 'accepted' && 'geolocation' in navigator;
+    if (!shouldShare) return;
+
+    const pushLocation = (lat, lng) => {
+      const now = Date.now();
+      if (now - lastPushRef.current < LOCATION_PUSH_INTERVAL_MS) return;
+      lastPushRef.current = now;
+      api.post(`/community/events/${eventId}/locator/location`, { lat, lng }).catch(() => {});
+      if (profile?.id) {
+        setLiveLocations(prev => ({ ...prev, [profile.id]: { lat, lng, updated_at: new Date().toISOString() } }));
+      }
+    };
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => pushLocation(pos.coords.latitude, pos.coords.longitude),
+      () => { /* si falla el watch, simplemente no se actualiza — no es fatal */ },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+
+    return () => {
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, [group?.my_status, eventId, profile?.id]);
+
   if (loading || groupLoading) {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center">
@@ -155,6 +233,24 @@ export default function EventLocatorPage() {
   // durante días sin actividad.
   const msToStart = new Date(event.event_date).getTime() - Date.now();
   const canCreateLocatorGroup = !Number.isNaN(msToStart) && msToStart <= 60 * 60 * 1000;
+
+  // Marcadores de amigos en vivo para el mapa/globo — solo miembros que ya
+  // aceptaron el grupo (los únicos que comparten ubicación) y de los que
+  // tenemos alguna coordenada, ya sea persistida o llegada por Realtime.
+  const memberMarkers = (group?.members || [])
+    .filter(m => m.status === 'accepted')
+    .map(m => {
+      const live = liveLocations[m.user_id];
+      return {
+        user_id: m.user_id,
+        username: m.user?.username,
+        avatar_url: m.user?.avatar_url,
+        isMe: m.user_id === profile?.id,
+        lat: live?.lat ?? m.lat ?? null,
+        lng: live?.lng ?? m.lng ?? null,
+      };
+    })
+    .filter(m => m.lat != null && m.lng != null);
 
   async function handleOpenPicker() {
     if (!canCreateLocatorGroup) return;
@@ -244,7 +340,7 @@ export default function EventLocatorPage() {
         )}
 
         {event.lat != null && event.lng != null ? (
-          <GlobeLocationView lat={event.lat} lng={event.lng} label={event.location} />
+          <GlobeLocationView lat={event.lat} lng={event.lng} label={event.location} friends={memberMarkers} />
         ) : (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
             <p className="text-sm text-surface-muted text-center py-8">Este evento no tiene ubicación en el mapa.</p>
@@ -301,7 +397,11 @@ export default function EventLocatorPage() {
               <span className="text-xl">📍</span>
               <div>
                 <h3 className="font-display font-bold text-surface-text text-sm">Grupo de localización</h3>
-                <p className="text-xs text-surface-muted">Comparten ubicación durante el evento</p>
+                <p className="text-xs text-surface-muted">
+                  {group.my_status === 'accepted'
+                    ? 'Estás compartiendo tu ubicación en vivo con el grupo'
+                    : 'Comparten ubicación durante el evento'}
+                </p>
               </div>
             </div>
 
