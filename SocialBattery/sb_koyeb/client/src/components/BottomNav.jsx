@@ -14,10 +14,10 @@ const NAV_ITEMS = [
 export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { eventBadgeCount, planningUpdateCount } = useCommunityNotifications();
+  const { eventBadgeCount, planningUpdateCount, communitiesWithNewPosts } = useCommunityNotifications();
   const { poolChatBadgeCount } = usePoolChatNotifications();
   const { poolInviteBadgeCount } = usePoolInviteNotifications();
-  const communityBadge = eventBadgeCount + planningUpdateCount;
+  const communityBadge = eventBadgeCount + planningUpdateCount + communitiesWithNewPosts.size;
   const poolsBadge = poolChatBadgeCount + poolInviteBadgeCount;
 
   return (

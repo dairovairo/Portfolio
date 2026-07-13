@@ -14,6 +14,9 @@ const CommunityNotificationsContext = createContext({
   planningUpdateCount: 0,
   clearEventUpdateBadge: () => {},
   clearAllEventUpdateBadges: () => {},
+  // hilo de comunidad — badges de publicaciones nuevas
+  communitiesWithNewPosts: new Set(),
+  clearCommunityPostBadge: () => {},
 });
 
 export function useCommunityNotifications() {
@@ -23,6 +26,7 @@ export function useCommunityNotifications() {
 const STORAGE_KEY           = 'sb_community_events_badge';
 const STORAGE_KEY_BY_COM    = 'sb_community_events_by_community';
 const STORAGE_KEY_UPDATES   = 'sb_event_updates_badge'; // Set<eventId> serialized as JSON array
+const STORAGE_KEY_NEW_POSTS = 'sb_community_new_posts_badge'; // Set<communityId> serialized as JSON array
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -104,6 +108,19 @@ function saveUpdatesSet(set) {
   try { localStorage.setItem(STORAGE_KEY_UPDATES, JSON.stringify([...set])); } catch {}
 }
 
+// ── Serialize / deserialize el Set<communityId> de hilos con publicaciones
+//    nuevas sin ver ──────────────────────────────────────────────────────────
+function loadNewPostsSet() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_NEW_POSTS);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveNewPostsSet(set) {
+  try { localStorage.setItem(STORAGE_KEY_NEW_POSTS, JSON.stringify([...set])); } catch {}
+}
+
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
   const { muteAllNotifications, muteNewEvents, muteEventRecommendations, isConversationMuted } = useSettings();
@@ -114,12 +131,16 @@ export function CommunityNotificationsProvider({ children }) {
   // eventsWithUpdates: Set<eventId> — eventos planificados con actualizaciones no leídas
   const [eventsWithUpdates, setEventsWithUpdates] = useState(loadUpdatesSet);
 
+  // communitiesWithNewPosts: Set<communityId> — hilos con publicaciones nuevas sin ver
+  const [communitiesWithNewPosts, setCommunitiesWithNewPosts] = useState(loadNewPostsSet);
+
   const joinedCommunityIdsRef   = useRef(new Set());
   // Set<eventId> de eventos en los que el usuario está apuntado
   const attendingEventIdsRef    = useRef(new Set());
   const settingsRef             = useRef({ muteAllNotifications, muteNewEvents, muteEventRecommendations });
   const channelRef              = useRef(null);
   const updateChannelRef        = useRef(null);
+  const postChannelRef          = useRef(null);
 
   useEffect(() => {
     settingsRef.current = { muteAllNotifications, muteNewEvents, muteEventRecommendations };
@@ -143,6 +164,10 @@ export function CommunityNotificationsProvider({ children }) {
   useEffect(() => {
     saveUpdatesSet(eventsWithUpdates);
   }, [eventsWithUpdates]);
+
+  useEffect(() => {
+    saveNewPostsSet(communitiesWithNewPosts);
+  }, [communitiesWithNewPosts]);
 
   // ── Carga los IDs de comunidades + eventos a los que pertenece el usuario ──
   const refreshJoinedCommunities = useCallback(async () => {
@@ -338,6 +363,59 @@ export function CommunityNotificationsProvider({ children }) {
     };
   }, [profile?.id, isConversationMuted]);
 
+  // ── Supabase Realtime: escucha el broadcast de nuevas publicaciones del
+  //    hilo de comunidad ─────────────────────────────────────────────────────
+  // Mismo patrón que event-update-notif: el servidor
+  // (broadcastCommunityPostToMembers en server/routes/community.js) manda el
+  // aviso in-app instantáneo a cada miembro por su canal personal, sin
+  // depender de que Realtime respete la RLS de community_posts. El push
+  // (app en segundo plano/cerrada) lo maneja notifyUsers en el mismo
+  // endpoint, vía server/lib/webpush.js.
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    if (postChannelRef.current) {
+      postChannelRef.current.unsubscribe();
+      postChannelRef.current = null;
+    }
+
+    const postChannel = supabase
+      .channel(`community-post-notif-${profile.id}`)
+      .on('broadcast', { event: 'new_community_post' }, (msg) => {
+        const data = msg.payload;
+        if (!data?.community_id) return;
+        if (data.creator_id === profile.id) return;
+
+        // Badge del hilo con publicaciones no vistas
+        setCommunitiesWithNewPosts(prev => {
+          const next = new Set(prev);
+          next.add(data.community_id);
+          return next;
+        });
+
+        // Notificación local en foreground (con la app abierta)
+        const settings = settingsRef.current;
+        if (settings.muteAllNotifications) return;
+        if (isConversationMuted('community', data.community_id)) return;
+
+        const kindEmoji = data.kind === 'video' ? '🎥' : data.kind === 'photo' ? '📸' : '📣';
+        fireLocalNotification({
+          title: `${kindEmoji} ${data.community_name || 'Nueva publicación'}`,
+          body:  data.body || 'Nueva publicación en el hilo',
+          tag:   `community-post-${data.community_id}`,
+          url:   `/community/${data.community_id}`,
+        });
+      })
+      .subscribe();
+
+    postChannelRef.current = postChannel;
+
+    return () => {
+      postChannel.unsubscribe();
+      postChannelRef.current = null;
+    };
+  }, [profile?.id, isConversationMuted]);
+
   // ── Limpia todos los badges de eventos nuevos ─────────────────────────────
   const clearEventBadge = useCallback(() => {
     setEventsByCommunity({});
@@ -368,6 +446,17 @@ export function CommunityNotificationsProvider({ children }) {
     setEventsWithUpdates(new Set());
   }, []);
 
+  // ── Limpia el badge de publicaciones nuevas de un hilo concreto ──────────
+  const clearCommunityPostBadge = useCallback((communityId) => {
+    if (!communityId) return;
+    setCommunitiesWithNewPosts(prev => {
+      if (!prev.has(communityId)) return prev;
+      const next = new Set(prev);
+      next.delete(communityId);
+      return next;
+    });
+  }, []);
+
   return (
     <CommunityNotificationsContext.Provider
       value={{
@@ -380,6 +469,8 @@ export function CommunityNotificationsProvider({ children }) {
         planningUpdateCount,
         clearEventUpdateBadge,
         clearAllEventUpdateBadges,
+        communitiesWithNewPosts,
+        clearCommunityPostBadge,
       }}
     >
       {children}

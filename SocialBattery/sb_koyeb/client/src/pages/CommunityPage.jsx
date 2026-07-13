@@ -1884,7 +1884,7 @@ export default function CommunityPage() {
   const location = useLocation();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
+  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates, communitiesWithNewPosts } = useCommunityNotifications();
 
   const [tab, setTab] = useState(location.state?.tab || 'events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -2162,11 +2162,14 @@ export default function CommunityPage() {
               }`}
             >
               👥 Comunidades
-              {communitiesWithEvents.size > 0 && (
-                <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
-                  {communitiesWithEvents.size > 9 ? '9+' : communitiesWithEvents.size}
-                </span>
-              )}
+              {(() => {
+                const badgeCommunities = new Set([...communitiesWithEvents, ...communitiesWithNewPosts]);
+                return badgeCommunities.size > 0 && (
+                  <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
+                    {badgeCommunities.size > 9 ? '9+' : badgeCommunities.size}
+                  </span>
+                );
+              })()}
             </button>
           </div>
         </div>
@@ -2589,7 +2592,7 @@ export default function CommunityPage() {
                       onLeave={handleLeaveCommunity}
                       onOpen={(id) => { clearCommunityBadge(id); navigate(`/community/${id}`); }}
                       currentUserId={profile?.id}
-                      hasNewEvents={communitiesWithEvents.has(community.id)}
+                      hasNewEvents={communitiesWithEvents.has(community.id) || communitiesWithNewPosts.has(community.id)}
                     />
                     ))}
                   </div>

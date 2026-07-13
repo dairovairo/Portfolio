@@ -2752,6 +2752,46 @@ function serializeCommunityPostComment(row) {
   };
 }
 
+// ── Broadcast de nuevas publicaciones del hilo a los miembros ──────────────
+// Mismo patrón que broadcastEventUpdateToAttendees: aviso in-app instantáneo
+// por canal personal de cada miembro (evita depender de que Realtime respete
+// la RLS de community_posts), más el push (server/lib/webpush.js) que sí
+// llega con la app cerrada o en segundo plano.
+async function broadcastCommunityPostToMembers({ communityId, communityName, creatorId, postId, body, kind }) {
+  try {
+    const { data: members } = await supabase
+      .from('community_members')
+      .select('user_id')
+      .eq('community_id', communityId)
+      .neq('user_id', creatorId);
+
+    const memberIds = (members || []).map(m => m.user_id);
+    if (!memberIds.length) return memberIds;
+
+    const broadcastPayload = {
+      community_id: communityId,
+      community_name: communityName,
+      creator_id: creatorId,
+      post_id: postId,
+      body,
+      kind, // 'photo' | 'video' | 'text' — el cliente decide el emoji del título
+    };
+
+    await Promise.allSettled(
+      memberIds.map(uid =>
+        supabase
+          .channel(`community-post-notif-${uid}`)
+          .send({ type: 'broadcast', event: 'new_community_post', payload: broadcastPayload })
+      )
+    );
+
+    return memberIds;
+  } catch (err) {
+    console.error('[community] broadcastCommunityPostToMembers error:', err);
+    return [];
+  }
+}
+
 // ── GET /api/community/communities/:id/posts — listar hilo ─────────────────
 router.get('/communities/:id/posts', requireAuth, async (req, res) => {
   const userId = req.user.id;
@@ -2809,7 +2849,7 @@ router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, asy
   try {
     const { data: community } = await supabase
       .from('communities')
-      .select('id, creator_id')
+      .select('id, creator_id, name')
       .eq('id', communityId)
       .maybeSingle();
 
@@ -2845,6 +2885,38 @@ router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, asy
       .single();
 
     if (error) throw error;
+
+    // ── Aviso in-app instantáneo (broadcast) + push a los miembros ───────────
+    const notifBody = content
+      ? (content.length > 80 ? content.slice(0, 77) + '…' : content)
+      : type === 'video'
+        ? '🎥 Se ha publicado un vídeo'
+        : type === 'photo'
+          ? '📷 Se ha publicado una foto'
+          : 'Nueva publicación';
+
+    const memberIds = await broadcastCommunityPostToMembers({
+      communityId,
+      communityName: community.name,
+      creatorId: userId,
+      postId: data.id,
+      body: notifBody,
+      kind: type,
+    });
+
+    if (memberIds.length) {
+      // No mandar el push a quien haya silenciado esta comunidad (mismo
+      // interruptor que silencia su chat — fase 88/89).
+      const mutedIds = await getMutedUserIds(supabase, 'community', communityId, memberIds);
+      const pushMemberIds = memberIds.filter(uid => !mutedIds.has(uid));
+
+      notifyUsers(supabase, pushMemberIds, userId, {
+        title: `📸 ${community.name || 'Nueva publicación'}`,
+        body: notifBody,
+        url: `/community/${communityId}`,
+        tag: `community-post-${communityId}`,
+      }).catch(() => {});
+    }
 
     res.status(201).json({ post: serializeCommunityPost(data, { commentCount: 0 }) });
   } catch (err) {

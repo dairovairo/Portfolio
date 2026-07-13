@@ -997,7 +997,7 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
-        className="relative bg-surface-card border border-surface-border rounded-t-3xl w-full max-w-lg pb-safe"
+        className="relative bg-surface-card border border-surface-border rounded-t-3xl w-full max-w-lg max-h-[85vh] overflow-y-auto pb-safe"
         onClick={e => e.stopPropagation()}
       >
         {/* Handle */}
