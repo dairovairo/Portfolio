@@ -17,6 +17,7 @@ import BadgesPage from './pages/BadgesPage';
 import GroupChatPage from './pages/GroupChatPage';
 import CommunityChatPage from './pages/CommunityChatPage';
 import PoolChatPage from './pages/PoolChatPage';
+import PoolSnifferPage from './pages/PoolSnifferPage';
 import SettingsPage from './pages/SettingsPage';
 import CommunityPage from './pages/CommunityPage';
 import CommunityDetailPage from './pages/CommunityDetailPage';
@@ -121,6 +122,7 @@ function AppRoutes() {
       <Route path="/messages/:friendId"       element={<MessagesPage />} />
       <Route path="/pools"                    element={<PoolsPage />} />
       <Route path="/pools/:poolId/chat"       element={<PoolChatPage />} />
+      <Route path="/pools/:poolId/sniffer"    element={<PoolSnifferPage />} />
       <Route path="/badges"                   element={<BadgesPage />} />
       <Route path="/settings"                 element={<SettingsPage />} />
       <Route path="/shop"                     element={<ShopPage />} />
