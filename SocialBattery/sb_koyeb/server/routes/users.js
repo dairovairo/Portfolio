@@ -251,7 +251,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, mascot_name, mute_new_pools, mute_pool_chats, mute_community_chats, mute_group_chats, mute_new_events, mute_event_recommendations } = req.body;
+  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, mascot_name, mute_new_pools, mute_pool_chats, mute_community_chats, mute_community_threads, mute_group_chats, mute_new_events, mute_event_recommendations } = req.body;
   const updates = {};
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
@@ -263,6 +263,7 @@ router.patch('/me', requireAuth, async (req, res) => {
   if (mute_new_pools !== undefined) updates.mute_new_pools = Boolean(mute_new_pools);
   if (mute_pool_chats !== undefined) updates.mute_pool_chats = Boolean(mute_pool_chats);
   if (mute_community_chats !== undefined) updates.mute_community_chats = Boolean(mute_community_chats);
+  if (mute_community_threads !== undefined) updates.mute_community_threads = Boolean(mute_community_threads);
   if (mute_group_chats !== undefined) updates.mute_group_chats = Boolean(mute_group_chats);
   if (mute_new_events !== undefined) updates.mute_new_events = Boolean(mute_new_events);
   if (mute_event_recommendations !== undefined) updates.mute_event_recommendations = Boolean(mute_event_recommendations);

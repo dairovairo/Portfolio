@@ -2065,6 +2065,24 @@ async function getCommunityChatMuteFilteredIds(candidateIds) {
   }
 }
 
+// Devuelve el Set de candidateIds que tiene activado el silencio global de
+// los hilos de comunidad (users.mute_community_threads, fase 96). Mismo
+// patrón que getCommunityChatMuteFilteredIds, pero para el aviso de "nueva
+// publicación en el hilo" en vez del chat.
+async function getCommunityThreadMuteFilteredIds(candidateIds) {
+  if (!candidateIds.length) return new Set();
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_community_threads', true);
+    return new Set((data || []).map(u => u.id));
+  } catch {
+    return new Set();
+  }
+}
+
 async function requireCommunityMembership(communityId, userId) {
   const { data } = await supabase
     .from('community_members')
@@ -2798,10 +2816,11 @@ router.get('/communities/:id/posts', requireAuth, async (req, res) => {
 // ── Aviso de nueva publicación en el hilo a todos los miembros ─────────────
 // Mismo patrón que broadcastEventUpdateToAttendees / broadcastCommunityMessage:
 // broadcast por canal personal (aviso in-app instantáneo con la app abierta)
-// + web-push (app en segundo plano/cerrada). El silencio se comparte con el
-// del chat de la comunidad (conversation_type 'community'): "Notificaciones
-// silenciadas" ya se presenta al usuario como un silencio de la comunidad
-// entera, no solo del chat.
+// + web-push (app en segundo plano/cerrada). Se filtra tanto por el
+// silencio de esa comunidad en concreto (conversation_type 'community',
+// fase 88) como por el ajuste global "Silenciar hilos de comunidad"
+// (users.mute_community_threads, fase 96), que aplica a todas las
+// comunidades del usuario a la vez.
 async function broadcastCommunityPostToMembers({ communityId, communityName, creatorId, creatorName, postId, body }) {
   try {
     const { data: members } = await supabase
@@ -2903,10 +2922,15 @@ router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, asy
     });
 
     if (memberIds.length) {
-      // No mandar el push a quien haya silenciado esta comunidad (mismo
-      // silencio que el del chat, conversation_type 'community').
-      const mutedIds = await getMutedUserIds(supabase, 'community', communityId, memberIds);
-      const pushMemberIds = memberIds.filter(uid => !mutedIds.has(uid));
+      // No mandar el push a quien haya silenciado esta comunidad en
+      // concreto (mismo silencio que el del chat, conversation_type
+      // 'community') NI a quien tenga activado el silencio global de
+      // "hilos de comunidad" (users.mute_community_threads, fase 96).
+      const [mutedIds, globallyMutedIds] = await Promise.all([
+        getMutedUserIds(supabase, 'community', communityId, memberIds),
+        getCommunityThreadMuteFilteredIds(memberIds),
+      ]);
+      const pushMemberIds = memberIds.filter(uid => !mutedIds.has(uid) && !globallyMutedIds.has(uid));
 
       notifyUsers(supabase, pushMemberIds, userId, {
         title: `📌 ${community.name || 'Comunidad'}`,

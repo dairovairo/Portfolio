@@ -125,6 +125,7 @@ const STORAGE_KEYS = {
   muteGroupChats:        'sb-mute-group-chats',
   mutePoolChats:         'sb-mute-pool-chats',
   muteCommunityChats:    'sb-mute-community-chats',
+  muteCommunityThreads:  'sb-mute-community-threads',
   muteNewEvents:         'sb-mute-new-events',
   muteNewPools:          'sb-mute-new-pools',
   muteEventReminders:        'sb-mute-event-reminders',
@@ -292,6 +293,9 @@ export function SettingsProvider({ children }) {
   const [muteCommunityChats, setMuteCommunityChatsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteCommunityChats, 'false') === 'true'
   );
+  const [muteCommunityThreads, setMuteCommunityThreadsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteCommunityThreads, 'false') === 'true'
+  );
   const [muteNewEvents, setMuteNewEventsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteNewEvents, 'false') === 'true'
   );
@@ -454,6 +458,19 @@ export function SettingsProvider({ children }) {
     });
   }, []);
 
+  const setMuteCommunityThreads = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteCommunityThreads, String(v));
+    setMuteCommunityThreadsState(v);
+    // El aviso de "nueva publicación en el hilo" es un web-push real
+    // (routes/community.js, broadcastCommunityPostToMembers) que llega
+    // igual con la app en foreground o en segundo plano/cerrada, así que
+    // este ajuste tiene que persistir en el usuario
+    // (users.mute_community_threads, fase 96) — no basta con localStorage.
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_community_threads: v }).catch(() => {});
+    });
+  }, []);
+
   const setMuteNewEvents = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteNewEvents, String(v));
     setMuteNewEventsState(v);
@@ -579,6 +596,10 @@ export function SettingsProvider({ children }) {
     if (typeof profile.mute_community_chats === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteCommunityChats, String(profile.mute_community_chats));
       setMuteCommunityChatsState(profile.mute_community_chats);
+    }
+    if (typeof profile.mute_community_threads === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.muteCommunityThreads, String(profile.mute_community_threads));
+      setMuteCommunityThreadsState(profile.mute_community_threads);
     }
     if (typeof profile.mute_new_events === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteNewEvents, String(profile.mute_new_events));
@@ -726,6 +747,7 @@ export function SettingsProvider({ children }) {
       muteGroupChats, setMuteGroupChats,
       mutePoolChats, setMutePoolChats,
       muteCommunityChats, setMuteCommunityChats,
+      muteCommunityThreads, setMuteCommunityThreads,
       muteNewEvents, setMuteNewEvents,
       muteNewPools, setMuteNewPools,
       muteEventReminders, setMuteEventReminders,

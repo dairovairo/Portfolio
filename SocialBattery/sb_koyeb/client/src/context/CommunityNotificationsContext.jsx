@@ -106,7 +106,7 @@ function saveUpdatesSet(set) {
 
 export function CommunityNotificationsProvider({ children }) {
   const { profile } = useAuth();
-  const { muteAllNotifications, muteNewEvents, muteEventRecommendations, isConversationMuted } = useSettings();
+  const { muteAllNotifications, muteNewEvents, muteEventRecommendations, muteCommunityThreads, isConversationMuted } = useSettings();
 
   // eventsByCommunity: { [communityId: string]: number }
   const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
@@ -117,13 +117,13 @@ export function CommunityNotificationsProvider({ children }) {
   const joinedCommunityIdsRef   = useRef(new Set());
   // Set<eventId> de eventos en los que el usuario está apuntado
   const attendingEventIdsRef    = useRef(new Set());
-  const settingsRef             = useRef({ muteAllNotifications, muteNewEvents, muteEventRecommendations });
+  const settingsRef             = useRef({ muteAllNotifications, muteNewEvents, muteEventRecommendations, muteCommunityThreads });
   const channelRef              = useRef(null);
   const updateChannelRef        = useRef(null);
 
   useEffect(() => {
-    settingsRef.current = { muteAllNotifications, muteNewEvents, muteEventRecommendations };
-  }, [muteAllNotifications, muteNewEvents, muteEventRecommendations]);
+    settingsRef.current = { muteAllNotifications, muteNewEvents, muteEventRecommendations, muteCommunityThreads };
+  }, [muteAllNotifications, muteNewEvents, muteEventRecommendations, muteCommunityThreads]);
 
   // ── Derivados ──────────────────────────────────────────────────────────────
   const eventBadgeCount     = totalCount(eventsByCommunity);
@@ -361,6 +361,7 @@ export function CommunityNotificationsProvider({ children }) {
 
         const settings = settingsRef.current;
         if (settings.muteAllNotifications) return;
+        if (settings.muteCommunityThreads) return;
         if (isConversationMuted('community', data.community_id)) return;
 
         fireLocalNotification({
