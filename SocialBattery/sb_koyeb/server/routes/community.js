@@ -1986,6 +1986,225 @@ router.delete('/events/:id/updates/:updateId', requireAuth, async (req, res) => 
 });
 
 // ════════════════════════════════════════════════════════════════════════
+//  Grupo de localización de evento (fase 98) — botón "Crear grupo de
+//  localización" dentro del modo Locator (EventLocatorPage.jsx). Cualquier
+//  asistente del evento puede crear el grupo invitando a una selección de
+//  sus amigos que también asisten; solo hay un grupo por evento.
+// ════════════════════════════════════════════════════════════════════════
+
+// Aviso in-app instantáneo (broadcast por canal personal) + web-push a los
+// amigos invitados, mismo patrón que broadcastCommunityPostToMembers /
+// broadcastEventUpdateToAttendees. El push lleva a /community/event/:id/locator,
+// donde el invitado ve la lista de miembros y puede aceptar o rechazar.
+async function notifyLocatorGroupInvitees({ eventId, eventTitle, creatorName, inviteeIds }) {
+  if (!inviteeIds.length) return;
+
+  const broadcastPayload = { event_id: eventId, event_title: eventTitle, creator_name: creatorName };
+  await Promise.allSettled(
+    inviteeIds.map(uid =>
+      supabase
+        .channel(`locator-invite-notif-${uid}`)
+        .send({ type: 'broadcast', event: 'locator_group_invite', payload: broadcastPayload })
+    )
+  );
+
+  notifyUsers(supabase, inviteeIds, null, {
+    title: `📍 Grupo de localización: ${eventTitle || 'Evento'}`,
+    body:  `${creatorName || 'Alguien'} te ha invitado a compartir ubicación durante el evento`,
+    url:   `/community/event/${eventId}/locator`,
+    tag:   `locator-group-${eventId}`,
+  }).catch(() => {});
+}
+
+// GET /api/community/events/:id/locator-friends — amigos aceptados del
+// usuario que también asisten a este evento, para elegir a quién invitar.
+router.get('/events/:id/locator-friends', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: friendRows, error: friendsErr } = await supabase
+      .from('friendships')
+      .select('requester_id, addressee_id')
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+
+    if (friendsErr) throw friendsErr;
+
+    const friendIds = (friendRows || []).map(f => (f.requester_id === userId ? f.addressee_id : f.requester_id));
+    if (!friendIds.length) return res.json({ friends: [] });
+
+    const { data: attendeeRows, error: attendeesErr } = await supabase
+      .from('community_event_attendees')
+      .select('user_id')
+      .eq('event_id', id)
+      .in('user_id', friendIds);
+
+    if (attendeesErr) throw attendeesErr;
+
+    const attendingFriendIds = (attendeeRows || []).map(a => a.user_id);
+    if (!attendingFriendIds.length) return res.json({ friends: [] });
+
+    const { data: users, error: usersErr } = await supabase
+      .from('users')
+      .select('id, username, avatar_url')
+      .in('id', attendingFriendIds);
+
+    if (usersErr) throw usersErr;
+
+    res.json({ friends: users || [] });
+  } catch (err) {
+    console.error('[community] GET /events/:id/locator-friends error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener amigos del evento') });
+  }
+});
+
+// GET /api/community/events/:id/locator — grupo de localización del evento
+// (si existe), con sus miembros y el estado del usuario actual.
+router.get('/events/:id/locator', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: group, error: groupErr } = await supabase
+      .from('event_locator_groups')
+      .select('id, creator_id, created_at')
+      .eq('event_id', id)
+      .maybeSingle();
+
+    if (groupErr) throw groupErr;
+    if (!group) return res.json({ group: null });
+
+    const { data: members, error: membersErr } = await supabase
+      .from('event_locator_group_members')
+      .select('user_id, status, created_at, responded_at, user:user_id(id, username, avatar_url)')
+      .eq('group_id', group.id)
+      .order('created_at', { ascending: true });
+
+    if (membersErr) throw membersErr;
+
+    const myMember = (members || []).find(m => m.user_id === userId);
+
+    res.json({
+      group: {
+        id: group.id,
+        creator_id: group.creator_id,
+        is_creator: group.creator_id === userId,
+        my_status: myMember?.status || null,
+        members: members || [],
+      },
+    });
+  } catch (err) {
+    console.error('[community] GET /events/:id/locator error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al obtener el grupo de localización') });
+  }
+});
+
+// POST /api/community/events/:id/locator — crear el grupo de localización.
+router.post('/events/:id/locator', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const friendIds = Array.isArray(req.body.friendIds) ? [...new Set(req.body.friendIds)].filter(Boolean) : [];
+
+  try {
+    const { data: event, error: eventErr } = await supabase
+      .from('community_events')
+      .select('id, title, event_date, creator:users!community_events_creator_id_fkey(username)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (eventErr) throw eventErr;
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    // Solo se puede crear cuando falta 1 hora o menos para el evento (o ya
+    // ha empezado) — mismo criterio que el botón deshabilitado en el cliente,
+    // comprobado también aquí para no depender solo de la UI.
+    const msToStart = new Date(event.event_date).getTime() - Date.now();
+    if (Number.isNaN(msToStart) || msToStart > 60 * 60 * 1000) {
+      return res.status(400).json({ error: 'Aún falta más de 1 hora para el evento' });
+    }
+
+    const { data: existing } = await supabase
+      .from('event_locator_groups')
+      .select('id')
+      .eq('event_id', id)
+      .maybeSingle();
+
+    if (existing) return res.status(409).json({ error: 'Este evento ya tiene un grupo de localización' });
+
+    const { data: newGroup, error: createErr } = await supabase
+      .from('event_locator_groups')
+      .insert({ event_id: id, creator_id: userId })
+      .select('id')
+      .single();
+
+    if (createErr) throw createErr;
+
+    const { data: creatorProfile } = await supabase.from('users').select('username').eq('id', userId).single();
+
+    const memberRows = [
+      { group_id: newGroup.id, user_id: userId, status: 'accepted', responded_at: new Date().toISOString() },
+      ...friendIds.map(fid => ({ group_id: newGroup.id, user_id: fid, status: 'pending' })),
+    ];
+
+    const { error: membersErr } = await supabase.from('event_locator_group_members').insert(memberRows);
+    if (membersErr) throw membersErr;
+
+    if (friendIds.length) {
+      notifyLocatorGroupInvitees({
+        eventId: id,
+        eventTitle: event.title,
+        creatorName: creatorProfile?.username || 'Alguien',
+        inviteeIds: friendIds,
+      }).catch(() => {});
+    }
+
+    res.status(201).json({ groupId: newGroup.id });
+  } catch (err) {
+    console.error('[community] POST /events/:id/locator error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al crear el grupo de localización') });
+  }
+});
+
+// POST /api/community/events/:id/locator/respond — aceptar o rechazar la
+// invitación al grupo de localización de este evento.
+router.post('/events/:id/locator/respond', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { status } = req.body;
+
+  if (!['accepted', 'declined'].includes(status)) {
+    return res.status(400).json({ error: 'Status debe ser accepted o declined' });
+  }
+
+  try {
+    const { data: group, error: groupErr } = await supabase
+      .from('event_locator_groups')
+      .select('id')
+      .eq('event_id', id)
+      .maybeSingle();
+
+    if (groupErr) throw groupErr;
+    if (!group) return res.status(404).json({ error: 'Grupo de localización no encontrado' });
+
+    const { data, error } = await supabase
+      .from('event_locator_group_members')
+      .update({ status, responded_at: new Date().toISOString() })
+      .eq('group_id', group.id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error || !data) return res.status(404).json({ error: 'No estás invitado a este grupo' });
+
+    res.json({ member: data });
+  } catch (err) {
+    console.error('[community] POST /events/:id/locator/respond error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al responder a la invitación') });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
 //  Chat de comunidad — mismo patrón que groups.js, pero con community_id
 //  y comprobando membership en community_members. El fondo (wallpaper) se
 //  gestiona en el cliente (localStorage) igual que en grupos; lo único que

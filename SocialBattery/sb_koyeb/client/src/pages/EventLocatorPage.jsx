@@ -1,9 +1,88 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { useUserLocation } from '../context/UserLocationContext';
 import LocationMapView from '../components/LocationMapView';
 import { api } from '../lib/api';
+
+function LocatorAvatar({ user }) {
+  if (user?.avatar_url) {
+    return <img src={user.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-surface-border flex-shrink-0" />;
+  }
+  return (
+    <div className="w-9 h-9 rounded-full bg-accent-primary/20 border border-accent-primary/30 flex items-center justify-center text-xs font-display font-bold text-accent-glow flex-shrink-0">
+      {(user?.username || '?').charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+function statusMeta(status) {
+  if (status === 'accepted') return { label: 'En el grupo', className: 'text-green-400 bg-green-500/10 border-green-500/25' };
+  if (status === 'declined') return { label: 'Rechazó', className: 'text-red-400 bg-red-500/10 border-red-500/25' };
+  return { label: 'Pendiente', className: 'text-amber-300 bg-amber-500/10 border-amber-500/25' };
+}
+
+// ── Selector de amigos para invitar al grupo de localización ────────────────
+function FriendPicker({ friends, selectedIds, onToggle, onCancel, onConfirm, creating }) {
+  return (
+    <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
+      <div>
+        <h3 className="font-display font-bold text-surface-text text-sm">Elige a quién invitar</h3>
+        <p className="text-xs text-surface-muted mt-0.5">Solo se muestran amigos que también van a este evento.</p>
+      </div>
+
+      {friends.length === 0 ? (
+        <p className="text-sm text-surface-muted text-center py-6">
+          Ninguno de tus amigos está apuntado a este evento todavía.
+        </p>
+      ) : (
+        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+          {friends.map(friend => {
+            const checked = selectedIds.has(friend.id);
+            return (
+              <button
+                key={friend.id}
+                type="button"
+                onClick={() => onToggle(friend.id)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2 border transition-colors ${
+                  checked
+                    ? 'bg-accent-primary/10 border-accent-primary/30'
+                    : 'bg-surface-bg border-surface-border hover:border-accent-primary/25'
+                }`}
+              >
+                <LocatorAvatar user={friend} />
+                <span className="flex-1 min-w-0 text-left text-sm text-surface-text truncate">{friend.username}</span>
+                <span className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 text-xs ${
+                  checked ? 'bg-accent-primary border-accent-primary text-white' : 'border-surface-border text-transparent'
+                }`}>
+                  ✓
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 py-2.5 rounded-xl border border-surface-border text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={creating || selectedIds.size === 0}
+          className="flex-1 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-display font-bold transition-all disabled:opacity-50"
+        >
+          {creating ? 'Creando...' : `Crear grupo (${selectedIds.size})`}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ── Página "Locator" — ubicación del evento a pantalla completa ────────────
 // Antes era un modal emergente dentro de EventDetailPage; ahora es su propia
@@ -17,6 +96,27 @@ export default function EventLocatorPage() {
 
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [group, setGroup] = useState(null); // null = sin cargar aún / sin grupo
+  const [groupLoading, setGroupLoading] = useState(true);
+  const [responding, setResponding] = useState(false);
+
+  const [showPicker, setShowPicker] = useState(false);
+  const [friends, setFriends] = useState([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [creatingGroup, setCreatingGroup] = useState(false);
+
+  const fetchGroup = useCallback(async () => {
+    try {
+      const data = await api.get(`/community/events/${eventId}/locator`);
+      setGroup(data.group);
+    } catch {
+      /* non-fatal: el bloque de creación sigue disponible */
+    } finally {
+      setGroupLoading(false);
+    }
+  }, [eventId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +134,9 @@ export default function EventLocatorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
-  if (loading) {
+  useEffect(() => { fetchGroup(); }, [fetchGroup]);
+
+  if (loading || groupLoading) {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center">
         <div className="text-center">
@@ -54,9 +156,53 @@ export default function EventLocatorPage() {
   const msToStart = new Date(event.event_date).getTime() - Date.now();
   const canCreateLocatorGroup = !Number.isNaN(msToStart) && msToStart <= 60 * 60 * 1000;
 
-  function handleCreateLocatorGroup() {
+  async function handleOpenPicker() {
     if (!canCreateLocatorGroup) return;
-    showToast('Función en camino: pronto podrás crear el grupo de localización 📍', 'info');
+    setShowPicker(true);
+    setFriendsLoading(true);
+    try {
+      const data = await api.get(`/community/events/${eventId}/locator-friends`);
+      setFriends(data.friends || []);
+    } catch (e) {
+      showToast(e.message || 'Error al cargar tus amigos', 'error');
+    } finally {
+      setFriendsLoading(false);
+    }
+  }
+
+  function handleToggleFriend(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleConfirmCreate() {
+    setCreatingGroup(true);
+    try {
+      await api.post(`/community/events/${eventId}/locator`, { friendIds: [...selectedIds] });
+      showToast('Grupo de localización creado 📍', 'success');
+      setShowPicker(false);
+      setSelectedIds(new Set());
+      await fetchGroup();
+    } catch (e) {
+      showToast(e.message || 'Error al crear el grupo', 'error');
+    } finally {
+      setCreatingGroup(false);
+    }
+  }
+
+  async function handleRespond(status) {
+    setResponding(true);
+    try {
+      await api.post(`/community/events/${eventId}/locator/respond`, { status });
+      await fetchGroup();
+    } catch (e) {
+      showToast(e.message || 'Error al responder', 'error');
+    } finally {
+      setResponding(false);
+    }
   }
 
   return (
@@ -105,29 +251,98 @@ export default function EventLocatorPage() {
           )}
         </div>
 
-        <div>
-          <button
-            type="button"
-            onClick={handleCreateLocatorGroup}
-            disabled={!canCreateLocatorGroup}
-            className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 border transition-colors ${
-              canCreateLocatorGroup
-                ? 'bg-blue-500/15 text-blue-400 border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300'
-                : 'bg-surface-bg text-surface-muted border-surface-border opacity-50 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-xl flex-shrink-0">📍</span>
-            <span className="flex-1 min-w-0 text-left">
-              <span className="block font-display font-bold text-sm">Crear grupo de localización</span>
-              <span className="block text-xs mt-0.5 opacity-90">Añade a tus amigos a un grupo para saber dónde están durante el evento</span>
-            </span>
-          </button>
-          {!canCreateLocatorGroup && (
-            <p className="text-[11px] text-surface-muted mt-1.5 px-1">
-              Podrás crear el grupo de localización cuando falte 1 hora o menos para que empiece el evento.
-            </p>
-          )}
-        </div>
+        {/* ── Grupo de localización ──────────────────────────────────────── */}
+        {!group && !showPicker && (
+          <div>
+            <button
+              type="button"
+              onClick={handleOpenPicker}
+              disabled={!canCreateLocatorGroup}
+              className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 border transition-colors ${
+                canCreateLocatorGroup
+                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300'
+                  : 'bg-surface-bg text-surface-muted border-surface-border opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <span className="text-xl flex-shrink-0">📍</span>
+              <span className="flex-1 min-w-0 text-left">
+                <span className="block font-display font-bold text-sm">Crear grupo de localización</span>
+                <span className="block text-xs mt-0.5 opacity-90">Añade a tus amigos a un grupo para saber dónde están durante el evento</span>
+              </span>
+            </button>
+            {!canCreateLocatorGroup && (
+              <p className="text-[11px] text-surface-muted mt-1.5 px-1">
+                Podrás crear el grupo de localización cuando falte 1 hora o menos para que empiece el evento.
+              </p>
+            )}
+          </div>
+        )}
+
+        {!group && showPicker && (
+          friendsLoading ? (
+            <div className="bg-surface-card border border-surface-border rounded-2xl p-8 text-center">
+              <p className="text-sm text-surface-muted font-mono">Cargando amigos...</p>
+            </div>
+          ) : (
+            <FriendPicker
+              friends={friends}
+              selectedIds={selectedIds}
+              onToggle={handleToggleFriend}
+              onCancel={() => { setShowPicker(false); setSelectedIds(new Set()); }}
+              onConfirm={handleConfirmCreate}
+              creating={creatingGroup}
+            />
+          )
+        )}
+
+        {group && (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">📍</span>
+              <div>
+                <h3 className="font-display font-bold text-surface-text text-sm">Grupo de localización</h3>
+                <p className="text-xs text-surface-muted">Comparten ubicación durante el evento</p>
+              </div>
+            </div>
+
+            {group.my_status === 'pending' && (
+              <div className="bg-accent-primary/10 border border-accent-primary/25 rounded-xl p-3 space-y-2">
+                <p className="text-sm text-surface-text">Te han invitado a este grupo de localización. ¿Te unes?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleRespond('declined')}
+                    disabled={responding}
+                    className="flex-1 py-2 rounded-lg border border-surface-border text-surface-muted text-xs font-display font-semibold hover:text-surface-text transition-colors disabled:opacity-50"
+                  >
+                    Rechazar
+                  </button>
+                  <button
+                    onClick={() => handleRespond('accepted')}
+                    disabled={responding}
+                    className="flex-1 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-bold transition-colors disabled:opacity-50"
+                  >
+                    Aceptar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              {group.members.map(m => {
+                const meta = statusMeta(m.status);
+                return (
+                  <div key={m.user_id} className="flex items-center gap-3 bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                    <LocatorAvatar user={m.user} />
+                    <span className="flex-1 min-w-0 text-sm text-surface-text truncate">{m.user?.username || 'Usuario'}</span>
+                    <span className={`flex-shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-full border ${meta.className}`}>
+                      {meta.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

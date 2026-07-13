@@ -381,6 +381,46 @@ export function CommunityNotificationsProvider({ children }) {
     };
   }, [profile?.id, isConversationMuted]);
 
+  // ── Supabase Realtime: escucha el broadcast de invitaciones al grupo de
+  //    localización de un evento (server/routes/community.js →
+  //    notifyLocatorGroupInvitees). App abierta = notificación local
+  //    instantánea; app en segundo plano/cerrada = la cubre el web-push que
+  //    manda el mismo endpoint. Ambas llevan a /community/event/:id/locator.
+  const locatorChannelRef = useRef(null);
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    if (locatorChannelRef.current) {
+      locatorChannelRef.current.unsubscribe();
+      locatorChannelRef.current = null;
+    }
+
+    const locatorChannel = supabase
+      .channel(`locator-invite-notif-${profile.id}`)
+      .on('broadcast', { event: 'locator_group_invite' }, (msg) => {
+        const data = msg.payload;
+        if (!data?.event_id) return;
+
+        const settings = settingsRef.current;
+        if (settings.muteAllNotifications) return;
+
+        fireLocalNotification({
+          title: `📍 Grupo de localización: ${data.event_title || 'Evento'}`,
+          body:  `${data.creator_name || 'Alguien'} te ha invitado a compartir ubicación durante el evento`,
+          tag:   `locator-group-${data.event_id}`,
+          url:   `/community/event/${data.event_id}/locator`,
+        });
+      })
+      .subscribe();
+
+    locatorChannelRef.current = locatorChannel;
+
+    return () => {
+      locatorChannel.unsubscribe();
+      locatorChannelRef.current = null;
+    };
+  }, [profile?.id]);
+
   // ── Limpia todos los badges de eventos nuevos ─────────────────────────────
   const clearEventBadge = useCallback(() => {
     setEventsByCommunity({});
