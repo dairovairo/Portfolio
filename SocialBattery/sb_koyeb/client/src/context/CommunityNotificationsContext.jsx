@@ -338,6 +338,48 @@ export function CommunityNotificationsProvider({ children }) {
     };
   }, [profile?.id, isConversationMuted]);
 
+  // ── Supabase Realtime: escucha el broadcast de nuevas publicaciones del
+  //    hilo de comunidad (server/routes/community.js →
+  //    broadcastCommunityPostToMembers). App abierta = notificación local
+  //    instantánea; app en segundo plano/cerrada = la cubre el web-push que
+  //    manda el mismo endpoint.
+  const postChannelRef = useRef(null);
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    if (postChannelRef.current) {
+      postChannelRef.current.unsubscribe();
+      postChannelRef.current = null;
+    }
+
+    const postChannel = supabase
+      .channel(`community-post-notif-${profile.id}`)
+      .on('broadcast', { event: 'new_community_post' }, (msg) => {
+        const data = msg.payload;
+        if (!data?.community_id) return;
+        if (data.creator_id === profile.id) return;
+
+        const settings = settingsRef.current;
+        if (settings.muteAllNotifications) return;
+        if (isConversationMuted('community', data.community_id)) return;
+
+        fireLocalNotification({
+          title: `📌 ${data.community_name || 'Comunidad'}`,
+          body:  `${data.creator_name || 'El admin'}: ${data.body || 'Nueva publicación en el hilo'}`,
+          tag:   `community-post-${data.community_id}`,
+          url:   `/community/${data.community_id}`,
+        });
+      })
+      .subscribe();
+
+    postChannelRef.current = postChannel;
+
+    return () => {
+      postChannel.unsubscribe();
+      postChannelRef.current = null;
+    };
+  }, [profile?.id, isConversationMuted]);
+
   // ── Limpia todos los badges de eventos nuevos ─────────────────────────────
   const clearEventBadge = useCallback(() => {
     setEventsByCommunity({});

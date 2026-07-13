@@ -2795,6 +2795,48 @@ router.get('/communities/:id/posts', requireAuth, async (req, res) => {
   }
 });
 
+// ── Aviso de nueva publicación en el hilo a todos los miembros ─────────────
+// Mismo patrón que broadcastEventUpdateToAttendees / broadcastCommunityMessage:
+// broadcast por canal personal (aviso in-app instantáneo con la app abierta)
+// + web-push (app en segundo plano/cerrada). El silencio se comparte con el
+// del chat de la comunidad (conversation_type 'community'): "Notificaciones
+// silenciadas" ya se presenta al usuario como un silencio de la comunidad
+// entera, no solo del chat.
+async function broadcastCommunityPostToMembers({ communityId, communityName, creatorId, creatorName, postId, body }) {
+  try {
+    const { data: members } = await supabase
+      .from('community_members')
+      .select('user_id')
+      .eq('community_id', communityId)
+      .neq('user_id', creatorId);
+
+    const memberIds = (members || []).map(m => m.user_id);
+    if (!memberIds.length) return memberIds;
+
+    const broadcastPayload = {
+      community_id:   communityId,
+      community_name: communityName,
+      creator_id:     creatorId,
+      creator_name:   creatorName,
+      post_id:        postId,
+      body,
+    };
+
+    await Promise.allSettled(
+      memberIds.map(uid =>
+        supabase
+          .channel(`community-post-notif-${uid}`)
+          .send({ type: 'broadcast', event: 'new_community_post', payload: broadcastPayload })
+      )
+    );
+
+    return memberIds;
+  } catch (err) {
+    console.error('[community] broadcastCommunityPostToMembers error:', err);
+    return [];
+  }
+}
+
 // ── POST /api/community/communities/:id/posts — publicar en el hilo ────────
 // Solo el creador de la comunidad. Admite foto, vídeo o solo texto.
 router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, async (req, res) => {
@@ -2809,7 +2851,7 @@ router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, asy
   try {
     const { data: community } = await supabase
       .from('communities')
-      .select('id, creator_id')
+      .select('id, name, creator_id')
       .eq('id', communityId)
       .maybeSingle();
 
@@ -2845,6 +2887,34 @@ router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, asy
       .single();
 
     if (error) throw error;
+
+    // ── Aviso in-app instantáneo (broadcast) + push a los miembros ──────────
+    const previewBody = content
+      ? (content.length > 80 ? content.slice(0, 77) + '…' : content)
+      : type === 'video' ? '🎬 Se ha publicado un vídeo' : '📷 Se ha publicado una foto';
+
+    const memberIds = await broadcastCommunityPostToMembers({
+      communityId,
+      communityName: community.name || 'Comunidad',
+      creatorId: userId,
+      creatorName: data.creator?.username || 'El admin',
+      postId: data.id,
+      body: previewBody,
+    });
+
+    if (memberIds.length) {
+      // No mandar el push a quien haya silenciado esta comunidad (mismo
+      // silencio que el del chat, conversation_type 'community').
+      const mutedIds = await getMutedUserIds(supabase, 'community', communityId, memberIds);
+      const pushMemberIds = memberIds.filter(uid => !mutedIds.has(uid));
+
+      notifyUsers(supabase, pushMemberIds, userId, {
+        title: `📌 ${community.name || 'Comunidad'}`,
+        body:  `${data.creator?.username || 'El admin'}: ${previewBody}`,
+        url:   `/community/${communityId}`,
+        tag:   `community-post-${communityId}`,
+      }).catch(() => {});
+    }
 
     res.status(201).json({ post: serializeCommunityPost(data, { commentCount: 0 }) });
   } catch (err) {
