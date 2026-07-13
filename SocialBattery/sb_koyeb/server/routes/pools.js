@@ -696,11 +696,32 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
       );
     }
 
+    // Filtra el web-push (el aviso real, llega en foreground y background/app
+    // cerrada) para quien tenga activado "Silenciar nuevas quedadas" en
+    // Ajustes > Notificaciones (users.mute_new_pools, fase 90). El broadcast
+    // de Realtime (badge del dock) NO se filtra aquí — igual que el resto de
+    // mutes de la app, silenciar el aviso no oculta la quedada del badge.
+    async function getPoolMuteFilteredIds(candidateIds) {
+      if (!candidateIds.length) return [];
+      try {
+        const { data } = await supabase
+          .from('users')
+          .select('id')
+          .in('id', candidateIds)
+          .eq('mute_new_pools', true);
+        const mutedIds = new Set((data || []).map(u => u.id));
+        return candidateIds.filter(id => !mutedIds.has(id));
+      } catch {
+        return candidateIds;
+      }
+    }
+
     if (isPublic) {
       // Notify all accepted friends of the creator
       getFriendIds(userId).then(async friendIds => {
+        const pushRecipientIds = await getPoolMuteFilteredIds(friendIds);
         await Promise.all([
-          notifyUsers(supabase, friendIds, userId, notifPayload),
+          notifyUsers(supabase, pushRecipientIds, userId, notifPayload),
           broadcastToUsers(friendIds),
         ]);
       }).catch(() => {});
@@ -721,8 +742,9 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
           invitedIds.forEach(id => { if (id !== userId) recipientIds.add(id); });
         }
         if (recipientIds.size) {
+          const pushRecipientIds = await getPoolMuteFilteredIds([...recipientIds]);
           await Promise.all([
-            notifyUsers(supabase, [...recipientIds], userId, notifPayload),
+            notifyUsers(supabase, pushRecipientIds, userId, notifPayload),
             broadcastToUsers([...recipientIds]),
           ]);
         }
