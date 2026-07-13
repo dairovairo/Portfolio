@@ -869,172 +869,196 @@ export default function SettingsPage() {
                 />
               </div>
 
-              {/* Sub-toggles — solo visibles si las notifs del sistema están activadas */}
-              {!muteAllNotifications && (
-                <div className="pl-4 border-l-2 border-surface-border space-y-4 animate-slide-down">
+            </div>
+          </SubSection>
 
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar chats personales
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No recibirás notificaciones de mensajes directos
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={mutePersonalChats}
-                      onToggle={() => setMutePersonalChats(!mutePersonalChats)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar grupos privados
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No recibirás notificaciones de grupos
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={muteGroupChats}
-                      onToggle={() => setMuteGroupChats(!muteGroupChats)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar chat de quedadas
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No recibirás notificaciones de mensajes de tus quedadas, ni con la app abierta ni en segundo plano
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={mutePoolChats}
-                      onToggle={() => setMutePoolChats(!mutePoolChats)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar chat de comunidad
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No recibirás notificaciones de mensajes de tus comunidades, ni con la app abierta ni en segundo plano
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={muteCommunityChats}
-                      onToggle={() => setMuteCommunityChats(!muteCommunityChats)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar nuevos eventos de tus comunidades
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No te avisaremos cuando se cree un nuevo evento en tus comunidades
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={muteNewEvents}
-                      onToggle={() => setMuteNewEvents(!muteNewEvents)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar recomendaciones de eventos de otras comunidades
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No recibirás notificaciones de eventos premium y ultra de otras comunidades
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={muteEventRecommendations}
-                      onToggle={() => setMuteEventRecommendations(!muteEventRecommendations)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar nuevas quedadas
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No te avisaremos cuando alguien proponga una nueva quedada
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={muteNewPools}
-                      onToggle={() => setMuteNewPools(!muteNewPools)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar cambios de batería
-                      </div>
-                      <div className="text-xs text-surface-muted">
-                        No te avisaremos cuando un amigo actualice su energía
-                      </div>
-                    </div>
-                    <Toggle
-                      enabled={muteBatteryChanges}
-                      onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
-                    />
-                  </div>
-
-                </div>
-              )}
-
-              <div className="border-t border-surface-border" />
-
-              {/* Recordatorios */}
-              <div className="text-[11px] font-mono uppercase tracking-widest text-surface-muted pt-1">
-                Recordatorios
+          <SubSection title="Chats">
+            {muteAllNotifications ? (
+              <div className="text-xs text-surface-muted italic">
+                Desactivado mientras "Silenciar notificaciones" esté activo
               </div>
+            ) : (
+              <div className="space-y-4 animate-slide-down">
 
-              <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-display font-semibold text-surface-text">
-                      Silenciar avisos de eventos
+                      Silenciar chats personales
                     </div>
                     <div className="text-xs text-surface-muted">
-                      No recibirás recordatorios de eventos en tu planificación
+                      No recibirás notificaciones de mensajes directos
                     </div>
                   </div>
                   <Toggle
-                    enabled={muteAllNotifications || muteEventReminders}
-                    onToggle={() => !muteAllNotifications && setMuteEventReminders(!muteEventReminders)}
+                    enabled={mutePersonalChats}
+                    onToggle={() => setMutePersonalChats(!mutePersonalChats)}
                   />
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-display font-semibold text-surface-text">
-                      Silenciar avisos de quedadas
+                      Silenciar grupos privados
                     </div>
                     <div className="text-xs text-surface-muted">
-                      No recibirás recordatorios de quedadas a las que te has unido
+                      No recibirás notificaciones de grupos
                     </div>
                   </div>
                   <Toggle
-                    enabled={muteAllNotifications || mutePoolReminders}
-                    onToggle={() => !muteAllNotifications && setMutePoolReminders(!mutePoolReminders)}
+                    enabled={muteGroupChats}
+                    onToggle={() => setMuteGroupChats(!muteGroupChats)}
                   />
                 </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar chat de comunidad
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás notificaciones de mensajes de tus comunidades, ni con la app abierta ni en segundo plano
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteCommunityChats}
+                    onToggle={() => setMuteCommunityChats(!muteCommunityChats)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar chat de quedadas
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás notificaciones de mensajes de tus quedadas, ni con la app abierta ni en segundo plano
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={mutePoolChats}
+                    onToggle={() => setMutePoolChats(!mutePoolChats)}
+                  />
+                </div>
+
+              </div>
+            )}
+          </SubSection>
+
+          <SubSection title="Quedadas y eventos">
+            {muteAllNotifications ? (
+              <div className="text-xs text-surface-muted italic">
+                Desactivado mientras "Silenciar notificaciones" esté activo
+              </div>
+            ) : (
+              <div className="space-y-4 animate-slide-down">
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar nuevos eventos de tus comunidades
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No te avisaremos cuando se cree un nuevo evento en tus comunidades
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteNewEvents}
+                    onToggle={() => setMuteNewEvents(!muteNewEvents)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar recomendaciones de eventos de otras comunidades
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás notificaciones de eventos premium y ultra de otras comunidades
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteEventRecommendations}
+                    onToggle={() => setMuteEventRecommendations(!muteEventRecommendations)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar nuevas quedadas
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No te avisaremos cuando alguien proponga una nueva quedada
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteNewPools}
+                    onToggle={() => setMuteNewPools(!muteNewPools)}
+                  />
+                </div>
+
+              </div>
+            )}
+          </SubSection>
+
+          <SubSection title="Batería">
+            {muteAllNotifications ? (
+              <div className="text-xs text-surface-muted italic">
+                Desactivado mientras "Silenciar notificaciones" esté activo
+              </div>
+            ) : (
+              <div className="space-y-4 animate-slide-down">
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar cambios de batería
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No te avisaremos cuando un amigo actualice su energía
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteBatteryChanges}
+                    onToggle={() => setMuteBatteryChanges(!muteBatteryChanges)}
+                  />
+                </div>
+
+              </div>
+            )}
+          </SubSection>
+
+          <SubSection title="Recordatorios">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Silenciar avisos de eventos
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    No recibirás recordatorios de eventos en tu planificación
+                  </div>
+                </div>
+                <Toggle
+                  enabled={muteAllNotifications || muteEventReminders}
+                  onToggle={() => !muteAllNotifications && setMuteEventReminders(!muteEventReminders)}
+                />
               </div>
 
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Silenciar avisos de quedadas
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    No recibirás recordatorios de quedadas a las que te has unido
+                  </div>
+                </div>
+                <Toggle
+                  enabled={muteAllNotifications || mutePoolReminders}
+                  onToggle={() => !muteAllNotifications && setMutePoolReminders(!mutePoolReminders)}
+                />
+              </div>
             </div>
           </SubSection>
         </AccordionSection>
