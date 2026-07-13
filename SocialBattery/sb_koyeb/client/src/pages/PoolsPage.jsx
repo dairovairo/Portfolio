@@ -58,13 +58,35 @@ function formatPoolDate(dateStr) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// Margen de "actividad" para quedadas sin ends_at: se consideran en curso
+// durante 2 horas desde el inicio. Mismo criterio que isActive() más abajo.
+const NO_END_GRACE_MS = 2 * 60 * 60 * 1000;
+
+function getPoolEffectiveEnd(pool) {
+  if (pool?.ends_at) return new Date(pool.ends_at);
+  return new Date(new Date(pool?.scheduled_at).getTime() + NO_END_GRACE_MS);
+}
+
 function formatPoolDateRange(pool) {
-  const start = formatPoolDate(pool.scheduled_at);
-  if (!pool.ends_at) return start;
-  const end = new Date(pool.ends_at);
-  if (Number.isNaN(end.getTime())) return start;
+  const now = new Date();
+  const start = new Date(pool.scheduled_at);
+  const end = getPoolEffectiveEnd(pool);
+
+  // En curso: desde que empieza hasta que llega ends_at (o, si no hay
+  // ends_at, hasta que pasen 2 horas desde el inicio).
+  if (start <= now && now < end) {
+    if (pool.ends_at) {
+      const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return `🟢 Activo ahora - fin ${endLabel}`;
+    }
+    return '🟢 Activo ahora';
+  }
+
+  const startLabel = formatPoolDate(pool.scheduled_at);
+  if (!pool.ends_at) return startLabel;
+  if (Number.isNaN(end.getTime())) return startLabel;
   const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return `${start} - fin ${endLabel}`;
+  return `${startLabel} - fin ${endLabel}`;
 }
 
 function formatInputDateTime(dateStr) {
@@ -1310,7 +1332,7 @@ function sortByDate(pools) {
 }
 
 function isActive(p) {
-  return p.status !== 'cancelled' && p.status !== 'closed' && new Date(p.scheduled_at) > new Date();
+  return p.status !== 'cancelled' && p.status !== 'closed' && new Date() < getPoolEffectiveEnd(p);
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────

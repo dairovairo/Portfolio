@@ -312,8 +312,15 @@ router.get('/', requireAuth, async (req, res) => {
       // 2. Public pools where creator is a friend
       // 3. Private pools where user is in the linked group
       // 4. Private pools where user is explicitly invited
+      // Antes se excluían las quedadas en el momento en que empezaban
+      // (scheduled_at > now). Ahora se consideran "activas" mientras siguen
+      // en curso: si tienen ends_at, hasta que llegue esa hora; si no,
+      // durante 2 horas desde el inicio (mismo criterio que isActive() en
+      // el cliente, ver PoolsPage.jsx).
+      const nowIso = new Date().toISOString();
+      const noEndGraceIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       query = query
-        .gt('scheduled_at', new Date().toISOString())
+        .or(`ends_at.gt.${nowIso},and(ends_at.is.null,scheduled_at.gt.${noEndGraceIso})`)
         .in('status', ['open', 'full']);
 
       // Collect private pool IDs the user can access
