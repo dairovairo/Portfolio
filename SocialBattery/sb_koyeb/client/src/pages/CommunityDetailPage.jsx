@@ -1463,7 +1463,7 @@ function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreato
   }
 
   return (
-    <div ref={containerRef} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div ref={containerRef} className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl max-h-[92vh] flex flex-col">
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-2 sm:hidden flex-shrink-0" />
