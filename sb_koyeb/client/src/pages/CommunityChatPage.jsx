@@ -1099,21 +1099,6 @@ export default function CommunityChatPage() {
             <div className="flex-1 h-8 bg-surface-card rounded-xl animate-pulse" />
           ) : null}
 
-          {/* Campanita de silenciar notificaciones */}
-          {community && (
-            <button
-              onClick={handleToggleMute}
-              className={`w-9 h-9 rounded-xl border transition-all flex items-center justify-center text-lg flex-shrink-0 ${
-                chatMuted
-                  ? 'text-amber-400 bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20'
-                  : 'text-surface-muted border-transparent hover:text-surface-text hover:bg-surface-card hover:border-surface-border'
-              }`}
-              title={chatMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
-            >
-              {chatMuted ? '🔕' : '🔔'}
-            </button>
-          )}
-
           {/* Menú de opciones (⋯) */}
           {community && (
             <div className="relative flex-shrink-0" ref={headerMenuRef}>
@@ -1134,6 +1119,12 @@ export default function CommunityChatPage() {
                       <span>🖼️</span> Fondo de la comunidad{communityWallpaper ? ' (activo)' : ''}
                     </button>
                   )}
+                  <button
+                    onClick={() => { setShowHeaderMenu(false); handleToggleMute(); }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
+                  >
+                    <span>{chatMuted ? '🔔' : '🔕'}</span> {chatMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+                  </button>
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
