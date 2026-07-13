@@ -1219,6 +1219,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
                 setPickerLat(lat);
                 setPickerLng(lng);
               }}
+              typingWarning="Si la ubicación no es real, el modo Sniffer no funcionará. Se recomienda el uso del mapa para mayor precisión."
             />
           </div>
 

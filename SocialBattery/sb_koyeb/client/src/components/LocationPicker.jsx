@@ -40,7 +40,7 @@ function loadLeaflet() {
   return leafletLoadPromise;
 }
 
-export default function LocationPicker({ value, lat, lng, onChange }) {
+export default function LocationPicker({ value, lat, lng, onChange, typingWarning = '' }) {
   const mapContainerRef  = useRef(null);
   const mapInstanceRef   = useRef(null);
   const markerRef        = useRef(null);
@@ -264,6 +264,14 @@ export default function LocationPicker({ value, lat, lng, onChange }) {
           </ul>
         )}
       </div>
+
+      {/* Aviso: escribiendo texto libre sin haber fijado la ubicación con el mapa/sugerencias */}
+      {typingWarning && query.trim().length > 0 && (lat == null || lng == null) && (
+        <p className="text-xs text-amber-400 font-mono leading-relaxed flex items-start gap-1.5">
+          <span className="flex-shrink-0">⚠️</span>
+          <span>{typingWarning}</span>
+        </p>
+      )}
 
       {/* Error */}
       {error && (

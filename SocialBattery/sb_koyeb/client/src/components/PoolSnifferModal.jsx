@@ -131,7 +131,7 @@ export default function PoolSnifferModal({ pool, onClose }) {
               <p className="text-xs text-surface-muted font-mono">{error}</p>
             </div>
           ) : (
-            <GlobeLocationView lat={coords.lat} lng={coords.lng} label={pool.location_hint} />
+            <GlobeLocationView lat={coords.lat} lng={coords.lng} label={pool.location_hint} radiusCircleMeters={50} />
           )}
         </div>
       </div>

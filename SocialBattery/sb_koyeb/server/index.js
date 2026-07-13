@@ -259,17 +259,35 @@ cron.schedule('0 * * * *', () => {
   });
 });
 
-cron.schedule('0 0 * * *', async () => {
-  console.log('[CRON] Closing expired pools...');
+// Borrado de quedadas caducadas: cada 10 min.
+// Regla: si la quedada tiene fecha de fin (ends_at), se borra al llegar esa
+// fecha. Si no tiene fecha de fin, se borra 2 horas después de haberse
+// creado (created_at + 2h) — antes se cerraban (status='closed') nada más
+// empezar (scheduled_at), lo cual borraba/ocultaba la quedada demasiado
+// pronto, incluso si seguía en marcha. El borrado es un DELETE real (todas
+// las tablas relacionadas — mensajes, participantes, invitaciones, polls —
+// tienen ON DELETE CASCADE sobre hangout_pools).
+cron.schedule('*/10 * * * *', async () => {
+  console.log('[CRON] Deleting expired pools...');
   const supabase = require('./lib/supabase');
+  const nowIso = new Date().toISOString();
+  const twoHoursAgoIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   try {
+    // Quedadas con fecha de fin ya pasada
     await supabase
       .from('hangout_pools')
-      .update({ status: 'closed' })
-      .in('status', ['open', 'full'])
-      .lt('scheduled_at', new Date().toISOString());
+      .delete()
+      .not('ends_at', 'is', null)
+      .lt('ends_at', nowIso);
+
+    // Quedadas sin fecha de fin, creadas hace más de 2 horas
+    await supabase
+      .from('hangout_pools')
+      .delete()
+      .is('ends_at', null)
+      .lt('created_at', twoHoursAgoIso);
   } catch (err) {
-    console.error('[CRON] Pool close failed:', err);
+    console.error('[CRON] Pool deletion failed:', err);
   }
 });
 

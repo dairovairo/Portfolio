@@ -51,10 +51,11 @@ function friendMarkerHtml(friend) {
 }
 
 // ── Mapa 2D detallado (oscuro/claro según tema) ─────────────────────────
-function FlatMapView({ lat, lng, label, isDark, friends }) {
+function FlatMapView({ lat, lng, label, isDark, friends, radiusCircleMeters }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const friendMarkersRef = useRef(new Map()); // user_id -> L.Marker
+  const circleRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState('');
 
@@ -128,6 +129,19 @@ function FlatMapView({ lat, lng, label, isDark, friends }) {
         );
       }
 
+      // Círculo de precisión aproximada (verde clarito), p.ej. para el modo
+      // Sniffer de quedadas: la ubicación es un texto geocodificado, no un
+      // punto exacto, así que un radio ilustra ese margen de error.
+      if (radiusCircleMeters) {
+        circleRef.current = L.circle([lat, lng], {
+          radius: radiusCircleMeters,
+          color: '#86efac',
+          weight: 1.5,
+          fillColor: '#86efac',
+          fillOpacity: 0.18,
+        }).addTo(map);
+      }
+
       mapRef.current = map;
       setReady(true);
     }).catch(() => setErr('No se pudo cargar el mapa'));
@@ -135,13 +149,14 @@ function FlatMapView({ lat, lng, label, isDark, friends }) {
     return () => {
       cancelled = true;
       friendMarkersRef.current.clear();
+      circleRef.current = null;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng, isDark]);
+  }, [lat, lng, isDark, radiusCircleMeters]);
 
   return (
     <div className="relative w-full h-full">
@@ -168,7 +183,7 @@ function FlatMapView({ lat, lng, label, isDark, friends }) {
 // en vivo de los miembros ACEPTADOS del grupo de localización (la gestiona
 // EventLocatorPage con watchPosition + Realtime). Puede venir vacío si aún
 // no hay grupo o nadie ha compartido ubicación todavía.
-export default function GlobeLocationView({ lat, lng, label, friends = [] }) {
+export default function GlobeLocationView({ lat, lng, label, friends = [], radiusCircleMeters = 0 }) {
   const { isDark } = useTheme();
 
   if (lat == null || lng == null) return null;
@@ -178,7 +193,7 @@ export default function GlobeLocationView({ lat, lng, label, friends = [] }) {
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden">
       <div className="relative" style={{ height: 260 }}>
-        <FlatMapView lat={lat} lng={lng} label={label} isDark={isDark} friends={friends} />
+        <FlatMapView lat={lat} lng={lng} label={label} isDark={isDark} friends={friends} radiusCircleMeters={radiusCircleMeters} />
 
         {liveCount > 0 && (
           <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-full pl-1.5 pr-2.5 py-1">
