@@ -1388,12 +1388,40 @@ function CreatePostModal({ onClose, onCreate }) {
   );
 }
 
+// Mantiene el modal (y por tanto el input de comentario) anclado a la parte
+// visible de la pantalla cuando el teclado móvil está abierto. Sin esto, en
+// iOS/Android el contenedor `fixed inset-0` se calcula sobre la altura de
+// layout (no la visual), por lo que el teclado lo "hunde" y el campo de
+// texto queda oculto debajo de él.
+function useKeyboardSafeViewport(containerRef) {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const el = containerRef.current;
+    if (!vv || !el) return;
+
+    function handleResize() {
+      el.style.height = `${vv.height}px`;
+      el.style.top = `${vv.offsetTop}px`;
+    }
+
+    handleResize();
+    vv.addEventListener('resize', handleResize);
+    vv.addEventListener('scroll', handleResize);
+    return () => {
+      vv.removeEventListener('resize', handleResize);
+      vv.removeEventListener('scroll', handleResize);
+    };
+  }, [containerRef]);
+}
+
 function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreator, onClose, onCountChange }) {
   const { showToast } = useToast();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const containerRef = useRef(null);
+  useKeyboardSafeViewport(containerRef);
 
   const loadComments = useCallback(async () => {
     setLoading(true);
@@ -1435,7 +1463,7 @@ function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreato
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div ref={containerRef} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl max-h-[92vh] flex flex-col">
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-2 sm:hidden flex-shrink-0" />
