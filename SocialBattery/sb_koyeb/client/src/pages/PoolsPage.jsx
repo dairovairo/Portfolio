@@ -13,6 +13,7 @@ import { usePoolInviteNotifications } from '../context/PoolInviteNotificationsCo
 import MascotDisplay from '../components/MascotDisplay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import PoolSnifferModal from '../components/PoolSnifferModal';
+import LocationPicker from '../components/LocationPicker';
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 function getActivityEmoji(activity = '') {
@@ -292,7 +293,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
             <button
               onClick={() => setShowSniffer(true)}
               title="Ver la ubicación de la quedada en el mapa"
-              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-pink-500/15 text-pink-400 border border-pink-500/25 hover:bg-pink-500/25 hover:border-pink-500/40 hover:text-pink-300 transition-colors transform scale-[1.15] origin-left"
+              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-pink-500/15 text-pink-400 border border-pink-500/25 hover:bg-pink-500/25 hover:border-pink-500/40 hover:text-pink-300 transition-colors transform scale-[1.15] -translate-x-1.5 origin-left"
             >
               <span>🐽</span> Sniffer
             </button>
@@ -1006,6 +1007,11 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Coordenadas solo para pintar el marcador en el mapa del selector de
+  // ubicación — las quedadas siguen guardando la ubicación como texto libre
+  // (location_hint) en el backend, igual que hacía el input anterior.
+  const [pickerLat, setPickerLat] = useState(null);
+  const [pickerLng, setPickerLng] = useState(null);
   const emoji = getActivityEmoji(form.activity);
   // La fecha de fin no puede ser más de un día después de la fecha de inicio elegida.
   const poolStartForEnd = form.scheduled_at ? new Date(form.scheduled_at) : new Date(minDate);
@@ -1204,9 +1210,16 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
           {/* Location */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
-            <input type="text" value={form.location_hint} onChange={e => set('location_hint', e.target.value)}
-              placeholder="Ej: Plaza Mayor, cerca de la estación..." maxLength={150}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
+            <LocationPicker
+              value={form.location_hint}
+              lat={pickerLat}
+              lng={pickerLng}
+              onChange={(location, lat, lng) => {
+                set('location_hint', location.slice(0, 150));
+                setPickerLat(lat);
+                setPickerLng(lng);
+              }}
+            />
           </div>
 
           {/* Visibility */}
