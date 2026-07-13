@@ -421,16 +421,6 @@ export function SettingsProvider({ children }) {
   const setMuteNewPools = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteNewPools, String(v));
     setMuteNewPoolsState(v);
-    // A diferencia del resto de mutes de esta sección (que solo filtran la
-    // notificación local en el cliente), el aviso de "nueva quedada" es un
-    // web-push real que manda el servidor y que llega igual con la app en
-    // foreground o en segundo plano/cerrada (routes/pools.js). Por eso este
-    // ajuste tiene que persistir en el usuario (users.mute_new_pools, fase
-    // 90), no basta con localStorage — mismo patrón que show_interests /
-    // show_public_stats / show_badges.
-    import('../lib/api').then(({ api }) => {
-      api.patch('/users/me', { mute_new_pools: v }).catch(() => {});
-    });
   }, []);
 
   const setMuteEventReminders = useCallback((v) => {
@@ -507,10 +497,6 @@ export function SettingsProvider({ children }) {
     if (typeof profile.show_badges === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.showBadges, String(profile.show_badges));
       setShowBadgesState(profile.show_badges);
-    }
-    if (typeof profile.mute_new_pools === 'boolean') {
-      localStorage.setItem(STORAGE_KEYS.muteNewPools, String(profile.mute_new_pools));
-      setMuteNewPoolsState(profile.mute_new_pools);
     }
   }, []);
 

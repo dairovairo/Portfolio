@@ -251,7 +251,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, mascot_name, mute_new_pools } = req.body;
+  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, mascot_name } = req.body;
   const updates = {};
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
@@ -260,7 +260,6 @@ router.patch('/me', requireAuth, async (req, res) => {
   if (show_interests !== undefined) updates.show_interests = Boolean(show_interests);
   if (show_public_stats !== undefined) updates.show_public_stats = Boolean(show_public_stats);
   if (show_badges !== undefined) updates.show_badges = Boolean(show_badges);
-  if (mute_new_pools !== undefined) updates.mute_new_pools = Boolean(mute_new_pools);
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });

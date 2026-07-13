@@ -866,7 +866,6 @@ const SUBSCRIPTION_PLANS = [
       'Creación de eventos',
       'Creación de sorteos',
       'Dashboard de control',
-      'Recibir donaciones',
     ],
     highlight: true,
   },
