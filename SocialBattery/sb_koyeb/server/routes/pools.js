@@ -209,6 +209,30 @@ function buildParticipantPreview(rawParticipants) {
     .filter(p => p.id);
 }
 
+// Filtra el web-push (el aviso real, llega en foreground y background/app
+// cerrada) para quien tenga activado "Silenciar nuevas quedadas" en
+// Ajustes > Notificaciones (users.mute_new_pools, fase 90). El broadcast
+// de Realtime (badge del dock) NO se filtra aquí — igual que el resto de
+// mutes de la app, silenciar el aviso no oculta la quedada del badge.
+// Función a nivel de módulo (antes vivía solo dentro de POST /, así que
+// POST /:id/invite mandaba el mismo aviso de "te invitan a una quedada"
+// sin pasar por el filtro — bug reportado: el toggle no silenciaba las
+// invitaciones a quedadas ya existentes, solo las quedadas nuevas).
+async function getPoolMuteFilteredIds(candidateIds) {
+  if (!candidateIds.length) return [];
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_new_pools', true);
+    const mutedIds = new Set((data || []).map(u => u.id));
+    return candidateIds.filter(id => !mutedIds.has(id));
+  } catch {
+    return candidateIds;
+  }
+}
+
 // ── GET /api/pools — feed visible to the current user ───────────────────────
 router.get('/', requireAuth, async (req, res) => {
   const userId = req.user.id;
@@ -699,8 +723,9 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
     if (isPublic) {
       // Notify all accepted friends of the creator
       getFriendIds(userId).then(async friendIds => {
+        const pushRecipientIds = await getPoolMuteFilteredIds(friendIds);
         await Promise.all([
-          notifyUsers(supabase, friendIds, userId, notifPayload),
+          notifyUsers(supabase, pushRecipientIds, userId, notifPayload),
           broadcastToUsers(friendIds),
         ]);
       }).catch(() => {});
@@ -721,8 +746,9 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
           invitedIds.forEach(id => { if (id !== userId) recipientIds.add(id); });
         }
         if (recipientIds.size) {
+          const pushRecipientIds = await getPoolMuteFilteredIds([...recipientIds]);
           await Promise.all([
-            notifyUsers(supabase, [...recipientIds], userId, notifPayload),
+            notifyUsers(supabase, pushRecipientIds, userId, notifPayload),
             broadcastToUsers([...recipientIds]),
           ]);
         }
@@ -968,8 +994,9 @@ router.post('/:id/invite', requireAuth, async (req, res) => {
       try {
         const { data: creator } = await supabase.from('users').select('username').eq('id', userId).single();
         const creatorName = creator?.username || 'Un amigo';
+        const pushRecipientIds = await getPoolMuteFilteredIds([user_id]);
         await Promise.all([
-          notifyUsers(supabase, [user_id], userId, {
+          notifyUsers(supabase, pushRecipientIds, userId, {
             title: `🤝 ${creatorName} te invita a una quedada`,
             body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
             url: `/pools?pool=${poolId}`,
@@ -1156,8 +1183,9 @@ router.patch('/:id/join-requests/:requestId', requireAuth, async (req, res) => {
         try {
           const { data: creator } = await supabase.from('users').select('username').eq('id', userId).single();
           const creatorName = creator?.username || 'El organizador';
+          const pushRecipientIds = await getPoolMuteFilteredIds([request.requested_user_id]);
           await Promise.all([
-            notifyUsers(supabase, [request.requested_user_id], userId, {
+            notifyUsers(supabase, pushRecipientIds, userId, {
               title: `🤝 ${creatorName} te invita a una quedada`,
               body: `${pool.activity}${pool.location_hint ? ` · ${pool.location_hint}` : ''}`,
               url: `/pools?pool=${poolId}`,
