@@ -1,8 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import GlobeLocationView from '../components/GlobeLocationView';
+import MascotDisplay from '../components/MascotDisplay';
 import { useUserLocation } from '../context/UserLocationContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
+import { getBatteryColor } from '../lib/battery';
 
 /**
  * PoolSnifferPage — "🐽 Sniffer" a pantalla completa.
@@ -68,9 +71,49 @@ function distanceMeters(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// PoolsPage.jsx / HomePage.jsx / FriendCard.jsx / GroupChatPage.jsx): 0-33 →
+// low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
+
+// Mascota en miniatura — mismo criterio que en el resto de la app: capa
+// base según tier de batería + overlay "horneado" (mascot_preview_url) con
+// la personalización del usuario.
+function MiniMascot({ user, size = 32 }) {
+  const color = getBatteryColor(user?.battery_level ?? 50);
+  const tier = getMascotTier(user?.battery_level ?? 50);
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <MascotDisplay
+        tier={tier}
+        size={size}
+        glowColor={color.hex}
+        outfitSrc={null}
+        feetSrc={null}
+        headSrc={null}
+        accessories={[]}
+        activityLayers={[]}
+      />
+      {user?.mascot_preview_url && (
+        <img
+          src={user.mascot_preview_url}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+        />
+      )}
+    </div>
+  );
+}
+
 export default function PoolSnifferPage() {
   const { poolId } = useParams();
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
 
   const [pool, setPool] = useState(null);
@@ -172,7 +215,13 @@ export default function PoolSnifferPage() {
     if (distanceToPool != null && distanceToPool <= SNIFFER_RADIUS_METERS) {
       const now = new Date();
       setCheckins(prev => [
-        { id: `${now.getTime()}`, time: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) },
+        {
+          id: `${now.getTime()}`,
+          time: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+          username: profile?.username || 'Tú',
+          mascot_preview_url: profile?.mascot_preview_url,
+          battery_level: profile?.battery_level,
+        },
         ...prev,
       ]);
       setCheckMsg({ type: 'ok', text: '¡Estás dentro del radio! Anotado.' });
@@ -283,9 +332,14 @@ export default function PoolSnifferPage() {
                   {checkins.length > 0 && (
                     <div className="bg-surface-card border border-surface-border rounded-2xl divide-y divide-surface-border overflow-hidden">
                       {checkins.map(c => (
-                        <div key={c.id} className="px-4 py-2.5 flex items-center gap-2 text-xs">
-                          <span className="text-emerald-400">✅</span>
-                          <span className="text-surface-text font-mono">Dentro del radio a las {c.time}</span>
+                        <div key={c.id} className="px-3 py-2.5 flex items-center gap-2.5">
+                          <MiniMascot user={c} size={30} />
+                          <span className="flex-1 min-w-0 text-sm font-display font-semibold text-surface-text truncate">
+                            {c.username}
+                          </span>
+                          <span className="flex-shrink-0 text-xs font-mono text-surface-muted">
+                            {c.time}
+                          </span>
                         </div>
                       ))}
                     </div>
