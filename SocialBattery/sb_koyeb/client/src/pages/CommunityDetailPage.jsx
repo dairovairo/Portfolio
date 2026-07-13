@@ -1916,7 +1916,7 @@ export default function CommunityDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearCommunityBadge, communitiesWithEvents, clearCommunityPostBadge } = useCommunityNotifications();
+  const { clearCommunityBadge, communitiesWithEvents } = useCommunityNotifications();
   const [community, setCommunity] = useState(null);
   const [currentEvents, setCurrentEvents] = useState([]);
   const [pastEvents, setPastEvents] = useState([]);
@@ -1981,9 +1981,8 @@ export default function CommunityDetailPage() {
   useEffect(() => {
     if (!loading && community) {
       clearCommunityBadge(communityId);
-      clearCommunityPostBadge(communityId);
     }
-  }, [loading, community, communityId, clearCommunityBadge, clearCommunityPostBadge]);
+  }, [loading, community, communityId, clearCommunityBadge]);
 
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
