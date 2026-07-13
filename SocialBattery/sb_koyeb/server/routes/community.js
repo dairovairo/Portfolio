@@ -1991,9 +1991,18 @@ async function broadcastCommunityMessage({ communityId, senderId, senderName, co
       )
     );
 
-    // No mandar el push a quien haya silenciado este chat de comunidad (fase 88).
-    const mutedIds = await getMutedUserIds(supabase, 'community', communityId, recipientIds);
-    const pushRecipientIds = recipientIds.filter(id => !mutedIds.has(id));
+    // No mandar el push a quien haya silenciado este chat de comunidad en
+    // concreto (fase 88) NI a quien tenga activado el silencio global de
+    // "chat de comunidad" (users.mute_community_chats, fase 91) — aplica en
+    // foreground (useMessageNotifications) y en background/app cerrada, y el
+    // push real es lo único que llega en ese segundo caso.
+    const [mutedIds, globallyMutedIds] = await Promise.all([
+      getMutedUserIds(supabase, 'community', communityId, recipientIds),
+      getCommunityChatMuteFilteredIds(recipientIds),
+    ]);
+    const pushRecipientIds = recipientIds.filter(
+      id => !mutedIds.has(id) && !globallyMutedIds.has(id)
+    );
     const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
     await notifyUsers(supabase, pushRecipientIds, senderId, {
       title: communityName,
@@ -2003,6 +2012,23 @@ async function broadcastCommunityMessage({ communityId, senderId, senderName, co
     });
   } catch (err) {
     console.error('[community] broadcastCommunityMessage error:', err);
+  }
+}
+
+// Devuelve el Set de candidateIds que tiene activado el silencio global del
+// chat de comunidad (users.mute_community_chats, fase 91). Mismo patrón que
+// getPoolChatMuteFilteredIds en routes/pools.js.
+async function getCommunityChatMuteFilteredIds(candidateIds) {
+  if (!candidateIds.length) return new Set();
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_community_chats', true);
+    return new Set((data || []).map(u => u.id));
+  } catch {
+    return new Set();
   }
 }
 

@@ -161,9 +161,19 @@ async function broadcastPoolChatMessage({ poolId, senderId, senderName, content,
       )
     );
 
-    // No mandar el push a quien haya silenciado este chat de quedada (fase 88).
-    const mutedIds = await getMutedUserIds(supabase, 'pool', poolId, recipientIds);
-    const pushRecipientIds = recipientIds.filter(id => !mutedIds.has(id));
+    // No mandar el push a quien haya silenciado este chat de quedada en
+    // concreto (fase 88) NI a quien tenga activado el silencio global de
+    // "chat de quedadas" (users.mute_pool_chats, fase 91) — ese ajuste debe
+    // aplicar tanto en foreground (useMessageNotifications) como en
+    // background/app cerrada, y el push real es lo único que llega en ese
+    // segundo caso, así que el filtro tiene que vivir aquí también.
+    const [mutedIds, globallyMutedIds] = await Promise.all([
+      getMutedUserIds(supabase, 'pool', poolId, recipientIds),
+      getPoolChatMuteFilteredIds(recipientIds),
+    ]);
+    const pushRecipientIds = recipientIds.filter(
+      id => !mutedIds.has(id) && !globallyMutedIds.has(id)
+    );
     const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
     await notifyUsers(supabase, pushRecipientIds, senderId, {
       title: `💬 ${activityLabel}`,
@@ -173,6 +183,25 @@ async function broadcastPoolChatMessage({ poolId, senderId, senderName, content,
     });
   } catch (err) {
     console.error('[POOLS] broadcastPoolChatMessage error:', err);
+  }
+}
+
+// Devuelve el subconjunto de candidateIds que tiene activado el silencio
+// global del chat de quedadas (users.mute_pool_chats, fase 91). A diferencia
+// de getPoolMuteFilteredIds (que filtra la lista y la devuelve ya limpia),
+// aquí devolvemos el Set de silenciados para poder combinarlo con
+// getMutedUserIds en broadcastPoolChatMessage.
+async function getPoolChatMuteFilteredIds(candidateIds) {
+  if (!candidateIds.length) return new Set();
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_pool_chats', true);
+    return new Set((data || []).map(u => u.id));
+  } catch {
+    return new Set();
   }
 }
 

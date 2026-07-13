@@ -245,7 +245,7 @@ export function useMessageNotifications(profile, settings) {
           window.dispatchEvent(new CustomEvent('sb-pool-message', { detail: data }));
 
           const s = settingsRef.current;
-          if (s.muteAllNotifications) return;
+          if (s.muteAllNotifications || s.mutePoolChats) return;
           if (isConvMuted('pool', data.pool_id)) return;
           if (!shouldNotify(locationRef.current, chatPath)) return;
 
@@ -277,7 +277,7 @@ export function useMessageNotifications(profile, settings) {
           if (data.sender_id === profile.id) return;
 
           const s = settingsRef.current;
-          if (s.muteAllNotifications) return;
+          if (s.muteAllNotifications || s.muteCommunityChats) return;
           if (isConvMuted('community', data.community_id)) return;
 
           const chatPath = `/messages/community/${data.community_id}`;

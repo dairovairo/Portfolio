@@ -216,11 +216,24 @@ export function CommunityNotificationsProvider({ children }) {
           }
 
           const settings = settingsRef.current;
-          if (settings.muteAllNotifications || settings.muteNewEvents) return;
+          if (settings.muteAllNotifications) return;
+
+          // "Silenciar recomendaciones de eventos de otras comunidades" solo
+          // debe silenciar eventos ultra/premium que NO sean de una comunidad
+          // tuya. Los eventos de tus propias comunidades (de cualquier plan,
+          // incluidos ultra/premium) se controlan con "Silenciar nuevos
+          // eventos de tus comunidades" (muteNewEvents) — antes ultra/premium
+          // se silenciaban siempre con muteEventRecommendations aunque fueran
+          // de tu propia comunidad, lo cual no era lo esperado.
+          if (isMember) {
+            if (settings.muteNewEvents) return;
+          } else {
+            // No socio: aquí solo llegan eventos ultra/premium (ya filtrado
+            // arriba en el `if (!isUltraOrPremium && !isMember) return;`)
+            if (settings.muteEventRecommendations) return;
+          }
 
           if (plan === 'ultra') {
-            // ultra y premium también respetan muteEventRecommendations
-            if (settings.muteEventRecommendations) return;
             claimLocalNotifToday();
             fireLocalNotification({
               title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
@@ -231,7 +244,6 @@ export function CommunityNotificationsProvider({ children }) {
                 : '/community',
             });
           } else if (plan === 'premium') {
-            if (settings.muteEventRecommendations) return;
             claimLocalNotifToday();
             fireLocalNotification({
               title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,

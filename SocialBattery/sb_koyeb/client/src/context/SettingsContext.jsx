@@ -123,6 +123,8 @@ const STORAGE_KEYS = {
   muteAllNotifications:  'sb-mute-all-notifications',
   mutePersonalChats:     'sb-mute-personal-chats',
   muteGroupChats:        'sb-mute-group-chats',
+  mutePoolChats:         'sb-mute-pool-chats',
+  muteCommunityChats:    'sb-mute-community-chats',
   muteNewEvents:         'sb-mute-new-events',
   muteNewPools:          'sb-mute-new-pools',
   muteEventReminders:        'sb-mute-event-reminders',
@@ -284,6 +286,12 @@ export function SettingsProvider({ children }) {
   const [muteGroupChats, setMuteGroupChatsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteGroupChats, 'false') === 'true'
   );
+  const [mutePoolChats, setMutePoolChatsState] = useState(
+    () => loadStorage(STORAGE_KEYS.mutePoolChats, 'false') === 'true'
+  );
+  const [muteCommunityChats, setMuteCommunityChatsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteCommunityChats, 'false') === 'true'
+  );
   const [muteNewEvents, setMuteNewEventsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteNewEvents, 'false') === 'true'
   );
@@ -413,6 +421,31 @@ export function SettingsProvider({ children }) {
     setMuteGroupChatsState(v);
   }, []);
 
+  const setMutePoolChats = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.mutePoolChats, String(v));
+    setMutePoolChatsState(v);
+    // El chat de quedadas manda web-push real (routes/pools.js,
+    // broadcastPoolChatMessage) que llega igual con la app en foreground o
+    // en segundo plano/cerrada, así que este ajuste tiene que persistir en
+    // el usuario (users.mute_pool_chats, fase 91) — no basta con
+    // localStorage. Mismo patrón que mute_new_pools (fase 90).
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_pool_chats: v }).catch(() => {});
+    });
+  }, []);
+
+  const setMuteCommunityChats = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteCommunityChats, String(v));
+    setMuteCommunityChatsState(v);
+    // Mismo caso que mutePoolChats: el chat de comunidad manda web-push real
+    // (routes/community.js, broadcastCommunityMessage) que llega con la app
+    // en foreground o segundo plano/cerrada, así que persiste en el usuario
+    // (users.mute_community_chats, fase 91).
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_community_chats: v }).catch(() => {});
+    });
+  }, []);
+
   const setMuteNewEvents = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteNewEvents, String(v));
     setMuteNewEventsState(v);
@@ -511,6 +544,14 @@ export function SettingsProvider({ children }) {
     if (typeof profile.mute_new_pools === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteNewPools, String(profile.mute_new_pools));
       setMuteNewPoolsState(profile.mute_new_pools);
+    }
+    if (typeof profile.mute_pool_chats === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.mutePoolChats, String(profile.mute_pool_chats));
+      setMutePoolChatsState(profile.mute_pool_chats);
+    }
+    if (typeof profile.mute_community_chats === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.muteCommunityChats, String(profile.mute_community_chats));
+      setMuteCommunityChatsState(profile.mute_community_chats);
     }
   }, []);
 
@@ -648,6 +689,8 @@ export function SettingsProvider({ children }) {
       muteAllNotifications, setMuteAllNotifications,
       mutePersonalChats, setMutePersonalChats,
       muteGroupChats, setMuteGroupChats,
+      mutePoolChats, setMutePoolChats,
+      muteCommunityChats, setMuteCommunityChats,
       muteNewEvents, setMuteNewEvents,
       muteNewPools, setMuteNewPools,
       muteEventReminders, setMuteEventReminders,

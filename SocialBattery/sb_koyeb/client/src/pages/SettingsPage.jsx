@@ -365,6 +365,8 @@ export default function SettingsPage() {
     muteAllNotifications, setMuteAllNotifications,
     mutePersonalChats, setMutePersonalChats,
     muteGroupChats, setMuteGroupChats,
+    mutePoolChats, setMutePoolChats,
+    muteCommunityChats, setMuteCommunityChats,
     muteNewEvents, setMuteNewEvents,
     muteNewPools, setMuteNewPools,
     muteEventReminders, setMuteEventReminders,
@@ -904,7 +906,37 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar nuevos eventos
+                        Silenciar chat de quedadas
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de mensajes de tus quedadas, ni con la app abierta ni en segundo plano
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={mutePoolChats}
+                      onToggle={() => setMutePoolChats(!mutePoolChats)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar chat de comunidad
+                      </div>
+                      <div className="text-xs text-surface-muted">
+                        No recibirás notificaciones de mensajes de tus comunidades, ni con la app abierta ni en segundo plano
+                      </div>
+                    </div>
+                    <Toggle
+                      enabled={muteCommunityChats}
+                      onToggle={() => setMuteCommunityChats(!muteCommunityChats)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-display font-semibold text-surface-text">
+                        Silenciar nuevos eventos de tus comunidades
                       </div>
                       <div className="text-xs text-surface-muted">
                         No te avisaremos cuando se cree un nuevo evento en tus comunidades
@@ -919,10 +951,10 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-display font-semibold text-surface-text">
-                        Silenciar recomendaciones de eventos
+                        Silenciar recomendaciones de eventos de otras comunidades
                       </div>
                       <div className="text-xs text-surface-muted">
-                        No recibirás notificaciones de eventos premium y destacados
+                        No recibirás notificaciones de eventos premium y ultra de otras comunidades
                       </div>
                     </div>
                     <Toggle
