@@ -419,6 +419,14 @@ export function SettingsProvider({ children }) {
   const setMuteGroupChats = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteGroupChats, String(v));
     setMuteGroupChatsState(v);
+    // El chat de grupo manda web-push real (routes/groups.js,
+    // broadcastGroupMessage) que llega igual con la app en foreground o en
+    // segundo plano/cerrada, así que este ajuste tiene que persistir en el
+    // usuario (users.mute_group_chats, fase 93) — no basta con localStorage.
+    // Mismo patrón que mutePoolChats / muteCommunityChats (fase 91).
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_group_chats: v }).catch(() => {});
+    });
   }, []);
 
   const setMutePoolChats = useCallback((v) => {
@@ -563,6 +571,10 @@ export function SettingsProvider({ children }) {
     if (typeof profile.mute_pool_chats === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.mutePoolChats, String(profile.mute_pool_chats));
       setMutePoolChatsState(profile.mute_pool_chats);
+    }
+    if (typeof profile.mute_group_chats === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.muteGroupChats, String(profile.mute_group_chats));
+      setMuteGroupChatsState(profile.mute_group_chats);
     }
     if (typeof profile.mute_community_chats === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteCommunityChats, String(profile.mute_community_chats));

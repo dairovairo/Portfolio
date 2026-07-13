@@ -64,9 +64,18 @@ async function broadcastGroupMessage({ groupId, senderId, senderName, content, t
     );
 
     // Web-push for recipients who have a push subscription (background / closed
-    // app) — pero no a quien haya silenciado este chat de grupo (fase 88).
-    const mutedIds = await getMutedUserIds(supabase, 'group', groupId, recipientIds);
-    const pushRecipientIds = recipientIds.filter(id => !mutedIds.has(id));
+    // app) — pero no a quien haya silenciado este grupo en concreto (fase 88)
+    // NI a quien tenga activado el silencio global de "grupos privados"
+    // (users.mute_group_chats, fase 93) — ese ajuste debe aplicar tanto en
+    // foreground (useMessageNotifications) como en background/app cerrada,
+    // y el push real es lo único que llega en ese segundo caso.
+    const [mutedIds, globallyMutedIds] = await Promise.all([
+      getMutedUserIds(supabase, 'group', groupId, recipientIds),
+      getGroupChatMuteFilteredIds(recipientIds),
+    ]);
+    const pushRecipientIds = recipientIds.filter(
+      id => !mutedIds.has(id) && !globallyMutedIds.has(id)
+    );
     const previewText = type === 'image' ? '📷 Imagen' : content?.slice(0, 80) || '📩 Nuevo mensaje';
     await notifyUsers(supabase, pushRecipientIds, senderId, {
       title: groupName,
@@ -76,6 +85,23 @@ async function broadcastGroupMessage({ groupId, senderId, senderName, content, t
     });
   } catch (err) {
     console.error('[GROUPS] broadcastGroupMessage error:', err);
+  }
+}
+
+// Devuelve el Set de candidateIds que tiene activado el silencio global de
+// "grupos privados" (users.mute_group_chats, fase 93). Mismo patrón que
+// getPoolChatMuteFilteredIds / getCommunityChatMuteFilteredIds.
+async function getGroupChatMuteFilteredIds(candidateIds) {
+  if (!candidateIds.length) return new Set();
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_group_chats', true);
+    return new Set((data || []).map(u => u.id));
+  } catch {
+    return new Set();
   }
 }
 
