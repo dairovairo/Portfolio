@@ -6,6 +6,7 @@ import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
+import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { shareOrDownloadBlob } from '../lib/instagramStory';
 import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
@@ -1197,6 +1198,18 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
   );
 }
 
+// ── Silencio del hilo de esta comunidad concreta (fase 97) ────────────────
+// Independiente del silencio del chat: solo afecta al aviso de "nueva
+// publicación en el hilo" (foreground vía CommunityNotificationsContext y
+// segundo plano/cerrada vía web-push, server/routes/community.js).
+function useThreadMuteToggle(communityId, threadMuted, setThreadMuted, setConversationMuted) {
+  return useCallback(() => {
+    const next = !threadMuted;
+    setThreadMuted(next);
+    setConversationMuted('community_thread', communityId, next);
+  }, [communityId, threadMuted, setThreadMuted, setConversationMuted]);
+}
+
 // ── Hilo de comunidad ────────────────────────────────────────────────────
 
 function formatThreadDate(dateStr) {
@@ -1945,6 +1958,12 @@ export default function CommunityDetailPage() {
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { clearCommunityBadge, communitiesWithEvents } = useCommunityNotifications();
+  const { isConversationMuted, setConversationMuted } = useSettings();
+  const [threadMuted, setThreadMuted] = useState(() => isConversationMuted('community_thread', communityId));
+  useEffect(() => {
+    setThreadMuted(isConversationMuted('community_thread', communityId));
+  }, [communityId, isConversationMuted]);
+  const toggleThreadMuted = useThreadMuteToggle(communityId, threadMuted, setThreadMuted, setConversationMuted);
   const [community, setCommunity] = useState(null);
   const [currentEvents, setCurrentEvents] = useState([]);
   const [pastEvents, setPastEvents] = useState([]);
@@ -2350,14 +2369,27 @@ export default function CommunityDetailPage() {
         <section className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <h2 className="font-display font-bold text-surface-text text-sm">Hilo de la comunidad</h2>
-            {community.creator_id === profile?.id && (
+            <div className="flex-shrink-0 flex items-center gap-1.5">
               <button
-                onClick={() => setShowCreatePost(true)}
-                className="flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors"
+                onClick={toggleThreadMuted}
+                title={threadMuted ? 'Activar notificaciones del hilo' : 'Silenciar notificaciones del hilo'}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center border transition-colors ${
+                  threadMuted
+                    ? 'bg-surface-bg text-surface-muted border-surface-border'
+                    : 'bg-accent-primary/10 text-accent-glow border-accent-primary/25 hover:bg-accent-primary/20'
+                }`}
               >
-                <span>+</span> Publicar
+                {threadMuted ? '🔕' : '🔔'}
               </button>
-            )}
+              {community.creator_id === profile?.id && (
+                <button
+                  onClick={() => setShowCreatePost(true)}
+                  className="flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors"
+                >
+                  <span>+</span> Publicar
+                </button>
+              )}
+            </div>
           </div>
           {posts.length === 0 ? (
             <div className="text-center py-8 border border-surface-border rounded-2xl bg-surface-card">
@@ -2368,7 +2400,7 @@ export default function CommunityDetailPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
               {posts.map(post => (
                 <CommunityPostCard
                   key={post.id}

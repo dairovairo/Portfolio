@@ -2817,8 +2817,9 @@ router.get('/communities/:id/posts', requireAuth, async (req, res) => {
 // Mismo patrón que broadcastEventUpdateToAttendees / broadcastCommunityMessage:
 // broadcast por canal personal (aviso in-app instantáneo con la app abierta)
 // + web-push (app en segundo plano/cerrada). Se filtra tanto por el
-// silencio de esa comunidad en concreto (conversation_type 'community',
-// fase 88) como por el ajuste global "Silenciar hilos de comunidad"
+// silencio del hilo de esa comunidad en concreto (conversation_type
+// 'community_thread', fase 97 — independiente del silencio del chat) como
+// por el ajuste global "Silenciar hilos de comunidad"
 // (users.mute_community_threads, fase 96), que aplica a todas las
 // comunidades del usuario a la vez.
 async function broadcastCommunityPostToMembers({ communityId, communityName, creatorId, creatorName, postId, body }) {
@@ -2922,12 +2923,13 @@ router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, asy
     });
 
     if (memberIds.length) {
-      // No mandar el push a quien haya silenciado esta comunidad en
-      // concreto (mismo silencio que el del chat, conversation_type
-      // 'community') NI a quien tenga activado el silencio global de
-      // "hilos de comunidad" (users.mute_community_threads, fase 96).
+      // No mandar el push a quien haya silenciado el HILO de esta comunidad
+      // en concreto (conversation_type 'community_thread', fase 97 —
+      // independiente del silencio del chat) NI a quien tenga activado el
+      // silencio global de "hilos de comunidad" (users.mute_community_threads,
+      // fase 96).
       const [mutedIds, globallyMutedIds] = await Promise.all([
-        getMutedUserIds(supabase, 'community', communityId, memberIds),
+        getMutedUserIds(supabase, 'community_thread', communityId, memberIds),
         getCommunityThreadMuteFilteredIds(memberIds),
       ]);
       const pushMemberIds = memberIds.filter(uid => !mutedIds.has(uid) && !globallyMutedIds.has(uid));

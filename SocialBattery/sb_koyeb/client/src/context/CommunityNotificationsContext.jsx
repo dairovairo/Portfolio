@@ -362,7 +362,7 @@ export function CommunityNotificationsProvider({ children }) {
         const settings = settingsRef.current;
         if (settings.muteAllNotifications) return;
         if (settings.muteCommunityThreads) return;
-        if (isConversationMuted('community', data.community_id)) return;
+        if (isConversationMuted('community_thread', data.community_id)) return;
 
         fireLocalNotification({
           title: `📌 ${data.community_name || 'Comunidad'}`,

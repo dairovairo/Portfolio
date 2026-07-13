@@ -176,7 +176,7 @@ router.get('/mutes', requireAuth, async (req, res) => {
 
 router.post('/mutes', requireAuth, async (req, res) => {
   const { type, id, muted } = req.body || {};
-  if (!['group', 'pool', 'community', 'event'].includes(type) || !id) {
+  if (!['group', 'pool', 'community', 'event', 'community_thread'].includes(type) || !id) {
     return res.status(400).json({ error: 'type e id son obligatorios' });
   }
 
