@@ -12,6 +12,7 @@ import { usePoolChatNotifications } from '../context/PoolChatNotificationsContex
 import { usePoolInviteNotifications } from '../context/PoolInviteNotificationsContext';
 import MascotDisplay from '../components/MascotDisplay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import PoolSnifferModal from '../components/PoolSnifferModal';
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 function getActivityEmoji(activity = '') {
@@ -233,6 +234,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
   const navigate = useNavigate();
   const { hasUnreadPoolChat } = usePoolChatNotifications();
   const hasUnreadChat = hasUnreadPoolChat(pool.id);
+  const [showSniffer, setShowSniffer] = useState(false);
   // Fetch full participant list
   const [participants, setParticipants] = useState(pool.participants_preview || []);
   const [loading, setLoading] = useState(false);
@@ -264,6 +266,7 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
   const canAdjustReminder = pool.has_joined && !isPast && pool.status !== 'cancelled' && pool.status !== 'closed';
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
@@ -286,6 +289,13 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
               <h3 className="font-display font-bold text-surface-text truncate">{pool.activity}</h3>
               <p className="text-xs text-surface-muted font-mono">{formatPoolDateRange(pool)}</p>
             </div>
+            <button
+              onClick={() => setShowSniffer(true)}
+              title="Ver la ubicación de la quedada en el mapa"
+              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-pink-500/15 text-pink-400 border border-pink-500/25 hover:bg-pink-500/25 hover:border-pink-500/40 hover:text-pink-300 transition-colors transform scale-[1.15] origin-left"
+            >
+              <span>🐽</span> Sniffer
+            </button>
             <button
               onClick={() => navigate(`/pools/${pool.id}/chat`)}
               title="Abrir chat de la quedada"
@@ -446,6 +456,10 @@ function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, o
         </div>
       </div>
     </div>
+    {showSniffer && (
+      <PoolSnifferModal pool={pool} onClose={() => setShowSniffer(false)} />
+    )}
+    </>
   );
 }
 
