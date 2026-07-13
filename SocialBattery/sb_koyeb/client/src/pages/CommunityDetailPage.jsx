@@ -1188,6 +1188,326 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
   );
 }
 
+// ── Hilo de comunidad ────────────────────────────────────────────────────
+
+function formatThreadDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '';
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'ahora';
+  if (mins < 60) return `hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `hace ${days} d`;
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function CommunityPostCard({ post, isCreator, onOpen, onDelete }) {
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete(e) {
+    e.stopPropagation();
+    if (!window.confirm('¿Borrar esta publicación del hilo?')) return;
+    setDeleting(true);
+    try { await onDelete(post.id); } finally { setDeleting(false); }
+  }
+
+  return (
+    <div
+      onClick={() => onOpen(post)}
+      className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
+    >
+      <div className="p-3.5 pb-2 flex items-center gap-2.5">
+        <RaffleAvatar user={post.creator} />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-display font-bold text-surface-text truncate">{post.creator?.username || 'Alguien'}</p>
+          <p className="text-[10px] text-surface-muted font-mono">{formatThreadDate(post.created_at)}</p>
+        </div>
+        {isCreator && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            title="Borrar publicación"
+            className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-surface-muted hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+          >
+            {deleting ? '⏳' : '🗑️'}
+          </button>
+        )}
+      </div>
+
+      {post.content && (
+        <p className="px-3.5 pb-2.5 text-sm text-surface-text leading-relaxed whitespace-pre-wrap">{post.content}</p>
+      )}
+
+      {post.type === 'photo' && post.media_url && (
+        <div className="bg-surface-bg">
+          <img src={post.media_url} alt="" className="w-full max-h-96 object-cover" />
+        </div>
+      )}
+      {post.type === 'video' && post.media_url && (
+        <div className="bg-black">
+          <video src={post.media_url} controls className="w-full max-h-96" />
+        </div>
+      )}
+
+      <div className="px-3.5 py-2.5 flex items-center gap-1.5 text-xs font-mono text-surface-muted border-t border-surface-border/60">
+        <span>💬</span>
+        <span>{post.comment_count > 0 ? `${post.comment_count} comentario${post.comment_count === 1 ? '' : 's'}` : 'Comentar'}</span>
+      </div>
+    </div>
+  );
+}
+
+function CreatePostModal({ onClose, onCreate }) {
+  const fileInputRef = useRef(null);
+  const [content, setContent] = useState('');
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState('');
+  const [previewKind, setPreviewKind] = useState(null); // 'photo' | 'video'
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleFileChange(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 30 * 1024 * 1024) {
+      setError('El archivo no puede superar 30MB');
+      e.target.value = '';
+      return;
+    }
+    setFile(f);
+    setPreviewKind(f.type.startsWith('video/') ? 'video' : 'photo');
+    setPreview(URL.createObjectURL(f));
+    setError('');
+  }
+
+  function clearFile() {
+    setFile(null);
+    setPreview('');
+    setPreviewKind(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function handleSubmit() {
+    if (!content.trim() && !file) {
+      setError('Escribe un mensaje o adjunta una foto o vídeo');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onCreate({ content: content.trim(), file });
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Error al publicar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
+
+        <div className="flex items-center gap-3 mb-6">
+          <span className="text-3xl">📸</span>
+          <h2 className="font-display font-bold text-surface-text text-lg">Publicar en el hilo</h2>
+        </div>
+
+        <div className="space-y-4">
+          <textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            placeholder="Escribe algo para la comunidad..."
+            rows={4}
+            maxLength={2000}
+            className="w-full bg-surface-bg border border-surface-border rounded-xl px-3.5 py-3 text-sm text-surface-text placeholder:text-surface-muted focus:outline-none focus:border-accent-primary/50 resize-none"
+          />
+
+          {preview ? (
+            <div className="relative rounded-xl overflow-hidden bg-black">
+              {previewKind === 'video' ? (
+                <video src={preview} controls className="w-full max-h-72" />
+              ) : (
+                <img src={preview} alt="" className="w-full max-h-72 object-cover" />
+              )}
+              <button
+                onClick={clearFile}
+                className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-3.5 rounded-xl border border-dashed border-surface-border text-surface-muted text-xs font-mono hover:border-accent-primary/40 hover:text-surface-text transition-colors"
+            >
+              📎 Adjuntar foto o vídeo (opcional)
+            </button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          {error && (
+            <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            disabled={saving || (!content.trim() && !file)}
+            className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
+          >
+            {saving ? 'Publicando...' : 'Publicar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreator, onClose, onCountChange }) {
+  const { showToast } = useToast();
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const loadComments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get(`/community/communities/${communityId}/posts/${post.id}/comments`);
+      setComments(data.comments || []);
+    } catch (e) {
+      showToast(e.message || 'Error cargando comentarios', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [communityId, post.id, showToast]);
+
+  useEffect(() => { loadComments(); }, [loadComments]);
+
+  async function handleSend() {
+    if (!text.trim()) return;
+    setSending(true);
+    try {
+      await api.post(`/community/communities/${communityId}/posts/${post.id}/comments`, { content: text.trim() });
+      setText('');
+      await loadComments();
+      onCountChange?.(post.id, 1);
+    } catch (e) {
+      showToast(e.message || 'Error al comentar', 'error');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleDeleteComment(commentId) {
+    try {
+      await api.delete(`/community/communities/${communityId}/posts/${post.id}/comments/${commentId}`);
+      setComments(cs => cs.filter(c => c.id !== commentId));
+      onCountChange?.(post.id, -1);
+    } catch (e) {
+      showToast(e.message || 'Error al borrar comentario', 'error');
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl max-h-[92vh] flex flex-col">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-2 sm:hidden flex-shrink-0" />
+
+        <div className="flex items-center justify-between px-5 py-3 border-b border-surface-border flex-shrink-0">
+          <h2 className="font-display font-bold text-surface-text text-sm">Publicación</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-surface-muted hover:text-surface-text">✕</button>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          <div className="p-4 border-b border-surface-border/60">
+            <div className="flex items-center gap-2.5 mb-2">
+              <RaffleAvatar user={post.creator} />
+              <div className="min-w-0">
+                <p className="text-xs font-display font-bold text-surface-text truncate">{post.creator?.username || 'Alguien'}</p>
+                <p className="text-[10px] text-surface-muted font-mono">{formatThreadDate(post.created_at)}</p>
+              </div>
+            </div>
+            {post.content && <p className="text-sm text-surface-text leading-relaxed whitespace-pre-wrap">{post.content}</p>}
+            {post.type === 'photo' && post.media_url && (
+              <img src={post.media_url} alt="" className="w-full max-h-80 object-cover rounded-xl mt-2" />
+            )}
+            {post.type === 'video' && post.media_url && (
+              <video src={post.media_url} controls className="w-full max-h-80 rounded-xl mt-2 bg-black" />
+            )}
+          </div>
+
+          <div className="p-4 space-y-3">
+            {loading ? (
+              <p className="text-xs text-surface-muted text-center py-4">Cargando comentarios...</p>
+            ) : comments.length === 0 ? (
+              <p className="text-xs text-surface-muted text-center py-4">Sé el primero en comentar</p>
+            ) : (
+              comments.map(c => (
+                <div key={c.id} className="flex items-start gap-2.5">
+                  <RaffleAvatar user={c.user} />
+                  <div className="flex-1 min-w-0 bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-display font-bold text-surface-text truncate">{c.user?.username || 'Alguien'}</p>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-[10px] text-surface-muted font-mono">{formatThreadDate(c.created_at)}</span>
+                        {(c.user?.id === currentUserId || isCommunityCreator) && (
+                          <button
+                            onClick={() => handleDeleteComment(c.id)}
+                            className="text-[10px] text-surface-muted hover:text-red-400"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-surface-text leading-relaxed whitespace-pre-wrap mt-0.5">{c.content}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="p-3 border-t border-surface-border flex items-center gap-2 flex-shrink-0 pb-safe">
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
+            placeholder="Escribe un comentario..."
+            maxLength={1000}
+            className="flex-1 bg-surface-bg border border-surface-border rounded-xl px-3.5 py-2.5 text-sm text-surface-text placeholder:text-surface-muted focus:outline-none focus:border-accent-primary/50"
+          />
+          <button
+            onClick={handleSend}
+            disabled={sending || !text.trim()}
+            className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white flex items-center justify-center disabled:opacity-50"
+          >
+            {sending ? '⏳' : '➤'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, onLike }) {
   const sortedEvents = sortEventsByProximity(events);
 
@@ -1595,6 +1915,9 @@ export default function CommunityDetailPage() {
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [raffles, setRaffles] = useState([]);
   const [showCreateRaffle, setShowCreateRaffle] = useState(false);
+  const [posts, setPosts] = useState([]);
+  const [showCreatePost, setShowCreatePost] = useState(false);
+  const [openPost, setOpenPost] = useState(null);
   const [showCollabModal, setShowCollabModal] = useState(false);
   const [collaborating, setCollaborating] = useState(false);
   const [collabStats, setCollabStats] = useState(null);
@@ -1607,6 +1930,15 @@ export default function CommunityDetailPage() {
       setRaffles(data.raffles || []);
     } catch (e) {
       // No bloqueamos la carga de la comunidad si fallan los sorteos.
+    }
+  }, [communityId]);
+
+  const loadPosts = useCallback(async () => {
+    try {
+      const data = await api.get(`/community/communities/${communityId}/posts`);
+      setPosts(data.posts || []);
+    } catch (e) {
+      // No bloqueamos la carga de la comunidad si falla el hilo.
     }
   }, [communityId]);
 
@@ -1631,6 +1963,10 @@ export default function CommunityDetailPage() {
   useEffect(() => {
     loadRaffles();
   }, [loadRaffles]);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
 
   // Limpiar el badge SOLO después de que la página haya cargado y se muestre al usuario
   useEffect(() => {
@@ -1661,6 +1997,26 @@ export default function CommunityDetailPage() {
     await api.postForm(`/community/communities/${communityId}/raffles`, formData);
     showToast('¡Sorteo creado! 🎁', 'success');
     await loadRaffles();
+  }
+
+  async function handleCreatePost({ content, file }) {
+    const formData = new FormData();
+    if (content) formData.append('content', content);
+    if (file) formData.append('media', file);
+    await api.postForm(`/community/communities/${communityId}/posts`, formData);
+    showToast('¡Publicado en el hilo! 📸', 'success');
+    await loadPosts();
+  }
+
+  async function handleDeletePost(postId) {
+    try {
+      await api.delete(`/community/communities/${communityId}/posts/${postId}`);
+      setPosts(ps => ps.filter(p => p.id !== postId));
+      if (openPost?.id === postId) setOpenPost(null);
+      showToast('Publicación borrada', 'success');
+    } catch (e) {
+      showToast(e.message || 'Error al borrar', 'error');
+    }
   }
 
   async function handleDrawRaffle(raffleId) {
@@ -1954,6 +2310,41 @@ export default function CommunityDetailPage() {
           </section>
         )}
 
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="font-display font-bold text-surface-text text-sm">Hilo de la comunidad</h2>
+            {community.creator_id === profile?.id && (
+              <button
+                onClick={() => setShowCreatePost(true)}
+                className="flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors"
+              >
+                <span>+</span> Publicar
+              </button>
+            )}
+          </div>
+          {posts.length === 0 ? (
+            <div className="text-center py-8 border border-surface-border rounded-2xl bg-surface-card">
+              <p className="text-sm text-surface-muted">
+                {community.creator_id === profile?.id
+                  ? 'Publica una foto, vídeo o mensaje para empezar el hilo.'
+                  : 'Todavía no hay publicaciones en el hilo de esta comunidad.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {posts.map(post => (
+                <CommunityPostCard
+                  key={post.id}
+                  post={post}
+                  isCreator={community.creator_id === profile?.id}
+                  onOpen={setOpenPost}
+                  onDelete={handleDeletePost}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
         {raffles.length > 0 && (
           <section className="space-y-3">
             <h2 className="font-display font-bold text-surface-text text-sm px-1">Sorteos</h2>
@@ -2005,6 +2396,26 @@ export default function CommunityDetailPage() {
           community={community}
           onClose={() => setShowEditCommunity(false)}
           onSave={handleEditCommunity}
+        />
+      )}
+
+      {showCreatePost && (
+        <CreatePostModal
+          onClose={() => setShowCreatePost(false)}
+          onCreate={handleCreatePost}
+        />
+      )}
+
+      {openPost && (
+        <PostCommentsModal
+          post={openPost}
+          communityId={communityId}
+          currentUserId={profile?.id}
+          isCommunityCreator={community.creator_id === profile?.id}
+          onClose={() => setOpenPost(null)}
+          onCountChange={(postId, delta) => {
+            setPosts(ps => ps.map(p => p.id === postId ? { ...p, comment_count: Math.max(0, (p.comment_count || 0) + delta) } : p));
+          }}
         />
       )}
 

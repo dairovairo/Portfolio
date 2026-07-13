@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../lib/supabase');
 const { applyBatteryExpiry } = require('../lib/batteryExpiry');
 const { requireAuth } = require('../middleware/auth');
-const { createImageUpload, storeImage } = require('../lib/imageUpload');
+const { createImageUpload, createMediaUpload, storeImage, storeMedia, mediaKindFromMimetype } = require('../lib/imageUpload');
 const { notifyUsers, getMutedUserIds } = require('../lib/webpush');
 const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 const { getNotificationDayKey } = require('../lib/notificationDay');
@@ -17,6 +17,8 @@ const eventUpdateImageUpload = createImageUpload({ maxSizeMb: 8 });
 // Multer instance for community chat image uploads (8 MB max) — mismo
 // límite que el chat de grupos (groups.js).
 const _communityChatImageUpload = createImageUpload({ maxSizeMb: 8 }).single('image');
+// Multer para el hilo de comunidad (fotos o vídeos, 30 MB máx.).
+const communityPostMediaUpload = createMediaUpload({ maxSizeMb: 30 });
 
 function uploadEventCover(req, res, next) {
   eventCoverUpload.single('cover')(req, res, err => {
@@ -39,6 +41,14 @@ function uploadEventUpdateImage(req, res, next) {
     if (!err) return next();
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return res.status(status).json({ error: err.message || 'No se pudo subir la imagen' });
+  });
+}
+
+function uploadCommunityPostMedia(req, res, next) {
+  communityPostMediaUpload.single('media')(req, res, err => {
+    if (!err) return next();
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ error: err.message || 'No se pudo subir el archivo' });
   });
 }
 
@@ -2713,6 +2723,283 @@ function serializeRaffle(raffle, { participantCount, currentUserId, isEligible }
       : undefined,
   };
 }
+
+// ── Hilo de comunidad (posts de foto/vídeo/texto + comentarios) ────────────
+// Solo el CREADOR de la comunidad puede publicar en el hilo; cualquier
+// miembro puede comentar. Mismo criterio de pertenencia que el chat
+// (requireCommunityMembership) y de creador que los sorteos.
+
+function serializeCommunityPost(row, { commentCount = 0 } = {}) {
+  return {
+    id: row.id,
+    community_id: row.community_id,
+    type: row.type,
+    content: row.content,
+    media_url: row.media_url,
+    created_at: row.created_at,
+    creator: row.creator || null,
+    comment_count: commentCount,
+  };
+}
+
+function serializeCommunityPostComment(row) {
+  return {
+    id: row.id,
+    post_id: row.post_id,
+    content: row.content,
+    created_at: row.created_at,
+    user: row.user || null,
+  };
+}
+
+// ── GET /api/community/communities/:id/posts — listar hilo ─────────────────
+router.get('/communities/:id/posts', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data, error } = await supabase
+      .from('community_posts')
+      .select(`
+        id, community_id, type, content, media_url, created_at,
+        creator:creator_id(id, username, avatar_url)
+      `)
+      .eq('community_id', communityId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const posts = data || [];
+    const postIds = posts.map(p => p.id);
+    const countByPost = new Map();
+    if (postIds.length) {
+      const { data: commentRows } = await supabase
+        .from('community_post_comments')
+        .select('post_id')
+        .in('post_id', postIds);
+      for (const c of commentRows || []) {
+        countByPost.set(c.post_id, (countByPost.get(c.post_id) || 0) + 1);
+      }
+    }
+
+    res.json({
+      posts: posts.map(p => serializeCommunityPost(p, { commentCount: countByPost.get(p.id) || 0 })),
+    });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/posts', err);
+    res.status(500).json({ error: `Failed to fetch posts: ${err.message || err}` });
+  }
+});
+
+// ── POST /api/community/communities/:id/posts — publicar en el hilo ────────
+// Solo el creador de la comunidad. Admite foto, vídeo o solo texto.
+router.post('/communities/:id/posts', requireAuth, uploadCommunityPostMedia, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  const content = req.body.content?.trim() || null;
+
+  if (!content && !req.file) {
+    return res.status(400).json({ error: 'Escribe un mensaje o adjunta una foto o vídeo' });
+  }
+
+  try {
+    const { data: community } = await supabase
+      .from('communities')
+      .select('id, creator_id')
+      .eq('id', communityId)
+      .maybeSingle();
+
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (community.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la comunidad puede publicar en el hilo' });
+    }
+
+    let mediaUrl = null;
+    let type = 'text';
+    if (req.file) {
+      type = mediaKindFromMimetype(req.file.mimetype) || 'photo';
+      mediaUrl = await storeMedia({
+        file: req.file,
+        bucket: 'chat-images',
+        objectName: `community-posts/${communityId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('community_posts')
+      .insert({
+        community_id: communityId,
+        creator_id: userId,
+        type,
+        content,
+        media_url: mediaUrl,
+      })
+      .select(`
+        id, community_id, type, content, media_url, created_at,
+        creator:creator_id(id, username, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ post: serializeCommunityPost(data, { commentCount: 0 }) });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/posts', err);
+    res.status(err.status || 500).json({ error: err.message || 'Failed to create post' });
+  }
+});
+
+// ── DELETE /api/community/communities/:id/posts/:postId — borrar post ──────
+// Solo el creador de la comunidad.
+router.delete('/communities/:id/posts/:postId', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: communityId, postId } = req.params;
+
+  try {
+    const { data: community } = await supabase
+      .from('communities')
+      .select('id, creator_id')
+      .eq('id', communityId)
+      .maybeSingle();
+
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (community.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la comunidad puede borrar publicaciones del hilo' });
+    }
+
+    const { error } = await supabase
+      .from('community_posts')
+      .delete()
+      .eq('id', postId)
+      .eq('community_id', communityId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[community] DELETE /communities/:id/posts/:postId', err);
+    res.status(500).json({ error: err.message || 'Failed to delete post' });
+  }
+});
+
+// ── GET /api/community/communities/:id/posts/:postId/comments ──────────────
+router.get('/communities/:id/posts/:postId/comments', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: communityId, postId } = req.params;
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data: post } = await supabase
+      .from('community_posts')
+      .select('id')
+      .eq('id', postId)
+      .eq('community_id', communityId)
+      .maybeSingle();
+    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+
+    const { data, error } = await supabase
+      .from('community_post_comments')
+      .select(`
+        id, post_id, content, created_at,
+        user:user_id(id, username, avatar_url)
+      `)
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ comments: (data || []).map(serializeCommunityPostComment) });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/posts/:postId/comments', err);
+    res.status(500).json({ error: `Failed to fetch comments: ${err.message || err}` });
+  }
+});
+
+// ── POST /api/community/communities/:id/posts/:postId/comments ─────────────
+// Cualquier miembro de la comunidad puede comentar.
+router.post('/communities/:id/posts/:postId/comments', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: communityId, postId } = req.params;
+  const content = req.body.content?.trim();
+
+  if (!content) return res.status(400).json({ error: 'El comentario no puede estar vacío' });
+  if (content.length > 1000) return res.status(400).json({ error: 'El comentario es demasiado largo' });
+
+  try {
+    if (!(await requireCommunityMembership(communityId, userId))) {
+      return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const { data: post } = await supabase
+      .from('community_posts')
+      .select('id')
+      .eq('id', postId)
+      .eq('community_id', communityId)
+      .maybeSingle();
+    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+
+    const { data, error } = await supabase
+      .from('community_post_comments')
+      .insert({ post_id: postId, user_id: userId, content })
+      .select(`
+        id, post_id, content, created_at,
+        user:user_id(id, username, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ comment: serializeCommunityPostComment(data) });
+  } catch (err) {
+    console.error('[community] POST /communities/:id/posts/:postId/comments', err);
+    res.status(500).json({ error: err.message || 'Failed to create comment' });
+  }
+});
+
+// ── DELETE /api/community/communities/:id/posts/:postId/comments/:commentId ─
+// El autor del comentario o el creador de la comunidad pueden borrarlo.
+router.delete('/communities/:id/posts/:postId/comments/:commentId', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { id: communityId, postId, commentId } = req.params;
+
+  try {
+    const { data: community } = await supabase
+      .from('communities')
+      .select('id, creator_id')
+      .eq('id', communityId)
+      .maybeSingle();
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+
+    const { data: comment } = await supabase
+      .from('community_post_comments')
+      .select('id, user_id, post_id')
+      .eq('id', commentId)
+      .eq('post_id', postId)
+      .maybeSingle();
+    if (!comment) return res.status(404).json({ error: 'Comentario no encontrado' });
+
+    if (comment.user_id !== userId && community.creator_id !== userId) {
+      return res.status(403).json({ error: 'No puedes borrar este comentario' });
+    }
+
+    const { error } = await supabase
+      .from('community_post_comments')
+      .delete()
+      .eq('id', commentId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[community] DELETE /communities/:id/posts/:postId/comments/:commentId', err);
+    res.status(500).json({ error: err.message || 'Failed to delete comment' });
+  }
+});
 
 // ── GET /api/community/communities/:id/raffles — listar sorteos ────────────
 router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
