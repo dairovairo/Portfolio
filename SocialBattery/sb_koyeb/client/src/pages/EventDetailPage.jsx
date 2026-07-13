@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
 import ReminderBellButton, { DEFAULT_EVENT_REMINDER_MINUTES } from '../components/ReminderBellButton';
+import { useUserLocation } from '../context/UserLocationContext';
 import LocationMapView from '../components/LocationMapView';
 import { generateEventStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
 import { useMascot } from '../context/MascotContext';
@@ -641,6 +642,91 @@ function EndPromotionModal({ event, onClose, onEnded }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Modal "Locator" — mapa a pantalla completa con la ubicación del evento ──
+function EventLocatorModal({ event, onClose }) {
+  const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
+  const { showToast } = useToast();
+
+  // El grupo de localización solo se puede crear cuando falta 1 hora o
+  // menos para que empiece el evento (o ya ha empezado) — no tiene sentido
+  // compartir ubicación con antelación, y así evitamos grupos abiertos
+  // durante días sin actividad.
+  const msToStart = new Date(event.event_date).getTime() - Date.now();
+  const canCreateLocatorGroup = !Number.isNaN(msToStart) && msToStart <= 60 * 60 * 1000;
+
+  function handleCreateLocatorGroup() {
+    if (!canCreateLocatorGroup) return;
+    showToast('Función en camino: pronto podrás crear el grupo de localización 📍', 'info');
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-xl">📍</span>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-display font-bold text-surface-text truncate">{event.title}</h2>
+            <p className="text-xs text-surface-muted truncate">{event.location || 'Ubicación del evento'}</p>
+          </div>
+          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none flex-shrink-0">×</button>
+        </div>
+
+        {/* Aviso de ubicación desactivada — mismo patrón que en Comunidad
+            (CommunityPage.jsx): se comprueba locationStatus === 'denied'
+            explícitamente además de !userCoords por si quedaran coords
+            cacheadas de un permiso ya revocado. Todo el aviso es clicable
+            para pedir el permiso, no solo el texto "Activar". */}
+        {(!userCoords || locationStatus === 'denied') && locationStatus !== 'unsupported' && (
+          <button
+            type="button"
+            onClick={requestLocation}
+            className="w-full mb-3 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5 text-left hover:bg-amber-500/15 transition-colors"
+          >
+            <span>
+              📍 {locationStatus === 'denied'
+                ? 'Has denegado la ubicación: actívala para usar el localizador.'
+                : 'No tienes la ubicación activada. Actívala para usar el localizador.'}
+            </span>
+            <span className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap">Activar</span>
+          </button>
+        )}
+
+        {event.lat != null && event.lng != null ? (
+          <LocationMapView lat={event.lat} lng={event.lng} label={event.location} />
+        ) : (
+          <p className="text-sm text-surface-muted text-center py-8">Este evento no tiene ubicación en el mapa.</p>
+        )}
+
+        <div className="mt-4 pt-4 border-t border-surface-border">
+          <button
+            type="button"
+            onClick={handleCreateLocatorGroup}
+            disabled={!canCreateLocatorGroup}
+            className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 border transition-colors ${
+              canCreateLocatorGroup
+                ? 'bg-blue-500/15 text-blue-400 border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300'
+                : 'bg-surface-bg text-surface-muted border-surface-border opacity-50 cursor-not-allowed'
+            }`}
+          >
+            <span className="text-xl flex-shrink-0">📍</span>
+            <span className="flex-1 min-w-0 text-left">
+              <span className="block font-display font-bold text-sm">Crear grupo de localización</span>
+              <span className="block text-xs mt-0.5 opacity-90">Añade a tus amigos a un grupo para saber dónde están durante el evento</span>
+            </span>
+          </button>
+          {!canCreateLocatorGroup && (
+            <p className="text-[11px] text-surface-muted mt-1.5 px-1">
+              Podrás crear el grupo de localización cuando falte 1 hora o menos para que empiece el evento.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EventDetailPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
@@ -665,6 +751,7 @@ export default function EventDetailPage() {
   // — mismo patrón que el mute de chats de grupo/quedada/comunidad (fase 88),
   // reutilizando muted_conversations con conversation_type = 'event' (fase 89).
   const [updatesMuted, setUpdatesMuted] = useState(() => isConversationMuted('event', eventId));
+  const [showLocator, setShowLocator] = useState(false);
 
   // update thread composer
   const [draft, setDraft] = useState('');
@@ -990,6 +1077,16 @@ export default function EventDetailPage() {
               {daysLabel && <span className="text-amber-300/80"> · {daysLabel}</span>}
             </p>
           </div>
+          {event.lat != null && event.lng != null && (
+            <button
+              onClick={() => setShowLocator(true)}
+              title="Ver ubicación en el mapa"
+              aria-label="Ver ubicación en el mapa"
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors flex-shrink-0 text-base"
+            >
+              📍
+            </button>
+          )}
           {!isCreator && (
             <button
               onClick={handleToggleUpdatesMute}
@@ -1002,6 +1099,10 @@ export default function EventDetailPage() {
           )}
         </div>
       </header>
+
+      {showLocator && (
+        <EventLocatorModal event={event} onClose={() => setShowLocator(false)} />
+      )}
 
       <main className="max-w-lg mx-auto px-4 pb-28 pt-4 space-y-4">
 
