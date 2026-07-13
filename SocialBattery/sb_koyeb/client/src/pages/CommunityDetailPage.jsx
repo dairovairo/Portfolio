@@ -823,6 +823,14 @@ function raffleTierMeta(tierKey) {
   return RAFFLE_TIER_OPTIONS.find(t => t.key === tierKey) || RAFFLE_TIER_OPTIONS[0];
 }
 
+// Color del panel al seleccionar cada tipo de sorteo en el modal de creación
+// (mismo azul clarito que usa el botón "Chat" de la comunidad).
+const RAFFLE_TIER_SELECTED_STYLES = {
+  volt: 'border-blue-400/60 bg-blue-400/10',
+  community: 'border-red-400/60 bg-red-400/10',
+  light: 'border-amber-400/60 bg-amber-400/10',
+};
+
 function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
   const [drawing, setDrawing] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -1005,6 +1013,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
             <div className="space-y-2">
               {RAFFLE_TIER_OPTIONS.map(opt => {
                 const selected = tier === opt.key;
+                const selectedStyle = RAFFLE_TIER_SELECTED_STYLES[opt.key] || 'border-accent-primary/60 bg-accent-primary/10';
                 return (
                   <button
                     key={opt.key}
@@ -1012,7 +1021,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
                     onClick={() => setTier(opt.key)}
                     className={`w-full text-left rounded-xl border px-3.5 py-3 transition-all ${
                       selected
-                        ? 'border-accent-primary/60 bg-accent-primary/10'
+                        ? selectedStyle
                         : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
                     }`}
                   >
