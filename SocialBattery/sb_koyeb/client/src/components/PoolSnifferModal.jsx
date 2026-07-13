@@ -4,17 +4,25 @@ import { useUserLocation } from '../context/UserLocationContext';
 
 /**
  * PoolSnifferModal — "🐽 Sniffer": muestra en un mapa la ubicación de una
- * quedada (pool.location_hint). Las quedadas solo guardan la ubicación como
- * texto libre, así que aquí se geocodifica con Nominatim (mismo servicio que
- * ya usa LocationPicker) y se reutiliza GlobeLocationView para pintar el
- * mapa con precisión.
+ * quedada.
+ *
+ * Desde que las quedadas guardan lat/lng reales (el punto exacto en el que
+ * se hizo clic en LocationPicker al crearlas), el Sniffer las usa
+ * directamente sin volver a geocodificar — así se evita el desfase de
+ * ~15-20 m que aparecía siempre en la misma dirección al hacer un
+ * reverse-geocode (clic → texto) seguido de un forward-geocode (texto →
+ * coordenadas) con Nominatim, que no siempre devuelve el mismo punto.
+ *
+ * Para quedadas antiguas creadas antes de este cambio (sin lat/lng
+ * guardadas), se mantiene como respaldo la geocodificación de
+ * pool.location_hint, igual que antes.
  *
  * También muestra el aviso estándar de la app cuando el usuario no tiene la
  * ubicación de su móvil activada (mismo texto/patrón que en CommunityPage),
  * con botón para solicitarla.
  *
  * Props:
- *   pool    {object} — quedada (usa pool.location_hint)
+ *   pool    {object} — quedada (usa pool.lat/pool.lng si existen, si no pool.location_hint)
  *   onClose () => void
  */
 
@@ -55,8 +63,22 @@ export default function PoolSnifferModal({ pool, onClose }) {
     : null;
   const isUnlocked = !unlockAt || new Date() >= unlockAt;
 
+  const hasStoredCoords = pool?.lat != null && pool?.lng != null;
+
   useEffect(() => {
     if (!isUnlocked) { setLoading(false); return; }
+
+    // Coordenadas ya guardadas al crear la quedada (clic exacto en el mapa)
+    // — caso normal desde ahora, sin llamada a Nominatim ni desfase.
+    if (hasStoredCoords) {
+      setCoords({ lat: pool.lat, lng: pool.lng });
+      setError('');
+      setLoading(false);
+      return;
+    }
+
+    // Respaldo para quedadas antiguas sin lat/lng guardadas: geocodificar
+    // el texto libre, como se hacía antes.
     let cancelled = false;
     const query = pool?.location_hint?.trim();
     if (!query) {
@@ -79,7 +101,7 @@ export default function PoolSnifferModal({ pool, onClose }) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [pool?.location_hint, isUnlocked]);
+  }, [pool?.location_hint, pool?.lat, pool?.lng, hasStoredCoords, isUnlocked]);
 
   // Mismo criterio que en CommunityPage: coords cacheadas de un permiso ya
   // revocado no cuentan como "ubicación activada".

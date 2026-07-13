@@ -282,7 +282,7 @@ router.get('/', requireAuth, async (req, res) => {
     let query = supabase
       .from('hangout_pools')
       .select(`
-        id, activity, description, location_hint, scheduled_at, ends_at,
+        id, activity, description, location_hint, lat, lng, scheduled_at, ends_at,
         max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
         creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at),
         pool_participants(
@@ -541,7 +541,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     const { data: pool, error } = await supabase
       .from('hangout_pools')
       .select(`
-        id, activity, description, location_hint, scheduled_at, ends_at,
+        id, activity, description, location_hint, lat, lng, scheduled_at, ends_at,
         max_people, is_public, group_id, status, created_at, creator_id, cover_image_url,
         creator:creator_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url),
         pool_participants(
@@ -607,6 +607,7 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
     max_people = null, is_public = false,
     group_id = null,
     invited_user_ids = [],   // NEW: individual friend invites for private pools
+    lat = null, lng = null,  // coordenadas reales del clic en el mapa (LocationPicker)
   } = req.body;
 
   // req.body arrives as multipart/form-data (strings only) when a cover photo
@@ -634,6 +635,14 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
   }
   const location = location_hint?.trim();
   if (!location) return res.status(400).json({ error: 'location_hint is required' });
+
+  // lat/lng son opcionales (compatibilidad con quedadas antiguas / texto
+  // libre sin mapa), pero si llegan deben ser números válidos.
+  const parsedLat = (lat === null || lat === undefined || lat === '') ? null : parseFloat(lat);
+  const parsedLng = (lng === null || lng === undefined || lng === '') ? null : parseFloat(lng);
+  if ((parsedLat !== null && Number.isNaN(parsedLat)) || (parsedLng !== null && Number.isNaN(parsedLng))) {
+    return res.status(400).json({ error: 'Coordenadas de ubicación no válidas' });
+  }
 
   let endDateIso = null;
   if (ends_at) {
@@ -680,6 +689,8 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
         activity: activity.trim(),
         description: description?.trim() || null,
         location_hint: location,
+        lat: parsedLat,
+        lng: parsedLng,
         scheduled_at: startDate.toISOString(),
         ends_at: endDateIso,
         max_people: maxPeople,
@@ -689,7 +700,7 @@ router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
         status: 'open',
       })
       .select(`
-        id, activity, description, location_hint, scheduled_at, ends_at,
+        id, activity, description, location_hint, lat, lng, scheduled_at, ends_at,
         max_people, is_public, status, created_at, cover_image_url,
         creator:creator_id(id, username, avatar_url, battery_level, mascot_preview_url, mascot_name)
       `)
@@ -1297,7 +1308,7 @@ router.patch('/:id/reminder', requireAuth, async (req, res) => {
 router.patch('/:id', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const poolId = req.params.id;
-  const { activity, description, location_hint, scheduled_at, ends_at, max_people, is_public, status } = req.body;
+  const { activity, description, location_hint, lat, lng, scheduled_at, ends_at, max_people, is_public, status } = req.body;
 
   try {
     const { data: pool } = await supabase
@@ -1316,6 +1327,18 @@ router.patch('/:id', requireAuth, async (req, res) => {
       const location = location_hint?.trim();
       if (!location) return res.status(400).json({ error: 'location_hint is required' });
       updates.location_hint = location;
+      // Si se manda un texto de ubicación nuevo, las coordenadas viajan
+      // juntas (lat/lng) o se limpian — evita dejar coordenadas de una
+      // ubicación anterior asociadas a un texto distinto.
+      if (lat !== undefined || lng !== undefined) {
+        const parsedLat = (lat === null || lat === undefined || lat === '') ? null : parseFloat(lat);
+        const parsedLng = (lng === null || lng === undefined || lng === '') ? null : parseFloat(lng);
+        if ((parsedLat !== null && Number.isNaN(parsedLat)) || (parsedLng !== null && Number.isNaN(parsedLng))) {
+          return res.status(400).json({ error: 'Coordenadas de ubicación no válidas' });
+        }
+        updates.lat = parsedLat;
+        updates.lng = parsedLng;
+      }
     }
     if (scheduled_at !== undefined) {
       const startDate = new Date(scheduled_at);

@@ -995,6 +995,8 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
     activity: '',
     description: '',
     location_hint: '',
+    lat: null,
+    lng: null,
     scheduled_at: minDate,
     ends_at: '',
     max_people: null,
@@ -1007,11 +1009,6 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  // Coordenadas solo para pintar el marcador en el mapa del selector de
-  // ubicación — las quedadas siguen guardando la ubicación como texto libre
-  // (location_hint) en el backend, igual que hacía el input anterior.
-  const [pickerLat, setPickerLat] = useState(null);
-  const [pickerLng, setPickerLng] = useState(null);
   const emoji = getActivityEmoji(form.activity);
   // La fecha de fin no puede ser más de un día después de la fecha de inicio elegida.
   const poolStartForEnd = form.scheduled_at ? new Date(form.scheduled_at) : new Date(minDate);
@@ -1212,12 +1209,10 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
             <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
             <LocationPicker
               value={form.location_hint}
-              lat={pickerLat}
-              lng={pickerLng}
+              lat={form.lat}
+              lng={form.lng}
               onChange={(location, lat, lng) => {
-                set('location_hint', location.slice(0, 150));
-                setPickerLat(lat);
-                setPickerLng(lng);
+                setForm(f => ({ ...f, location_hint: location.slice(0, 150), lat, lng }));
               }}
               typingWarning="Si la ubicación no es real, el modo Sniffer no funcionará. Se recomienda el uso del mapa para mayor precisión."
             />
