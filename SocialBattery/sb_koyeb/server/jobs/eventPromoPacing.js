@@ -279,6 +279,24 @@ async function runEventPromoPacingTick() {
     const notifiedTodaySet = new Set((claimedToday || []).map(r => r.user_id));
     console.log(`[NOTIF-CAP][PROMO-PACING][pid:${INSTANCE_ID}] tick ${dayKey}: ${pending.length} eventos pendientes, ${notifiedTodaySet.size} usuarios ya con hueco de hoy reservado (excluidos de este tick).`);
 
+    // 2b. Usuarios con "Silenciar recomendaciones de eventos de otras
+    //     comunidades" activado (users.mute_event_recommendations, fase 92).
+    //     Este pool de reparto (fetchEligiblePool más abajo) YA excluye a
+    //     los miembros de la comunidad del propio evento (ver excludeSet más
+    //     abajo, línea "...communityMembersByCommunity..."), así que lo que
+    //     queda aquí es exactamente el alcance hacia gente de OTRAS
+    //     comunidades (o sin comunidad) — el caso que este ajuste debe
+    //     silenciar.
+    const { data: mutedRecommendationRows, error: mutedRecError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('mute_event_recommendations', true);
+    if (mutedRecError) {
+      console.warn('[PROMO-PACING] error consultando mute_event_recommendations:', mutedRecError.message);
+    }
+    const mutedRecommendationIds = new Set((mutedRecommendationRows || []).map(r => r.id));
+    console.log(`[NOTIF-CAP][PROMO-PACING] ${mutedRecommendationIds.size} usuarios con recomendaciones de eventos silenciadas (excluidos del reparto).`);
+
     // 3. Historial completo por evento (para no repetir usuario en el mismo evento)
     const eventIds = pending.map(e => e.id);
     const { data: everNotified } = await supabase
@@ -305,8 +323,10 @@ async function runEventPromoPacingTick() {
       });
     }
 
-    // 5. Cupo disponible este tick: usuarios con push activo, sin notificar hoy
-    let available = await fetchEligiblePool(notifiedTodaySet);
+    // 5. Cupo disponible este tick: usuarios con push activo, sin notificar
+    //    hoy y sin las recomendaciones de eventos silenciadas.
+    const excludedFromPool = new Set([...notifiedTodaySet, ...mutedRecommendationIds]);
+    let available = await fetchEligiblePool(excludedFromPool);
     if (!available.length) return;
 
     // 6. Priorización: Tier A (bajo mínimo, más urgentes primero) + Tier B (más rezagados primero)

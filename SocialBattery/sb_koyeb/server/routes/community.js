@@ -354,6 +354,25 @@ router.get('/events/ranking', requireAuth, async (req, res) => {
   }
 });
 
+// Devuelve el Set de candidateIds que tiene activado "Silenciar nuevos
+// eventos de tus comunidades" (users.mute_new_events, fase 92). Se usa para
+// no mandar el push inmediato de "nuevo evento en tu comunidad" (cualquier
+// plan) a quien lo tenga silenciado — igual que getPoolChatMuteFilteredIds
+// en routes/pools.js.
+async function getMuteNewEventsFilteredIds(candidateIds) {
+  if (!candidateIds.length) return new Set();
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_new_events', true);
+    return new Set((data || []).map(u => u.id));
+  } catch {
+    return new Set();
+  }
+}
+
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
@@ -505,10 +524,12 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           ]);
 
           const communityMemberIds = members?.map(m => m.user_id) || [];
+          const mutedNewEventsIds = await getMuteNewEventsFilteredIds(communityMemberIds);
+          const pushMemberIds = communityMemberIds.filter(uid => !mutedNewEventsIds.has(uid));
           const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
-          console.log(`[NOTIF-CAP] evento ${event.id} ("${event.title}") es de comunidad ${communityId}: ${communityMemberIds.length} miembros a notificar SIEMPRE (excepción al tope diario).`);
+          console.log(`[NOTIF-CAP] evento ${event.id} ("${event.title}") es de comunidad ${communityId}: ${communityMemberIds.length} miembros (${pushMemberIds.length} sin silenciar) a notificar SIEMPRE (excepción al tope diario).`);
 
-          const notifiedUserIds = await notifyUsers(supabase, communityMemberIds, userId, {
+          const notifiedUserIds = await notifyUsers(supabase, pushMemberIds, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
             url:   `/community/event/${event.id}`,
@@ -682,10 +703,12 @@ router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
           ]);
 
           const communityMemberIds = members?.map(m => m.user_id) || [];
+          const mutedNewEventsIds = await getMuteNewEventsFilteredIds(communityMemberIds);
+          const pushMemberIds = communityMemberIds.filter(uid => !mutedNewEventsIds.has(uid));
           const communityLabel = comm?.name ? `en "${comm.name}"` : 'en tu comunidad';
-          console.log(`[NOTIF-CAP] renovación evento ${event.id} ("${event.title}") es de comunidad ${event.community_id}: ${communityMemberIds.length} miembros a re-notificar SIEMPRE (excepción al tope diario).`);
+          console.log(`[NOTIF-CAP] renovación evento ${event.id} ("${event.title}") es de comunidad ${event.community_id}: ${communityMemberIds.length} miembros (${pushMemberIds.length} sin silenciar) a re-notificar SIEMPRE (excepción al tope diario).`);
 
-          const notifiedUserIds = await notifyUsers(supabase, communityMemberIds, userId, {
+          const notifiedUserIds = await notifyUsers(supabase, pushMemberIds, userId, {
             title: `📅 Evento renovado ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
             url:   `/community/event/${event.id}`,

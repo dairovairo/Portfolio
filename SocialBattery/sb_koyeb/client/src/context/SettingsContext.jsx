@@ -449,6 +449,14 @@ export function SettingsProvider({ children }) {
   const setMuteNewEvents = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteNewEvents, String(v));
     setMuteNewEventsState(v);
+    // El aviso de "nuevo evento en tu comunidad" es un web-push real que
+    // manda el servidor (POST /community/events y /renew-promotion) y que
+    // llega igual con la app en foreground o en segundo plano/cerrada, así
+    // que este ajuste tiene que persistir en el usuario
+    // (users.mute_new_events, fase 92) — mismo patrón que mute_new_pools.
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_new_events: v }).catch(() => {});
+    });
   }, []);
 
   const setMuteNewPools = useCallback((v) => {
@@ -479,6 +487,13 @@ export function SettingsProvider({ children }) {
   const setMuteEventRecommendations = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteEventRecommendations, String(v));
     setMuteEventRecommendationsState(v);
+    // El reparto premium/ultra hacia fuera de tus comunidades es un
+    // web-push real (server/jobs/eventPromoPacing.js) que llega igual con
+    // la app en foreground o en segundo plano/cerrada, así que persiste en
+    // el usuario (users.mute_event_recommendations, fase 92).
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_event_recommendations: v }).catch(() => {});
+    });
   }, []);
 
   const setReadReceipts = useCallback((v) => {
@@ -552,6 +567,14 @@ export function SettingsProvider({ children }) {
     if (typeof profile.mute_community_chats === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteCommunityChats, String(profile.mute_community_chats));
       setMuteCommunityChatsState(profile.mute_community_chats);
+    }
+    if (typeof profile.mute_new_events === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.muteNewEvents, String(profile.mute_new_events));
+      setMuteNewEventsState(profile.mute_new_events);
+    }
+    if (typeof profile.mute_event_recommendations === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.muteEventRecommendations, String(profile.mute_event_recommendations));
+      setMuteEventRecommendationsState(profile.mute_event_recommendations);
     }
   }, []);
 
