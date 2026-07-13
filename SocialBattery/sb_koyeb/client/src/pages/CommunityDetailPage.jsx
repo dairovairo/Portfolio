@@ -1053,7 +1053,24 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
                   📶 Las apariciones de banners publicitarios tienen preferencia en sorteos Light frente a sorteos Volt.
                 </p>
                 <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🎯 A cada usuario se le publicitará el sorteo como mucho 3 veces en cada contrato publicitario.
+                  🔁 Se notificará como máximo una vez a cada usuario dentro de una misma promoción; para repetir notificaciones a usuarios se deberá crear otra promoción.
+                </p>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📡 Los banners se enviarán conforme los usuarios estén disponibles.
+                </p>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  ℹ️ Si no se alcanzan 500 banners enseñados no se cobrará nada.
+                </p>
+              </div>
+            )}
+
+            {tier === 'volt' && (
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🎯 Cada persona recibirá como máximo 3 banners esporádicos del sorteo.
+                </p>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📶 Las apariciones de banners publicitarios tienen preferencia en sorteos Light frente a sorteos Volt.
                 </p>
               </div>
             )}
