@@ -25,9 +25,27 @@ function getMascotTier(level) {
 // Mascota en miniatura — misma lógica que FriendCard: capa base según tier
 // de batería + overlay "horneado" (mascot_preview_url) con la personalización
 // del usuario (ropa/calzado/gorro/accesorios), si la tiene.
+//
+// Si el miembro del grupo es el propio usuario (isMe), NO se usa
+// mascot_preview_url: ese PNG lo sube MascotPreviewSync con debounce (1.2s)
+// + red, así que cambiar de outfit/accesorios/actividad y ver la lista de
+// miembros seguía enseñando la ropa anterior hasta refrescar. En su lugar,
+// MascotDisplay se monta sin overrides para que lea directamente el
+// equipado real del contexto (useMascot) — se ve al instante.
 function MiniMascot({ user, size = 32 }) {
+  const { profile } = useAuth();
+  const isMe = Boolean(profile?.id) && user?.id === profile.id;
   const color = getBatteryColor(user?.battery_level ?? 50);
   const tier = getMascotTier(user?.battery_level ?? 50);
+
+  if (isMe) {
+    return (
+      <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+        <MascotDisplay tier={tier} size={size} glowColor={color.hex} />
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
       <MascotDisplay

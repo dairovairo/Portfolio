@@ -84,9 +84,27 @@ function getMascotTier(level) {
 // Mascota en miniatura — mismo criterio que en el resto de la app: capa
 // base según tier de batería + overlay "horneado" (mascot_preview_url) con
 // la personalización del usuario.
+//
+// Si el check-in es el propio (isMe), NO se usa mascot_preview_url: ese PNG
+// lo genera y sube MascotPreviewSync con debounce (1.2s) + red, así que
+// cambiar de outfit y entrar aquí seguía enseñando la ropa anterior hasta
+// refrescar. En su lugar, MascotDisplay se monta sin overrides para que lea
+// directamente el equipado real del contexto (useMascot), igual que hace
+// ProfilePage.jsx con la mascota propia — se ve al instante.
 function MiniMascot({ user, size = 32 }) {
+  const { profile } = useAuth();
+  const isMe = Boolean(profile?.id) && user?.id === profile.id;
   const color = getBatteryColor(user?.battery_level ?? 50);
   const tier = getMascotTier(user?.battery_level ?? 50);
+
+  if (isMe) {
+    return (
+      <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+        <MascotDisplay tier={tier} size={size} glowColor={color.hex} />
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
       <MascotDisplay
@@ -245,13 +263,24 @@ export default function PoolSnifferPage() {
     return distanceMeters(userCoords.lat, userCoords.lng, coords.lat, coords.lng);
   }, [userCoords, coords]);
 
+  // Máximo una vez por usuario: si ya apareces en la lista (por check-in
+  // propio o por el evento Realtime de otra sesión/pestaña tuya), el botón
+  // se deshabilita en vez de dejar volver a pulsar sin necesidad — el
+  // servidor ya lo impide (UNIQUE pool_id+user_id, fase101), esto es solo
+  // para que la UI lo refleje también.
+  const alreadyCheckedIn = useMemo(
+    () => checkins.some(c => c.user?.id === profile?.id),
+    [checkins, profile?.id]
+  );
+
   const handleCheckIn = async () => {
+    if (alreadyCheckedIn || checkingIn) return;
     if (!userCoords) {
       requestLocation();
       setCheckMsg({ type: 'error', text: 'Activa tu ubicación para poder comprobarlo.' });
       return;
     }
-    if (!coords || checkingIn) return;
+    if (!coords) return;
 
     setCheckingIn(true);
     setCheckMsg(null);
@@ -360,10 +389,10 @@ export default function PoolSnifferPage() {
                   <button
                     type="button"
                     onClick={handleCheckIn}
-                    disabled={checkingIn}
+                    disabled={checkingIn || alreadyCheckedIn}
                     className="w-full font-display font-bold text-sm px-4 py-3 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 hover:border-emerald-500/50 transition-colors active:scale-[0.98] disabled:opacity-60"
                   >
-                    {checkingIn ? 'Comprobando…' : '📍 Estoy dentro'}
+                    {checkingIn ? 'Comprobando…' : alreadyCheckedIn ? '✅ Ya estás anotado' : '📍 Estoy dentro'}
                   </button>
 
                   {checkMsg ? (

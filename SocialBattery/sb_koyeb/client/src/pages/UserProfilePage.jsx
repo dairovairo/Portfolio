@@ -229,25 +229,42 @@ export default function UserProfilePage() {
                 Igual que en FriendCard.jsx: la base según su tier de
                 batería se resuelve localmente, y la personalización
                 (ropa/calzado/gorro/accesorios) llega ya horneada como
-                overlay en user.mascot_preview_url. */}
+                overlay en user.mascot_preview_url.
+                Si se entra en este perfil siendo el propio (myProfile.id ===
+                user.id), NO se usa mascot_preview_url: ese PNG lo sube
+                MascotPreviewSync con debounce (1.2s) + red, así que cambiar
+                de outfit y volver aquí seguía enseñando la ropa anterior
+                hasta refrescar. En su lugar, MascotDisplay se monta sin
+                overrides para que lea el equipado real del contexto
+                (useMascot) — se ve al instante, igual que en ProfilePage. */}
             <div className="relative flex-shrink-0" style={{ width: 56, height: 56 }}>
-              <MascotDisplay
-                tier={getMascotTier(user.battery_level ?? 50)}
-                size={56}
-                glowColor={color.hex}
-                outfitSrc={null}
-                feetSrc={null}
-                headSrc={null}
-                accessories={[]}
-                activityLayers={[]}
-              />
-              {user.mascot_preview_url && (
-                <img
-                  src={user.mascot_preview_url}
-                  alt=""
-                  draggable={false}
-                  className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+              {myProfile?.id && myProfile.id === user.id ? (
+                <MascotDisplay
+                  tier={getMascotTier(user.battery_level ?? 50)}
+                  size={56}
+                  glowColor={color.hex}
                 />
+              ) : (
+                <>
+                  <MascotDisplay
+                    tier={getMascotTier(user.battery_level ?? 50)}
+                    size={56}
+                    glowColor={color.hex}
+                    outfitSrc={null}
+                    feetSrc={null}
+                    headSrc={null}
+                    accessories={[]}
+                    activityLayers={[]}
+                  />
+                  {user.mascot_preview_url && (
+                    <img
+                      src={user.mascot_preview_url}
+                      alt=""
+                      draggable={false}
+                      className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>

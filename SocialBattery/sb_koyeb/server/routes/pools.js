@@ -711,7 +711,30 @@ router.post('/:id/sniffer/checkin', requireAuth, async (req, res) => {
       .insert({ pool_id: req.params.id, user_id: userId })
       .select(`id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
       .single();
-    if (insertError) throw insertError;
+
+    if (insertError) {
+      // Carrera entre dos peticiones casi simultáneas (doble tap, dos
+      // pestañas/dispositivos a la vez): ambas pasan el check de "existing"
+      // de arriba antes de que ninguna haya insertado todavía, pero el
+      // UNIQUE (pool_id, user_id) de la tabla (fase101) garantiza que solo
+      // una llegue a insertarse — la otra cae aquí con "23505". En vez de
+      // devolver un error, se recupera la fila ya insertada por la otra
+      // petición y se responde igual que un "ya estabas anotado", así el
+      // máximo de una fila por usuario y quedada se cumple siempre, sin
+      // importar cuántas peticiones lleguen a la vez.
+      if (insertError.code === '23505') {
+        const { data: raceWinner } = await supabase
+          .from('pool_sniffer_checkins')
+          .select(`id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
+          .eq('pool_id', req.params.id)
+          .eq('user_id', userId)
+          .single();
+        if (raceWinner) {
+          return res.json({ checkin: { ...raceWinner, user: applyBatteryExpiry(raceWinner.user) }, already_checked_in: true });
+        }
+      }
+      throw insertError;
+    }
 
     res.json({ checkin: { ...inserted, user: applyBatteryExpiry(inserted.user) }, already_checked_in: false });
   } catch (err) {
