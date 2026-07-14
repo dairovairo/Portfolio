@@ -3529,11 +3529,11 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
 
   // Sorteo Light: visualizaciones de banner a contratar, entre BANNER_VIEWS_MIN
   // y BANNER_VIEWS_MAX (mismo rango que notification_count en eventos
-  // Premium/Ultra — ver POST /community/events más arriba).
-  // ⚠️ TEST: mínimo bajado temporalmente a 1 (normalmente 500) para poder
-  // probar de extremo a extremo el reparto Light → Volt con pocos usuarios.
-  // Revertir a 500 antes de producción real (ver mensaje de Claude).
-  const BANNER_VIEWS_MIN = 1;
+  // Premium/Ultra — ver POST /community/events más arriba). Debe coincidir
+  // con la constraint de la BD (phase102_raffle_banner_views.sql: CHECK
+  // banner_views_contracted BETWEEN 500 AND 50000), o si no la fila se
+  // rechaza en el INSERT aunque haya pasado esta validación de la API.
+  const BANNER_VIEWS_MIN = 500;
   const BANNER_VIEWS_MAX = 50000;
   let resolvedBannerViews = null;
   if (raffleTier === 'light') {
