@@ -421,6 +421,52 @@ export function CommunityNotificationsProvider({ children }) {
     };
   }, [profile?.id]);
 
+  // ── Supabase Realtime: escucha el broadcast de nuevo sorteo con banner
+  //    volador (server/routes/community.js → notifyCommunityRaffleTargets).
+  //    Solo llega a quien, siendo target del banner volador (Community,
+  //    Light o Volt), YA pertenece a la comunidad del sorteo — en Community
+  //    esto es siempre el 100% de los targets. Es un aviso ADICIONAL e
+  //    inmediato, independiente del banner volador en sí (que se sigue
+  //    sirviendo, diferido y con su propio cooldown de 15 min, en la
+  //    próxima entrada al menú principal vía GET /raffle-banner). App
+  //    abierta = notificación local instantánea; app en segundo plano/
+  //    cerrada = la cubre el web-push que manda el mismo endpoint.
+  const raffleBannerChannelRef = useRef(null);
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    if (raffleBannerChannelRef.current) {
+      raffleBannerChannelRef.current.unsubscribe();
+      raffleBannerChannelRef.current = null;
+    }
+
+    const raffleBannerChannel = supabase
+      .channel(`raffle-banner-notif-${profile.id}`)
+      .on('broadcast', { event: 'new_raffle_banner' }, (msg) => {
+        const data = msg.payload;
+        if (!data?.raffle_id || !data?.community_id) return;
+        if (data.creator_id === profile.id) return;
+
+        const settings = settingsRef.current;
+        if (settings.muteAllNotifications) return;
+
+        fireLocalNotification({
+          title: `🎉 Nuevo sorteo en ${data.community_name || 'tu comunidad'}`,
+          body:  data.title || 'Se ha creado un nuevo sorteo',
+          tag:   `raffle-banner-${data.raffle_id}`,
+          url:   `/community/${data.community_id}#raffle-${data.raffle_id}`,
+        });
+      })
+      .subscribe();
+
+    raffleBannerChannelRef.current = raffleBannerChannel;
+
+    return () => {
+      raffleBannerChannel.unsubscribe();
+      raffleBannerChannelRef.current = null;
+    };
+  }, [profile?.id]);
+
   // ── Limpia todos los badges de eventos nuevos ─────────────────────────────
   const clearEventBadge = useCallback(() => {
     setEventsByCommunity({});

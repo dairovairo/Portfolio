@@ -3032,14 +3032,17 @@ async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = n
     }
 
     const targetIds = capCount != null ? candidates.slice(0, Math.min(capCount, candidates.length)) : candidates;
-    if (!targetIds.length) return;
+    if (!targetIds.length) return [];
 
     const rows = targetIds.map(userId => ({ raffle_id: raffleId, user_id: userId }));
     const { error: insertErr } = await supabase.from('raffle_banner_targets').insert(rows);
     if (insertErr) throw insertErr;
+    return targetIds;
   } catch (err) {
     console.error('[community] assignRaffleBannerTargets error:', err);
+    return [];
   }
+
 }
 
 // Todos los miembros de una comunidad (sin filtrar por rol), excluyendo al
@@ -3053,6 +3056,57 @@ async function getCommunityMemberIdsForBanner(communityId, excludeUserId) {
     .eq('community_id', communityId);
   if (error) throw error;
   return (data || []).map(m => m.user_id).filter(id => id !== excludeUserId);
+}
+
+// ── Notificación inmediata de sorteo (avioneta) a quien pertenece a la
+//    comunidad del sorteo ───────────────────────────────────────────────────
+// Además del banner volador (que se sirve de forma diferida, la próxima vez
+// que el usuario entre al menú principal — ver GET /raffle-banner), quienes
+// hayan sido "elegidos" como target del banner (assignRaffleBannerTargets) Y
+// además ya pertenezcan a la comunidad del sorteo reciben también un aviso
+// inmediato nada más crearse el sorteo: broadcast por canal personal (para
+// que le llegue al instante con la app abierta, mismo patrón que
+// broadcastCommunityPostToMembers) + web-push (para que le llegue con la app
+// en segundo plano o cerrada). En 'community' esto es siempre el 100% de los
+// targets, ya que su pool son los propios miembros; en 'light'/'volt' es
+// solo la intersección entre los elegidos al azar y los miembros de esa
+// comunidad en concreto — a quien le toque el sorteo pero no sea de esa
+// comunidad solo le llegará el banner volador diferido, sin aviso inmediato.
+async function notifyCommunityRaffleTargets({ raffleId, communityId, communityName, creatorId, title, tier, targetIds, memberIds = null }) {
+  try {
+    if (!targetIds?.length) return;
+
+    const knownMemberIds = memberIds || await getCommunityMemberIdsForBanner(communityId, creatorId);
+    const memberIdSet = new Set(knownMemberIds);
+    const recipientIds = targetIds.filter(id => memberIdSet.has(id));
+    if (!recipientIds.length) return;
+
+    const broadcastPayload = {
+      raffle_id:      raffleId,
+      community_id:   communityId,
+      community_name: communityName,
+      creator_id:     creatorId,
+      title,
+      tier,
+    };
+
+    await Promise.allSettled(
+      recipientIds.map(uid =>
+        supabase
+          .channel(`raffle-banner-notif-${uid}`)
+          .send({ type: 'broadcast', event: 'new_raffle_banner', payload: broadcastPayload })
+      )
+    );
+
+    notifyUsers(supabase, recipientIds, creatorId, {
+      title: `🎉 Nuevo sorteo en ${communityName || 'tu comunidad'}`,
+      body:  title || 'Se ha creado un nuevo sorteo',
+      url:   `/community/${communityId}#raffle-${raffleId}`,
+      tag:   `raffle-banner-${raffleId}`,
+    }).catch(() => {});
+  } catch (err) {
+    console.error('[community] notifyCommunityRaffleTargets error:', err);
+  }
 }
 
 // Devuelve un mapa raffleId -> nº de targets ya mostrados (shown_at no nulo),
@@ -3551,7 +3605,7 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   try {
     const { data: community } = await supabase
       .from('communities')
-      .select('id, creator_id')
+      .select('id, creator_id, name')
       .eq('id', communityId)
       .maybeSingle();
 
@@ -3587,12 +3641,27 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     if (error) throw error;
 
     if (raffleTier === 'light' && resolvedBannerViews) {
-      await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews);
+      await notifyCommunityRaffleTargets({
+        raffleId: data.id, communityId, communityName: community.name,
+        creatorId: userId, title: data.title, tier: raffleTier, targetIds,
+      });
     } else if (raffleTier === 'volt') {
-      await assignRaffleBannerTargets(data.id, userId, null);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, null);
+      await notifyCommunityRaffleTargets({
+        raffleId: data.id, communityId, communityName: community.name,
+        creatorId: userId, title: data.title, tier: raffleTier, targetIds,
+      });
     } else if (raffleTier === 'community') {
       const memberIds = await getCommunityMemberIdsForBanner(communityId, userId);
-      await assignRaffleBannerTargets(data.id, userId, null, memberIds);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, null, memberIds);
+      // Aquí memberIds y targetIds son el mismo conjunto (el pool YA estaba
+      // restringido a los miembros), así que se lo pasamos ya calculado a
+      // notifyCommunityRaffleTargets para no repetir la consulta.
+      await notifyCommunityRaffleTargets({
+        raffleId: data.id, communityId, communityName: community.name,
+        creatorId: userId, title: data.title, tier: raffleTier, targetIds, memberIds,
+      });
     }
 
     const eligibleIds = await getEligibleRaffleMembers(communityId, raffleTier);
