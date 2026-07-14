@@ -2996,30 +2996,23 @@ async function getEligibleRaffleMembers(communityId, tier) {
 // En 'light' se reparte a una selección aleatoria de tamaño
 // banner_views_contracted (capCount). En 'volt' no hay número contratado
 // ("al número de usuarios disponibles"): se reparte a TODOS los usuarios
-// disponibles (capCount = null), y su entrega está sujeta a que antes se
-// agote el reparto pendiente de Light — ver hasPendingLightBannerBacklog
-// y GET /raffle-banner más abajo.
+// disponibles (capCount = null).
 //
-// A cada usuario solo le puede llegar UN banner volador a la vez: si ya es
-// target pendiente (shown_at IS NULL) de OTRO sorteo (de cualquier tier),
-// se excluye de esta nueva asignación. Solo vuelve a ser candidato una vez
-// se le muestre (y consuma) el banner que ya tenía pendiente.
+// Un mismo usuario puede acabar siendo target de varios sorteos a la vez
+// (p.ej. un Light y un Volt en paralelo); no hay problema en que se le
+// asignen ambos. Lo que garantiza la prioridad de Light sobre Volt es el
+// ORDEN DE ENTREGA en GET /raffle-banner (más abajo): si un usuario tiene
+// pendiente un banner Light, se le sirve ese primero; el Volt pendiente le
+// llegará en una siguiente entrada a la app, una vez consumido el Light.
 async function assignRaffleBannerTargets(raffleId, creatorId, capCount) {
   try {
-    const { data: pendingRows, error: pendingErr } = await supabase
-      .from('raffle_banner_targets')
-      .select('user_id')
-      .is('shown_at', null);
-    if (pendingErr) throw pendingErr;
-    const alreadyPendingIds = new Set((pendingRows || []).map(r => r.user_id));
-
     const { data: allUsers, error } = await supabase
       .from('users')
       .select('id')
       .neq('id', creatorId);
     if (error) throw error;
 
-    const pool = (allUsers || []).map(u => u.id).filter(id => !alreadyPendingIds.has(id));
+    const pool = (allUsers || []).map(u => u.id);
     // Fisher–Yates para una selección aleatoria sin sesgo.
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -3035,37 +3028,6 @@ async function assignRaffleBannerTargets(raffleId, creatorId, capCount) {
   } catch (err) {
     console.error('[community] assignRaffleBannerTargets error:', err);
   }
-}
-
-// ¿Queda reparto de banner Light pendiente en CUALQUIER sorteo activo (de
-// cualquier comunidad)? El reparto de Light tiene preferencia absoluta
-// sobre Volt (ver copy "📶 Las apariciones de banners publicitarios tienen
-// preferencia en sorteos Light frente a sorteos Volt" en el modal de
-// creación): mientras quede algún target Light sin mostrar, no se sirve
-// ningún banner Volt a nadie, aunque ese target pendiente no sea del
-// usuario que está consultando en ese momento.
-async function hasPendingLightBannerBacklog() {
-  const now = new Date().toISOString();
-  const { data: activeLightRaffles, error } = await supabase
-    .from('community_raffles')
-    .select('id')
-    .eq('tier', 'light')
-    .is('drawn_at', null)
-    .gt('ends_at', now);
-  if (error) throw error;
-
-  const raffleIds = (activeLightRaffles || []).map(r => r.id);
-  if (!raffleIds.length) return false;
-
-  const { data: pendingTargets, error: targetsErr } = await supabase
-    .from('raffle_banner_targets')
-    .select('id')
-    .in('raffle_id', raffleIds)
-    .is('shown_at', null)
-    .limit(1);
-  if (targetsErr) throw targetsErr;
-
-  return (pendingTargets || []).length > 0;
 }
 
 // Devuelve un mapa raffleId -> nº de targets ya mostrados (shown_at no nulo),
@@ -3545,7 +3507,10 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   // Sorteo Light: visualizaciones de banner a contratar, entre BANNER_VIEWS_MIN
   // y BANNER_VIEWS_MAX (mismo rango que notification_count en eventos
   // Premium/Ultra — ver POST /community/events más arriba).
-  const BANNER_VIEWS_MIN = 500;
+  // ⚠️ TEST: mínimo bajado temporalmente a 1 (normalmente 500) para poder
+  // probar de extremo a extremo el reparto Light → Volt con pocos usuarios.
+  // Revertir a 500 antes de producción real (ver mensaje de Claude).
+  const BANNER_VIEWS_MIN = 1;
   const BANNER_VIEWS_MAX = 50000;
   let resolvedBannerViews = null;
   if (raffleTier === 'light') {
@@ -3654,14 +3619,14 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     //    es ese el que se sirve, sin más comprobaciones.
     let candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'light');
 
-    // 2) Si no, se busca un banner Volt pendiente para este usuario, pero
-    //    solo se sirve si YA NO queda ningún reparto Light pendiente en
-    //    ningún sorteo activo de toda la app (prioridad global de Light).
+    // 2) Si el usuario no tiene ningún Light pendiente (puede que no le
+    //    haya tocado ninguno, o que ya se le haya mostrado el suyo en una
+    //    entrada anterior), puede recibir su Volt pendiente con
+    //    normalidad. La prioridad de Light sobre Volt es PERSONAL, no un
+    //    bloqueo global: a otro usuario le puede tocar su Volt aunque a un
+    //    tercero todavía le quede un Light pendiente por repartir.
     if (!candidate) {
-      const voltCandidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'volt');
-      if (voltCandidate && !(await hasPendingLightBannerBacklog())) {
-        candidate = voltCandidate;
-      }
+      candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'volt');
     }
 
     if (!candidate) return res.json({ banner: null });

@@ -945,7 +945,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
   const [endsAt, setEndsAt] = useState(defaultDate);
   const [tier, setTier] = useState(RAFFLE_TIER_OPTIONS[0].key);
   const [showTierDetails, setShowTierDetails] = useState(false);
-  const [bannerViewsContracted, setBannerViewsContracted] = useState(500);
+  const [bannerViewsContracted, setBannerViewsContracted] = useState(1); // ⚠️ TEST: normalmente 500
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
@@ -1076,15 +1076,15 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
                   </div>
                   <input
                     type="range"
-                    min={500}
+                    min={1}
                     max={50000}
-                    step={500}
+                    step={1}
                     value={bannerViewsContracted}
                     onChange={e => setBannerViewsContracted(Number(e.target.value))}
                     className="w-full accent-amber-400 cursor-pointer"
                   />
                   <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-                    <span>Mín. 500</span>
+                    <span>Mín. 1 (⚠️ modo prueba)</span>
                     <span>Máx. 50.000</span>
                   </div>
                   <p className="text-[10px] font-mono text-surface-muted">
