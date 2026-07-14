@@ -2,17 +2,19 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
-// ── Banner volador de sorteos Light, Volt y Community ───────────────────────
+// ── Banner volador de sorteos Community, Light y Volt ───────────────────────
 // Al entrar en el menú principal (HomePage), comprobamos si el usuario ha
-// sido "elegido" para ver el banner volador de algún sorteo Light, Volt o
-// Community activo (ver GET /api/community/raffle-banner en el servidor, que
-// además marca la visualización como consumida y aplica la prioridad
-// Light > Volt > Community — no se le volverá a mostrar por ese sorteo).
+// sido "elegido" para ver el banner volador de algún sorteo Community,
+// Light o Volt activo (ver GET /api/community/raffle-banner en el servidor,
+// que además marca la visualización como consumida y aplica la prioridad
+// Community > Light > Volt — no se le volverá a mostrar por ese sorteo).
 // Dentro de cada uno de esos tres tipos, si el usuario tiene pendiente más
 // de un sorteo, el servidor prioriza el que pertenezca a una comunidad de
 // la que el usuario ya es miembro sobre uno de una comunidad ajena (los
 // Community siempre son de la propia comunidad del usuario; los Light y
-// Volt pueden o no serlo). El
+// Volt pueden o no serlo). El servidor limita además a como mucho una
+// avioneta cada 15 minutos por usuario, sea cual sea el sorteo, para no
+// saturarle si entra varias veces seguidas a la app. El
 // propio banner es la avioneta + pancarta "¡Sorteo nuevo!" cruzando la
 // pantalla de izquierda a derecha; al tocarlo se navega a la comunidad del
 // sorteo. A diferencia de Light/Volt (que se reparten entre usuarios de
