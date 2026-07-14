@@ -3642,9 +3642,30 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       return raffle && !raffle.drawn_at && new Date(raffle.ends_at) > now;
     });
 
+    // Comunidades de las que el usuario es miembro: dentro de cada tier, un
+    // sorteo cuya comunidad sea una de las suyas tiene prioridad sobre uno
+    // de una comunidad ajena (Community siempre lo es, ya que su pool son
+    // los propios miembros; Light y Volt pueden o no serlo).
+    const { data: memberships, error: memErr } = await supabase
+      .from('community_members')
+      .select('community_id')
+      .eq('user_id', userId);
+    if (memErr) throw memErr;
+    const ownCommunityIds = new Set((memberships || []).map(m => m.community_id));
+
+    // Dentro de las filas de un mismo tier, prioriza la primera (por orden
+    // cronológico de asignación) cuya comunidad sea del propio usuario; si
+    // ninguna lo es, cae de vuelta a la primera disponible de ese tier.
+    function pickWithinTier(tier) {
+      const rows = activeRows.filter(row => normalizeRaffleTier(row.raffle.tier) === tier);
+      if (!rows.length) return null;
+      return rows.find(row => ownCommunityIds.has(row.raffle.community_id)) || rows[0];
+    }
+
     // 1) Máxima prioridad: si el usuario tiene un banner Light pendiente,
-    //    es ese el que se sirve, sin más comprobaciones.
-    let candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'light');
+    //    es ese el que se sirve (con prioridad de comunidad propia dentro
+    //    del propio tier), sin más comprobaciones.
+    let candidate = pickWithinTier('light');
 
     // 2) Si el usuario no tiene ningún Light pendiente (puede que no le
     //    haya tocado ninguno, o que ya se le haya mostrado el suyo en una
@@ -3653,13 +3674,15 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     //    bloqueo global: a otro usuario le puede tocar su Volt aunque a un
     //    tercero todavía le quede un Light pendiente por repartir.
     if (!candidate) {
-      candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'volt');
+      candidate = pickWithinTier('volt');
     }
 
     // 3) Si tampoco tiene ningún Volt pendiente, se le sirve su Community
-    //    pendiente (misma lógica de prioridad personal que en el paso 2).
+    //    pendiente (misma lógica de prioridad personal que en el paso 2;
+    //    aquí la prioridad de comunidad propia es un no-op ya que todo
+    //    Community pertenece por definición a la comunidad del usuario).
     if (!candidate) {
-      candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'community');
+      candidate = pickWithinTier('community');
     }
 
     if (!candidate) return res.json({ banner: null });

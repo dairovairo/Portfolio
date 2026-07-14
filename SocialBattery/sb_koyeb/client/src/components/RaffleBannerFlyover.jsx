@@ -7,7 +7,12 @@ import { api } from '../lib/api';
 // sido "elegido" para ver el banner volador de algún sorteo Light, Volt o
 // Community activo (ver GET /api/community/raffle-banner en el servidor, que
 // además marca la visualización como consumida y aplica la prioridad
-// Light > Volt > Community — no se le volverá a mostrar por ese sorteo). El
+// Light > Volt > Community — no se le volverá a mostrar por ese sorteo).
+// Dentro de cada uno de esos tres tipos, si el usuario tiene pendiente más
+// de un sorteo, el servidor prioriza el que pertenezca a una comunidad de
+// la que el usuario ya es miembro sobre uno de una comunidad ajena (los
+// Community siempre son de la propia comunidad del usuario; los Light y
+// Volt pueden o no serlo). El
 // propio banner es la avioneta + pancarta "¡Sorteo nuevo!" cruzando la
 // pantalla de izquierda a derecha; al tocarlo se navega a la comunidad del
 // sorteo. A diferencia de Light/Volt (que se reparten entre usuarios de
