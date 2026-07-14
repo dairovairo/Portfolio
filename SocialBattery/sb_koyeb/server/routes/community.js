@@ -2991,7 +2991,7 @@ async function getEligibleRaffleMembers(communityId, tier) {
 }
 
 // ── Reparto del banner volador (avioneta con pancarta "¡Sorteo nuevo!") ────
-// Aplica a los tiers 'light', 'volt' y 'community' (los que incluyen banner
+// Aplica a los tiers 'community', 'light' y 'volt' (los que incluyen banner
 // en el menú principal, ver RAFFLE_TIER_OPTIONS en CommunityDetailPage.jsx).
 // En 'light' se reparte a una selección aleatoria de tamaño
 // banner_views_contracted (capCount) tomada de TODOS los usuarios de la
@@ -3004,11 +3004,13 @@ async function getEligibleRaffleMembers(communityId, tier) {
 //
 // Un mismo usuario puede acabar siendo target de varios sorteos a la vez
 // (p.ej. un Light y un Volt en paralelo); no hay problema en que se le
-// asignen ambos. Lo que garantiza la prioridad de Light sobre Volt sobre
-// Community es el ORDEN DE ENTREGA en GET /raffle-banner (más abajo): si un
-// usuario tiene pendiente un banner Light, se le sirve ese primero; el
-// resto le llegarán en siguientes entradas a la app, una vez consumidos los
-// de mayor prioridad.
+// asignen ambos. Lo que garantiza la prioridad de Community sobre Light
+// sobre Volt es el ORDEN DE ENTREGA en GET /raffle-banner (más abajo): si
+// un usuario tiene pendiente un banner Community, se le sirve ese primero;
+// el resto le llegarán en siguientes entradas a la app, una vez consumidos
+// los de mayor prioridad. Además, GET /raffle-banner aplica un cooldown de
+// 30 min por usuario (RAFFLE_BANNER_COOLDOWN_MS) para no saturarlo con
+// avionetas seguidas.
 async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = null) {
   try {
     let candidates = pool;
@@ -3608,16 +3610,44 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   }
 });
 
+// Cada cuántos ms se le puede volver a mostrar una avioneta al mismo
+// usuario, sea cual sea el tier del sorteo — evita saturar a un usuario que
+// tenga varios banners pendientes a la vez (p.ej. Community + Light + Volt).
+const RAFFLE_BANNER_COOLDOWN_MS = 30 * 60 * 1000; // 30 min
+
 // ── GET /api/community/raffle-banner — banner volador pendiente ────────────
 // Comprueba si el usuario autenticado es uno de los "elegidos" (ver
 // assignRaffleBannerTargets) para ver el banner volador de algún sorteo
-// Light, Volt o Community todavía activo, y en tal caso lo consume
+// Community, Light o Volt todavía activo, y en tal caso lo consume
 // (shown_at = ahora) para que no se le vuelva a mostrar por ese sorteo. Se
-// llama al entrar en el menú principal.
+// llama al entrar en el menú principal. Respeta un cooldown de
+// RAFFLE_BANNER_COOLDOWN_MS por usuario para no saturarlo con avionetas.
 router.get('/raffle-banner', requireAuth, async (req, res) => {
   const userId = req.user.id;
 
   try {
+    const now = new Date();
+
+    // Cooldown: si a este usuario ya se le mostró CUALQUIER avioneta (de
+    // cualquier sorteo/tier) hace menos de 30 min, no se le sirve otra
+    // todavía, aunque tenga banners pendientes de mayor prioridad.
+    const { data: lastShown, error: lastShownErr } = await supabase
+      .from('raffle_banner_targets')
+      .select('shown_at')
+      .eq('user_id', userId)
+      .not('shown_at', 'is', null)
+      .order('shown_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastShownErr) throw lastShownErr;
+
+    if (lastShown?.shown_at) {
+      const elapsed = now.getTime() - new Date(lastShown.shown_at).getTime();
+      if (elapsed < RAFFLE_BANNER_COOLDOWN_MS) {
+        return res.json({ banner: null });
+      }
+    }
+
     const { data: pending, error } = await supabase
       .from('raffle_banner_targets')
       .select(`
@@ -3636,7 +3666,6 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     // Solo cuentan sorteos que siguen activos (no sorteados ni terminados);
     // si el sorteo ya terminó, se descarta sin mostrarlo pero tampoco se
     // "gasta" la visualización de otro sorteo por error.
-    const now = new Date();
     const activeRows = (pending || []).filter(row => {
       const raffle = row.raffle;
       return raffle && !raffle.drawn_at && new Date(raffle.ends_at) > now;
@@ -3662,27 +3691,29 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       return rows.find(row => ownCommunityIds.has(row.raffle.community_id)) || rows[0];
     }
 
-    // 1) Máxima prioridad: si el usuario tiene un banner Light pendiente,
-    //    es ese el que se sirve (con prioridad de comunidad propia dentro
-    //    del propio tier), sin más comprobaciones.
-    let candidate = pickWithinTier('light');
+    // 1) Máxima prioridad: si el usuario tiene un banner Community
+    //    pendiente, es ese el que se sirve, sin más comprobaciones (la
+    //    prioridad de comunidad propia dentro del tier es aquí un no-op,
+    //    ya que todo Community pertenece por definición a la comunidad del
+    //    usuario).
+    let candidate = pickWithinTier('community');
 
-    // 2) Si el usuario no tiene ningún Light pendiente (puede que no le
-    //    haya tocado ninguno, o que ya se le haya mostrado el suyo en una
-    //    entrada anterior), puede recibir su Volt pendiente con
-    //    normalidad. La prioridad de Light sobre Volt es PERSONAL, no un
-    //    bloqueo global: a otro usuario le puede tocar su Volt aunque a un
-    //    tercero todavía le quede un Light pendiente por repartir.
+    // 2) Si no tiene ningún Community pendiente (puede que no le haya
+    //    tocado ninguno, o que ya se le haya mostrado el suyo en una
+    //    entrada anterior), puede recibir su Light pendiente (con
+    //    prioridad de comunidad propia dentro del propio tier). La
+    //    prioridad de Community sobre Light es PERSONAL, no un bloqueo
+    //    global: a otro usuario le puede tocar su Light aunque a un
+    //    tercero todavía le quede un Community pendiente por repartir.
     if (!candidate) {
-      candidate = pickWithinTier('volt');
+      candidate = pickWithinTier('light');
     }
 
-    // 3) Si tampoco tiene ningún Volt pendiente, se le sirve su Community
-    //    pendiente (misma lógica de prioridad personal que en el paso 2;
-    //    aquí la prioridad de comunidad propia es un no-op ya que todo
-    //    Community pertenece por definición a la comunidad del usuario).
+    // 3) Si tampoco tiene ningún Light pendiente, se le sirve su Volt
+    //    pendiente (misma lógica de prioridad personal que en el paso 2,
+    //    también con prioridad de comunidad propia dentro del tier).
     if (!candidate) {
-      candidate = pickWithinTier('community');
+      candidate = pickWithinTier('volt');
     }
 
     if (!candidate) return res.json({ banner: null });
