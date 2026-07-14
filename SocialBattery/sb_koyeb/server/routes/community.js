@@ -2991,14 +2991,15 @@ async function getEligibleRaffleMembers(communityId, tier) {
 }
 
 // ── Reparto del banner volador (avioneta con pancarta "¡Sorteo nuevo!") ────
-// Solo aplica al tier 'light', que es el único con banner_views_contracted.
-// Se elige una selección aleatoria de usuarios de TODA la app (no solo de
-// la comunidad, ya que el banner es publicidad en el menú principal) de
-// tamaño banner_views_contracted (o el total de usuarios disponibles si
-// hay menos). Cada usuario objetivo lo verá como máximo una vez — ver
-// GET /raffle-banner más abajo, que marca shown_at al consumirlo.
-async function assignRaffleBannerTargets(raffleId, creatorId, viewsContracted) {
-  if (!viewsContracted) return;
+// Aplica a los tiers 'light' y 'volt' (los dos que incluyen banner en el
+// menú principal, ver RAFFLE_TIER_OPTIONS en CommunityDetailPage.jsx).
+// En 'light' se reparte a una selección aleatoria de tamaño
+// banner_views_contracted (capCount). En 'volt' no hay número contratado
+// ("al número de usuarios disponibles"): se reparte a TODOS los usuarios
+// de la app (capCount = null), y su entrega está sujeta a que antes se
+// agote el reparto pendiente de Light — ver hasPendingLightBannerBacklog
+// y GET /raffle-banner más abajo.
+async function assignRaffleBannerTargets(raffleId, creatorId, capCount) {
   try {
     const { data: allUsers, error } = await supabase
       .from('users')
@@ -3013,7 +3014,7 @@ async function assignRaffleBannerTargets(raffleId, creatorId, viewsContracted) {
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
 
-    const targetIds = pool.slice(0, Math.min(viewsContracted, pool.length));
+    const targetIds = capCount != null ? pool.slice(0, Math.min(capCount, pool.length)) : pool;
     if (!targetIds.length) return;
 
     const rows = targetIds.map(userId => ({ raffle_id: raffleId, user_id: userId }));
@@ -3022,6 +3023,37 @@ async function assignRaffleBannerTargets(raffleId, creatorId, viewsContracted) {
   } catch (err) {
     console.error('[community] assignRaffleBannerTargets error:', err);
   }
+}
+
+// ¿Queda reparto de banner Light pendiente en CUALQUIER sorteo activo (de
+// cualquier comunidad)? El reparto de Light tiene preferencia absoluta
+// sobre Volt (ver copy "📶 Las apariciones de banners publicitarios tienen
+// preferencia en sorteos Light frente a sorteos Volt" en el modal de
+// creación): mientras quede algún target Light sin mostrar, no se sirve
+// ningún banner Volt a nadie, aunque ese target pendiente no sea del
+// usuario que está consultando en ese momento.
+async function hasPendingLightBannerBacklog() {
+  const now = new Date().toISOString();
+  const { data: activeLightRaffles, error } = await supabase
+    .from('community_raffles')
+    .select('id')
+    .eq('tier', 'light')
+    .is('drawn_at', null)
+    .gt('ends_at', now);
+  if (error) throw error;
+
+  const raffleIds = (activeLightRaffles || []).map(r => r.id);
+  if (!raffleIds.length) return false;
+
+  const { data: pendingTargets, error: targetsErr } = await supabase
+    .from('raffle_banner_targets')
+    .select('id')
+    .in('raffle_id', raffleIds)
+    .is('shown_at', null)
+    .limit(1);
+  if (targetsErr) throw targetsErr;
+
+  return (pendingTargets || []).length > 0;
 }
 
 function serializeRaffle(raffle, { participantCount, currentUserId, isEligible } = {}) {
@@ -3528,6 +3560,8 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
 
     if (raffleTier === 'light' && resolvedBannerViews) {
       await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews);
+    } else if (raffleTier === 'volt') {
+      await assignRaffleBannerTargets(data.id, userId, null);
     }
 
     const eligibleIds = await getEligibleRaffleMembers(communityId, raffleTier);
@@ -3558,7 +3592,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       .select(`
         id, created_at,
         raffle:raffle_id(
-          id, community_id, title, ends_at, drawn_at,
+          id, community_id, title, ends_at, drawn_at, tier,
           community:community_id(id, name)
         )
       `)
@@ -3572,10 +3606,24 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     // si el sorteo ya terminó, se descarta sin mostrarlo pero tampoco se
     // "gasta" la visualización de otro sorteo por error.
     const now = new Date();
-    const candidate = (pending || []).find(row => {
+    const activeRows = (pending || []).filter(row => {
       const raffle = row.raffle;
       return raffle && !raffle.drawn_at && new Date(raffle.ends_at) > now;
     });
+
+    // 1) Máxima prioridad: si el usuario tiene un banner Light pendiente,
+    //    es ese el que se sirve, sin más comprobaciones.
+    let candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'light');
+
+    // 2) Si no, se busca un banner Volt pendiente para este usuario, pero
+    //    solo se sirve si YA NO queda ningún reparto Light pendiente en
+    //    ningún sorteo activo de toda la app (prioridad global de Light).
+    if (!candidate) {
+      const voltCandidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'volt');
+      if (voltCandidate && !(await hasPendingLightBannerBacklog())) {
+        candidate = voltCandidate;
+      }
+    }
 
     if (!candidate) return res.json({ banner: null });
 
@@ -3590,6 +3638,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
         community_id: candidate.raffle.community_id,
         community_name: candidate.raffle.community?.name || 'Comunidad',
         title: candidate.raffle.title,
+        tier: normalizeRaffleTier(candidate.raffle.tier),
       },
     });
   } catch (err) {
