@@ -98,7 +98,7 @@ async function apiFetch(path, options = {}, retries = 3) {
   }
 
   if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`);
+    throw Object.assign(new Error(data.error || `HTTP ${res.status}`), data);
   }
 
   return data;

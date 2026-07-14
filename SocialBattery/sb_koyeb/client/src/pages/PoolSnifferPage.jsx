@@ -6,6 +6,7 @@ import { useUserLocation } from '../context/UserLocationContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getBatteryColor } from '../lib/battery';
+import { supabase } from '../lib/supabase';
 
 /**
  * PoolSnifferPage — "🐽 Sniffer" a pantalla completa.
@@ -125,7 +126,46 @@ export default function PoolSnifferPage() {
   const [error, setError] = useState('');
 
   const [checkins, setCheckins] = useState([]);
+  const [checkinsLoading, setCheckinsLoading] = useState(true);
+  const [checkingIn, setCheckingIn] = useState(false);
   const [checkMsg, setCheckMsg] = useState(null); // { type: 'ok'|'error', text }
+
+  // Lista compartida de "Estoy dentro" — se carga del servidor (persiste
+  // entre sesiones y la ven todos los que tienen acceso a la quedada).
+  useEffect(() => {
+    let cancelled = false;
+    setCheckinsLoading(true);
+    api.get(`/pools/${poolId}/sniffer/checkins`)
+      .then(({ checkins: list }) => { if (!cancelled) setCheckins(list || []); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setCheckinsLoading(false); });
+    return () => { cancelled = true; };
+  }, [poolId]);
+
+  // Realtime: cuando otro participante marca "Estoy dentro", se añade a la
+  // lista sin necesidad de recargar la página — mismo patrón que el resto
+  // de la app (ver PoolChatPage.jsx).
+  useEffect(() => {
+    const channel = supabase
+      .channel(`pool-sniffer-${poolId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'pool_sniffer_checkins',
+        filter: `pool_id=eq.${poolId}`,
+      }, async (payload) => {
+        const { data } = await supabase
+          .from('pool_sniffer_checkins')
+          .select('id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, mascot_preview_url)')
+          .eq('id', payload.new.id)
+          .single();
+        if (data) {
+          setCheckins(prev => prev.some(c => c.id === data.id) ? prev : [...prev, data]);
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [poolId]);
 
   // Carga la quedada al entrar en la página.
   useEffect(() => {
@@ -205,34 +245,36 @@ export default function PoolSnifferPage() {
     return distanceMeters(userCoords.lat, userCoords.lng, coords.lat, coords.lng);
   }, [userCoords, coords]);
 
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     if (!userCoords) {
       requestLocation();
       setCheckMsg({ type: 'error', text: 'Activa tu ubicación para poder comprobarlo.' });
       return;
     }
-    if (!coords) return;
-    if (distanceToPool != null && distanceToPool <= SNIFFER_RADIUS_METERS) {
-      const now = new Date();
-      setCheckins(prev => [
-        {
-          id: `${now.getTime()}`,
-          time: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-          username: profile?.username || 'Tú',
-          mascot_preview_url: profile?.mascot_preview_url,
-          battery_level: profile?.battery_level,
-        },
-        ...prev,
-      ]);
-      setCheckMsg({ type: 'ok', text: '¡Estás dentro del radio! Anotado.' });
-    } else {
-      const metros = distanceToPool != null ? Math.round(distanceToPool) : null;
+    if (!coords || checkingIn) return;
+
+    setCheckingIn(true);
+    setCheckMsg(null);
+    try {
+      const { checkin, already_checked_in } = await api.post(`/pools/${poolId}/sniffer/checkin`, {
+        lat: userCoords.lat,
+        lng: userCoords.lng,
+      });
+      setCheckins(prev => prev.some(c => c.id === checkin.id) ? prev : [...prev, checkin]);
+      setCheckMsg({
+        type: 'ok',
+        text: already_checked_in ? 'Ya estabas anotado en la lista.' : '¡Estás dentro del radio! Anotado.',
+      });
+    } catch (e) {
+      const metros = e?.distance_meters;
       setCheckMsg({
         type: 'error',
         text: metros != null
           ? `Todavía no estás dentro (a ~${metros} m del punto).`
-          : 'No se ha podido comprobar tu distancia.',
+          : (e?.message || 'No se ha podido comprobar tu distancia.'),
       });
+    } finally {
+      setCheckingIn(false);
     }
   };
 
@@ -318,27 +360,35 @@ export default function PoolSnifferPage() {
                   <button
                     type="button"
                     onClick={handleCheckIn}
-                    className="w-full font-display font-bold text-sm px-4 py-3 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 hover:border-emerald-500/50 transition-colors active:scale-[0.98]"
+                    disabled={checkingIn}
+                    className="w-full font-display font-bold text-sm px-4 py-3 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 hover:border-emerald-500/50 transition-colors active:scale-[0.98] disabled:opacity-60"
                   >
-                    📍 Estoy dentro
+                    {checkingIn ? 'Comprobando…' : '📍 Estoy dentro'}
                   </button>
 
-                  {checkMsg && (
+                  {checkMsg ? (
                     <p className={`text-xs font-mono text-center ${checkMsg.type === 'ok' ? 'text-emerald-400' : 'text-amber-300'}`}>
                       {checkMsg.text}
                     </p>
+                  ) : distanceToPool != null && (
+                    <p className="text-xs font-mono text-center text-surface-muted">
+                      {distanceToPool <= SNIFFER_RADIUS_METERS
+                        ? 'Estás dentro del radio ✅'
+                        : `Estás a ~${Math.round(distanceToPool)} m del punto`}
+                    </p>
                   )}
 
-                  {checkins.length > 0 && (
+                  {!checkinsLoading && checkins.length > 0 && (
                     <div className="bg-surface-card border border-surface-border rounded-2xl divide-y divide-surface-border overflow-hidden">
                       {checkins.map(c => (
                         <div key={c.id} className="px-3 py-2.5 flex items-center gap-2.5">
-                          <MiniMascot user={c} size={30} />
+                          <MiniMascot user={c.user} size={30} />
                           <span className="flex-1 min-w-0 text-sm font-display font-semibold text-surface-text truncate">
-                            {c.username}
+                            {c.user?.username || 'Alguien'}
+                            {c.user?.id === profile?.id && <span className="text-surface-muted font-normal"> (tú)</span>}
                           </span>
                           <span className="flex-shrink-0 text-xs font-mono text-surface-muted">
-                            {c.time}
+                            {new Date(c.checked_in_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       ))}

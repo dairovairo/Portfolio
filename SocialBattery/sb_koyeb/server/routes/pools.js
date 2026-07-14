@@ -606,7 +606,121 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// ── POST /api/pools — create a new pool ─────────────────────────────────────
+// Radio de detección del botón "Estoy dentro" del Sniffer — mismo valor que
+// SNIFFER_RADIUS_METERS en PoolSnifferPage.jsx (cliente). Se valida también
+// aquí para no depender solo del cálculo del cliente.
+const SNIFFER_CHECKIN_RADIUS_METERS = 75;
+
+function distanceMetersHaversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = deg => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── GET /api/pools/:id/sniffer/checkins — lista de quién ha marcado "Estoy dentro" ──
+router.get('/:id/sniffer/checkins', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data: pool, error: poolError } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id, is_public, group_id')
+      .eq('id', req.params.id)
+      .single();
+    if (poolError || !pool) return res.status(404).json({ error: 'Pool not found' });
+
+    const friendIds = await getFriendIds(userId);
+    const allowed = await canAccessPool(pool, userId, friendIds);
+    if (!allowed) return res.status(403).json({ error: 'No tienes acceso a este pool' });
+
+    const { data: checkins, error } = await supabase
+      .from('pool_sniffer_checkins')
+      .select(`
+        id, checked_in_at,
+        user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)
+      `)
+      .eq('pool_id', req.params.id)
+      .order('checked_in_at', { ascending: true });
+    if (error) throw error;
+
+    res.json({
+      checkins: (checkins || []).map(c => ({
+        id: c.id,
+        checked_in_at: c.checked_in_at,
+        user: applyBatteryExpiry(c.user),
+      })),
+    });
+  } catch (err) {
+    console.error('[POOLS] GET /:id/sniffer/checkins', err);
+    res.status(500).json({ error: 'Failed to fetch checkins' });
+  }
+});
+
+// ── POST /api/pools/:id/sniffer/checkin — marcar "Estoy dentro" del radio ──
+router.post('/:id/sniffer/checkin', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { lat, lng } = req.body;
+
+  if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {
+    return res.status(400).json({ error: 'Ubicación no válida' });
+  }
+
+  try {
+    const { data: pool, error: poolError } = await supabase
+      .from('hangout_pools')
+      .select('id, creator_id, is_public, group_id, lat, lng')
+      .eq('id', req.params.id)
+      .single();
+    if (poolError || !pool) return res.status(404).json({ error: 'Pool not found' });
+
+    const friendIds = await getFriendIds(userId);
+    const allowed = await canAccessPool(pool, userId, friendIds);
+    if (!allowed) return res.status(403).json({ error: 'No tienes acceso a este pool' });
+
+    if (pool.lat == null || pool.lng == null) {
+      return res.status(400).json({ error: 'Esta quedada no tiene una ubicación exacta guardada' });
+    }
+
+    const distance = distanceMetersHaversine(lat, lng, pool.lat, pool.lng);
+    if (distance > SNIFFER_CHECKIN_RADIUS_METERS) {
+      return res.status(400).json({
+        error: 'Todavía no estás dentro del radio',
+        distance_meters: Math.round(distance),
+      });
+    }
+
+    // Un check-in por usuario y quedada — si ya existía, se devuelve tal
+    // cual (se conserva la hora de la primera confirmación).
+    const { data: existing } = await supabase
+      .from('pool_sniffer_checkins')
+      .select(`id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
+      .eq('pool_id', req.params.id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existing) {
+      return res.json({ checkin: { ...existing, user: applyBatteryExpiry(existing.user) }, already_checked_in: true });
+    }
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('pool_sniffer_checkins')
+      .insert({ pool_id: req.params.id, user_id: userId })
+      .select(`id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
+      .single();
+    if (insertError) throw insertError;
+
+    res.json({ checkin: { ...inserted, user: applyBatteryExpiry(inserted.user) }, already_checked_in: false });
+  } catch (err) {
+    console.error('[POOLS] POST /:id/sniffer/checkin', err);
+    res.status(500).json({ error: 'Failed to check in' });
+  }
+});
+
+
 router.post('/', requireAuth, uploadPoolCover, async (req, res) => {
   const userId = req.user.id;
   const {
