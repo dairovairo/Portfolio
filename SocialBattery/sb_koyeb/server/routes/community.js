@@ -2991,35 +2991,45 @@ async function getEligibleRaffleMembers(communityId, tier) {
 }
 
 // ── Reparto del banner volador (avioneta con pancarta "¡Sorteo nuevo!") ────
-// Aplica a los tiers 'light' y 'volt' (los dos que incluyen banner en el
-// menú principal, ver RAFFLE_TIER_OPTIONS en CommunityDetailPage.jsx).
+// Aplica a los tiers 'light', 'volt' y 'community' (los que incluyen banner
+// en el menú principal, ver RAFFLE_TIER_OPTIONS en CommunityDetailPage.jsx).
 // En 'light' se reparte a una selección aleatoria de tamaño
-// banner_views_contracted (capCount). En 'volt' no hay número contratado
-// ("al número de usuarios disponibles"): se reparte a TODOS los usuarios
-// disponibles (capCount = null).
+// banner_views_contracted (capCount) tomada de TODOS los usuarios de la
+// app. En 'volt' no hay número contratado ("al número de usuarios
+// disponibles"): se reparte a TODOS los usuarios de la app (capCount =
+// null). En 'community' tampoco hay número contratado, pero el "pool" no es
+// toda la app: se reparte únicamente entre los MIEMBROS DE LA COMUNIDAD del
+// propio sorteo (capCount = null, pool restringido — ver llamada en
+// POST /communities/:id/raffles).
 //
 // Un mismo usuario puede acabar siendo target de varios sorteos a la vez
 // (p.ej. un Light y un Volt en paralelo); no hay problema en que se le
-// asignen ambos. Lo que garantiza la prioridad de Light sobre Volt es el
-// ORDEN DE ENTREGA en GET /raffle-banner (más abajo): si un usuario tiene
-// pendiente un banner Light, se le sirve ese primero; el Volt pendiente le
-// llegará en una siguiente entrada a la app, una vez consumido el Light.
-async function assignRaffleBannerTargets(raffleId, creatorId, capCount) {
+// asignen ambos. Lo que garantiza la prioridad de Light sobre Volt sobre
+// Community es el ORDEN DE ENTREGA en GET /raffle-banner (más abajo): si un
+// usuario tiene pendiente un banner Light, se le sirve ese primero; el
+// resto le llegarán en siguientes entradas a la app, una vez consumidos los
+// de mayor prioridad.
+async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = null) {
   try {
-    const { data: allUsers, error } = await supabase
-      .from('users')
-      .select('id')
-      .neq('id', creatorId);
-    if (error) throw error;
-
-    const pool = (allUsers || []).map(u => u.id);
-    // Fisher–Yates para una selección aleatoria sin sesgo.
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
+    let candidates = pool;
+    if (!candidates) {
+      const { data: allUsers, error } = await supabase
+        .from('users')
+        .select('id')
+        .neq('id', creatorId);
+      if (error) throw error;
+      candidates = (allUsers || []).map(u => u.id);
+    } else {
+      candidates = candidates.filter(id => id !== creatorId);
     }
 
-    const targetIds = capCount != null ? pool.slice(0, Math.min(capCount, pool.length)) : pool;
+    // Fisher–Yates para una selección aleatoria sin sesgo.
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const targetIds = capCount != null ? candidates.slice(0, Math.min(capCount, candidates.length)) : candidates;
     if (!targetIds.length) return;
 
     const rows = targetIds.map(userId => ({ raffle_id: raffleId, user_id: userId }));
@@ -3028,6 +3038,19 @@ async function assignRaffleBannerTargets(raffleId, creatorId, capCount) {
   } catch (err) {
     console.error('[community] assignRaffleBannerTargets error:', err);
   }
+}
+
+// Todos los miembros de una comunidad (sin filtrar por rol), excluyendo al
+// creador del sorteo — es el "pool" del banner volador Community: solo se
+// enseña a quien ya es miembro de esa comunidad, y solamente una vez por
+// usuario (igual que Light y Volt, ver raffle_banner_targets).
+async function getCommunityMemberIdsForBanner(communityId, excludeUserId) {
+  const { data, error } = await supabase
+    .from('community_members')
+    .select('user_id')
+    .eq('community_id', communityId);
+  if (error) throw error;
+  return (data || []).map(m => m.user_id).filter(id => id !== excludeUserId);
 }
 
 // Devuelve un mapa raffleId -> nº de targets ya mostrados (shown_at no nulo),
@@ -3051,7 +3074,7 @@ async function getBannerSentCounts(raffleIds) {
 function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, bannerViewsSent } = {}) {
   const tier = normalizeRaffleTier(raffle.tier);
   const tierMeta = RAFFLE_TIERS[tier];
-  const hasBanner = tier === 'light' || tier === 'volt';
+  const hasBanner = tier === 'light' || tier === 'volt' || tier === 'community';
   return {
     id: raffle.id,
     community_id: raffle.community_id,
@@ -3460,7 +3483,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
     }
 
     const bannerRaffleIds = raffles
-      .filter(r => ['light', 'volt'].includes(normalizeRaffleTier(r.tier)))
+      .filter(r => ['light', 'volt', 'community'].includes(normalizeRaffleTier(r.tier)))
       .map(r => r.id);
     const bannerSentCounts = await getBannerSentCounts(bannerRaffleIds);
 
@@ -3565,6 +3588,9 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
       await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews);
     } else if (raffleTier === 'volt') {
       await assignRaffleBannerTargets(data.id, userId, null);
+    } else if (raffleTier === 'community') {
+      const memberIds = await getCommunityMemberIdsForBanner(communityId, userId);
+      await assignRaffleBannerTargets(data.id, userId, null, memberIds);
     }
 
     const eligibleIds = await getEligibleRaffleMembers(communityId, raffleTier);
@@ -3585,8 +3611,9 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
 // ── GET /api/community/raffle-banner — banner volador pendiente ────────────
 // Comprueba si el usuario autenticado es uno de los "elegidos" (ver
 // assignRaffleBannerTargets) para ver el banner volador de algún sorteo
-// Light todavía activo, y en tal caso lo consume (shown_at = ahora) para
-// que no se le vuelva a mostrar. Se llama al entrar en el menú principal.
+// Light, Volt o Community todavía activo, y en tal caso lo consume
+// (shown_at = ahora) para que no se le vuelva a mostrar por ese sorteo. Se
+// llama al entrar en el menú principal.
 router.get('/raffle-banner', requireAuth, async (req, res) => {
   const userId = req.user.id;
 
@@ -3627,6 +3654,12 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     //    tercero todavía le quede un Light pendiente por repartir.
     if (!candidate) {
       candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'volt');
+    }
+
+    // 3) Si tampoco tiene ningún Volt pendiente, se le sirve su Community
+    //    pendiente (misma lógica de prioridad personal que en el paso 2).
+    if (!candidate) {
+      candidate = activeRows.find(row => normalizeRaffleTier(row.raffle.tier) === 'community');
     }
 
     if (!candidate) return res.json({ banner: null });
@@ -3699,7 +3732,7 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
     if (updateErr) throw updateErr;
 
     const bannerSentCounts = await getBannerSentCounts(
-      ['light', 'volt'].includes(raffleTier) ? [raffleId] : []
+      ['light', 'volt', 'community'].includes(raffleTier) ? [raffleId] : []
     );
 
     res.json({

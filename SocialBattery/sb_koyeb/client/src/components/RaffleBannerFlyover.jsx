@@ -2,14 +2,18 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
-// ── Banner volador de sorteos Light y Volt ──────────────────────────────────
+// ── Banner volador de sorteos Light, Volt y Community ───────────────────────
 // Al entrar en el menú principal (HomePage), comprobamos si el usuario ha
-// sido "elegido" para ver el banner volador de algún sorteo Light o Volt
-// activo (ver GET /api/community/raffle-banner en el servidor, que además
-// marca la visualización como consumida y aplica la prioridad de Light
-// sobre Volt — no se le volverá a mostrar por ese sorteo). El propio banner
-// es la avioneta + pancarta "¡Sorteo nuevo!" cruzando la pantalla de
-// izquierda a derecha; al tocarlo se navega a la comunidad del sorteo.
+// sido "elegido" para ver el banner volador de algún sorteo Light, Volt o
+// Community activo (ver GET /api/community/raffle-banner en el servidor, que
+// además marca la visualización como consumida y aplica la prioridad
+// Light > Volt > Community — no se le volverá a mostrar por ese sorteo). El
+// propio banner es la avioneta + pancarta "¡Sorteo nuevo!" cruzando la
+// pantalla de izquierda a derecha; al tocarlo se navega a la comunidad del
+// sorteo. A diferencia de Light/Volt (que se reparten entre usuarios de
+// toda la app), el banner Community solo se reparte entre los miembros de
+// la propia comunidad del sorteo (ver assignRaffleBannerTargets en el
+// servidor).
 const TIER_STYLES = {
   light: {
     image: '/raffle-banner-plane.png',
@@ -20,6 +24,11 @@ const TIER_STYLES = {
     image: '/raffle-banner-plane-volt.png',
     bannerClass: 'bg-blue-400 text-surface-bg',
     flagClass: 'border-l-blue-400',
+  },
+  community: {
+    image: '/raffle-banner-plane-community.png',
+    bannerClass: 'bg-red-400 text-surface-bg',
+    flagClass: 'border-l-red-400',
   },
 };
 

@@ -804,6 +804,7 @@ const RAFFLE_TIER_OPTIONS = [
     rules: 'Participan los miembros que han colaborado con la comunidad.',
     includes: [
       'Notificaciones a toda la comunidad',
+      'Apariciones de banner esporádico a todos los miembros de la comunidad',
     ],
     emoji: '🤝',
   },
@@ -884,7 +885,7 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
           <p className="text-[11px] text-surface-muted/80 italic leading-relaxed">{raffle.tier_rules}</p>
         )}
 
-        {isCreator && (raffle.tier === 'light' || raffle.tier === 'volt') && raffle.banner_views_sent != null && (
+        {isCreator && ['light', 'volt', 'community'].includes(raffle.tier) && raffle.banner_views_sent != null && (
           <p className="text-[11px] text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-1.5">
             📣 {Number(raffle.banner_views_sent).toLocaleString('es-ES')}
             {raffle.banner_views_contracted ? ` / ${Number(raffle.banner_views_contracted).toLocaleString('es-ES')}` : ''} usuarios notificados
@@ -1118,9 +1119,15 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
             )}
 
             {tier === 'community' && (
-              <div className="mt-2">
+              <div className="mt-2 space-y-2">
                 <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                   ℹ️ Este tipo de sorteos tiene como objetivo la afiliación a la comunidad, no incluye publicidad fuera de la comunidad.
+                </p>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  ✈️ Se mostrará una avioneta con el banner del sorteo a todos los miembros de la comunidad, como máximo una vez a cada uno.
+                </p>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  📶 Las apariciones de banners publicitarios tienen preferencia en sorteos Light y Volt frente a sorteos Community.
                 </p>
               </div>
             )}
