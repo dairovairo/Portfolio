@@ -10,6 +10,7 @@ import FriendCard from '../components/FriendCard';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import TutorialOverlay from '../components/TutorialOverlay';
 import BottomNav from '../components/BottomNav';
+import RaffleBannerFlyover from '../components/RaffleBannerFlyover';
 import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
@@ -894,6 +895,7 @@ export default function HomePage() {
       </main>
 
       <BottomNav pendingCount={pendingCount} unreadCount={unreadCount} />
+      <RaffleBannerFlyover />
     </div>
   );
 }

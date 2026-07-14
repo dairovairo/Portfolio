@@ -2990,6 +2990,40 @@ async function getEligibleRaffleMembers(communityId, tier) {
   return userIds;
 }
 
+// ── Reparto del banner volador (avioneta con pancarta "¡Sorteo nuevo!") ────
+// Solo aplica al tier 'light', que es el único con banner_views_contracted.
+// Se elige una selección aleatoria de usuarios de TODA la app (no solo de
+// la comunidad, ya que el banner es publicidad en el menú principal) de
+// tamaño banner_views_contracted (o el total de usuarios disponibles si
+// hay menos). Cada usuario objetivo lo verá como máximo una vez — ver
+// GET /raffle-banner más abajo, que marca shown_at al consumirlo.
+async function assignRaffleBannerTargets(raffleId, creatorId, viewsContracted) {
+  if (!viewsContracted) return;
+  try {
+    const { data: allUsers, error } = await supabase
+      .from('users')
+      .select('id')
+      .neq('id', creatorId);
+    if (error) throw error;
+
+    const pool = (allUsers || []).map(u => u.id);
+    // Fisher–Yates para una selección aleatoria sin sesgo.
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    const targetIds = pool.slice(0, Math.min(viewsContracted, pool.length));
+    if (!targetIds.length) return;
+
+    const rows = targetIds.map(userId => ({ raffle_id: raffleId, user_id: userId }));
+    const { error: insertErr } = await supabase.from('raffle_banner_targets').insert(rows);
+    if (insertErr) throw insertErr;
+  } catch (err) {
+    console.error('[community] assignRaffleBannerTargets error:', err);
+  }
+}
+
 function serializeRaffle(raffle, { participantCount, currentUserId, isEligible } = {}) {
   const tier = normalizeRaffleTier(raffle.tier);
   const tierMeta = RAFFLE_TIERS[tier];
@@ -3492,6 +3526,10 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
 
     if (error) throw error;
 
+    if (raffleTier === 'light' && resolvedBannerViews) {
+      await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews);
+    }
+
     const eligibleIds = await getEligibleRaffleMembers(communityId, raffleTier);
     res.status(201).json({
       raffle: serializeRaffle({ ...data, winner: null }, {
@@ -3503,6 +3541,60 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   } catch (err) {
     console.error('[community] POST /communities/:id/raffles', err);
     res.status(500).json({ error: err.message || 'Failed to create raffle' });
+  }
+});
+
+// ── GET /api/community/raffle-banner — banner volador pendiente ────────────
+// Comprueba si el usuario autenticado es uno de los "elegidos" (ver
+// assignRaffleBannerTargets) para ver el banner volador de algún sorteo
+// Light todavía activo, y en tal caso lo consume (shown_at = ahora) para
+// que no se le vuelva a mostrar. Se llama al entrar en el menú principal.
+router.get('/raffle-banner', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const { data: pending, error } = await supabase
+      .from('raffle_banner_targets')
+      .select(`
+        id, created_at,
+        raffle:raffle_id(
+          id, community_id, title, ends_at, drawn_at,
+          community:community_id(id, name)
+        )
+      `)
+      .eq('user_id', userId)
+      .is('shown_at', null)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    // Solo cuentan sorteos que siguen activos (no sorteados ni terminados);
+    // si el sorteo ya terminó, se descarta sin mostrarlo pero tampoco se
+    // "gasta" la visualización de otro sorteo por error.
+    const now = new Date();
+    const candidate = (pending || []).find(row => {
+      const raffle = row.raffle;
+      return raffle && !raffle.drawn_at && new Date(raffle.ends_at) > now;
+    });
+
+    if (!candidate) return res.json({ banner: null });
+
+    await supabase
+      .from('raffle_banner_targets')
+      .update({ shown_at: now.toISOString() })
+      .eq('id', candidate.id);
+
+    res.json({
+      banner: {
+        raffle_id: candidate.raffle.id,
+        community_id: candidate.raffle.community_id,
+        community_name: candidate.raffle.community?.name || 'Comunidad',
+        title: candidate.raffle.title,
+      },
+    });
+  } catch (err) {
+    console.error('[community] GET /raffle-banner', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch raffle banner' });
   }
 });
 
