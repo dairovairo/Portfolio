@@ -199,22 +199,16 @@ select {
   100% { box-shadow: 0 0 0 0 rgba(45, 212, 220, 0.55), 0 0 0 4px rgba(45, 212, 220, 0.18); }
 }
 
-/* ── Banner volador de sorteo — cruza la pantalla de izq. a dcha. ─────────
-   Se monta a nivel de App.jsx (fuera de las Routes), no dentro de una
-   página concreta, así que sigue en pantalla aunque el usuario cambie de
-   menú de por medio (Home → Comunidad → ... → Perfil). La duración se
-   alargó de 9s a 16s precisamente para eso: dar tiempo real a que la
-   avioneta siga su curso mientras el usuario navega por varias pantallas,
-   antes de salirse del todo por la derecha. */
+/* ── Banner volador de sorteo Light — cruza la pantalla de izq. a dcha. ──── */
 @keyframes raffleFlyover {
   0%   { transform: translateX(-40vw); opacity: 0; }
-  6%   { opacity: 1; }
-  94%  { opacity: 1; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
   100% { transform: translateX(140vw); opacity: 0; }
 }
 
 .raffle-flyover {
-  animation: raffleFlyover 16s linear forwards;
+  animation: raffleFlyover 9s linear forwards;
 }
 
 .tutorial-highlight {

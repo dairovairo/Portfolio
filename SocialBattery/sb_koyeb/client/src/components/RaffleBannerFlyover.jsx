@@ -1,21 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 // ── Banner volador de sorteos Community, Light y Volt ───────────────────────
-// Montado a nivel de App.jsx (fuera de las <Routes>, ver ahí), NO dentro de
-// HomePage: así el componente no se desmonta al navegar a otro menú (Perfil,
-// Comunidad, Mensajes...). Como el nodo del <button> sobrevive a la
-// navegación, cada cambio de página vuelve a arrancar la animación desde la
-// izquierda (ver el `flightKey` más abajo) en vez de continuarla desde el
-// punto en que iba: el efecto es que la avioneta "reaparece" entrando por
-// la izquierda en cada menú por el que va pasando el usuario (ver
-// raffleFlyover en index.css), hasta que finalmente termina su recorrido y
-// sale del todo por la derecha (o el usuario la toca antes).
-// Al arrancar la app ya autenticada, comprobamos si el usuario ha sido
-// "elegido" para ver el banner volador de algún sorteo Community, Light o
-// Volt activo (ver GET /api/community/raffle-banner en el servidor, que
-// además marca la visualización como consumida y aplica la prioridad
+// Al entrar en el menú principal (HomePage), comprobamos si el usuario ha
+// sido "elegido" para ver el banner volador de algún sorteo Community,
+// Light o Volt activo (ver GET /api/community/raffle-banner en el servidor,
+// que además marca la visualización como consumida y aplica la prioridad
 // Community > Light > Volt — no se le volverá a mostrar por ese sorteo).
 // Dentro de cada uno de esos tres tipos, si el usuario tiene pendiente más
 // de un sorteo, el servidor prioriza el que pertenezca a una comunidad de
@@ -50,17 +41,9 @@ const TIER_STYLES = {
 
 export default function RaffleBannerFlyover() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [banner, setBanner] = useState(null);
   const [visible, setVisible] = useState(false);
-  // Se incrementa en cada cambio de página mientras la avioneta sigue en
-  // vuelo; se usa como `key` del <button> para forzar que React lo
-  // desmonte y monte de cero, y así la animación CSS vuelva a arrancar
-  // desde el 0% (entrando por la izquierda) en vez de seguir corriendo
-  // desde el punto en el que iba en la página anterior.
-  const [flightKey, setFlightKey] = useState(0);
   const timeoutRef = useRef(null);
-  const prevPathRef = useRef(location.pathname);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +53,7 @@ export default function RaffleBannerFlyover() {
         const data = await api.get('/community/raffle-banner');
         if (cancelled || !data?.banner) return;
         setBanner(data.banner);
-        // Pequeño respiro tras cargar la app antes de que cruce la pantalla.
+        // Pequeño respiro tras cargar la home antes de que cruce la pantalla.
         timeoutRef.current = setTimeout(() => {
           if (!cancelled) setVisible(true);
         }, 900);
@@ -85,21 +68,6 @@ export default function RaffleBannerFlyover() {
       clearTimeout(timeoutRef.current);
     };
   }, []);
-
-  // Al estar montado fuera de las <Routes> (ver App.jsx), el <button> de la
-  // avioneta es el MISMO nodo DOM aunque el usuario cambie de página, así
-  // que por defecto la animación seguiría corriendo tal cual desde donde
-  // iba al entrar en la nueva pantalla — el efecto correcto es justo el
-  // contrario: que vuelva a aparecer entrando por la izquierda en cada
-  // menú nuevo. Por eso, cada vez que cambia el pathname mientras la
-  // avioneta sigue visible, cambiamos su `key` para remontarla de cero.
-  useEffect(() => {
-    if (prevPathRef.current === location.pathname) return;
-    prevPathRef.current = location.pathname;
-    if (banner && visible) {
-      setFlightKey(k => k + 1);
-    }
-  }, [location.pathname, banner, visible]);
 
   if (!banner) return null;
 
@@ -118,7 +86,6 @@ export default function RaffleBannerFlyover() {
     <div className="fixed top-[18%] left-0 w-full pointer-events-none z-[60] overflow-hidden h-24">
       {visible && (
         <button
-          key={flightKey}
           onClick={handleClick}
           onAnimationEnd={handleAnimationEnd}
           className="raffle-flyover pointer-events-auto absolute top-0 flex items-center gap-0 cursor-pointer"

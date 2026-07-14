@@ -10,6 +10,7 @@ import FriendCard from '../components/FriendCard';
 import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import TutorialOverlay from '../components/TutorialOverlay';
 import BottomNav from '../components/BottomNav';
+import RaffleBannerFlyover from '../components/RaffleBannerFlyover';
 import { getBatteryColor, formatRelativeTime, getEffectiveBatteryLevel, isBatteryExpired } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
@@ -894,10 +895,7 @@ export default function HomePage() {
       </main>
 
       <BottomNav pendingCount={pendingCount} unreadCount={unreadCount} />
-      {/* RaffleBannerFlyover se monta ahora a nivel de App (fuera de las
-          Routes) para que la avioneta pueda cruzar la pantalla mientras el
-          usuario navega entre menús, en vez de desaparecer de golpe al salir
-          de HomePage — ver App.jsx. */}
+      <RaffleBannerFlyover />
     </div>
   );
 }
