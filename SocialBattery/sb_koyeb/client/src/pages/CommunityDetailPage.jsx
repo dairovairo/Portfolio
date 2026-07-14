@@ -938,6 +938,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
   const [endsAt, setEndsAt] = useState(defaultDate);
   const [tier, setTier] = useState(RAFFLE_TIER_OPTIONS[0].key);
   const [showTierDetails, setShowTierDetails] = useState(false);
+  const [bannerViewsContracted, setBannerViewsContracted] = useState(500);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
@@ -975,6 +976,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
         description: description.trim(),
         ends_at: new Date(endsAt).toISOString(),
         tier,
+        banner_views_contracted: tier === 'light' ? bannerViewsContracted : null,
         image_file: imageFile,
       });
       onClose();
@@ -1056,6 +1058,32 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
 
             {tier === 'light' && (
               <div className="mt-2 space-y-2">
+                <div className="p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-mono text-surface-muted">
+                      👁️ Visualizaciones contratadas
+                    </label>
+                    <span className="text-xs font-mono font-semibold text-surface-text">
+                      {Number(bannerViewsContracted).toLocaleString('es-ES')}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={500}
+                    max={50000}
+                    step={500}
+                    value={bannerViewsContracted}
+                    onChange={e => setBannerViewsContracted(Number(e.target.value))}
+                    className="w-full accent-amber-400 cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
+                    <span>Mín. 500</span>
+                    <span>Máx. 50.000</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-surface-muted">
+                    ℹ️ Si no se alcanzan 500 banners enseñados no se cobrará nada.
+                  </p>
+                </div>
                 <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                   💳 Se aplicará una retencion al comenzar el sorteo, el pago se efectuará al renovar o finalizar el contrato publicitario, o en su defecto al finalizar el sorteo.
                 </p>
@@ -1067,9 +1095,6 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
                 </p>
                 <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                   📡 Los banners se enviarán conforme los usuarios estén disponibles.
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  ℹ️ Si no se alcanzan 500 banners enseñados no se cobrará nada.
                 </p>
               </div>
             )}
@@ -2049,6 +2074,7 @@ export default function CommunityDetailPage() {
     if (form.description?.trim()) formData.append('description', form.description.trim());
     formData.append('ends_at', form.ends_at);
     formData.append('tier', form.tier || 'light');
+    if (form.banner_views_contracted != null) formData.append('banner_views_contracted', form.banner_views_contracted);
     if (form.image_file) formData.append('image', form.image_file);
     await api.postForm(`/community/communities/${communityId}/raffles`, formData);
     showToast('¡Sorteo creado! 🎁', 'success');

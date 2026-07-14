@@ -3008,6 +3008,7 @@ function serializeRaffle(raffle, { participantCount, currentUserId, isEligible }
     tier_label: tierMeta.label,
     tier_rules: tierMeta.rules,
     price_cents: tierMeta.price_cents,
+    banner_views_contracted: raffle.banner_views_contracted ?? null,
     is_creator: currentUserId ? raffle.creator_id === currentUserId : undefined,
     can_participate: currentUserId
       ? (raffle.creator_id !== currentUserId && (isEligible ?? true))
@@ -3383,7 +3384,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
       .from('community_raffles')
       .select(`
         id, community_id, creator_id, title, description, image_url,
-        ends_at, drawn_at, created_at, tier,
+        ends_at, drawn_at, created_at, tier, banner_views_contracted,
         winner:winner_id(id, username, avatar_url)
       `)
       .eq('community_id', communityId)
@@ -3420,7 +3421,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
 router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (req, res) => {
   const userId = req.user.id;
   const communityId = req.params.id;
-  const { title, description, ends_at, tier } = req.body;
+  const { title, description, ends_at, tier, banner_views_contracted } = req.body;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El título es obligatorio' });
   if (!ends_at) return res.status(400).json({ error: 'La fecha de fin es obligatoria' });
@@ -3435,6 +3436,22 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   }
   if (endsAtDate <= new Date()) {
     return res.status(400).json({ error: 'La fecha de fin debe ser en el futuro' });
+  }
+
+  // Sorteo Light: visualizaciones de banner a contratar, entre BANNER_VIEWS_MIN
+  // y BANNER_VIEWS_MAX (mismo rango que notification_count en eventos
+  // Premium/Ultra — ver POST /community/events más arriba).
+  const BANNER_VIEWS_MIN = 500;
+  const BANNER_VIEWS_MAX = 50000;
+  let resolvedBannerViews = null;
+  if (raffleTier === 'light') {
+    const parsedViews = Number.parseInt(banner_views_contracted, 10);
+    if (!Number.isFinite(parsedViews) || parsedViews < BANNER_VIEWS_MIN || parsedViews > BANNER_VIEWS_MAX) {
+      return res.status(400).json({
+        error: `Elige cuántas visualizaciones quieres contratar (entre ${BANNER_VIEWS_MIN} y ${BANNER_VIEWS_MAX})`,
+      });
+    }
+    resolvedBannerViews = parsedViews;
   }
 
   try {
@@ -3468,8 +3485,9 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
         image_url: imageUrl,
         ends_at: endsAtDate.toISOString(),
         tier: raffleTier,
+        banner_views_contracted: resolvedBannerViews,
       })
-      .select('id, community_id, creator_id, title, description, image_url, ends_at, drawn_at, created_at, tier')
+      .select('id, community_id, creator_id, title, description, image_url, ends_at, drawn_at, created_at, tier, banner_views_contracted')
       .single();
 
     if (error) throw error;
