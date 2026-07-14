@@ -3,10 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 // ── Banner volador de sorteos Community, Light y Volt ───────────────────────
-// Al entrar en el menú principal (HomePage), comprobamos si el usuario ha
-// sido "elegido" para ver el banner volador de algún sorteo Community,
-// Light o Volt activo (ver GET /api/community/raffle-banner en el servidor,
-// que además marca la visualización como consumida y aplica la prioridad
+// Montado a nivel de App.jsx (fuera de las <Routes>, ver ahí), NO dentro de
+// HomePage: así el componente no se desmonta al navegar a otro menú (Perfil,
+// Comunidad, Mensajes...), y la avioneta puede seguir cruzando la pantalla de
+// izquierda a derecha por encima de CUALQUIER pantalla por la que el usuario
+// vaya pasando mientras dura la animación (ver raffleFlyover en index.css,
+// pensada para durar lo suficiente como para atravesar varios menús antes de
+// salirse del todo por la derecha), en vez de cortarse en seco si el usuario
+// cambia de pantalla nada más entrar.
+// Al arrancar la app ya autenticada, comprobamos si el usuario ha sido
+// "elegido" para ver el banner volador de algún sorteo Community, Light o
+// Volt activo (ver GET /api/community/raffle-banner en el servidor, que
+// además marca la visualización como consumida y aplica la prioridad
 // Community > Light > Volt — no se le volverá a mostrar por ese sorteo).
 // Dentro de cada uno de esos tres tipos, si el usuario tiene pendiente más
 // de un sorteo, el servidor prioriza el que pertenezca a una comunidad de
@@ -53,7 +61,7 @@ export default function RaffleBannerFlyover() {
         const data = await api.get('/community/raffle-banner');
         if (cancelled || !data?.banner) return;
         setBanner(data.banner);
-        // Pequeño respiro tras cargar la home antes de que cruce la pantalla.
+        // Pequeño respiro tras cargar la app antes de que cruce la pantalla.
         timeoutRef.current = setTimeout(() => {
           if (!cancelled) setVisible(true);
         }, 900);

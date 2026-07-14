@@ -33,6 +33,7 @@ import { TutorialProvider } from './context/TutorialContext';
 import { MascotProvider } from './context/MascotContext';
 import { UserLocationProvider, useUserLocation } from './context/UserLocationContext';
 import MascotPreviewSync from './components/MascotPreviewSync';
+import RaffleBannerFlyover from './components/RaffleBannerFlyover';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
@@ -110,6 +111,13 @@ function AppRoutes() {
           equipada para que se vea personalizada en la tarjeta de amigo de
           los demás (ver FriendCard.jsx). */}
       <MascotPreviewSync />
+      {/* Se monta fuera de <Routes> (a nivel de toda la app ya autenticada)
+          para que la avioneta del sorteo pueda cruzar la pantalla de
+          izquierda a derecha sin cortarse aunque el usuario cambie de menú
+          de por medio (Home → Comunidad → ... → Perfil): al estar fuera del
+          switch de rutas, no se desmonta al navegar, y sigue su curso por
+          encima de cualquier pantalla hasta salir del todo por la derecha. */}
+      <RaffleBannerFlyover />
       <Routes>
       <Route path="/"                         element={<HomePage />} />
       <Route path="/auth"                     element={<Navigate to="/" replace />} />
