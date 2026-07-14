@@ -2996,18 +2996,30 @@ async function getEligibleRaffleMembers(communityId, tier) {
 // En 'light' se reparte a una selección aleatoria de tamaño
 // banner_views_contracted (capCount). En 'volt' no hay número contratado
 // ("al número de usuarios disponibles"): se reparte a TODOS los usuarios
-// de la app (capCount = null), y su entrega está sujeta a que antes se
+// disponibles (capCount = null), y su entrega está sujeta a que antes se
 // agote el reparto pendiente de Light — ver hasPendingLightBannerBacklog
 // y GET /raffle-banner más abajo.
+//
+// A cada usuario solo le puede llegar UN banner volador a la vez: si ya es
+// target pendiente (shown_at IS NULL) de OTRO sorteo (de cualquier tier),
+// se excluye de esta nueva asignación. Solo vuelve a ser candidato una vez
+// se le muestre (y consuma) el banner que ya tenía pendiente.
 async function assignRaffleBannerTargets(raffleId, creatorId, capCount) {
   try {
+    const { data: pendingRows, error: pendingErr } = await supabase
+      .from('raffle_banner_targets')
+      .select('user_id')
+      .is('shown_at', null);
+    if (pendingErr) throw pendingErr;
+    const alreadyPendingIds = new Set((pendingRows || []).map(r => r.user_id));
+
     const { data: allUsers, error } = await supabase
       .from('users')
       .select('id')
       .neq('id', creatorId);
     if (error) throw error;
 
-    const pool = (allUsers || []).map(u => u.id);
+    const pool = (allUsers || []).map(u => u.id).filter(id => !alreadyPendingIds.has(id));
     // Fisher–Yates para una selección aleatoria sin sesgo.
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -3056,9 +3068,28 @@ async function hasPendingLightBannerBacklog() {
   return (pendingTargets || []).length > 0;
 }
 
-function serializeRaffle(raffle, { participantCount, currentUserId, isEligible } = {}) {
+// Devuelve un mapa raffleId -> nº de targets ya mostrados (shown_at no nulo),
+// para los "cartelitos" de progreso de banner en la UI (mismo patrón que
+// notification_sent_count en eventos Premium/Ultra).
+async function getBannerSentCounts(raffleIds) {
+  const counts = {};
+  if (!raffleIds.length) return counts;
+  const { data, error } = await supabase
+    .from('raffle_banner_targets')
+    .select('raffle_id')
+    .in('raffle_id', raffleIds)
+    .not('shown_at', 'is', null);
+  if (error) throw error;
+  for (const row of data || []) {
+    counts[row.raffle_id] = (counts[row.raffle_id] || 0) + 1;
+  }
+  return counts;
+}
+
+function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, bannerViewsSent } = {}) {
   const tier = normalizeRaffleTier(raffle.tier);
   const tierMeta = RAFFLE_TIERS[tier];
+  const hasBanner = tier === 'light' || tier === 'volt';
   return {
     id: raffle.id,
     community_id: raffle.community_id,
@@ -3075,6 +3106,7 @@ function serializeRaffle(raffle, { participantCount, currentUserId, isEligible }
     tier_rules: tierMeta.rules,
     price_cents: tierMeta.price_cents,
     banner_views_contracted: raffle.banner_views_contracted ?? null,
+    banner_views_sent: hasBanner ? (bannerViewsSent ?? 0) : null,
     is_creator: currentUserId ? raffle.creator_id === currentUserId : undefined,
     can_participate: currentUserId
       ? (raffle.creator_id !== currentUserId && (isEligible ?? true))
@@ -3465,6 +3497,11 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
       eligibleByTier[tier] = await getEligibleRaffleMembers(communityId, tier);
     }
 
+    const bannerRaffleIds = raffles
+      .filter(r => ['light', 'volt'].includes(normalizeRaffleTier(r.tier)))
+      .map(r => r.id);
+    const bannerSentCounts = await getBannerSentCounts(bannerRaffleIds);
+
     res.json({
       raffles: raffles.map(r => {
         const tier = normalizeRaffleTier(r.tier);
@@ -3473,6 +3510,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
           participantCount: eligibleIds.length,
           currentUserId: userId,
           isEligible: eligibleIds.includes(userId),
+          bannerViewsSent: bannerSentCounts[r.id] || 0,
         });
       }),
     });
@@ -3570,6 +3608,7 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
         participantCount: eligibleIds.length,
         currentUserId: userId,
         isEligible: eligibleIds.includes(userId),
+        bannerViewsSent: 0,
       }),
     });
   } catch (err) {
@@ -3694,11 +3733,16 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
 
     if (updateErr) throw updateErr;
 
+    const bannerSentCounts = await getBannerSentCounts(
+      ['light', 'volt'].includes(raffleTier) ? [raffleId] : []
+    );
+
     res.json({
       raffle: serializeRaffle(updated, {
         participantCount: eligibleIds.length,
         currentUserId: userId,
         isEligible: eligibleIds.includes(userId),
+        bannerViewsSent: bannerSentCounts[raffleId] || 0,
       }),
     });
   } catch (err) {

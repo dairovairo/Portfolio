@@ -63,7 +63,7 @@ export default function RaffleBannerFlyover() {
 
   function handleClick() {
     setBanner(null);
-    navigate(`/community/${banner.community_id}`);
+    navigate(`/community/${banner.community_id}#raffle-${banner.raffle_id}`);
   }
 
   return (

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import LocationPicker from '../components/LocationPicker';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
@@ -849,7 +849,7 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
   }
 
   return (
-    <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden">
+    <div id={`raffle-${raffle.id}`} className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden transition-shadow">
       {raffle.image_url && (
         <div className="aspect-[16/9] bg-surface-bg">
           <img src={raffle.image_url} alt={raffle.title} className="w-full h-full object-cover" />
@@ -882,6 +882,13 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
 
         {raffle.tier_rules && (
           <p className="text-[11px] text-surface-muted/80 italic leading-relaxed">{raffle.tier_rules}</p>
+        )}
+
+        {isCreator && (raffle.tier === 'light' || raffle.tier === 'volt') && raffle.banner_views_sent != null && (
+          <p className="text-[11px] text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-1.5">
+            📣 {Number(raffle.banner_views_sent).toLocaleString('es-ES')}
+            {raffle.banner_views_contracted ? ` / ${Number(raffle.banner_views_contracted).toLocaleString('es-ES')}` : ''} usuarios notificados
+          </p>
         )}
 
         {raffle.description && (
@@ -1980,6 +1987,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
 export default function CommunityDetailPage() {
   const { communityId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { clearCommunityBadge, communitiesWithEvents } = useCommunityNotifications();
@@ -2013,6 +2021,20 @@ export default function CommunityDetailPage() {
       // No bloqueamos la carga de la comunidad si fallan los sorteos.
     }
   }, [communityId]);
+
+  // Deep-link desde el banner volador (#raffle-<id>): hace scroll hasta la
+  // tarjeta del sorteo en cuestión y la resalta brevemente.
+  useEffect(() => {
+    if (!raffles.length) return;
+    const hash = location.hash;
+    if (!hash?.startsWith('#raffle-')) return;
+    const el = document.getElementById(hash.slice(1));
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ring-2', 'ring-amber-400/70');
+    const t = setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400/70'), 2200);
+    return () => clearTimeout(t);
+  }, [raffles, location.hash]);
 
   const loadPosts = useCallback(async () => {
     try {
