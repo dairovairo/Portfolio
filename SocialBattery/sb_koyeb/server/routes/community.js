@@ -1321,6 +1321,59 @@ router.patch('/communities/:id', requireAuth, uploadCommunityCover, async (req, 
   }
 });
 
+// ── GET /api/community/communities/:id/raffle-audience — tamaño de audiencia
+//    para la configuración de publicidad de un sorteo Light ────────────────
+// El "pool" de un sorteo Light es el mismo que assignRaffleBannerTargets usa
+// al crearlo: todos los usuarios de la app salvo el propio creador (no se
+// restringe a los miembros de la comunidad, a diferencia del tier
+// Community). Con ?filter=interested se añade además cuántos de esos
+// usuarios notificables tienen entre sus intereses alguna de las categorías
+// de la comunidad (users.interests ∩ communities.categories).
+router.get('/communities/:id/raffle-audience', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const wantInterested = req.query.filter === 'interested';
+
+  try {
+    const { data: community, error: communityErr } = await supabase
+      .from('communities')
+      .select('id, categories')
+      .eq('id', id)
+      .maybeSingle();
+    if (communityErr) throw communityErr;
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+
+    const { count: total, error: totalErr } = await supabase
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .neq('id', userId);
+    if (totalErr) throw totalErr;
+
+    let interested = null;
+    if (wantInterested) {
+      const categories = (community.categories || []).filter(Boolean);
+      if (categories.length) {
+        const { count, error: intErr } = await supabase
+          .from('users')
+          .select('id', { count: 'exact', head: true })
+          .neq('id', userId)
+          .overlaps('interests', categories);
+        if (intErr) throw intErr;
+        interested = count || 0;
+      } else {
+        // Sin categorías definidas en la comunidad no hay forma de cruzar
+        // intereses, así que no hay nadie "interesado" que podamos afirmar.
+        interested = 0;
+      }
+    }
+
+    res.json({ total: total || 0, interested });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/raffle-audience error:', err);
+    res.status(500).json({ error: err.message || 'Error al calcular la audiencia' });
+  }
+});
+
 // POST /api/community/communities/:id/join
 router.post('/communities/:id/join', requireAuth, async (req, res) => {
   const { id } = req.params;
@@ -3719,7 +3772,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       .select(`
         id, created_at,
         raffle:raffle_id(
-          id, community_id, title, ends_at, drawn_at, tier,
+          id, community_id, title, ends_at, drawn_at, tier, image_url,
           community:community_id(id, name)
         )
       `)
@@ -3797,6 +3850,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
         community_name: candidate.raffle.community?.name || 'Comunidad',
         title: candidate.raffle.title,
         tier: normalizeRaffleTier(candidate.raffle.tier),
+        image_url: candidate.raffle.image_url || null,
       },
     });
   } catch (err) {

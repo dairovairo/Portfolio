@@ -1323,7 +1323,7 @@ function CreateEventModal({ onClose, onCreate }) {
             disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
-            {saving ? 'Creando...' : '🌐 Publicar evento'}
+            {saving ? 'Creando...' : (form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') ? '🌐 Configurar publicidad' : '🌐 Publicar evento'}
           </button>
         </div>
       </div>

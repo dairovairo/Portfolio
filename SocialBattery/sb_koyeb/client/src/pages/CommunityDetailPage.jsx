@@ -752,7 +752,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
-            {saving ? 'Creando...' : 'Publicar evento'}
+            {saving ? 'Creando...' : (form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') ? 'Configurar publicidad' : 'Publicar evento'}
           </button>
         </div>
       </div>
@@ -934,7 +934,8 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
   );
 }
 
-function CreateRaffleModal({ onClose, onCreate, communityName }) {
+function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
+  const navigate = useNavigate();
   const minDate = new Date(Date.now() + 60 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
@@ -976,17 +977,31 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
     if (!title.trim()) { setError('El título es obligatorio'); return; }
     if (!endsAt) { setError('La fecha de fin es obligatoria'); return; }
     if (new Date(endsAt) <= new Date()) { setError('La fecha de fin debe ser en el futuro'); return; }
+
+    const draft = {
+      title: title.trim(),
+      description: description.trim(),
+      ends_at: new Date(endsAt).toISOString(),
+      tier,
+      banner_views_contracted: tier === 'light' ? bannerViewsContracted : null,
+      image_file: imageFile,
+      image_preview: imagePreview,
+    };
+
+    // Los sorteos Light llevan publicidad de pago: antes de crearlo, se
+    // configura la audiencia (usuarios notificables / interesados) en una
+    // pantalla propia. El sorteo no se crea todavía aquí — se crea al
+    // confirmar en RaffleAdAudiencePage con estos mismos datos.
+    if (tier === 'light') {
+      onClose();
+      navigate(`/community/${communityId}/raffle-publicidad`, { state: { draft, communityName } });
+      return;
+    }
+
     setSaving(true);
     setError('');
     try {
-      await onCreate({
-        title: title.trim(),
-        description: description.trim(),
-        ends_at: new Date(endsAt).toISOString(),
-        tier,
-        banner_views_contracted: tier === 'light' ? bannerViewsContracted : null,
-        image_file: imageFile,
-      });
+      await onCreate(draft);
       onClose();
     } catch (e) {
       setError(e.message || 'Error al crear el sorteo');
@@ -1229,7 +1244,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName }) {
             disabled={saving || !title.trim() || !endsAt}
             className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-surface-bg font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
-            {saving ? 'Creando...' : 'Crear sorteo'}
+            {saving ? 'Creando...' : tier === 'light' ? 'Configurar publicidad' : 'Crear sorteo'}
           </button>
         </div>
       </div>
@@ -2546,6 +2561,7 @@ export default function CommunityDetailPage() {
       {showCreateRaffle && (
         <CreateRaffleModal
           communityName={community.name}
+          communityId={communityId}
           onClose={() => setShowCreateRaffle(false)}
           onCreate={handleCreateRaffle}
         />

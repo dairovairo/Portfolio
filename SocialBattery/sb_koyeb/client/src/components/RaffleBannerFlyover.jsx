@@ -83,7 +83,7 @@ export default function RaffleBannerFlyover() {
   }
 
   return (
-    <div className="fixed top-[18%] left-0 w-full pointer-events-none z-[60] overflow-hidden h-24">
+    <div className="fixed top-[16%] left-0 w-full pointer-events-none z-[60] overflow-hidden h-28 sm:h-32">
       {visible && (
         <button
           onClick={handleClick}
@@ -93,16 +93,32 @@ export default function RaffleBannerFlyover() {
           title={`🎁 ${banner.title} — ${banner.community_name}`}
         >
           {/* Pancarta remolcada, va detrás (a la izquierda) de la avioneta */}
-          <span className={`flex items-center font-display font-bold text-sm sm:text-base px-4 py-2 rounded-md shadow-lg whitespace-nowrap -mr-2 relative ${style.bannerClass}`}>
-            🎉 ¡Sorteo nuevo! · {banner.community_name}
-            <span className={`absolute right-[-10px] top-1/2 -translate-y-1/2 w-0 h-0 border-y-[14px] border-y-transparent border-l-[10px] ${style.flagClass}`} />
+          <span className={`flex items-center gap-3 font-display px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-xl ring-1 ring-black/10 whitespace-nowrap -mr-2 relative ${style.bannerClass}`}>
+            {banner.image_url ? (
+              <img
+                src={banner.image_url}
+                alt=""
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover flex-shrink-0 shadow-md ring-2 ring-white/60"
+              />
+            ) : (
+              <span className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg flex-shrink-0 flex items-center justify-center text-2xl bg-black/10 shadow-md ring-2 ring-white/60">
+                🎁
+              </span>
+            )}
+            <span className="flex flex-col items-start leading-tight">
+              <span className="font-bold text-sm sm:text-lg">🎉 ¡Sorteo nuevo!</span>
+              <span className="font-medium text-xs sm:text-sm opacity-90 max-w-[38vw] sm:max-w-none truncate">
+                {banner.community_name}
+              </span>
+            </span>
+            <span className={`absolute right-[-10px] top-1/2 -translate-y-1/2 w-0 h-0 border-y-[16px] border-y-transparent border-l-[11px] ${style.flagClass}`} />
           </span>
           {/* Cuerda de remolque */}
           <span className="w-6 h-[2px] bg-slate-400/70 flex-shrink-0" />
           <img
             src={style.image}
             alt="Sorteo nuevo"
-            className="w-16 h-16 sm:w-20 sm:h-20 object-contain flex-shrink-0 drop-shadow-lg"
+            className="w-20 h-20 sm:w-24 sm:h-24 object-contain flex-shrink-0 drop-shadow-lg"
           />
         </button>
       )}
