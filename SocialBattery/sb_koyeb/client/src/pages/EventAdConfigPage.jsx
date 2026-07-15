@@ -16,11 +16,15 @@ import { api } from '../lib/api';
 // harían las páginas de origen (`POST /community/events`), incluyendo
 // `community_id` si el draft venía de una comunidad concreta.
 //
-// El slider (500–50.000) es el mismo para Premium y Ultra; lo que cambia
-// entre planes es la insignia, el precio y las prestaciones (Ultra añade
-// apariciones en el banner del menú principal). El resto del formulario
-// del evento (título, categorías, fecha, ubicación...) NO se puede editar
-// aquí — si el usuario quiere retocarlo, pulsa Atrás y vuelve al modal.
+// El slider (500–50.000) es el mismo para Premium y Ultra y siempre
+// operativo — lo que cambia entre planes es la insignia, el precio y las
+// prestaciones (Ultra añade apariciones en el banner del menú principal).
+// Si la audiencia (con o sin filtro de intereses) queda por debajo de lo
+// contratado, se avisa con un banner ámbar bajo el slider; el pacing solo
+// enviará las notificaciones que quepan y no se cobrará por el resto
+// (ver eventPromoPacing.js). El resto del formulario del evento (título,
+// categorías, fecha, ubicación...) NO se puede editar aquí — si el
+// usuario quiere retocarlo, pulsa Atrás y vuelve al modal.
 const NOTIF_MIN = 500;
 const NOTIF_MAX = 50000;
 const NOTIF_STEP = 500;
@@ -169,29 +173,18 @@ export default function EventAdConfigPage() {
   // La audiencia realmente contratable ahora mismo: si el filtro de
   // intereses está activo (y hay categorías con las que cruzar), el máximo
   // pasa a ser el nº de interesados; si no, el total notificable. El
-  // slider se limita a ese máximo — no tiene sentido contratar más
-  // notificaciones de las que caben en el pool.
+  // Audiencia efectiva: si el filtro está activo (y hay categorías con
+  // las que cruzar), pasa a ser el nº de interesados; si no, el total
+  // notificable. Se usa SOLO para informar (banner ámbar bajo el slider);
+  // NO se usa para topar el máximo del slider — la empresa puede
+  // contratar hasta NOTIF_MAX aunque el pool sea menor. El pacing solo
+  // enviará las notificaciones que quepan y no se cobrará por el resto
+  // (ver eventPromoPacing.js).
   const audienceCap = filterInterested
     ? (categoriesDefined === false ? 0 : interested)
     : total;
-  const effectiveMax = audienceCap != null ? Math.min(NOTIF_MAX, audienceCap) : null;
-  const audienceReady = effectiveMax != null && !loadingInterested;
-  const audienceTooSmall = audienceReady && effectiveMax < NOTIF_MIN;
-
-  // Si el máximo cambia (filtro on/off, llega el recuento) y la cantidad
-  // elegida se sale de rango, la reencajamos.
-  useEffect(() => {
-    if (effectiveMax == null) return;
-    setNotificationCount(v => {
-      const stepped = Math.floor(v / NOTIF_STEP) * NOTIF_STEP;
-      if (effectiveMax < NOTIF_MIN) return NOTIF_MIN;
-      // El máximo alcanzable debe seguir siendo múltiplo del step.
-      const cappedMax = Math.floor(effectiveMax / NOTIF_STEP) * NOTIF_STEP || NOTIF_MIN;
-      if (stepped > cappedMax) return cappedMax;
-      if (stepped < NOTIF_MIN) return NOTIF_MIN;
-      return stepped;
-    });
-  }, [effectiveMax]);
+  const audienceReady = audienceCap != null && !loadingInterested;
+  const contractedExceedsAudience = audienceReady && notificationCount > audienceCap;
 
   async function handleToggleInterested() {
     const next = !filterInterested;
@@ -232,7 +225,7 @@ export default function EventAdConfigPage() {
     : (draft?.title || 'Nuevo evento');
 
   async function handlePublish() {
-    if (!draft || !audienceReady || audienceTooSmall) return;
+    if (!draft || !audienceReady) return;
     setSaving(true);
     setError('');
     try {
@@ -400,15 +393,16 @@ export default function EventAdConfigPage() {
               aria-checked={filterInterested}
               onClick={handleToggleInterested}
               disabled={loadingTotal || !!loadError}
-              className={`relative w-12 h-7 rounded-full flex-shrink-0 transition-colors disabled:opacity-40 ${
+              className={`relative inline-flex h-7 w-12 items-center rounded-full flex-shrink-0 transition-colors disabled:opacity-40 focus:outline-none ${
                 filterInterested
-                  ? (plan === 'ultra' ? 'bg-yellow-400' : 'bg-purple-400')
+                  ? (plan === 'ultra' ? 'bg-yellow-400' : 'bg-purple-500')
                   : 'bg-surface-bg border border-surface-border'
               }`}
             >
               <span
-                className={`absolute top-0.5 w-6 h-6 rounded-full bg-surface-card shadow transition-transform ${
-                  filterInterested ? 'translate-x-5' : 'translate-x-0.5'
+                aria-hidden="true"
+                className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform ${
+                  filterInterested ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
             </button>
@@ -445,9 +439,11 @@ export default function EventAdConfigPage() {
           )}
         </div>
 
-        {/* Notificaciones a contratar — su rango depende de la audiencia
-            calculada arriba (total notificable o interesados si el filtro
-            está activo). */}
+        {/* Notificaciones a contratar — siempre operativo 500–50.000.
+            Si la audiencia efectiva (con o sin filtro de intereses) queda
+            por debajo de lo contratado, se avisa con banner ámbar; solo
+            se enviarán las notificaciones que quepan y no se cobrará por
+            el resto (ver eventPromoPacing.js). */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <label className="text-xs font-mono text-surface-muted">
@@ -458,33 +454,26 @@ export default function EventAdConfigPage() {
             </span>
           </div>
 
-          {!audienceReady ? (
-            <div className="h-6 flex items-center">
-              <span className={`w-4 h-4 border-2 border-t-transparent rounded-full animate-spin inline-block ${plan === 'ultra' ? 'border-yellow-400' : 'border-purple-400'}`} />
-            </div>
-          ) : audienceTooSmall ? (
-            <p className="text-xs text-red-400 leading-relaxed">
-              {filterInterested
-                ? `Solo hay ${Number(effectiveMax).toLocaleString('es-ES')} usuarios interesados: no llega al mínimo de ${NOTIF_MIN.toLocaleString('es-ES')} contratables. Prueba a quitar el filtro.`
-                : `Solo hay ${Number(effectiveMax).toLocaleString('es-ES')} usuarios notificables: no llega al mínimo de ${NOTIF_MIN.toLocaleString('es-ES')} contratables.`}
+          <input
+            type="range"
+            min={NOTIF_MIN}
+            max={NOTIF_MAX}
+            step={NOTIF_STEP}
+            value={notificationCount}
+            onChange={e => setNotificationCount(Number(e.target.value))}
+            className={`w-full ${meta.slider} cursor-pointer`}
+          />
+          <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
+            <span>Mín. {NOTIF_MIN.toLocaleString('es-ES')}</span>
+            <span>Máx. {NOTIF_MAX.toLocaleString('es-ES')}</span>
+          </div>
+
+          {contractedExceedsAudience && (
+            <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 leading-relaxed">
+              ⚠️ Solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios {filterInterested ? 'interesados' : 'notificables'}: se enviarán como mucho {Number(audienceCap).toLocaleString('es-ES')} notificaciones, y no se cobrará por el resto.
             </p>
-          ) : (
-            <>
-              <input
-                type="range"
-                min={NOTIF_MIN}
-                max={effectiveMax}
-                step={NOTIF_STEP}
-                value={notificationCount}
-                onChange={e => setNotificationCount(Number(e.target.value))}
-                className={`w-full ${meta.slider} cursor-pointer`}
-              />
-              <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-                <span>Mín. {NOTIF_MIN.toLocaleString('es-ES')}</span>
-                <span>Máx. {Number(effectiveMax).toLocaleString('es-ES')}</span>
-              </div>
-            </>
           )}
+
           <p className="text-[10px] font-mono text-surface-muted">
             ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
           </p>
@@ -517,7 +506,7 @@ export default function EventAdConfigPage() {
 
         <button
           onClick={handlePublish}
-          disabled={saving || !audienceReady || audienceTooSmall}
+          disabled={saving || !audienceReady}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${meta.button}`}
         >
           {saving ? 'Publicando...' : `🌐 Publicar evento ${meta.label}`}
