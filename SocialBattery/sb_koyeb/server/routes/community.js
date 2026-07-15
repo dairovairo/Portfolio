@@ -3719,7 +3719,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       .select(`
         id, created_at,
         raffle:raffle_id(
-          id, community_id, title, image_url, ends_at, drawn_at, tier,
+          id, community_id, title, ends_at, drawn_at, tier,
           community:community_id(id, name)
         )
       `)
@@ -3796,7 +3796,6 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
         community_id: candidate.raffle.community_id,
         community_name: candidate.raffle.community?.name || 'Comunidad',
         title: candidate.raffle.title,
-        image_url: candidate.raffle.image_url || null,
         tier: normalizeRaffleTier(candidate.raffle.tier),
       },
     });

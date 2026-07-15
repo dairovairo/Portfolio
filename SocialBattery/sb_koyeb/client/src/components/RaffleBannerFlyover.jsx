@@ -24,21 +24,18 @@ import { api } from '../lib/api';
 const TIER_STYLES = {
   light: {
     image: '/raffle-banner-plane.png',
-    bannerClass: 'bg-gradient-to-r from-amber-400 to-amber-300 text-surface-bg',
-    flagClass: 'border-l-amber-300',
-    ringClass: 'ring-amber-200/60',
+    bannerClass: 'bg-amber-400 text-surface-bg',
+    flagClass: 'border-l-amber-400',
   },
   volt: {
     image: '/raffle-banner-plane-volt.png',
-    bannerClass: 'bg-gradient-to-r from-blue-400 to-sky-300 text-surface-bg',
-    flagClass: 'border-l-sky-300',
-    ringClass: 'ring-sky-200/60',
+    bannerClass: 'bg-blue-400 text-surface-bg',
+    flagClass: 'border-l-blue-400',
   },
   community: {
     image: '/raffle-banner-plane-community.png',
-    bannerClass: 'bg-gradient-to-r from-red-400 to-rose-300 text-surface-bg',
-    flagClass: 'border-l-rose-300',
-    ringClass: 'ring-rose-200/60',
+    bannerClass: 'bg-red-400 text-surface-bg',
+    flagClass: 'border-l-red-400',
   },
 };
 
@@ -86,7 +83,7 @@ export default function RaffleBannerFlyover() {
   }
 
   return (
-    <div className="fixed top-[16%] left-0 w-full pointer-events-none z-[60] overflow-hidden h-32 sm:h-36">
+    <div className="fixed top-[18%] left-0 w-full pointer-events-none z-[60] overflow-hidden h-24">
       {visible && (
         <button
           onClick={handleClick}
@@ -96,35 +93,16 @@ export default function RaffleBannerFlyover() {
           title={`🎁 ${banner.title} — ${banner.community_name}`}
         >
           {/* Pancarta remolcada, va detrás (a la izquierda) de la avioneta */}
-          <span className={`flex items-center gap-3 pl-2 pr-5 py-2 rounded-xl shadow-xl ring-1 ${style.ringClass} whitespace-nowrap -mr-2 relative ${style.bannerClass}`}>
-            {/* Foto del evento/sorteo, o icono de respaldo si no tiene */}
-            <span className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden flex-shrink-0 bg-white/25 ring-2 ring-white/70 shadow-inner">
-              {banner.image_url ? (
-                <img
-                  src={banner.image_url}
-                  alt={banner.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="w-full h-full flex items-center justify-center text-2xl">🎁</span>
-              )}
-            </span>
-            <span className="flex flex-col leading-tight">
-              <span className="font-display font-extrabold text-base sm:text-lg drop-shadow-sm">
-                🎉 ¡Sorteo nuevo!
-              </span>
-              <span className="font-display font-semibold text-xs sm:text-sm opacity-90 truncate max-w-[38vw]">
-                {banner.community_name}
-              </span>
-            </span>
-            <span className={`absolute right-[-12px] top-1/2 -translate-y-1/2 w-0 h-0 border-y-[18px] border-y-transparent border-l-[12px] ${style.flagClass}`} />
+          <span className={`flex items-center font-display font-bold text-sm sm:text-base px-4 py-2 rounded-md shadow-lg whitespace-nowrap -mr-2 relative ${style.bannerClass}`}>
+            🎉 ¡Sorteo nuevo! · {banner.community_name}
+            <span className={`absolute right-[-10px] top-1/2 -translate-y-1/2 w-0 h-0 border-y-[14px] border-y-transparent border-l-[10px] ${style.flagClass}`} />
           </span>
           {/* Cuerda de remolque */}
-          <span className="w-7 h-[2px] bg-slate-400/70 flex-shrink-0" />
+          <span className="w-6 h-[2px] bg-slate-400/70 flex-shrink-0" />
           <img
             src={style.image}
             alt="Sorteo nuevo"
-            className="w-20 h-20 sm:w-24 sm:h-24 object-contain flex-shrink-0 drop-shadow-lg"
+            className="w-16 h-16 sm:w-20 sm:h-20 object-contain flex-shrink-0 drop-shadow-lg"
           />
         </button>
       )}
