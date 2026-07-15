@@ -157,14 +157,15 @@ export default function EventAdConfigPage() {
     setLoadingTotal(true);
     setLoadError('');
     try {
-      const data = await api.get('/community/events/promotion-audience');
+      const query = draft?.communityId ? `?community_id=${encodeURIComponent(draft.communityId)}` : '';
+      const data = await api.get(`/community/events/promotion-audience${query}`);
       setTotal(data?.total ?? 0);
     } catch (e) {
       setLoadError(e.message || 'No se pudo calcular la audiencia');
     } finally {
       setLoadingTotal(false);
     }
-  }, []);
+  }, [draft]);
 
   useEffect(() => {
     if (draft) loadTotal();
@@ -186,6 +187,14 @@ export default function EventAdConfigPage() {
   const audienceReady = audienceCap != null && !loadingInterested;
   const contractedExceedsAudience = audienceReady && notificationCount > audienceCap;
 
+  // Con el filtro de intereses activado, si el pool resultante no llega al
+  // mínimo contratable (NOTIF_MIN) bloqueamos la publicación y ocultamos
+  // el slider. SIN filtro, dejamos publicar el evento igualmente aunque el
+  // total de usuarios notificables todavía no llegue a NOTIF_MIN (fase de
+  // crecimiento con pocos usuarios) — el slider sigue apareciendo y no se
+  // bloquea, para no frenar la adopción temprana de la app.
+  const blockedByFilterShortfall = filterInterested && audienceReady && audienceCap < NOTIF_MIN;
+
   async function handleToggleInterested() {
     const next = !filterInterested;
     if (!next) {
@@ -200,8 +209,9 @@ export default function EventAdConfigPage() {
     }
     setLoadingInterested(true);
     try {
+      const communityParam = draft?.communityId ? `&community_id=${encodeURIComponent(draft.communityId)}` : '';
       const data = await api.get(
-        `/community/events/promotion-audience?filter=interested&categories=${categoriesQueryParam}`
+        `/community/events/promotion-audience?filter=interested&categories=${categoriesQueryParam}${communityParam}`
       );
       setInterested(data?.interested ?? null);
       setCategoriesDefined(Boolean(data?.categories_defined));
@@ -225,7 +235,7 @@ export default function EventAdConfigPage() {
     : (draft?.title || 'Nuevo evento');
 
   async function handlePublish() {
-    if (!draft || !audienceReady) return;
+    if (!draft || !audienceReady || blockedByFilterShortfall) return;
     setSaving(true);
     setError('');
     try {
@@ -443,7 +453,18 @@ export default function EventAdConfigPage() {
             Si la audiencia efectiva (con o sin filtro de intereses) queda
             por debajo de lo contratado, se avisa con banner ámbar; solo
             se enviarán las notificaciones que quepan y no se cobrará por
-            el resto (ver eventPromoPacing.js). */}
+            el resto (ver eventPromoPacing.js). Excepción: con el filtro
+            de intereses activo y por debajo del mínimo contratable,
+            ocultamos el slider y bloqueamos la publicación (ver
+            blockedByFilterShortfall). */}
+        {blockedByFilterShortfall ? (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-1">
+            <p className="text-sm text-surface-muted leading-relaxed">
+              Con el filtro de intereses activo solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios interesados, por debajo del mínimo contratable ({NOTIF_MIN.toLocaleString('es-ES')}).
+            </p>
+            <p className="text-xs text-surface-muted">Desactiva el filtro para poder contratar publicidad.</p>
+          </div>
+        ) : (
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <label className="text-xs font-mono text-surface-muted">
@@ -478,6 +499,7 @@ export default function EventAdConfigPage() {
             ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
           </p>
         </div>
+        )}
 
         {/* Notas informativas — mismas que estaban antes en el modal */}
         <div className="space-y-2">
@@ -506,7 +528,7 @@ export default function EventAdConfigPage() {
 
         <button
           onClick={handlePublish}
-          disabled={saving || !audienceReady}
+          disabled={saving || !audienceReady || blockedByFilterShortfall}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${meta.button}`}
         >
           {saving ? 'Publicando...' : `🌐 Publicar evento ${meta.label}`}

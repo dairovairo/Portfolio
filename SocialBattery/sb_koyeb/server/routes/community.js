@@ -399,9 +399,27 @@ async function getMuteNewEventsFilteredIds(candidateIds) {
 // intereses del EventAdConfigPage. Si no se manda ninguna categoría, se
 // responde categories_defined=false y interested=null (mismo contrato que
 // raffle-audience cuando la comunidad no tiene categorías definidas).
+// ── GET /api/community/events/promotion-audience ─────────────────────────────
+// Devuelve el tamaño de la audiencia potencial de una promoción Premium/Ultra
+// para un evento que aún NO se ha creado (draft en el cliente,
+// EventAdConfigPage.jsx). El total es "todos los usuarios de la app salvo el
+// propio creador Y salvo los miembros de la comunidad organizadora" — misma
+// lógica que usa server/jobs/eventPromoPacing.js para su pool real (ver
+// communityMembersByCommunity en ese archivo: los miembros ya se enteran del
+// evento al publicarse, así que la promoción de pago no debe contarlos ni
+// dirigirse a ellos). Si el draft no trae community_id (evento sin
+// comunidad), no hay a quién excluir aparte del creador.
+//
+// Con ?filter=interested&categories=<JSON array> se añade además cuántos de
+// esos usuarios tienen entre sus intereses alguna de las categorías del
+// evento (users.interests ∩ event.categories) — este es el filtro de
+// intereses del EventAdConfigPage. Si no se manda ninguna categoría, se
+// responde categories_defined=false y interested=null (mismo contrato que
+// raffle-audience cuando la comunidad no tiene categorías definidas).
 router.get('/events/promotion-audience', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const wantInterested = req.query.filter === 'interested';
+  const communityId = req.query.community_id || null;
 
   let categories = [];
   if (req.query.categories) {
@@ -414,10 +432,22 @@ router.get('/events/promotion-audience', requireAuth, async (req, res) => {
   }
 
   try {
-    const { count: totalCount, error: totalErr } = await supabase
+    let excludedMemberIds = [];
+    if (communityId) {
+      const { data: members, error: memErr } = await supabase
+        .from('community_members')
+        .select('user_id')
+        .eq('community_id', communityId);
+      if (memErr) throw memErr;
+      excludedMemberIds = (members || []).map(m => m.user_id).filter(id => id !== userId);
+    }
+
+    let totalQuery = supabase
       .from('users')
       .select('id', { count: 'exact', head: true })
       .neq('id', userId);
+    if (excludedMemberIds.length) totalQuery = totalQuery.not('id', 'in', `(${excludedMemberIds.join(',')})`);
+    const { count: totalCount, error: totalErr } = await totalQuery;
     if (totalErr) throw totalErr;
 
     let interested = null;
@@ -427,11 +457,13 @@ router.get('/events/promotion-audience', requireAuth, async (req, res) => {
         categoriesDefined = false;
       } else {
         categoriesDefined = true;
-        const { count: interestedCount, error: interestedErr } = await supabase
+        let interestedQuery = supabase
           .from('users')
           .select('id', { count: 'exact', head: true })
           .neq('id', userId)
           .overlaps('interests', categories);
+        if (excludedMemberIds.length) interestedQuery = interestedQuery.not('id', 'in', `(${excludedMemberIds.join(',')})`);
+        const { count: interestedCount, error: interestedErr } = await interestedQuery;
         if (interestedErr) throw interestedErr;
         interested = interestedCount || 0;
       }
@@ -523,6 +555,43 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
       if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
       if (!isAdmin) {
         return res.status(403).json({ error: 'Solo el administrador puede publicar eventos en esta comunidad' });
+      }
+    }
+
+    // Política de bloqueo por audiencia insuficiente (debe reflejar
+    // exactamente blockedByFilterShortfall en EventAdConfigPage.jsx): SOLO
+    // se bloquea si el filtro de intereses está activo y el pool
+    // resultante (excluyendo creador y, si aplica, miembros de la
+    // comunidad) no llega al mínimo contratable (NOTIF_MIN). SIN filtro,
+    // se deja publicar el evento aunque el pool notificable sea menor —
+    // esto favorece el crecimiento de la app cuando aún tiene pocos
+    // usuarios; el pacing (eventPromoPacing.js) ya reparte como mucho
+    // tantas notificaciones como quepan en el pool real.
+    if (resolvedInterestedOnly) {
+      if (!categories.length) {
+        return res.status(400).json({ error: 'Define categorías en el evento para poder filtrar por intereses' });
+      }
+      let excludedMemberIds = [];
+      if (communityId) {
+        const { data: members, error: memErr } = await supabase
+          .from('community_members')
+          .select('user_id')
+          .eq('community_id', communityId);
+        if (memErr) throw memErr;
+        excludedMemberIds = (members || []).map(m => m.user_id).filter(id => id !== userId);
+      }
+      let interestedQuery = supabase
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .neq('id', userId)
+        .overlaps('interests', categories);
+      if (excludedMemberIds.length) interestedQuery = interestedQuery.not('id', 'in', `(${excludedMemberIds.join(',')})`);
+      const { count: interestedCount, error: interestedErr } = await interestedQuery;
+      if (interestedErr) throw interestedErr;
+      if ((interestedCount || 0) < NOTIF_MIN) {
+        return res.status(400).json({
+          error: `Solo hay ${interestedCount || 0} usuarios interesados disponibles, por debajo del mínimo contratable (${NOTIF_MIN}): quita el filtro para poder publicar el evento`,
+        });
       }
     }
 
@@ -3734,16 +3803,16 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   }
 
   // Sorteo Light: visualizaciones de banner a contratar, entre BANNER_VIEWS_MIN
-  // y BANNER_VIEWS_MAX (mismo rango que notification_count en eventos
-  // Premium/Ultra — ver POST /community/events más arriba), pero además
-  // topado al tamaño real de la audiencia (usuarios notificables, o solo
-  // los interesados si banner_interested_only viene activado — ver
-  // getRaffleLightAudienceIds). Debe coincidir con la constraint de la BD
-  // (phase102_raffle_banner_views.sql: CHECK banner_views_contracted
-  // BETWEEN 500 AND 50000), o si no la fila se rechaza en el INSERT aunque
-  // haya pasado esta validación de la API.
-  const BANNER_VIEWS_MIN = 500;
-  const BANNER_VIEWS_MAX = 50000;
+  // y BANNER_VIEWS_MAX (rango propio del sorteo, distinto del notification_count
+  // de eventos Premium/Ultra — ver POST /community/events más arriba). El
+  // mínimo de facturación (a partir de cuántos banners realmente enseñados se
+  // empieza a cobrar) es más bajo que BANNER_VIEWS_MIN y vive solo en el
+  // frontend (CHARGE_MIN en RaffleAdAudiencePage.jsx), no aquí. Debe coincidir
+  // con la constraint de la BD (phase106_raffle_banner_views_range.sql: CHECK
+  // banner_views_contracted BETWEEN 1000 AND 100000), o si no la fila se
+  // rechaza en el INSERT aunque haya pasado esta validación de la API.
+  const BANNER_VIEWS_MIN = 1000;
+  const BANNER_VIEWS_MAX = 100000;
   const resolvedInterestedOnly = raffleTier === 'light' && String(banner_interested_only) === 'true';
   let resolvedBannerViews = null;
   if (raffleTier === 'light') {
@@ -3772,19 +3841,25 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     // creador y a los miembros de la propia comunidad; si
     // resolvedInterestedOnly, restringido además a quien tenga intereses
     // afines a las categorías de la comunidad). Se calcula ANTES de crear
-    // el sorteo para poder rechazar la contratación si no hay audiencia
-    // suficiente, en vez de crear un sorteo Light sin banners que enseñar.
+    // el sorteo para decidir si hay que bloquear la contratación.
+    //
+    // Política de bloqueo (debe reflejar exactamente blockedByFilterShortfall
+    // en RaffleAdAudiencePage.jsx): SOLO se bloquea si el filtro de
+    // intereses está activo y el pool resultante no llega al mínimo
+    // contratable (BANNER_VIEWS_MIN). SIN filtro, se deja crear el sorteo
+    // aunque el pool sea menor que lo contratado (incluso menor que
+    // BANNER_VIEWS_MIN) — esto favorece el crecimiento de la app cuando
+    // aún tiene pocos usuarios; assignRaffleBannerTargets ya se encarga de
+    // repartir como mucho tantos banners como quepan en el pool real.
     let lightAudienceIds = null;
     if (raffleTier === 'light') {
       const { ids, categoriesDefined } = await getRaffleLightAudienceIds(communityId, userId, { interestedOnly: resolvedInterestedOnly });
       if (resolvedInterestedOnly && !categoriesDefined) {
         return res.status(400).json({ error: 'Tu comunidad no tiene categorías de intereses definidas: no se puede filtrar por interesados' });
       }
-      if (ids.length < resolvedBannerViews) {
+      if (resolvedInterestedOnly && ids.length < BANNER_VIEWS_MIN) {
         return res.status(400).json({
-          error: resolvedInterestedOnly
-            ? `Solo hay ${ids.length} usuarios interesados disponibles: reduce las visualizaciones contratadas o quita el filtro`
-            : `Solo hay ${ids.length} usuarios notificables disponibles: reduce las visualizaciones contratadas`,
+          error: `Solo hay ${ids.length} usuarios interesados disponibles, por debajo del mínimo contratable (${BANNER_VIEWS_MIN}): quita el filtro para poder crear el sorteo`,
         });
       }
       lightAudienceIds = ids;

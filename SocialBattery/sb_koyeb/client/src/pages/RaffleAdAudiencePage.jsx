@@ -20,13 +20,19 @@ import { api } from '../lib/api';
 // el filtro que se ven aquí son exactamente el pool del que luego se
 // sortean los targets reales del banner.
 //
-// Slider: siempre 500–50.000 y siempre operativo. Si la audiencia (con o
+// Slider: siempre 1.000–100.000 y siempre operativo. Si la audiencia (con o
 // sin filtro) queda por debajo del número contratado, el sistema entregará
 // como mucho ese número de banners y no se cobrará por el resto — no se
 // bloquea la contratación (ver info tras el slider).
-const VIEWS_MIN = 500;
-const VIEWS_MAX = 50000;
+//
+// CHARGE_MIN es el mínimo de banners realmente ENSEÑADOS por debajo del
+// cual no se cobra nada (ver mensaje bajo el slider) — es un umbral de
+// facturación independiente de VIEWS_MIN (mínimo contratable en el
+// slider), no tiene por qué coincidir con él.
+const VIEWS_MIN = 1000;
+const VIEWS_MAX = 100000;
 const VIEWS_STEP = 500;
+const CHARGE_MIN = 500;
 
 const LIGHT_META = {
   emoji: '🎫',
@@ -105,6 +111,15 @@ export default function RaffleAdAudiencePage() {
   const audienceReady = audienceCap != null && !loadingInterested;
   const contractedExceedsAudience = audienceReady && bannerViews > audienceCap;
 
+  // Con el filtro de intereses activado, si el pool resultante no llega al
+  // mínimo contratable (VIEWS_MIN) bloqueamos la contratación y ocultamos
+  // el slider — no tiene sentido dejar elegir un número por debajo del
+  // mínimo. SIN filtro, en cambio, dejamos crear el sorteo igualmente
+  // aunque el total de usuarios de la app todavía no llegue a VIEWS_MIN
+  // (fase de crecimiento con pocos usuarios): el slider sigue apareciendo
+  // y no se bloquea, para no frenar la adopción temprana de la app.
+  const blockedByFilterShortfall = filterInterested && audienceReady && audienceCap < VIEWS_MIN;
+
   async function handleToggleInterested() {
     const next = !filterInterested;
     if (!next) {
@@ -129,7 +144,7 @@ export default function RaffleAdAudiencePage() {
   }
 
   async function handleCreate() {
-    if (!draft || !audienceReady) return;
+    if (!draft || !audienceReady || blockedByFilterShortfall) return;
     setCreating(true);
     setCreateError('');
     try {
@@ -289,7 +304,18 @@ export default function RaffleAdAudiencePage() {
 
         {/* Visualizaciones contratadas — siempre operativo 500–50.000.
             Si la audiencia efectiva queda por debajo, avisamos abajo;
-            solo se entregarán los banners que quepan (ver assignRaffleBannerTargets). */}
+            solo se entregarán los banners que quepan (ver assignRaffleBannerTargets).
+            Excepción: con el filtro de intereses activo y por debajo del
+            mínimo contratable, ocultamos el slider y bloqueamos la
+            creación (ver blockedByFilterShortfall). */}
+        {blockedByFilterShortfall ? (
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-1">
+            <p className="text-sm text-surface-muted leading-relaxed">
+              Con el filtro de intereses activo solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios interesados, por debajo del mínimo contratable ({VIEWS_MIN.toLocaleString('es-ES')}).
+            </p>
+            <p className="text-xs text-surface-muted">Desactiva el filtro para poder contratar publicidad.</p>
+          </div>
+        ) : (
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <label className="text-xs font-mono text-surface-muted">
@@ -321,9 +347,10 @@ export default function RaffleAdAudiencePage() {
           )}
 
           <p className="text-[10px] font-mono text-surface-muted">
-            ℹ️ Si no se alcanzan {VIEWS_MIN} banners enseñados no se cobrará nada.
+            ℹ️ Si no se alcanzan {CHARGE_MIN} banners enseñados no se cobrará nada.
           </p>
         </div>
+        )}
 
         {/* Notas informativas */}
         <div className="space-y-2">
@@ -347,7 +374,7 @@ export default function RaffleAdAudiencePage() {
 
         <button
           onClick={handleCreate}
-          disabled={creating || !audienceReady}
+          disabled={creating || !audienceReady || blockedByFilterShortfall}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${LIGHT_META.button}`}
         >
           {creating ? 'Creando...' : '🎁 Crear sorteo Light'}
