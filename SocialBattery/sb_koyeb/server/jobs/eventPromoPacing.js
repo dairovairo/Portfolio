@@ -247,7 +247,7 @@ async function runEventPromoPacingTick() {
     // 1. Eventos premium/ultra activos (no empezados) que aún no llegan a lo contratado
     const { data: events, error: eventsError } = await supabase
       .from('community_events')
-      .select('id, title, location, community_id, creator_id, promotion_plan, notification_count, notification_sent_count, event_date')
+      .select('id, title, location, community_id, creator_id, promotion_plan, notification_count, notification_sent_count, event_date, audience_interested_only, categories')
       .in('promotion_plan', ['premium', 'ultra'])
       .gt('event_date', now.toISOString())
       .not('notification_count', 'is', null);
@@ -329,6 +329,34 @@ async function runEventPromoPacingTick() {
     let available = await fetchEligiblePool(excludedFromPool);
     if (!available.length) return;
 
+    // 5b. Fase 105 — filtro "solo intereses" por evento. Si algún evento
+    //     de este tick lo tiene activado, cargamos una sola vez el mapa
+    //     userId → Set(interests) para todos los candidatos vivos y
+    //     después, en el reparto por evento, se descartan los candidatos
+    //     que no compartan ninguna categoría con las del evento
+    //     (users.interests ∩ event.categories). Sin el flag, el reparto
+    //     sigue como antes (todo el pool notificable).
+    const anyInterestedOnly = pending.some(e => e.audience_interested_only);
+    const interestsByUser = new Map();
+    if (anyInterestedOnly) {
+      const candidateIds = available.map(c => c.userId);
+      const CHUNK = 500;
+      for (let i = 0; i < candidateIds.length; i += CHUNK) {
+        const slice = candidateIds.slice(i, i + CHUNK);
+        const { data: rows, error: interestsErr } = await supabase
+          .from('users')
+          .select('id, interests')
+          .in('id', slice);
+        if (interestsErr) {
+          console.warn('[PROMO-PACING] error cargando intereses para filtro por intereses:', interestsErr.message);
+          break;
+        }
+        (rows || []).forEach(r => {
+          interestsByUser.set(r.id, new Set((r.interests || []).filter(Boolean)));
+        });
+      }
+    }
+
     // 6. Priorización: Tier A (bajo mínimo, más urgentes primero) + Tier B (más rezagados primero)
     const urgent = pending
       .filter(e => e.notification_sent_count < FREE_THRESHOLD)
@@ -363,10 +391,28 @@ async function runEventPromoPacingTick() {
         ...(everNotifiedByEvent.get(event.id) || []),
       ]);
 
+      // Fase 105: si el evento contrató "solo intereses", el candidato
+      // además tiene que compartir alguna categoría con el evento
+      // (users.interests ∩ event.categories no vacío). Si el evento no
+      // tiene categorías, no hay con qué cruzar y nadie pasa este filtro
+      // — mismo criterio que el frontend (interested=0 sin categorías).
+      const eventCategories = new Set((event.categories || []).filter(Boolean));
+      const interestsFilter = event.audience_interested_only
+        ? (userId) => {
+            if (!eventCategories.size) return false;
+            const userInterests = interestsByUser.get(userId);
+            if (!userInterests || !userInterests.size) return false;
+            for (const cat of userInterests) if (eventCategories.has(cat)) return true;
+            return false;
+          }
+        : null;
+
       const chosen = [];
       const rest = [];
       for (const candidate of available) {
-        if (chosen.length < chunkTarget && !excludeSet.has(candidate.userId)) {
+        const passes = !excludeSet.has(candidate.userId) &&
+          (!interestsFilter || interestsFilter(candidate.userId));
+        if (chosen.length < chunkTarget && passes) {
           chosen.push(candidate);
         } else {
           rest.push(candidate);

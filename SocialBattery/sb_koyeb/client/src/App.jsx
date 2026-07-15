@@ -24,6 +24,7 @@ import CommunityDetailPage from './pages/CommunityDetailPage';
 import EventDetailPage from './pages/EventDetailPage';
 import EventLocatorPage from './pages/EventLocatorPage';
 import RaffleAdAudiencePage from './pages/RaffleAdAudiencePage';
+import EventAdConfigPage from './pages/EventAdConfigPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ShopPage from './pages/ShopPage';
 import CalendarPage from './pages/CalendarPage';
@@ -129,6 +130,7 @@ function AppRoutes() {
       <Route path="/shop"                     element={<ShopPage />} />
       <Route path="/calendar"                 element={<CalendarPage />} />
       <Route path="/community"               element={<CommunityPage />} />
+      <Route path="/community/event-publicidad" element={<EventAdConfigPage />} />
       <Route path="/community/event/:eventId"  element={<EventDetailPage />} />
       <Route path="/community/event/:eventId/locator" element={<EventLocatorPage />} />
       <Route path="/community/:communityId"   element={<CommunityDetailPage />} />

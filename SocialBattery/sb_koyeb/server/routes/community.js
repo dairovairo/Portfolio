@@ -383,9 +383,70 @@ async function getMuteNewEventsFilteredIds(candidateIds) {
   }
 }
 
+// ── GET /api/community/events/promotion-audience ─────────────────────────────
+// Devuelve el tamaño de la audiencia potencial de una promoción Premium/Ultra
+// para un evento que aún NO se ha creado (draft en el cliente,
+// EventAdConfigPage.jsx). El total es "todos los usuarios de la app salvo el
+// propio creador" — misma lógica que usa server/jobs/eventPromoPacing.js
+// para su pool (push_subscriptions ∖ {creador}); aquí lo aproximamos
+// contando directamente sobre users, igual que hace raffle-audience, para
+// que el número que ve la empresa antes de contratar sea el mismo que verá
+// después en el reparto real (fase 68/69).
+//
+// Con ?filter=interested&categories=<JSON array> se añade además cuántos de
+// esos usuarios tienen entre sus intereses alguna de las categorías del
+// evento (users.interests ∩ event.categories) — este es el filtro de
+// intereses del EventAdConfigPage. Si no se manda ninguna categoría, se
+// responde categories_defined=false y interested=null (mismo contrato que
+// raffle-audience cuando la comunidad no tiene categorías definidas).
+router.get('/events/promotion-audience', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const wantInterested = req.query.filter === 'interested';
+
+  let categories = [];
+  if (req.query.categories) {
+    try {
+      const parsed = JSON.parse(req.query.categories);
+      if (Array.isArray(parsed)) categories = parsed.filter(Boolean);
+    } catch {
+      return res.status(400).json({ error: 'categories debe ser un JSON array' });
+    }
+  }
+
+  try {
+    const { count: totalCount, error: totalErr } = await supabase
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .neq('id', userId);
+    if (totalErr) throw totalErr;
+
+    let interested = null;
+    let categoriesDefined = null;
+    if (wantInterested) {
+      if (!categories.length) {
+        categoriesDefined = false;
+      } else {
+        categoriesDefined = true;
+        const { count: interestedCount, error: interestedErr } = await supabase
+          .from('users')
+          .select('id', { count: 'exact', head: true })
+          .neq('id', userId)
+          .overlaps('interests', categories);
+        if (interestedErr) throw interestedErr;
+        interested = interestedCount || 0;
+      }
+    }
+
+    res.json({ total: totalCount || 0, interested, categories_defined: categoriesDefined });
+  } catch (err) {
+    console.error('[community] GET /events/promotion-audience error:', err);
+    res.status(500).json({ error: err.message || 'Error al calcular la audiencia' });
+  }
+});
+
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count } = req.body;
+  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count, audience_interested_only } = req.body;
   const userId = req.user.id;
 
   const categories = parseCategories(req.body.categories ?? category);
@@ -445,6 +506,14 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     resolvedNotificationCount = parsedCount;
   }
 
+  // Fase 105: filtro opcional "solo intereses" — restringe el pool de
+  // notificables del evento a los usuarios cuyos intereses se cruzan con
+  // las categorías del evento (users.interests ∩ event.categories). Se
+  // ignora fuera de premium/ultra (basic no tiene alcance contratado).
+  const resolvedInterestedOnly =
+    (resolvedPlan === 'premium' || resolvedPlan === 'ultra') &&
+    (audience_interested_only === 'true' || audience_interested_only === true);
+
   try {
     await ensurePublicProfile(req.user);
 
@@ -488,6 +557,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         community_id: communityId,
         promotion_plan: resolvedPlan,
         notification_count: resolvedNotificationCount,
+        audience_interested_only: resolvedInterestedOnly,
       })
       .select()
       .single();

@@ -772,6 +772,7 @@ const MAX_CATEGORIES = 3;
 const EVENT_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 
 function CreateEventModal({ onClose, onCreate }) {
+  const navigate = useNavigate();
   const now = new Date();
   const minDate = new Date(now.getTime() + 30 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
@@ -876,15 +877,28 @@ function CreateEventModal({ onClose, onCreate }) {
       return;
     }
     setError('');
+
+    const baseDraft = {
+      ...form,
+      categories: resolvedCategories,
+      cover_file: coverFile,
+      event_date: new Date(form.event_date).toISOString(),
+      ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
+    };
+
+    // Los eventos Premium / Ultra llevan publicidad de pago: antes de
+    // crearlos, se ajusta el plan y el volumen de notificaciones en una
+    // pantalla propia (EventAdConfigPage). El evento NO se crea aquí en
+    // este caso — se crea al confirmar allí con estos mismos datos.
+    if (baseDraft.promotion_plan === 'premium' || baseDraft.promotion_plan === 'ultra') {
+      onClose();
+      navigate('/community/event-publicidad', { state: { draft: baseDraft } });
+      return;
+    }
+
     setSaving(true);
     try {
-      await onCreate({
-        ...form,
-        categories: resolvedCategories,
-        cover_file: coverFile,
-        event_date: new Date(form.event_date).toISOString(),
-        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
-      });
+      await onCreate(baseDraft);
       onClose();
     } catch (e) {
       setError(e.message || 'Error al crear el evento');
@@ -1262,49 +1276,9 @@ function CreateEventModal({ onClose, onCreate }) {
             </div>
 
             {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
-              <>
-                <div className="mt-2 p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs font-mono text-surface-muted">
-                      📨 Notificaciones a contratar (on-demand)
-                    </label>
-                    <span className="text-xs font-mono font-semibold text-surface-text">
-                      {Number(form.notification_count).toLocaleString('es-ES')}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={500}
-                    max={50000}
-                    step={500}
-                    value={form.notification_count}
-                    onChange={e => set('notification_count', Number(e.target.value))}
-                    className="w-full accent-accent-primary cursor-pointer"
-                  />
-                  <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-                    <span>Mín. 500</span>
-                    <span>Máx. 50.000</span>
-                  </div>
-                  <p className="text-[10px] font-mono text-surface-muted">
-                    ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
-                  </p>
-                </div>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  💳 Se aplicará una retención al comenzar la promoción; el pago se efectuará al finalizar la promoción, al renovarla o en su defecto, al empezar el evento, en base a las notificaciones enviadas hasta ese momento.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🔁 Se notificará como máximo una vez a cada usuario dentro de una misma promoción; para repetir notificaciones a usuarios se deberá crear otra promoción.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  📍 Todas las notificaciones se reparten mediante algoritmos basados en intereses y ubicación.
-                </p>
-              </>
+              <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                🎯 El plan y el número de notificaciones a contratar se afinan en el siguiente paso, al pulsar "Configurar publicidad".
+              </p>
             )}
           </div>
 

@@ -250,7 +250,8 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
   );
 }
 
-function CreateCommunityEventModal({ onClose, onCreate, communityName, communityOrganization }) {
+function CreateCommunityEventModal({ onClose, onCreate, communityName, communityOrganization, communityId }) {
+  const navigate = useNavigate();
   const minDate = new Date(Date.now() + 30 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
   const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
@@ -333,16 +334,38 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
       setError('La fecha fin debe ser posterior al inicio');
       return;
     }
-    setSaving(true);
     setError('');
-    try {
-      await onCreate({
-        ...form,
-        categories: resolvedCategories,
-        cover_file: coverFile,
-        event_date: new Date(form.event_date).toISOString(),
-        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
+
+    const baseDraft = {
+      ...form,
+      categories: resolvedCategories,
+      cover_file: coverFile,
+      event_date: new Date(form.event_date).toISOString(),
+      ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
+    };
+
+    // Premium / Ultra: se afinan plan y notificaciones en la pantalla
+    // dedicada de publicidad (EventAdConfigPage). Al enviar el draft,
+    // adjuntamos `communityId` + `communityName` para que la creación
+    // final quede vinculada a esta comunidad y para poder volver aquí
+    // al terminar.
+    if (baseDraft.promotion_plan === 'premium' || baseDraft.promotion_plan === 'ultra') {
+      onClose();
+      navigate('/community/event-publicidad', {
+        state: {
+          draft: {
+            ...baseDraft,
+            communityId,
+            communityName,
+          },
+        },
       });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onCreate(baseDraft);
       onClose();
     } catch (e) {
       setError(e.message || 'Error al crear el evento');
@@ -697,49 +720,9 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             </div>
 
             {(form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') && (
-              <>
-                <div className="mt-2 p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs font-mono text-surface-muted">
-                      📨 Notificaciones a contratar (on-demand)
-                    </label>
-                    <span className="text-xs font-mono font-semibold text-surface-text">
-                      {Number(form.notification_count).toLocaleString('es-ES')}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={500}
-                    max={50000}
-                    step={500}
-                    value={form.notification_count}
-                    onChange={e => set('notification_count', Number(e.target.value))}
-                    className="w-full accent-accent-primary cursor-pointer"
-                  />
-                  <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-                    <span>Mín. 500</span>
-                    <span>Máx. 50.000</span>
-                  </div>
-                  <p className="text-[10px] font-mono text-surface-muted">
-                    ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
-                  </p>
-                </div>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  💳 El pago se efectuará tras el inicio del evento, en base a las notificaciones enviadas hasta su comienzo.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🔁 En cada promoción cada usuario se notifica una vez, para que usuarios ya notificados vuelvan a serlo, se debe renovar la promoción desde el evento creado.
-                </p>
-                <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  💶 La promoción se cobrará al empezar el evento automáticamente o al renovar la promoción.
-                </p>
-              </>
+              <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                🎯 El plan y el número de notificaciones a contratar se afinan en el siguiente paso, al pulsar "Configurar publicidad".
+              </p>
             )}
           </div>
 
@@ -2498,6 +2481,7 @@ export default function CommunityDetailPage() {
 
       {showCreateEvent && (
         <CreateCommunityEventModal
+          communityId={communityId}
           communityName={community.name}
           communityOrganization={community.organization}
           onClose={() => setShowCreateEvent(false)}
