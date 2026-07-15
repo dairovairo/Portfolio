@@ -947,7 +947,6 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
   const [endsAt, setEndsAt] = useState(defaultDate);
   const [tier, setTier] = useState(RAFFLE_TIER_OPTIONS[0].key);
   const [showTierDetails, setShowTierDetails] = useState(false);
-  const [bannerViewsContracted, setBannerViewsContracted] = useState(500);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
@@ -983,7 +982,6 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
       description: description.trim(),
       ends_at: new Date(endsAt).toISOString(),
       tier,
-      banner_views_contracted: tier === 'light' ? bannerViewsContracted : null,
       image_file: imageFile,
       image_preview: imagePreview,
     };
@@ -1081,32 +1079,9 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
 
             {tier === 'light' && (
               <div className="mt-2 space-y-2">
-                <div className="p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs font-mono text-surface-muted">
-                      👁️ Visualizaciones contratadas
-                    </label>
-                    <span className="text-xs font-mono font-semibold text-surface-text">
-                      {Number(bannerViewsContracted).toLocaleString('es-ES')}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={500}
-                    max={50000}
-                    step={1}
-                    value={bannerViewsContracted}
-                    onChange={e => setBannerViewsContracted(Number(e.target.value))}
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                  <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-                    <span>Mín. 500</span>
-                    <span>Máx. 50.000</span>
-                  </div>
-                  <p className="text-[10px] font-mono text-surface-muted">
-                    ℹ️ Si no se alcanzan 500 banners enseñados no se cobrará nada.
-                  </p>
-                </div>
+                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+                  🎯 El número de visualizaciones a contratar y el filtro de interesados se eligen en el siguiente paso, al pulsar "Configurar publicidad".
+                </p>
                 <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                   💳 Se aplicará una retencion al comenzar el sorteo, el pago se efectuará al renovar o finalizar el contrato publicitario, o en su defecto al finalizar el sorteo.
                 </p>

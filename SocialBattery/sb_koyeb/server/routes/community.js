@@ -1337,37 +1337,23 @@ router.get('/communities/:id/raffle-audience', requireAuth, async (req, res) => 
   try {
     const { data: community, error: communityErr } = await supabase
       .from('communities')
-      .select('id, categories')
+      .select('id')
       .eq('id', id)
       .maybeSingle();
     if (communityErr) throw communityErr;
     if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
 
-    const { count: total, error: totalErr } = await supabase
-      .from('users')
-      .select('id', { count: 'exact', head: true })
-      .neq('id', userId);
-    if (totalErr) throw totalErr;
+    const { ids: totalIds } = await getRaffleLightAudienceIds(id, userId);
 
     let interested = null;
+    let categoriesDefined = null;
     if (wantInterested) {
-      const categories = (community.categories || []).filter(Boolean);
-      if (categories.length) {
-        const { count, error: intErr } = await supabase
-          .from('users')
-          .select('id', { count: 'exact', head: true })
-          .neq('id', userId)
-          .overlaps('interests', categories);
-        if (intErr) throw intErr;
-        interested = count || 0;
-      } else {
-        // Sin categorías definidas en la comunidad no hay forma de cruzar
-        // intereses, así que no hay nadie "interesado" que podamos afirmar.
-        interested = 0;
-      }
+      const { ids: interestedIds, categoriesDefined: hasCategories } = await getRaffleLightAudienceIds(id, userId, { interestedOnly: true });
+      categoriesDefined = hasCategories;
+      interested = hasCategories ? interestedIds.length : null;
     }
 
-    res.json({ total: total || 0, interested });
+    res.json({ total: totalIds.length, interested, categories_defined: categoriesDefined });
   } catch (err) {
     console.error('[community] GET /communities/:id/raffle-audience error:', err);
     res.status(500).json({ error: err.message || 'Error al calcular la audiencia' });
@@ -3043,6 +3029,47 @@ async function getEligibleRaffleMembers(communityId, tier) {
   return userIds;
 }
 
+// ── Audiencia de banner para sorteos Light ──────────────────────────────────
+// A diferencia de 'volt' y 'community', el tier Light es publicidad de
+// pago dirigida a usuarios AJENOS a la comunidad que organiza el sorteo:
+// el pool de "usuarios notificables/contratables" son todos los usuarios de
+// la app EXCEPTO el propio creador Y EXCEPTO quienes ya son miembros de esa
+// comunidad (no tiene sentido pagar por publicidad a quien ya la conoce).
+// Si interestedOnly es true, se filtra además a quienes tengan algún
+// interés de perfil en común con las categorías de la comunidad. Se usa
+// tanto para calcular el tamaño de la audiencia (GET .../raffle-audience)
+// como para el reparto real del banner al crear el sorteo, así el número
+// que se le enseña al creador en la pantalla de configuración de publicidad
+// coincide exactamente con el pool real del que luego se sortean los
+// targets.
+async function getRaffleLightAudienceIds(communityId, creatorId, { interestedOnly = false } = {}) {
+  const { data: members, error: memErr } = await supabase
+    .from('community_members')
+    .select('user_id')
+    .eq('community_id', communityId);
+  if (memErr) throw memErr;
+  const excludedIds = new Set((members || []).map(m => m.user_id));
+  excludedIds.add(creatorId);
+
+  let query = supabase.from('users').select('id');
+  if (interestedOnly) {
+    const { data: community, error: communityErr } = await supabase
+      .from('communities')
+      .select('categories')
+      .eq('id', communityId)
+      .maybeSingle();
+    if (communityErr) throw communityErr;
+    const categories = (community?.categories || []).filter(Boolean);
+    if (!categories.length) return { ids: [], categoriesDefined: false };
+    query = query.overlaps('interests', categories);
+  }
+
+  const { data: users, error } = await query;
+  if (error) throw error;
+  const ids = (users || []).map(u => u.id).filter(id => !excludedIds.has(id));
+  return { ids, categoriesDefined: true };
+}
+
 // ── Reparto del banner volador (avioneta con pancarta "¡Sorteo nuevo!") ────
 // Aplica a los tiers 'light', 'volt' y 'community' (los que incluyen banner
 // en el menú principal, ver RAFFLE_TIER_OPTIONS en CommunityDetailPage.jsx).
@@ -3619,7 +3646,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
 router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (req, res) => {
   const userId = req.user.id;
   const communityId = req.params.id;
-  const { title, description, ends_at, tier, banner_views_contracted } = req.body;
+  const { title, description, ends_at, tier, banner_views_contracted, banner_interested_only } = req.body;
 
   if (!title?.trim()) return res.status(400).json({ error: 'El título es obligatorio' });
   if (!ends_at) return res.status(400).json({ error: 'La fecha de fin es obligatoria' });
@@ -3638,12 +3665,16 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
 
   // Sorteo Light: visualizaciones de banner a contratar, entre BANNER_VIEWS_MIN
   // y BANNER_VIEWS_MAX (mismo rango que notification_count en eventos
-  // Premium/Ultra — ver POST /community/events más arriba). Debe coincidir
-  // con la constraint de la BD (phase102_raffle_banner_views.sql: CHECK
-  // banner_views_contracted BETWEEN 500 AND 50000), o si no la fila se
-  // rechaza en el INSERT aunque haya pasado esta validación de la API.
+  // Premium/Ultra — ver POST /community/events más arriba), pero además
+  // topado al tamaño real de la audiencia (usuarios notificables, o solo
+  // los interesados si banner_interested_only viene activado — ver
+  // getRaffleLightAudienceIds). Debe coincidir con la constraint de la BD
+  // (phase102_raffle_banner_views.sql: CHECK banner_views_contracted
+  // BETWEEN 500 AND 50000), o si no la fila se rechaza en el INSERT aunque
+  // haya pasado esta validación de la API.
   const BANNER_VIEWS_MIN = 500;
   const BANNER_VIEWS_MAX = 50000;
+  const resolvedInterestedOnly = raffleTier === 'light' && String(banner_interested_only) === 'true';
   let resolvedBannerViews = null;
   if (raffleTier === 'light') {
     const parsedViews = Number.parseInt(banner_views_contracted, 10);
@@ -3667,6 +3698,28 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
       return res.status(403).json({ error: 'Solo el creador de la comunidad puede crear un sorteo' });
     }
 
+    // Pool real de la audiencia Light (usuarios notificables, excluyendo al
+    // creador y a los miembros de la propia comunidad; si
+    // resolvedInterestedOnly, restringido además a quien tenga intereses
+    // afines a las categorías de la comunidad). Se calcula ANTES de crear
+    // el sorteo para poder rechazar la contratación si no hay audiencia
+    // suficiente, en vez de crear un sorteo Light sin banners que enseñar.
+    let lightAudienceIds = null;
+    if (raffleTier === 'light') {
+      const { ids, categoriesDefined } = await getRaffleLightAudienceIds(communityId, userId, { interestedOnly: resolvedInterestedOnly });
+      if (resolvedInterestedOnly && !categoriesDefined) {
+        return res.status(400).json({ error: 'Tu comunidad no tiene categorías de intereses definidas: no se puede filtrar por interesados' });
+      }
+      if (ids.length < resolvedBannerViews) {
+        return res.status(400).json({
+          error: resolvedInterestedOnly
+            ? `Solo hay ${ids.length} usuarios interesados disponibles: reduce las visualizaciones contratadas o quita el filtro`
+            : `Solo hay ${ids.length} usuarios notificables disponibles: reduce las visualizaciones contratadas`,
+        });
+      }
+      lightAudienceIds = ids;
+    }
+
     let imageUrl = null;
     if (req.file) {
       imageUrl = await storeImage({
@@ -3687,14 +3740,15 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
         ends_at: endsAtDate.toISOString(),
         tier: raffleTier,
         banner_views_contracted: resolvedBannerViews,
+        banner_interested_only: resolvedInterestedOnly,
       })
-      .select('id, community_id, creator_id, title, description, image_url, ends_at, drawn_at, created_at, tier, banner_views_contracted')
+      .select('id, community_id, creator_id, title, description, image_url, ends_at, drawn_at, created_at, tier, banner_views_contracted, banner_interested_only')
       .single();
 
     if (error) throw error;
 
     if (raffleTier === 'light' && resolvedBannerViews) {
-      const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews, lightAudienceIds);
       await notifyCommunityRaffleTargets({
         raffleId: data.id, communityId, communityName: community.name,
         creatorId: userId, title: data.title, tier: raffleTier, targetIds,
