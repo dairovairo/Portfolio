@@ -1,0 +1,15 @@
+-- Fase 57: preview de la mascota personalizada equipada.
+--
+-- Hasta ahora, TODO el equipado de la mascota (ropa, calzado, gorro,
+-- accesorios y actividad) y sus recetas de color vivían únicamente en
+-- localStorage del propio dispositivo del usuario. Por eso, en la tarjeta
+-- de amigo del menú principal, la mascota de cada amigo se veía siempre en
+-- su forma base, sin nada de lo que se hubiera comprado o personalizado.
+--
+-- En vez de sincronizar todo el modelo de datos de la tienda (catálogo +
+-- desbloqueados + recetas de color por ítem) con el servidor, cada cliente
+-- "hornea" su propio equipado en un único PNG transparente (solo las capas
+-- por encima de la mascota base — ver client/src/lib/mascotRenderer.js →
+-- renderMascotOverlayBlob) y lo sube aquí. FriendCard.jsx simplemente
+-- superpone esa imagen sobre la mascota base del tier de cada amigo.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mascot_preview_url TEXT;
