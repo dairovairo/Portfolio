@@ -3972,7 +3972,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
         id, created_at,
         raffle:raffle_id(
           id, community_id, title, ends_at, drawn_at, tier, image_url,
-          community:community_id(id, name)
+          community:community_id(id, name, categories)
         )
       `)
       .eq('user_id', userId)
@@ -4001,13 +4001,42 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     if (memErr) throw memErr;
     const ownCommunityIds = new Set((memberships || []).map(m => m.community_id));
 
+    // Intereses propios del usuario — se usan SOLO como segundo criterio de
+    // prioridad dentro del tier 'volt' (ver pickWithinTier más abajo), para
+    // no tocar la prioridad ya existente de comunidad propia ni la de
+    // Community > Light > Volt entre tiers.
+    const { data: selfUser, error: selfErr } = await supabase
+      .from('users')
+      .select('interests')
+      .eq('id', userId)
+      .maybeSingle();
+    if (selfErr) throw selfErr;
+    const ownInterests = new Set((selfUser?.interests || []).filter(Boolean));
+
     // Dentro de las filas de un mismo tier, prioriza la primera (por orden
     // cronológico de asignación) cuya comunidad sea del propio usuario; si
     // ninguna lo es, cae de vuelta a la primera disponible de ese tier.
+    //
+    // Para el tier 'volt' se añade un criterio intermedio: como en Volt el
+    // pool de candidatos es TODA la app (no hay número contratado ni
+    // restricción a miembros), cuando el usuario no es miembro de ninguna
+    // de las comunidades con Volt pendiente, se prefiere mostrarle el
+    // banner de la comunidad cuyas categorías coincidan con sus propios
+    // intereses (users.interests ∩ community.categories) antes que una
+    // completamente ajena a sus gustos; si ninguna coincide, cae de vuelta
+    // a la primera disponible (misma lógica de siempre).
     function pickWithinTier(tier) {
       const rows = activeRows.filter(row => normalizeRaffleTier(row.raffle.tier) === tier);
       if (!rows.length) return null;
-      return rows.find(row => ownCommunityIds.has(row.raffle.community_id)) || rows[0];
+      const ownCommunityRow = rows.find(row => ownCommunityIds.has(row.raffle.community_id));
+      if (ownCommunityRow) return ownCommunityRow;
+      if (tier === 'volt' && ownInterests.size) {
+        const interestMatchRow = rows.find(row =>
+          (row.raffle.community?.categories || []).some(cat => ownInterests.has(cat))
+        );
+        if (interestMatchRow) return interestMatchRow;
+      }
+      return rows[0];
     }
 
     // 1) Máxima prioridad: si el usuario tiene un banner Community
