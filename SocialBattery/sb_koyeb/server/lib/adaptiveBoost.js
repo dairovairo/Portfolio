@@ -1,33 +1,24 @@
 /**
- * adaptiveBoost.js — Tamaño del grupo "necesitado" (anti-inanición) para el
- * boost de prioridad por intereses/categoría, compartido entre el reparto de
- * notificaciones Premium/Ultra (eventPromoPacing.js) y el banner volador de
- * sorteos Light/Volt (community.js → computeBoostRaffleInfo).
+ * adaptiveBoost.js — Tamaño del grupo compartido de reparto publicitario.
  *
- * Fase anterior: tamaño variable (5-7) calculado con un porcentaje inverso
- * al número de activos. Se abandona: al ser variable, el propio tamaño del
- * grupo era una variable más a ajustar sin necesidad real, ya que
- * community.js ahora resuelve el caso de "grupo sin match" paginando al
- * siguiente grupo (ver más abajo) en vez de necesitar que el primer grupo
- * fuera lo bastante grande para casi garantizar un match.
+ * BOOST_GROUP_SIZE es la única cosa que sobrevive de la fase adaptativa
+ * (antes tamaño variable calculado con computeAdaptiveBoostCount, ya
+ * retirada). Vale 3 y se usa en dos sitios:
  *
- * Ahora: tamaño FIJO, BOOST_GROUP_SIZE = 3, para todos los tiers (Premium,
- * Ultra, Light, Volt) y en cualquier n. Si n < 3, el grupo es simplemente
- * todos los activos disponibles.
+ *   - eventPromoPacing.js: reparto de notificaciones Premium/Ultra por
+ *     ticks. Cada tick sirve los 3 eventos con peor ratio; si ese grupo
+ *     no consume pool, se pasa al siguiente grupo de 3.
  *
- * La paginación en bloques de 3 vive en community.js (pickWithinTier): si
- * ningún miembro del grupo de 3 más necesitado coincide con los intereses
- * del usuario, se prueba el SIGUIENTE grupo de 3 (los 3 siguientes por
- * ratio ascendente), y así sucesivamente hasta agotar la lista o encontrar
- * match — sin ese "grupo sin match" acaba en el fallback cronológico de
- * siempre (rows[0]).
+ *   - community.js/pickWithinTier: elige qué avioneta de sorteo mostrar
+ *     al usuario cuando tiene varias pendientes. Grupos de 3 por peor
+ *     ratio; si el grupo actual no tiene ningún sorteo que se le pueda
+ *     mostrar, se paginan al siguiente grupo de 3.
+ *
+ * Cambiar este valor afecta a los dos comportamientos a la vez, que es
+ * lo deseable — el "grupo publicitario" es un único concepto compartido
+ * entre eventos y sorteos.
  */
 
 const BOOST_GROUP_SIZE = 3;
 
-function computeAdaptiveBoostCount(n) {
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(BOOST_GROUP_SIZE, n);
-}
-
-module.exports = { computeAdaptiveBoostCount, BOOST_GROUP_SIZE };
+module.exports = { BOOST_GROUP_SIZE };

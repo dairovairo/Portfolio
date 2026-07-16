@@ -191,8 +191,9 @@ export function CommunityNotificationsProvider({ children }) {
 
           const plan = newEvent.promotion_plan || 'basic';
           const isUltraOrPremium = plan === 'ultra' || plan === 'premium';
-          const isMember = newEvent.community_id &&
-            joinedCommunityIdsRef.current.has(newEvent.community_id);
+          // Desde fase 108 todo evento tiene community_id, ya no hace falta
+          // el null-check previo.
+          const isMember = joinedCommunityIdsRef.current.has(newEvent.community_id);
 
           // Notificar si:
           //   a) El plan es ultra o premium  → todos los usuarios (sin importar membresía)
@@ -207,7 +208,6 @@ export function CommunityNotificationsProvider({ children }) {
           if (!isMember && hasClaimedLocalNotifToday()) return;
 
           // Incrementar badge solo si el evento pertenece a una comunidad conocida del usuario
-          // (los ultra/premium sin comunidad no generan badge de comunidad, solo notificación)
           if (isMember) {
             setEventsByCommunity(prev => ({
               ...prev,
@@ -239,9 +239,7 @@ export function CommunityNotificationsProvider({ children }) {
               title: `🚀 Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡No te lo pierdas!`,
               tag:   `ultra-event-${newEvent.id}`,
-              url:   newEvent.community_id
-                ? `/community/event/${newEvent.id}`
-                : '/community',
+              url:   `/community/event/${newEvent.id}`,
             });
           } else if (plan === 'premium') {
             claimLocalNotifToday();
@@ -249,9 +247,7 @@ export function CommunityNotificationsProvider({ children }) {
               title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
               tag:   `premium-event-${newEvent.id}`,
-              url:   newEvent.community_id
-                ? `/community/event/${newEvent.id}`
-                : '/community',
+              url:   `/community/event/${newEvent.id}`,
             });
           } else {
             // basic — solo miembros de la comunidad (ya filtrado arriba)

@@ -42,7 +42,7 @@ const PLAN_META = {
     button: 'bg-purple-500 hover:bg-purple-400 text-white',
     includes: [
       'Aparición en lista de eventos',
-      'Notificaciones a usuarios de la comunidad (si existe)',
+      'Notificaciones a miembros de la comunidad',
       'Notificaciones a número de usuarios contratado',
       'Insignia premium',
     ],
@@ -59,7 +59,7 @@ const PLAN_META = {
     button: 'bg-yellow-500 hover:bg-yellow-400 text-surface-bg',
     includes: [
       'Aparición en lista de eventos',
-      'Notificaciones a usuarios de la comunidad (si existe)',
+      'Notificaciones a miembros de la comunidad',
       'Notificaciones a número de usuarios contratado',
       'Apariciones en banner menú principal a número de usuarios contratado',
       'Insignia ultra',
@@ -93,7 +93,10 @@ function buildEventFormData(draft, plan, notificationCount) {
   formData.append('promotion_plan', plan);
   formData.append('notification_count', String(notificationCount));
 
-  if (draft.communityId) formData.append('community_id', draft.communityId);
+  // Fase 108: community_id es obligatorio, todo evento pertenece a una
+  // comunidad. Se valida además en el propio POST /events (server), y la
+  // guarda en useEffect de más abajo hace kick-out si el draft llegara sin él.
+  formData.append('community_id', draft.communityId);
   if (draft.cover_file) formData.append('cover', draft.cover_file);
 
   return formData;
@@ -133,16 +136,16 @@ export default function EventAdConfigPage() {
   const [interested, setInterested] = useState(null);
   const [categoriesDefined, setCategoriesDefined] = useState(null);
 
-  // Sin borrador (p. ej. recarga directa aquí) no hay nada que
-  // configurar: de vuelta al menú comunidad. Si el draft venía de una
-  // comunidad concreta, mejor volver a esa comunidad.
+  // Sin borrador (p. ej. recarga directa aquí) no hay nada que configurar
+  // y volvemos al menú de comunidad. Igual si el borrador llegó sin
+  // communityId — desde fase 108 los eventos deben pertenecer a una
+  // comunidad, no debería ocurrir con el flujo normal desde
+  // CommunityDetailPage, pero es guarda ante navegación manual/estado
+  // corrupto.
   useEffect(() => {
-    if (draft) return;
-    const back = location.state?.draft?.communityId
-      ? `/community/${location.state.draft.communityId}`
-      : '/community';
-    navigate(back, { replace: true });
-  }, [draft, location.state, navigate]);
+    if (draft?.communityId) return;
+    navigate('/community', { replace: true });
+  }, [draft, navigate]);
 
   const draftCategories = useMemo(
     () => (Array.isArray(draft?.categories) ? draft.categories.filter(Boolean) : []),
@@ -157,7 +160,7 @@ export default function EventAdConfigPage() {
     setLoadingTotal(true);
     setLoadError('');
     try {
-      const query = draft?.communityId ? `?community_id=${encodeURIComponent(draft.communityId)}` : '';
+      const query = `?community_id=${encodeURIComponent(draft.communityId)}`;
       const data = await api.get(`/community/events/promotion-audience${query}`);
       setTotal(data?.total ?? 0);
     } catch (e) {
@@ -168,7 +171,7 @@ export default function EventAdConfigPage() {
   }, [draft]);
 
   useEffect(() => {
-    if (draft) loadTotal();
+    if (draft?.communityId) loadTotal();
   }, [draft, loadTotal]);
 
   // La audiencia realmente contratable ahora mismo: si el filtro de
@@ -209,7 +212,7 @@ export default function EventAdConfigPage() {
     }
     setLoadingInterested(true);
     try {
-      const communityParam = draft?.communityId ? `&community_id=${encodeURIComponent(draft.communityId)}` : '';
+      const communityParam = `&community_id=${encodeURIComponent(draft.communityId)}`;
       const data = await api.get(
         `/community/events/promotion-audience?filter=interested&categories=${categoriesQueryParam}${communityParam}`
       );
@@ -225,14 +228,16 @@ export default function EventAdConfigPage() {
 
   const meta = PLAN_META[plan] || PLAN_META.premium;
 
-  const backTarget = useMemo(() => {
-    if (draft?.communityId) return `/community/${draft.communityId}`;
-    return '/community';
-  }, [draft]);
+  // Fase 108: draft.communityId siempre existe (el guard de arriba echa
+  // fuera cualquier draft sin él). Simplificado sin fallback a '/community'.
+  const backTarget = useMemo(
+    () => `/community/${draft?.communityId ?? ''}`,
+    [draft]
+  );
 
   const headerSubtitle = draft?.communityName
     ? `Evento en ${draft.communityName}`
-    : (draft?.title || 'Nuevo evento');
+    : 'Nuevo evento';
 
   async function handlePublish() {
     if (!draft || !audienceReady || blockedByFilterShortfall) return;
@@ -256,7 +261,7 @@ export default function EventAdConfigPage() {
     }
   }
 
-  if (!draft) return null;
+  if (!draft?.communityId) return null;
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -281,15 +286,12 @@ export default function EventAdConfigPage() {
           <h2 className="font-display font-bold text-surface-text text-sm truncate">
             {draft.title || 'Nuevo evento'}
           </h2>
-          {draft.communityName ? (
-            <p className="text-xs font-mono text-surface-muted truncate">
-              👥 {draft.communityName}
-            </p>
-          ) : (
-            <p className="text-xs font-mono text-surface-muted">
-              Evento suelto (sin comunidad)
-            </p>
-          )}
+          {/* Desde fase 108 todo evento pertenece a una comunidad y el
+              useEffect de más arriba hace kick-out si el draft llegara sin
+              communityId, así que aquí siempre hay communityName. */}
+          <p className="text-xs font-mono text-surface-muted truncate">
+            👥 {draft.communityName}
+          </p>
         </div>
 
         {/* ── Selector Premium / Ultra ──────────────────────────────────

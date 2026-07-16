@@ -61,12 +61,12 @@
  * read-then-write en JS. Ver supabase_schema_phase70_atomic_daily_notification_cap.sql.
  *
  * Fase actual: simplificación del reparto.
- *   - Se retira el "boost" de prioridad por intereses (Ronda 1 que daba
- *     preferencia a candidatos con users.interests ∩ event.categories dentro
- *     del grupo "necesitado"): diluía el valor del filtro
- *     audience_interested_only — como los eventos SIN filtro ya acababan
- *     llegando principalmente a interesados por el boost, pagar por el
- *     filtro duro no aportaba prácticamente nada.
+ *   - Se retira el "boost" de prioridad por intereses TAL COMO ESTABA — la
+ *     ronda dedicada que daba preferencia a candidatos con
+ *     users.interests ∩ event.categories dentro del grupo "necesitado".
+ *     Encima diluía audience_interested_only: como los eventos SIN filtro
+ *     ya acababan llegando principalmente a interesados por el boost,
+ *     pagar por el filtro duro no aportaba prácticamente nada.
  *   - Se retira el split Tier A / Tier B y el chunk de emergencia
  *     (isEmergency/EMERGENCY_WINDOW_MS): añadían capas encima del ratio
  *     para empujar a los eventos por debajo del mínimo de cobro, pero el
@@ -80,12 +80,19 @@
  *     no consume nada (todos filter-only sin matches en pool), se pasa
  *     al siguiente grupo de 3. Recursivo hasta que un grupo consuma o
  *     se agoten los eventos.
+ *   - Ronda 2 del grupo (eventos sin filtro duro) es MATCH BIDIRECCIONAL,
+ *     no simple relleno secuencial: recorremos el pool candidato-a-
+ *     candidato y para cada uno le buscamos el mejor evento del grupo
+ *     (peor ratio entre los que coinciden intereses; si ninguno coincide,
+ *     peor ratio de los elegibles). Análogo al de los sorteos Light/Volt
+ *     en pickWithinTier — beneficia a ambos lados: el evento recibe a
+ *     alguien con intereses acordes, el usuario recibe publicidad
+ *     relevante para él.
  *
- *   La única palanca para dirigir publicidad por categorías es
- *   audience_interested_only (filtro duro, opcional en premium/ultra); sin
- *   él, el reparto es uniforme sobre el pool disponible del tick. Premium
- *   y Ultra no tienen prioridad entre sí — solo compiten vía la métrica
- *   del ratio, nunca por promotion_plan.
+ *   Palancas para dirigir publicidad por categorías: audience_interested_only
+ *   (filtro duro, opcional en premium/ultra) y el match bidireccional
+ *   automático de arriba (suave). Premium y Ultra no tienen prioridad entre
+ *   sí — solo compiten vía la métrica del ratio, nunca por promotion_plan.
  */
 
 const supabase = require('../lib/supabase');
@@ -93,6 +100,7 @@ const { sendPushToSubscription } = require('../lib/webpush');
 const { getNotificationDayKey } = require('../lib/notificationDay');
 const { INSTANCE_ID } = require('../lib/instanceId');
 const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
+const { assignCandidatesBidirectional } = require('../lib/promoDistribution');
 
 const FREE_THRESHOLD = 200;          // umbral mínimo de cobro — SOLO usado por community.js para bloqueo de renovación, no para pacing
 const BASE_CHUNK_PER_TICK = 50;      // cupo máximo que puede recibir un evento por tick
@@ -385,15 +393,19 @@ async function runEventPromoPacingTick() {
       .sort((a, b) => (a.notification_sent_count / a.notification_count) - (b.notification_sent_count / b.notification_count));
 
     // 6. Fase 105 — filtro "solo intereses" por evento (hard filter). Se
-    //    cargan los intereses de los candidatos vivos solo si algún evento
-    //    de este tick lo necesita para cruzarlos (audience_interested_only).
-    //    Sin esa opción, el reparto es uniforme sobre el pool disponible.
-    //    Se carga UNA SOLA VEZ para todo el tick (todos los grupos de 3
-    //    posibles), no por grupo — el pool de candidatos es el mismo en
-    //    memoria y no vale la pena re-consultar por cada iteración.
-    const anyInterestedOnly = allByRatio.some(e => e.audience_interested_only);
+    //    cargan los intereses de los candidatos vivos si cualquier evento
+    //    del tick puede beneficiarse del cruce users.interests ∩
+    //    event.categories:
+    //      - Filtro duro (audience_interested_only) → sí o sí necesita
+    //        intereses para cribar el pool.
+    //      - Match bidireccional en Ronda 2 (evento sin filtro con
+    //        categorías) → sí necesita intereses para dar preferencia al
+    //        candidato que coincide, ver más abajo.
+    //    Si NINGÚN evento del tick tiene categorías, no hay nada que cruzar
+    //    y saltamos la carga completa.
+    const anyEventUsesCategories = allByRatio.some(e => (e.categories || []).filter(Boolean).length > 0);
     const interestsByUser = new Map();
-    if (anyInterestedOnly) {
+    if (anyEventUsesCategories) {
       const candidateIds = available.map(c => c.userId);
       const CHUNK = 500;
       for (let i = 0; i < candidateIds.length; i += CHUNK) {
@@ -470,7 +482,7 @@ async function runEventPromoPacingTick() {
             }
           : null;
 
-        eventMeta.push({ event, remaining: chunkTarget, excludeSet, interestsFilter, chosen: [] });
+        eventMeta.push({ event, remaining: chunkTarget, excludeSet, interestsFilter, eventCategories, chosen: [] });
       }
 
       // Ronda 1 del grupo: filtros duros primero.
@@ -491,22 +503,29 @@ async function runEventPromoPacingTick() {
         }
       }
 
-      // Ronda 2 del grupo: relleno normal del cupo restante.
-      for (const meta of eventMeta) {
-        if (meta.remaining <= 0 || !available.length) continue;
-        const chosen = [];
-        const rest = [];
-        for (const candidate of available) {
-          const passes = chosen.length < meta.remaining &&
-            !meta.excludeSet.has(candidate.userId) &&
-            (!meta.interestsFilter || meta.interestsFilter(candidate.userId));
-          (passes ? chosen : rest).push(candidate);
-        }
-        if (chosen.length) {
-          meta.chosen.push(...chosen);
-          available = rest;
-        }
-      }
+      // Ronda 2 del grupo: relleno normal del cupo restante, MATCH
+      // BIDIRECCIONAL para los eventos sin filtro duro. La lógica pura
+      // vive en lib/promoDistribution.js (assignCandidatesBidirectional)
+      // y está cubierta por tests unitarios; ver server/test/
+      // promoDistribution.test.js. Análoga a la que usan los sorteos
+      // Light/Volt en pickWithinTier (community.js).
+      //
+      // "Bidireccional" quiere decir que la elección beneficia a ambos
+      // lados: el evento recibe a alguien con intereses acordes (mejor
+      // conversión) y el usuario recibe publicidad relevante para él
+      // (mejor engagement) — a diferencia de una asignación puramente
+      // secuencial en la que el usuario podría acabar en el primer
+      // evento que lo agarre aunque no le interese.
+      //
+      // Los eventos con filtro duro no entran aquí: sus matches ya se
+      // resolvieron en Ronda 1 y no tienen fallback a candidatos no
+      // coincidentes.
+      const noFilterMetas = eventMeta.filter(m => !m.interestsFilter);
+      available = assignCandidatesBidirectional({
+        candidates: available,
+        eventMetas: noFilterMetas,
+        interestsByUser,
+      });
 
       const groupAssignments = eventMeta
         .filter(meta => meta.chosen.length)

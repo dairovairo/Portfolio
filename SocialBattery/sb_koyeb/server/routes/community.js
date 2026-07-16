@@ -11,6 +11,7 @@ const { getNotificationDayKey } = require('../lib/notificationDay');
 const { runEventPromoPacingTick, FREE_THRESHOLD } = require('../jobs/eventPromoPacing');
 const { addYears, addMonths } = require('../lib/dateRangeLimits');
 const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
+const { pickRaffleFromRatioGroups } = require('../lib/promoDistribution');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -408,28 +409,14 @@ async function getMuteNewRafflesFilteredIds(candidateIds) {
 // Devuelve el tamaño de la audiencia potencial de una promoción Premium/Ultra
 // para un evento que aún NO se ha creado (draft en el cliente,
 // EventAdConfigPage.jsx). El total es "todos los usuarios de la app salvo el
-// propio creador" — misma lógica que usa server/jobs/eventPromoPacing.js
-// para su pool (push_subscriptions ∖ {creador}); aquí lo aproximamos
-// contando directamente sobre users, igual que hace raffle-audience, para
-// que el número que ve la empresa antes de contratar sea el mismo que verá
-// después en el reparto real (fase 68/69).
-//
-// Con ?filter=interested&categories=<JSON array> se añade además cuántos de
-// esos usuarios tienen entre sus intereses alguna de las categorías del
-// evento (users.interests ∩ event.categories) — este es el filtro de
-// intereses del EventAdConfigPage. Si no se manda ninguna categoría, se
-// responde categories_defined=false y interested=null (mismo contrato que
-// raffle-audience cuando la comunidad no tiene categorías definidas).
-// ── GET /api/community/events/promotion-audience ─────────────────────────────
-// Devuelve el tamaño de la audiencia potencial de una promoción Premium/Ultra
-// para un evento que aún NO se ha creado (draft en el cliente,
-// EventAdConfigPage.jsx). El total es "todos los usuarios de la app salvo el
 // propio creador Y salvo los miembros de la comunidad organizadora" — misma
 // lógica que usa server/jobs/eventPromoPacing.js para su pool real (ver
 // communityMembersByCommunity en ese archivo: los miembros ya se enteran del
 // evento al publicarse, así que la promoción de pago no debe contarlos ni
-// dirigirse a ellos). Si el draft no trae community_id (evento sin
-// comunidad), no hay a quién excluir aparte del creador.
+// dirigirse a ellos).
+//
+// Fase 108: community_id es OBLIGATORIO. Si no se manda, se rechaza (ya no
+// existen "eventos sueltos" sin comunidad).
 //
 // Con ?filter=interested&categories=<JSON array> se añade además cuántos de
 // esos usuarios tienen entre sus intereses alguna de las categorías del
@@ -441,6 +428,9 @@ router.get('/events/promotion-audience', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const wantInterested = req.query.filter === 'interested';
   const communityId = req.query.community_id || null;
+  if (!communityId) {
+    return res.status(400).json({ error: 'community_id es obligatorio (los eventos deben pertenecer a una comunidad)' });
+  }
 
   let categories = [];
   if (req.query.categories) {
@@ -453,15 +443,12 @@ router.get('/events/promotion-audience', requireAuth, async (req, res) => {
   }
 
   try {
-    let excludedMemberIds = [];
-    if (communityId) {
-      const { data: members, error: memErr } = await supabase
-        .from('community_members')
-        .select('user_id')
-        .eq('community_id', communityId);
-      if (memErr) throw memErr;
-      excludedMemberIds = (members || []).map(m => m.user_id).filter(id => id !== userId);
-    }
+    const { data: members, error: memErr } = await supabase
+      .from('community_members')
+      .select('user_id')
+      .eq('community_id', communityId);
+    if (memErr) throw memErr;
+    const excludedMemberIds = (members || []).map(m => m.user_id).filter(id => id !== userId);
 
     let totalQuery = supabase
       .from('users')
@@ -573,13 +560,17 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   try {
     await ensurePublicProfile(req.user);
 
+    // Fase 108: todo evento debe pertenecer a una comunidad. Rechazamos
+    // aquí ANTES de tocar BD; ver también la constraint NOT NULL en
+    // supabase_schema_phase108_events_require_community.sql.
     const communityId = community_id || null;
-    if (communityId) {
-      const { community, isAdmin } = await getCommunityAdminState(communityId, userId);
-      if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
-      if (!isAdmin) {
-        return res.status(403).json({ error: 'Solo el administrador puede publicar eventos en esta comunidad' });
-      }
+    if (!communityId) {
+      return res.status(400).json({ error: 'Los eventos deben pertenecer a una comunidad' });
+    }
+    const { community, isAdmin } = await getCommunityAdminState(communityId, userId);
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Solo el administrador puede publicar eventos en esta comunidad' });
     }
 
     // Política de bloqueo por audiencia insuficiente (debe reflejar
@@ -595,15 +586,16 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
       if (!categories.length) {
         return res.status(400).json({ error: 'Define categorías en el evento para poder filtrar por intereses' });
       }
-      let excludedMemberIds = [];
-      if (communityId) {
-        const { data: members, error: memErr } = await supabase
-          .from('community_members')
-          .select('user_id')
-          .eq('community_id', communityId);
-        if (memErr) throw memErr;
-        excludedMemberIds = (members || []).map(m => m.user_id).filter(id => id !== userId);
-      }
+      // Fase 108: communityId siempre existe (validado arriba). Excluimos
+      // a los miembros del pool de audiencia porque ya se enteran del
+      // evento por el aviso inmediato a la comunidad, no cuentan como
+      // publicidad de pago.
+      const { data: members, error: memErr } = await supabase
+        .from('community_members')
+        .select('user_id')
+        .eq('community_id', communityId);
+      if (memErr) throw memErr;
+      const excludedMemberIds = (members || []).map(m => m.user_id).filter(id => id !== userId);
       let interestedQuery = supabase
         .from('users')
         .select('id', { count: 'exact', head: true })
@@ -1748,6 +1740,12 @@ router.get('/events/:id', requireAuth, async (req, res) => {
 // exactamente "el primer evento que le notificó hoy" — da igual que
 // luego le llegue un aviso de otro evento (p.ej. de una comunidad suya),
 // el panel del front no debe cambiar en todo el día.
+//
+// Fase 109: SOLO se devuelve si el evento es Ultra. Es una prestación
+// exclusiva del plan Ultra (ver EventAdConfigPage: "Apariciones en banner
+// menú principal a número de usuarios contratado"). Premium también
+// consume el hueco diario del usuario, pero NO genera este panel — el
+// front recibe {event: null} en ese caso y no muestra nada.
 router.get('/notifications/today-event', requireAuth, async (req, res) => {
   try {
     const { data: claim, error: claimError } = await supabase
@@ -1762,11 +1760,13 @@ router.get('/notifications/today-event', requireAuth, async (req, res) => {
 
     const { data: event, error: eventError } = await supabase
       .from('community_events')
-      .select('id, title, organization, cover_image_url, community:communities!community_events_community_id_fkey(organization)')
+      .select('id, title, organization, cover_image_url, promotion_plan, community:communities!community_events_community_id_fkey(organization)')
       .eq('id', claim.event_id)
       .maybeSingle();
 
     if (eventError || !event) return res.json({ event: null });
+    // Fase 109: banner del menú principal exclusivo de Ultra.
+    if (event.promotion_plan !== 'ultra') return res.json({ event: null });
 
     res.json({
       event: {
@@ -4198,37 +4198,17 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
         const { sortedIds, ratioById } = await computeBoostRaffleInfo(tier, rows);
         const matchesCategory = row => (row.raffle.community?.categories || []).some(cat => ownInterests.has(cat));
         const isRestricted = row => row.raffle.banner_interested_only === true;
-        const byWorstRatio = (a, b) => (ratioById.get(a.raffle.id) ?? 0) - (ratioById.get(b.raffle.id) ?? 0);
         const rowsById = new Map(rows.map(row => [row.raffle.id, row]));
 
-        for (let start = 0; start < sortedIds.length; start += BOOST_GROUP_SIZE) {
-          const groupIds = sortedIds.slice(start, start + BOOST_GROUP_SIZE);
-          const groupRows = groupIds.map(id => rowsById.get(id)).filter(Boolean);
-
-          // 1) ¿Alguno del grupo coincide con los intereses del usuario?
-          //    Sí → gana el peor ratio de entre los matches.
-          const groupMatches = groupRows.filter(matchesCategory);
-          if (groupMatches.length) {
-            groupMatches.sort(byWorstRatio);
-            return groupMatches[0];
-          }
-
-          // 2) Ninguno coincide. Descarto los banner_interested_only (no
-          //    se pueden mostrar a este usuario, contratan targeting duro).
-          //    Si queda algún no-restringido en el grupo, gana el peor
-          //    ratio de esos (el mecanismo por defecto es worst-ratio, el
-          //    match solo lo sobrescribe cuando lo hay). En Volt esto
-          //    equivale a "gana el peor ratio del grupo" a secas, porque
-          //    Volt no tiene banner_interested_only.
-          const groupServable = groupRows.filter(row => !isRestricted(row));
-          if (groupServable.length) {
-            groupServable.sort(byWorstRatio);
-            return groupServable[0];
-          }
-
-          // 3) Todo el grupo es banner_interested_only y este usuario no
-          //    matchea con ninguno → salta al siguiente grupo de 3.
-        }
+        const picked = pickRaffleFromRatioGroups({
+          sortedIds,
+          rowsById,
+          ratioById,
+          matchesCategory,
+          isRestricted,
+          groupSize: BOOST_GROUP_SIZE,
+        });
+        if (picked) return picked;
       }
       return rows[0];
     }
