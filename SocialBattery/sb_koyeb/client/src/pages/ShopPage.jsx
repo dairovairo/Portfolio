@@ -862,7 +862,6 @@ const SUBSCRIPTION_PLANS = [
     emoji: '🏢',
     perks: [
       'Sin anuncios',
-      'Creación de comunidades',
       'Creación de eventos',
       'Creación de sorteos',
       'Dashboard de control',

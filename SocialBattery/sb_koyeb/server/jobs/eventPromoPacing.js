@@ -43,6 +43,20 @@
  * El incremento de notification_sent_count usa igualmente un UPDATE
  * atómico vía RPC (increment_event_notification_sent_count) en vez de un
  * read-then-write en JS. Ver supabase_schema_phase70_atomic_daily_notification_cap.sql.
+ *
+ * Fase actual: boost de prioridad por intereses (users.interests ∩
+ * event.categories), análogo al de los sorteos Light/Volt (raffle-banner).
+ * Fuera de la ya existente audience_interested_only (filtro DURO, solo
+ * contratable explícitamente), ahora TODOS los eventos premium/ultra dan
+ * preferencia — sin descartar a nadie — a quien coincide categoría al
+ * elegir candidatos dentro de su cupo del tick. Para que esto no genere
+ * inanición entre eventos del mismo tier (uno de categoría popular
+ * acaparando siempre a esos usuarios en cada tick), el boost solo se activa
+ * dentro del grupo "necesitado": Tier A completo (por debajo de
+ * FREE_THRESHOLD) + el 5% más rezagado de Tier B por ratio
+ * enviadas/contratadas. Premium y Ultra no tienen prioridad entre sí — ver
+ * priorityOrder, que ya los trata igual y solo depende de
+ * notification_sent_count/notification_count, nunca de promotion_plan.
  */
 
 const supabase = require('../lib/supabase');
@@ -329,35 +343,11 @@ async function runEventPromoPacingTick() {
     let available = await fetchEligiblePool(excludedFromPool);
     if (!available.length) return;
 
-    // 5b. Fase 105 — filtro "solo intereses" por evento. Si algún evento
-    //     de este tick lo tiene activado, cargamos una sola vez el mapa
-    //     userId → Set(interests) para todos los candidatos vivos y
-    //     después, en el reparto por evento, se descartan los candidatos
-    //     que no compartan ninguna categoría con las del evento
-    //     (users.interests ∩ event.categories). Sin el flag, el reparto
-    //     sigue como antes (todo el pool notificable).
-    const anyInterestedOnly = pending.some(e => e.audience_interested_only);
-    const interestsByUser = new Map();
-    if (anyInterestedOnly) {
-      const candidateIds = available.map(c => c.userId);
-      const CHUNK = 500;
-      for (let i = 0; i < candidateIds.length; i += CHUNK) {
-        const slice = candidateIds.slice(i, i + CHUNK);
-        const { data: rows, error: interestsErr } = await supabase
-          .from('users')
-          .select('id, interests')
-          .in('id', slice);
-        if (interestsErr) {
-          console.warn('[PROMO-PACING] error cargando intereses para filtro por intereses:', interestsErr.message);
-          break;
-        }
-        (rows || []).forEach(r => {
-          interestsByUser.set(r.id, new Set((r.interests || []).filter(Boolean)));
-        });
-      }
-    }
-
-    // 6. Priorización: Tier A (bajo mínimo, más urgentes primero) + Tier B (más rezagados primero)
+    // 5b. Priorización: Tier A (bajo mínimo, más urgentes primero) + Tier B
+    //     (más rezagados primero). Premium y Ultra compiten aquí en
+    //     igualdad de condiciones — el plan contratado no da prioridad de
+    //     por sí, solo influye vía notification_sent_count/notification_count
+    //     como cualquier otro evento de este tick.
     const urgent = pending
       .filter(e => e.notification_sent_count < FREE_THRESHOLD)
       .sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
@@ -368,12 +358,74 @@ async function runEventPromoPacingTick() {
 
     const priorityOrder = [...urgent, ...steady];
 
+    // 5c. Anti-inanición para la prioridad por intereses (ver más abajo,
+    // interestsFilter/interestsBoost): igual que en los sorteos Light/Volt,
+    // el boost por coincidencia de categoría solo se activa dentro de un
+    // grupo reducido de eventos "necesitados" de este tick — todos los de
+    // Tier A (por debajo de FREE_THRESHOLD, el mínimo garantizado) más el
+    // 5% (mínimo 1) más rezagado de Tier B por ratio enviadas/contratadas.
+    // Fuera de ese grupo, el reparto de candidatos no da preferencia a
+    // quien coincide categoría, para que un evento de categoría popular no
+    // acapare sistemáticamente a esos usuarios en cada tick a costa de
+    // otros eventos del mismo tier.
+    const boostEventIds = new Set(urgent.map(e => e.id));
+    if (steady.length) {
+      const boostCount = Math.max(1, Math.ceil(steady.length * 0.05));
+      steady.slice(0, boostCount).forEach(e => boostEventIds.add(e.id));
+    }
+
+    // 6. Fase 105 — filtro "solo intereses" por evento (hard filter) +
+    //    boost de intereses anti-inanición (soft priority, fase actual).
+    //    Se cargan los intereses de los candidatos vivos si algún evento
+    //    de este tick necesita cruzarlos, por cualquiera de los dos
+    //    motivos: filtro forzado (audience_interested_only) o boost
+    //    restringido al grupo necesitado (boostEventIds).
+    const anyInterestedOnly = pending.some(e => e.audience_interested_only);
+    const anyNeedsInterestBoost = pending.some(e =>
+      !e.audience_interested_only && boostEventIds.has(e.id) && (e.categories || []).filter(Boolean).length
+    );
+    const interestsByUser = new Map();
+    if (anyInterestedOnly || anyNeedsInterestBoost) {
+      const candidateIds = available.map(c => c.userId);
+      const CHUNK = 500;
+      for (let i = 0; i < candidateIds.length; i += CHUNK) {
+        const slice = candidateIds.slice(i, i + CHUNK);
+        const { data: rows, error: interestsErr } = await supabase
+          .from('users')
+          .select('id, interests')
+          .in('id', slice);
+        if (interestsErr) {
+          console.warn('[PROMO-PACING] error cargando intereses para filtro/boost por intereses:', interestsErr.message);
+          break;
+        }
+        (rows || []).forEach(r => {
+          interestsByUser.set(r.id, new Set((r.interests || []).filter(Boolean)));
+        });
+      }
+    }
+
     // 7. Reparto en memoria (sin duplicar usuarios entre eventos en el mismo tick)
-    const assignments = [];
-
+    //
+    // Se hace en DOS rondas para que la prioridad por intereses funcione
+    // también ENTRE eventos que compiten por el mismo usuario (no solo
+    // dentro del cupo de un evento concreto):
+    //
+    //   Ronda 1 (match de categoría): recorre los eventos "necesitados"
+    //   (boostEventIds) en su orden de prioridad y, para cada uno, se
+    //   queda con los candidatos disponibles cuyo interés coincida con su
+    //   categoría — ANTES de que ningún evento (necesitado o no) reparta
+    //   nada más. Así, si un usuario es candidato de varios eventos a la
+    //   vez y solo uno de ellos coincide con su categoría, se le publicita
+    //   ESE, sin que un evento no coincidente (aunque esté antes en la cola
+    //   de urgencia) se lo quede primero solo por procesarse antes.
+    //
+    //   Ronda 2 (relleno normal): con lo que sobra del pool tras la ronda
+    //   1, cada evento (en el mismo orden de prioridad) rellena el cupo que
+    //   le quede, sin sesgo por intereses — mismo criterio de siempre para
+    //   quien no tiene coincidencia o para eventos fuera del grupo
+    //   necesitado.
+    const eventMeta = [];
     for (const event of priorityOrder) {
-      if (!available.length) break;
-
       const remainingToThreshold = Math.max(0, FREE_THRESHOLD - event.notification_sent_count);
       const remainingToCap = event.notification_count - event.notification_sent_count;
       const timeLeftMs = new Date(event.event_date).getTime() - now.getTime();
@@ -407,23 +459,59 @@ async function runEventPromoPacingTick() {
           }
         : null;
 
-      const chosen = [];
+      const boosted = !interestsFilter && eventCategories.size > 0 && boostEventIds.has(event.id);
+
+      eventMeta.push({ event, remaining: chunkTarget, excludeSet, interestsFilter, eventCategories, boosted, chosen: [] });
+    }
+
+    function matchesInterests(userId, categories) {
+      const userInterests = interestsByUser.get(userId);
+      if (!userInterests || !userInterests.size) return false;
+      for (const cat of userInterests) if (categories.has(cat)) return true;
+      return false;
+    }
+
+    // Ronda 1: match de categoría, solo para el grupo necesitado.
+    for (const meta of eventMeta) {
+      if (!meta.boosted || meta.remaining <= 0 || !available.length) continue;
+      const matched = [];
       const rest = [];
       for (const candidate of available) {
-        const passes = !excludeSet.has(candidate.userId) &&
-          (!interestsFilter || interestsFilter(candidate.userId));
-        if (chosen.length < chunkTarget && passes) {
-          chosen.push(candidate);
-        } else {
-          rest.push(candidate);
-        }
+        const isMatch = matched.length < meta.remaining &&
+          !meta.excludeSet.has(candidate.userId) &&
+          matchesInterests(candidate.userId, meta.eventCategories);
+        (isMatch ? matched : rest).push(candidate);
       }
-
-      if (chosen.length) {
-        assignments.push({ event, users: chosen });
+      if (matched.length) {
+        meta.chosen.push(...matched);
+        meta.remaining -= matched.length;
         available = rest;
       }
     }
+
+    // Ronda 2: relleno normal del cupo restante de cada evento, respetando
+    // el filtro duro (audience_interested_only) donde aplique, sin sesgo
+    // adicional por intereses (eso ya se resolvió en la ronda 1 para
+    // quien lo necesitaba).
+    for (const meta of eventMeta) {
+      if (meta.remaining <= 0 || !available.length) continue;
+      const chosen = [];
+      const rest = [];
+      for (const candidate of available) {
+        const passes = chosen.length < meta.remaining &&
+          !meta.excludeSet.has(candidate.userId) &&
+          (!meta.interestsFilter || meta.interestsFilter(candidate.userId));
+        (passes ? chosen : rest).push(candidate);
+      }
+      if (chosen.length) {
+        meta.chosen.push(...chosen);
+        available = rest;
+      }
+    }
+
+    const assignments = eventMeta
+      .filter(meta => meta.chosen.length)
+      .map(meta => ({ event: meta.event, users: meta.chosen }));
 
     // 8. Ejecutar envíos
     for (const { event, users } of assignments) {

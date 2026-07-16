@@ -3129,6 +3129,14 @@ const RAFFLE_TIERS = {
 };
 const RAFFLE_TIER_KEYS = Object.keys(RAFFLE_TIERS);
 
+// Rango de visualizaciones de banner contratables en un sorteo Light (entre
+// BANNER_VIEWS_MIN y BANNER_VIEWS_MAX). Se usa tanto al crear el sorteo
+// (validación del aforo contratado) como en GET /raffle-banner (para saber
+// si un sorteo Light sigue por debajo de su mínimo garantizado — ver
+// "modo de emergencia" en pickWithinTier).
+const BANNER_VIEWS_MIN = 1000;
+const BANNER_VIEWS_MAX = 100000;
+
 function normalizeRaffleTier(tier) {
   return RAFFLE_TIERS[tier] ? tier : 'light';
 }
@@ -3209,6 +3217,22 @@ async function getRaffleLightAudienceIds(communityId, creatorId, { interestedOnl
   return { ids, categoriesDefined: true };
 }
 
+// Devuelve el subconjunto (Set) de userIds cuyos intereses de perfil solapan
+// con las categorías dadas. Se usa para dar prioridad, dentro del reparto
+// del banner de un sorteo Light, a quien coincide categoría de evento con
+// categoría de usuario (ver assignRaffleBannerTargets → priorityIds).
+async function getCategoryMatchingUserIds(userIds, categories) {
+  const cats = (categories || []).filter(Boolean);
+  if (!userIds?.length || !cats.length) return new Set();
+  const { data, error } = await supabase
+    .from('users')
+    .select('id')
+    .in('id', userIds)
+    .overlaps('interests', cats);
+  if (error) throw error;
+  return new Set((data || []).map(u => u.id));
+}
+
 // ── Reparto del banner volador (avioneta con pancarta "¡Sorteo nuevo!") ────
 // Aplica a los tiers 'light', 'volt' y 'community' (los que incluyen banner
 // en el menú principal, ver RAFFLE_TIER_OPTIONS en CommunityDetailPage.jsx).
@@ -3230,7 +3254,26 @@ async function getRaffleLightAudienceIds(communityId, creatorId, { interestedOnl
 // de mayor prioridad. Además, GET /raffle-banner limita a como mucho una
 // avioneta cada 15 minutos por usuario (ver BANNER_COOLDOWN_MS), sea cual
 // sea el tier, para no saturarle a base de entradas seguidas a la app.
-async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = null) {
+// Baraja un array in-place con Fisher–Yates (selección aleatoria sin sesgo).
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// priorityIds (opcional, Set<string>): usuarios cuya categoría de interés
+// coincide con la categoría del sorteo/evento. Cuando se proporciona y el
+// reparto está limitado (capCount != null, caso Light con aforo contratado),
+// estos usuarios se colocan primero en la cola de candidatos — barajados
+// entre sí para no introducir sesgo dentro del propio grupo prioritario —
+// de modo que si el aforo contratado no llega a cubrir todo el pool, se
+// publicita antes a quien coincide categoría de evento con categoría de
+// usuario. El resto (sin coincidencia) rellena las plazas sobrantes,
+// también en orden aleatorio. Sin priorityIds, el comportamiento es el
+// aleatorio uniforme de siempre.
+async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = null, priorityIds = null) {
   try {
     let candidates = pool;
     if (!candidates) {
@@ -3244,10 +3287,12 @@ async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = n
       candidates = candidates.filter(id => id !== creatorId);
     }
 
-    // Fisher–Yates para una selección aleatoria sin sesgo.
-    for (let i = candidates.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    if (priorityIds && priorityIds.size && capCount != null) {
+      const priority = candidates.filter(id => priorityIds.has(id));
+      const rest = candidates.filter(id => !priorityIds.has(id));
+      candidates = [...shuffleInPlace(priority), ...shuffleInPlace(rest)];
+    } else {
+      shuffleInPlace(candidates);
     }
 
     const targetIds = capCount != null ? candidates.slice(0, Math.min(capCount, candidates.length)) : candidates;
@@ -3811,8 +3856,6 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   // con la constraint de la BD (phase106_raffle_banner_views_range.sql: CHECK
   // banner_views_contracted BETWEEN 1000 AND 100000), o si no la fila se
   // rechaza en el INSERT aunque haya pasado esta validación de la API.
-  const BANNER_VIEWS_MIN = 1000;
-  const BANNER_VIEWS_MAX = 100000;
   const resolvedInterestedOnly = raffleTier === 'light' && String(banner_interested_only) === 'true';
   let resolvedBannerViews = null;
   if (raffleTier === 'light') {
@@ -3828,7 +3871,7 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   try {
     const { data: community } = await supabase
       .from('communities')
-      .select('id, creator_id, name')
+      .select('id, creator_id, name, categories')
       .eq('id', communityId)
       .maybeSingle();
 
@@ -3852,6 +3895,7 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     // aún tiene pocos usuarios; assignRaffleBannerTargets ya se encarga de
     // repartir como mucho tantos banners como quepan en el pool real.
     let lightAudienceIds = null;
+    let lightPriorityIds = null;
     if (raffleTier === 'light') {
       const { ids, categoriesDefined } = await getRaffleLightAudienceIds(communityId, userId, { interestedOnly: resolvedInterestedOnly });
       if (resolvedInterestedOnly && !categoriesDefined) {
@@ -3863,6 +3907,14 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
         });
       }
       lightAudienceIds = ids;
+      // Si el pool ya viene filtrado a "solo interesados" coincide entero
+      // con la categoría, así que no hace falta calcular prioridad (todos
+      // están al mismo nivel). Si el pool es el general (sin filtro), sí se
+      // calcula qué subconjunto coincide categoría de evento con categoría
+      // de usuario, para priorizarlo en el reparto del banner.
+      if (!resolvedInterestedOnly) {
+        lightPriorityIds = await getCategoryMatchingUserIds(lightAudienceIds, community.categories);
+      }
     }
 
     let imageUrl = null;
@@ -3893,7 +3945,7 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     if (error) throw error;
 
     if (raffleTier === 'light' && resolvedBannerViews) {
-      const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews, lightAudienceIds);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews, lightAudienceIds, lightPriorityIds);
       await notifyCommunityRaffleTargets({
         raffleId: data.id, communityId, communityName: community.name,
         creatorId: userId, title: data.title, tier: raffleTier, targetIds,
@@ -3971,7 +4023,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       .select(`
         id, created_at,
         raffle:raffle_id(
-          id, community_id, title, ends_at, drawn_at, tier, image_url,
+          id, community_id, title, ends_at, drawn_at, tier, image_url, banner_views_contracted,
           community:community_id(id, name, categories)
         )
       `)
@@ -4013,25 +4065,88 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     if (selfErr) throw selfErr;
     const ownInterests = new Set((selfUser?.interests || []).filter(Boolean));
 
+    // ── Anti-inanición ─────────────────────────────────────────────────────
+    // La prioridad por intereses de arriba, aplicada sin más, puede hacer
+    // que un sorteo de categoría popular le "robe" sistemáticamente la
+    // pantalla a otros sorteos del mismo tier cada vez que compitan por el
+    // mismo usuario, dejando a estos últimos sin alcanzar nunca sus
+    // visualizaciones (contratadas, en Light) aunque tengan targets
+    // asignados. Para evitarlo, el boost por intereses solo se activa
+    // dentro de un grupo reducido de sorteos "necesitados" de ese tier:
+    //   - El 5% (mínimo 1) con peor ratio de visualizaciones conseguidas
+    //     entre las contratadas (Light) o menos visualizaciones servidas
+    //     hasta ahora (Volt, que no tiene aforo contratado con el que
+    //     calcular un ratio).
+    //   - "Modo de emergencia": cualquier sorteo Light que todavía no haya
+    //     alcanzado su mínimo garantizado (BANNER_VIEWS_MIN) entra siempre
+    //     en el grupo necesitado, para asegurar que llega a ese mínimo.
+    // Fuera de ese grupo, dos sorteos del mismo tier compiten en igualdad
+    // (orden cronológico de asignación), sin boost por intereses.
+    async function computeBoostRaffleIds(tier, rows) {
+      const uniqueRaffles = new Map();
+      for (const row of rows) {
+        if (!uniqueRaffles.has(row.raffle.id)) uniqueRaffles.set(row.raffle.id, row.raffle);
+      }
+      const raffleList = [...uniqueRaffles.values()];
+      if (raffleList.length <= 1) return new Set(raffleList.map(r => r.id));
+
+      const raffleIds = raffleList.map(r => r.id);
+      const { data: shownRows, error: shownErr } = await supabase
+        .from('raffle_banner_targets')
+        .select('raffle_id')
+        .in('raffle_id', raffleIds)
+        .not('shown_at', 'is', null);
+      if (shownErr) throw shownErr;
+
+      const shownCounts = new Map();
+      for (const row of shownRows || []) {
+        shownCounts.set(row.raffle_id, (shownCounts.get(row.raffle_id) || 0) + 1);
+      }
+
+      const stats = raffleList.map(r => {
+        const shown = shownCounts.get(r.id) || 0;
+        const contracted = tier === 'light' ? (r.banner_views_contracted || null) : null;
+        const belowMinimum = tier === 'light' && contracted != null && shown < BANNER_VIEWS_MIN;
+        // En Light, el ratio es visualizaciones servidas / contratadas
+        // (cuanto más bajo, más necesitado). En Volt no hay aforo
+        // contratado, así que se usa directamente lo servido hasta ahora.
+        const ratio = contracted ? shown / contracted : shown;
+        return { id: r.id, ratio, belowMinimum };
+      });
+
+      stats.sort((a, b) => a.ratio - b.ratio);
+      const boostCount = Math.max(1, Math.ceil(stats.length * 0.05));
+      const boostSet = new Set(stats.slice(0, boostCount).map(s => s.id));
+      for (const s of stats) {
+        if (s.belowMinimum) boostSet.add(s.id);
+      }
+      return boostSet;
+    }
+
     // Dentro de las filas de un mismo tier, prioriza la primera (por orden
     // cronológico de asignación) cuya comunidad sea del propio usuario; si
     // ninguna lo es, cae de vuelta a la primera disponible de ese tier.
     //
-    // Para el tier 'volt' se añade un criterio intermedio: como en Volt el
-    // pool de candidatos es TODA la app (no hay número contratado ni
-    // restricción a miembros), cuando el usuario no es miembro de ninguna
-    // de las comunidades con Volt pendiente, se prefiere mostrarle el
-    // banner de la comunidad cuyas categorías coincidan con sus propios
-    // intereses (users.interests ∩ community.categories) antes que una
-    // completamente ajena a sus gustos; si ninguna coincide, cae de vuelta
-    // a la primera disponible (misma lógica de siempre).
-    function pickWithinTier(tier) {
+    // Para los tiers 'volt' y 'light' se añade un criterio intermedio: en
+    // ambos el pool de candidatos puede incluir comunidades ajenas al
+    // usuario (en Volt, toda la app; en Light, cualquiera salvo la propia
+    // comunidad organizadora), así que cuando no hay ningún sorteo de la
+    // propia comunidad pendiente, se prefiere mostrarle el banner cuya
+    // categoría coincida con sus propios intereses (users.interests ∩
+    // community.categories) — pero SOLO si ese sorteo está dentro del grupo
+    // "necesitado" de computeBoostRaffleIds (ver arriba), para no causar
+    // inanición en el resto. Si ninguno coincide (o ninguno de los que
+    // coinciden está necesitado), cae de vuelta al primero disponible por
+    // orden cronológico (misma lógica de siempre).
+    async function pickWithinTier(tier) {
       const rows = activeRows.filter(row => normalizeRaffleTier(row.raffle.tier) === tier);
       if (!rows.length) return null;
       const ownCommunityRow = rows.find(row => ownCommunityIds.has(row.raffle.community_id));
       if (ownCommunityRow) return ownCommunityRow;
-      if (tier === 'volt' && ownInterests.size) {
+      if ((tier === 'volt' || tier === 'light') && ownInterests.size) {
+        const boostIds = await computeBoostRaffleIds(tier, rows);
         const interestMatchRow = rows.find(row =>
+          boostIds.has(row.raffle.id) &&
           (row.raffle.community?.categories || []).some(cat => ownInterests.has(cat))
         );
         if (interestMatchRow) return interestMatchRow;
@@ -4044,7 +4159,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     //    propia dentro del tier es aquí un no-op, ya que todo Community
     //    pertenece por definición a la comunidad del usuario (su pool son
     //    los propios miembros).
-    let candidate = pickWithinTier('community');
+    let candidate = await pickWithinTier('community');
 
     // 2) Si el usuario no tiene ningún Community pendiente (puede que no le
     //    haya tocado ninguno, o que ya se le haya mostrado el suyo en una
@@ -4054,14 +4169,14 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     //    bloqueo global: a otro usuario le puede tocar su Light aunque a un
     //    tercero todavía le quede un Community pendiente por repartir.
     if (!candidate) {
-      candidate = pickWithinTier('light');
+      candidate = await pickWithinTier('light');
     }
 
     // 3) Si tampoco tiene ningún Light pendiente, se le sirve su Volt
     //    pendiente (misma lógica de prioridad personal que en el paso 2,
     //    con prioridad de comunidad propia dentro del tier).
     if (!candidate) {
-      candidate = pickWithinTier('volt');
+      candidate = await pickWithinTier('volt');
     }
 
     if (!candidate) return res.json({ banner: null });
