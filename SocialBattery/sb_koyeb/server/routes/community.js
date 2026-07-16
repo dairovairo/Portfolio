@@ -384,6 +384,26 @@ async function getMuteNewEventsFilteredIds(candidateIds) {
   }
 }
 
+// Devuelve el Set de candidateIds que tiene activado "Silenciar nuevos
+// sorteos de tus comunidades" (users.mute_new_raffles, fase 107). Se usa en
+// notifyCommunityRaffleTargets para no mandar el broadcast (avioneta popup
+// instantánea) ni el push inmediato de "nuevo sorteo en tu comunidad" a
+// quien lo tenga silenciado — mismo patrón que getMuteNewEventsFilteredIds
+// (fase 92) y getMuteNewPoolsFilteredIds/getPoolMuteFilteredIds en pools.js.
+async function getMuteNewRafflesFilteredIds(candidateIds) {
+  if (!candidateIds.length) return new Set();
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_new_raffles', true);
+    return new Set((data || []).map(u => u.id));
+  } catch {
+    return new Set();
+  }
+}
+
 // ── GET /api/community/events/promotion-audience ─────────────────────────────
 // Devuelve el tamaño de la audiencia potencial de una promoción Premium/Ultra
 // para un evento que aún NO se ha creado (draft en el cliente,
@@ -1470,11 +1490,13 @@ router.patch('/communities/:id', requireAuth, uploadCommunityCover, async (req, 
 // ── GET /api/community/communities/:id/raffle-audience — tamaño de audiencia
 //    para la configuración de publicidad de un sorteo Light ────────────────
 // El "pool" de un sorteo Light es el mismo que assignRaffleBannerTargets usa
-// al crearlo: todos los usuarios de la app salvo el propio creador (no se
-// restringe a los miembros de la comunidad, a diferencia del tier
-// Community). Con ?filter=interested se añade además cuántos de esos
-// usuarios notificables tienen entre sus intereses alguna de las categorías
-// de la comunidad (users.interests ∩ communities.categories).
+// al crearlo (getRaffleLightAudienceIds): todos los usuarios de la app
+// EXCEPTO el propio creador Y EXCEPTO los miembros de la comunidad que
+// organiza el sorteo (no tiene sentido pagar publicidad a quien ya la
+// conoce — misma razón por la que Light excluye miembros del pool, ver
+// getRaffleLightAudienceIds). Con ?filter=interested se añade además cuántos
+// de esos usuarios notificables tienen entre sus intereses alguna de las
+// categorías de la comunidad (users.interests ∩ communities.categories).
 router.get('/communities/:id/raffle-audience', requireAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
@@ -3347,7 +3369,18 @@ async function notifyCommunityRaffleTargets({ raffleId, communityId, communityNa
 
     const knownMemberIds = memberIds || await getCommunityMemberIdsForBanner(communityId, creatorId);
     const memberIdSet = new Set(knownMemberIds);
-    const recipientIds = targetIds.filter(id => memberIdSet.has(id));
+    const candidateIds = targetIds.filter(id => memberIdSet.has(id));
+    if (!candidateIds.length) return;
+
+    // Fase 107 — filtrar a quien tenga "silenciar nuevos sorteos de tus
+    // comunidades" activo (users.mute_new_raffles). Se aplica ANTES de
+    // ambos canales (broadcast + web-push), a diferencia de los mutes de
+    // conversación (muted_conversations, fase 88) que solo filtran el
+    // push: aquí el aviso es "hay algo nuevo", no un mensaje entrante,
+    // así que si el usuario lo silenció tampoco quiere ver el popup con
+    // la app abierta.
+    const mutedIds = await getMuteNewRafflesFilteredIds(candidateIds);
+    const recipientIds = candidateIds.filter(id => !mutedIds.has(id));
     if (!recipientIds.length) return;
 
     const broadcastPayload = {
@@ -4028,7 +4061,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       .select(`
         id, created_at,
         raffle:raffle_id(
-          id, community_id, title, ends_at, drawn_at, tier, image_url, banner_views_contracted,
+          id, community_id, title, ends_at, drawn_at, tier, image_url, banner_views_contracted, banner_interested_only,
           community:community_id(id, name, categories)
         )
       `)
@@ -4136,23 +4169,26 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     // cronológico de asignación) cuya comunidad sea del propio usuario; si
     // ninguna lo es, cae de vuelta a la primera disponible de ese tier.
     //
-    // Para los tiers 'volt' y 'light' se añade un criterio intermedio: en
-    // ambos el pool de candidatos puede incluir comunidades ajenas al
-    // usuario (en Volt, toda la app; en Light, cualquiera salvo la propia
-    // comunidad organizadora), así que cuando no hay ningún sorteo de la
-    // propia comunidad pendiente, se prefiere mostrarle el banner cuya
-    // categoría coincida con sus propios intereses (users.interests ∩
-    // community.categories) — paginando por GRUPOS FIJOS de 3 (ver
-    // computeBoostRaffleInfo), en orden de más a menos necesitado:
-    //   - Se prueba el grupo de los 3 más necesitados (peor ratio); si
-    //     alguno coincide categoría, gana el de peor ratio de ESE grupo.
-    //   - Si ninguno del primer grupo coincide, se prueba el SIGUIENTE
-    //     grupo de 3 (los 3 siguientes por ratio), y así sucesivamente
-    //     hasta agotar la lista de sorteos pendientes de este usuario para
-    //     ese tier — así un sorteo de categoría rara no pierde su única
-    //     oportunidad de match solo por no estar en el primer grupo de 3.
-    //   - Si NINGÚN grupo (agotada toda la lista) tiene match, cae al
-    //     primero disponible por orden cronológico (fallback de siempre).
+    // Para los tiers 'volt' y 'light' se añade un criterio intermedio:
+    // paginación por GRUPOS FIJOS de 3 sorteos (ver computeBoostRaffleInfo),
+    // ordenados de más a menos necesitado por ratio de visualizaciones
+    // conseguidas / contratadas ascendente:
+    //   - Grupo de los 3 más necesitados (peor ratio). Si alguno coincide
+    //     categoría con los intereses del usuario, gana el de peor ratio de
+    //     entre esos matches.
+    //   - Si ninguno del grupo coincide categoría, gana igualmente el de
+    //     peor ratio del grupo — el mecanismo por defecto es "worst-ratio",
+    //     el match solo lo sobrescribe cuando lo hay. Excepción: los
+    //     sorteos con banner_interested_only NO se pueden servir a un
+    //     usuario que no matchea (sería contradecir el filtro contratado),
+    //     así que se descartan del grupo. Si al descartarlos queda alguno
+    //     no restringido, gana el peor ratio de los que quedan.
+    //   - Solo si el grupo entero es banner_interested_only y el usuario
+    //     no matchea con NINGUNO de ellos se pasa al SIGUIENTE grupo de 3
+    //     (los 3 siguientes por ratio ascendente), y así sucesivamente
+    //     hasta agotar la lista.
+    //   - Si ningún grupo llega a resolver (poco probable en la práctica),
+    //     cae al primero disponible por orden cronológico (fallback).
     async function pickWithinTier(tier) {
       const rows = activeRows.filter(row => normalizeRaffleTier(row.raffle.tier) === tier);
       if (!rows.length) return null;
@@ -4161,22 +4197,37 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       if ((tier === 'volt' || tier === 'light') && ownInterests.size) {
         const { sortedIds, ratioById } = await computeBoostRaffleInfo(tier, rows);
         const matchesCategory = row => (row.raffle.community?.categories || []).some(cat => ownInterests.has(cat));
+        const isRestricted = row => row.raffle.banner_interested_only === true;
+        const byWorstRatio = (a, b) => (ratioById.get(a.raffle.id) ?? 0) - (ratioById.get(b.raffle.id) ?? 0);
         const rowsById = new Map(rows.map(row => [row.raffle.id, row]));
 
         for (let start = 0; start < sortedIds.length; start += BOOST_GROUP_SIZE) {
           const groupIds = sortedIds.slice(start, start + BOOST_GROUP_SIZE);
-          const groupMatches = groupIds
-            .map(id => rowsById.get(id))
-            .filter(row => row && matchesCategory(row));
+          const groupRows = groupIds.map(id => rowsById.get(id)).filter(Boolean);
+
+          // 1) ¿Alguno del grupo coincide con los intereses del usuario?
+          //    Sí → gana el peor ratio de entre los matches.
+          const groupMatches = groupRows.filter(matchesCategory);
           if (groupMatches.length) {
-            // Dentro del grupo de 3 que sí tiene match, gana el de peor
-            // ratio (más rezagado) — no el primero por orden cronológico
-            // de asignación como target. Mismo criterio que la Ronda 1 del
-            // reparto de notificaciones Premium/Ultra (ver
-            // eventPromoPacing.js).
-            groupMatches.sort((a, b) => (ratioById.get(a.raffle.id) ?? 0) - (ratioById.get(b.raffle.id) ?? 0));
+            groupMatches.sort(byWorstRatio);
             return groupMatches[0];
           }
+
+          // 2) Ninguno coincide. Descarto los banner_interested_only (no
+          //    se pueden mostrar a este usuario, contratan targeting duro).
+          //    Si queda algún no-restringido en el grupo, gana el peor
+          //    ratio de esos (el mecanismo por defecto es worst-ratio, el
+          //    match solo lo sobrescribe cuando lo hay). En Volt esto
+          //    equivale a "gana el peor ratio del grupo" a secas, porque
+          //    Volt no tiene banner_interested_only.
+          const groupServable = groupRows.filter(row => !isRestricted(row));
+          if (groupServable.length) {
+            groupServable.sort(byWorstRatio);
+            return groupServable[0];
+          }
+
+          // 3) Todo el grupo es banner_interested_only y este usuario no
+          //    matchea con ninguno → salta al siguiente grupo de 3.
         }
       }
       return rows[0];
