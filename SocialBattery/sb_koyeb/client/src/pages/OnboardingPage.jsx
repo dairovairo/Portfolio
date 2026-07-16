@@ -92,8 +92,8 @@ export default function OnboardingPage() {
     }
 
     if (STEPS[step].id === 'interests') {
-      if (interests.length === 0) {
-        setError('Elige al menos un interés para continuar');
+      if (interests.length < 3) {
+        setError('Elige al menos 3 intereses para continuar');
         return;
       }
     }

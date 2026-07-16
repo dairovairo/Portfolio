@@ -860,6 +860,7 @@ function CreateEventModal({ onClose, onCreate }) {
     if (!form.event_date) { setError('La fecha es obligatoria'); return; }
     if (!form.ends_at) { setError('La fecha fin es obligatoria'); return; }
     if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (!form.categories.length) { setError('Elige al menos una categoría'); return; }
     if (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
@@ -938,7 +939,7 @@ function CreateEventModal({ onClose, onCreate }) {
           {/* Category */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Categoría <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+              Categoría * <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
             </label>
             <div className="flex flex-wrap gap-2">
               {EVENT_CATEGORIES.map(cat => {
@@ -964,14 +965,19 @@ function CreateEventModal({ onClose, onCreate }) {
               })}
             </div>
             {form.categories.includes(OTHER_CATEGORY) && (
-              <input
-                type="text"
-                value={form.custom_category}
-                onChange={e => set('custom_category', e.target.value)}
-                placeholder="Escribe la categoría"
-                maxLength={60}
-                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
+              <>
+                <input
+                  type="text"
+                  value={form.custom_category}
+                  onChange={e => set('custom_category', e.target.value)}
+                  placeholder="Escribe la categoría"
+                  maxLength={60}
+                  className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                />
+                <p className="mt-2 text-xs text-amber-400/80 font-mono">
+                  ⚠️ La publicidad funcionará notablemente mejor escogiendo una categoría de la lista.
+                </p>
+              </>
             )}
           </div>
 
@@ -1288,13 +1294,13 @@ function CreateEventModal({ onClose, onCreate }) {
             </p>
           )}
 
-          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())) && (
+          {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || !form.categories.length || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())) && (
             <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
           )}
 
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
+            disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || !form.categories.length || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : (form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') ? '🌐 Configurar publicidad' : '🌐 Publicar evento'}
@@ -1397,6 +1403,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
   async function handleSubmit() {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
+    if (!form.categories.length) { setError('Elige al menos una categoría'); return; }
     if (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim()) {
       setError('Especifica la categoria');
       return;
@@ -1461,7 +1468,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
           {/* Category */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Categoría <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+              Categoría * <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
             </label>
             <div className="flex flex-wrap gap-2">
               {COMMUNITY_CATEGORIES.map(cat => {
@@ -1487,14 +1494,19 @@ function CreateCommunityModal({ onClose, onCreate }) {
               })}
             </div>
             {form.categories.includes(OTHER_CATEGORY) && (
-              <input
-                type="text"
-                value={form.custom_category}
-                onChange={e => set('custom_category', e.target.value)}
-                placeholder="Escribe la categoría"
-                maxLength={60}
-                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
+              <>
+                <input
+                  type="text"
+                  value={form.custom_category}
+                  onChange={e => set('custom_category', e.target.value)}
+                  placeholder="Escribe la categoría"
+                  maxLength={60}
+                  className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                />
+                <p className="mt-2 text-xs text-amber-400/80 font-mono">
+                  ⚠️ La publicidad funcionará notablemente mejor escogiendo una categoría de la lista.
+                </p>
+              </>
             )}
           </div>
 
@@ -1632,7 +1644,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
 
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.name.trim() || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
+            disabled={saving || !form.name.trim() || !form.categories.length || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? 'Creando...' : '👥 Crear comunidad'}

@@ -10,6 +10,7 @@ const { parseReminderMinutes } = require('../lib/reminderLeadTime');
 const { getNotificationDayKey } = require('../lib/notificationDay');
 const { runEventPromoPacingTick, FREE_THRESHOLD } = require('../jobs/eventPromoPacing');
 const { addYears, addMonths } = require('../lib/dateRangeLimits');
+const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -484,6 +485,9 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
   const categories = parseCategories(req.body.categories ?? category);
   if (categories.length > MAX_CATEGORIES) {
     return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
+  }
+  if (!categories.length) {
+    return res.status(400).json({ error: 'Elige al menos una categoría para el evento' });
   }
 
   if (!title?.trim()) return res.status(400).json({ error: 'El titulo es obligatorio' });
@@ -1313,6 +1317,9 @@ router.post('/communities', requireAuth, uploadCommunityCover, async (req, res) 
   const categories = parseCategories(req.body.categories ?? category);
   if (categories.length > MAX_CATEGORIES) {
     return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
+  }
+  if (!categories.length) {
+    return res.status(400).json({ error: 'Elige al menos una categoría para la comunidad' });
   }
 
   if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
@@ -3130,10 +3137,8 @@ const RAFFLE_TIERS = {
 const RAFFLE_TIER_KEYS = Object.keys(RAFFLE_TIERS);
 
 // Rango de visualizaciones de banner contratables en un sorteo Light (entre
-// BANNER_VIEWS_MIN y BANNER_VIEWS_MAX). Se usa tanto al crear el sorteo
-// (validación del aforo contratado) como en GET /raffle-banner (para saber
-// si un sorteo Light sigue por debajo de su mínimo garantizado — ver
-// "modo de emergencia" en pickWithinTier).
+// BANNER_VIEWS_MIN y BANNER_VIEWS_MAX). Se usa al crear el sorteo
+// (validación del aforo contratado).
 const BANNER_VIEWS_MIN = 1000;
 const BANNER_VIEWS_MAX = 100000;
 
@@ -4071,24 +4076,33 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     // pantalla a otros sorteos del mismo tier cada vez que compitan por el
     // mismo usuario, dejando a estos últimos sin alcanzar nunca sus
     // visualizaciones (contratadas, en Light) aunque tengan targets
-    // asignados. Para evitarlo, el boost por intereses solo se activa
-    // dentro de un grupo reducido de sorteos "necesitados" de ese tier:
-    //   - El 5% (mínimo 1) con peor ratio de visualizaciones conseguidas
-    //     entre las contratadas (Light) o menos visualizaciones servidas
-    //     hasta ahora (Volt, que no tiene aforo contratado con el que
-    //     calcular un ratio).
-    //   - "Modo de emergencia": cualquier sorteo Light que todavía no haya
-    //     alcanzado su mínimo garantizado (BANNER_VIEWS_MIN) entra siempre
-    //     en el grupo necesitado, para asegurar que llega a ese mínimo.
-    // Fuera de ese grupo, dos sorteos del mismo tier compiten en igualdad
-    // (orden cronológico de asignación), sin boost por intereses.
-    async function computeBoostRaffleIds(tier, rows) {
+    // asignados. Para evitarlo, el boost por intereses se evalúa en
+    // GRUPOS FIJOS de tamaño BOOST_GROUP_SIZE=3 (ver lib/adaptiveBoost.js),
+    // ordenados de más a menos necesitado:
+    //   - "Necesitado" = peor ratio de visualizaciones conseguidas entre
+    //     las contratadas (Light) o menos visualizaciones servidas hasta
+    //     ahora (Volt, que no tiene aforo contratado con el que calcular un
+    //     ratio).
+    //   - Se comprueba el PRIMER grupo de 3 (los más necesitados); si
+    //     ninguno coincide con los intereses del usuario, se pasa al
+    //     SIGUIENTE grupo de 3, y así sucesivamente — en vez de tener un
+    //     único grupo de tamaño variable, o de saltar directamente a "todo
+    //     el resto" sin respetar el orden de necesidad (ver pickWithinTier).
+    // Dentro de un mismo grupo de 3, si varios coinciden a la vez con los
+    // intereses del usuario, gana el de PEOR ratio (más rezagado). Entre
+    // sorteos que nunca coinciden con categorías de ningún usuario, no hay
+    // boost posible y compiten en igualdad (orden cronológico de
+    // asignación), como siempre.
+    async function computeBoostRaffleInfo(tier, rows) {
       const uniqueRaffles = new Map();
       for (const row of rows) {
         if (!uniqueRaffles.has(row.raffle.id)) uniqueRaffles.set(row.raffle.id, row.raffle);
       }
       const raffleList = [...uniqueRaffles.values()];
-      if (raffleList.length <= 1) return new Set(raffleList.map(r => r.id));
+      if (raffleList.length <= 1) {
+        const ratioById = new Map(raffleList.map(r => [r.id, 0]));
+        return { sortedIds: raffleList.map(r => r.id), ratioById };
+      }
 
       const raffleIds = raffleList.map(r => r.id);
       const { data: shownRows, error: shownErr } = await supabase
@@ -4106,21 +4120,16 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       const stats = raffleList.map(r => {
         const shown = shownCounts.get(r.id) || 0;
         const contracted = tier === 'light' ? (r.banner_views_contracted || null) : null;
-        const belowMinimum = tier === 'light' && contracted != null && shown < BANNER_VIEWS_MIN;
         // En Light, el ratio es visualizaciones servidas / contratadas
         // (cuanto más bajo, más necesitado). En Volt no hay aforo
         // contratado, así que se usa directamente lo servido hasta ahora.
         const ratio = contracted ? shown / contracted : shown;
-        return { id: r.id, ratio, belowMinimum };
+        return { id: r.id, ratio };
       });
 
       stats.sort((a, b) => a.ratio - b.ratio);
-      const boostCount = Math.max(1, Math.ceil(stats.length * 0.05));
-      const boostSet = new Set(stats.slice(0, boostCount).map(s => s.id));
-      for (const s of stats) {
-        if (s.belowMinimum) boostSet.add(s.id);
-      }
-      return boostSet;
+      const ratioById = new Map(stats.map(s => [s.id, s.ratio]));
+      return { sortedIds: stats.map(s => s.id), ratioById };
     }
 
     // Dentro de las filas de un mismo tier, prioriza la primera (por orden
@@ -4133,23 +4142,42 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
     // comunidad organizadora), así que cuando no hay ningún sorteo de la
     // propia comunidad pendiente, se prefiere mostrarle el banner cuya
     // categoría coincida con sus propios intereses (users.interests ∩
-    // community.categories) — pero SOLO si ese sorteo está dentro del grupo
-    // "necesitado" de computeBoostRaffleIds (ver arriba), para no causar
-    // inanición en el resto. Si ninguno coincide (o ninguno de los que
-    // coinciden está necesitado), cae de vuelta al primero disponible por
-    // orden cronológico (misma lógica de siempre).
+    // community.categories) — paginando por GRUPOS FIJOS de 3 (ver
+    // computeBoostRaffleInfo), en orden de más a menos necesitado:
+    //   - Se prueba el grupo de los 3 más necesitados (peor ratio); si
+    //     alguno coincide categoría, gana el de peor ratio de ESE grupo.
+    //   - Si ninguno del primer grupo coincide, se prueba el SIGUIENTE
+    //     grupo de 3 (los 3 siguientes por ratio), y así sucesivamente
+    //     hasta agotar la lista de sorteos pendientes de este usuario para
+    //     ese tier — así un sorteo de categoría rara no pierde su única
+    //     oportunidad de match solo por no estar en el primer grupo de 3.
+    //   - Si NINGÚN grupo (agotada toda la lista) tiene match, cae al
+    //     primero disponible por orden cronológico (fallback de siempre).
     async function pickWithinTier(tier) {
       const rows = activeRows.filter(row => normalizeRaffleTier(row.raffle.tier) === tier);
       if (!rows.length) return null;
       const ownCommunityRow = rows.find(row => ownCommunityIds.has(row.raffle.community_id));
       if (ownCommunityRow) return ownCommunityRow;
       if ((tier === 'volt' || tier === 'light') && ownInterests.size) {
-        const boostIds = await computeBoostRaffleIds(tier, rows);
-        const interestMatchRow = rows.find(row =>
-          boostIds.has(row.raffle.id) &&
-          (row.raffle.community?.categories || []).some(cat => ownInterests.has(cat))
-        );
-        if (interestMatchRow) return interestMatchRow;
+        const { sortedIds, ratioById } = await computeBoostRaffleInfo(tier, rows);
+        const matchesCategory = row => (row.raffle.community?.categories || []).some(cat => ownInterests.has(cat));
+        const rowsById = new Map(rows.map(row => [row.raffle.id, row]));
+
+        for (let start = 0; start < sortedIds.length; start += BOOST_GROUP_SIZE) {
+          const groupIds = sortedIds.slice(start, start + BOOST_GROUP_SIZE);
+          const groupMatches = groupIds
+            .map(id => rowsById.get(id))
+            .filter(row => row && matchesCategory(row));
+          if (groupMatches.length) {
+            // Dentro del grupo de 3 que sí tiene match, gana el de peor
+            // ratio (más rezagado) — no el primero por orden cronológico
+            // de asignación como target. Mismo criterio que la Ronda 1 del
+            // reparto de notificaciones Premium/Ultra (ver
+            // eventPromoPacing.js).
+            groupMatches.sort((a, b) => (ratioById.get(a.raffle.id) ?? 0) - (ratioById.get(b.raffle.id) ?? 0));
+            return groupMatches[0];
+          }
+        }
       }
       return rows[0];
     }
@@ -4181,10 +4209,26 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
 
     if (!candidate) return res.json({ banner: null });
 
-    await supabase
+    // Guarda .is('shown_at', null) + .select(): si dos requests concurrentes
+    // del mismo usuario (doble tap, retry de red) llegan a la vez, ambas
+    // pueden elegir el mismo candidato en el SELECT de arriba (todavía no
+    // marcado), pero aquí solo UNA gana el UPDATE — la fila ya no cumple
+    // shown_at IS NULL para la segunda. Antes no había guarda: las dos
+    // podían "ganar" el update (uno sobrescribiendo el timestamp del otro),
+    // sin corromper datos pero sirviendo el banner dos veces sin necesidad.
+    const { data: updatedRows, error: updateShownErr } = await supabase
       .from('raffle_banner_targets')
       .update({ shown_at: now.toISOString() })
-      .eq('id', candidate.id);
+      .eq('id', candidate.id)
+      .is('shown_at', null)
+      .select('id');
+    if (updateShownErr) throw updateShownErr;
+    if (!updatedRows?.length) {
+      // Perdió la carrera: otra request ya lo marcó como mostrado justo
+      // antes. No se sirve nada en este intento — la próxima entrada a la
+      // app recalculará el siguiente candidato con normalidad.
+      return res.json({ banner: null });
+    }
 
     res.json({
       banner: {

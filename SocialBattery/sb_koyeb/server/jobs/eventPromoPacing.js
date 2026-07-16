@@ -53,8 +53,10 @@
  * inanición entre eventos del mismo tier (uno de categoría popular
  * acaparando siempre a esos usuarios en cada tick), el boost solo se activa
  * dentro del grupo "necesitado": Tier A completo (por debajo de
- * FREE_THRESHOLD) + el 5% más rezagado de Tier B por ratio
- * enviadas/contratadas. Premium y Ultra no tienen prioridad entre sí — ver
+ * FREE_THRESHOLD) + el grupo más rezagado de Tier B por ratio
+ * enviadas/contratadas, de tamaño FIJO de 3 (BOOST_GROUP_SIZE, ver
+ * lib/adaptiveBoost.js) — compartido con el mismo grupo del banner volador
+ * de sorteos Light/Volt. Premium y Ultra no tienen prioridad entre sí — ver
  * priorityOrder, que ya los trata igual y solo depende de
  * notification_sent_count/notification_count, nunca de promotion_plan.
  */
@@ -63,6 +65,7 @@ const supabase = require('../lib/supabase');
 const { sendPushToSubscription } = require('../lib/webpush');
 const { getNotificationDayKey } = require('../lib/notificationDay');
 const { INSTANCE_ID } = require('../lib/instanceId');
+const { computeAdaptiveBoostCount } = require('../lib/adaptiveBoost');
 
 const FREE_THRESHOLD = 200;          // umbral mínimo para poder cobrar (ver UI)
 const BASE_CHUNK_PER_TICK = 50;      // cupo "normal" que puede recibir un evento por tick
@@ -363,14 +366,15 @@ async function runEventPromoPacingTick() {
     // el boost por coincidencia de categoría solo se activa dentro de un
     // grupo reducido de eventos "necesitados" de este tick — todos los de
     // Tier A (por debajo de FREE_THRESHOLD, el mínimo garantizado) más el
-    // 5% (mínimo 1) más rezagado de Tier B por ratio enviadas/contratadas.
-    // Fuera de ese grupo, el reparto de candidatos no da preferencia a
-    // quien coincide categoría, para que un evento de categoría popular no
+    // grupo más rezagado de Tier B por ratio enviadas/contratadas, de
+    // tamaño FIJO de 3 (BOOST_GROUP_SIZE, ver lib/adaptiveBoost.js). Fuera
+    // de ese grupo, el reparto de candidatos no da preferencia a quien
+    // coincide categoría, para que un evento de categoría popular no
     // acapare sistemáticamente a esos usuarios en cada tick a costa de
     // otros eventos del mismo tier.
     const boostEventIds = new Set(urgent.map(e => e.id));
     if (steady.length) {
-      const boostCount = Math.max(1, Math.ceil(steady.length * 0.05));
+      const boostCount = computeAdaptiveBoostCount(steady.length);
       steady.slice(0, boostCount).forEach(e => boostEventIds.add(e.id));
     }
 

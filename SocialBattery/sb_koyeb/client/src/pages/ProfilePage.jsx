@@ -163,6 +163,11 @@ export default function ProfilePage() {
       trimmedMascotName === (profile?.mascot_name || 'Volty')
     ) { setEditing(false); return; }
 
+    if (editInterests.length < 3) {
+      addToast('Elige al menos 3 intereses', 'error');
+      return;
+    }
+
     setSavingProfile(true);
     try {
       await api.patch('/users/me', {
@@ -174,7 +179,7 @@ export default function ProfilePage() {
       setEditing(false);
       addToast('Perfil actualizado ✓', 'success');
     } catch (e) {
-      addToast('Error al guardar', 'error');
+      addToast(e?.response?.data?.error || 'Error al guardar', 'error');
     } finally {
       setSavingProfile(false);
     }

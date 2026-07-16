@@ -255,7 +255,16 @@ router.patch('/me', requireAuth, async (req, res) => {
   const updates = {};
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
-  if (interests !== undefined) updates.interests = Array.isArray(interests) ? interests : [];
+  if (interests !== undefined) {
+    const cleanInterests = Array.isArray(interests) ? interests.filter(Boolean) : [];
+    // Mismo mínimo que el onboarding (OnboardingPage.jsx): evita que se
+    // pueda editar el perfil después para dejar los intereses por debajo
+    // de 3, que es lo que exigimos al crear la cuenta.
+    if (cleanInterests.length < 3) {
+      return res.status(400).json({ error: 'Elige al menos 3 intereses' });
+    }
+    updates.interests = cleanInterests;
+  }
   if (mascot_name !== undefined) updates.mascot_name = (mascot_name && mascot_name.trim()) ? mascot_name.trim().slice(0, 20) : 'Volty';
   if (show_interests !== undefined) updates.show_interests = Boolean(show_interests);
   if (show_public_stats !== undefined) updates.show_public_stats = Boolean(show_public_stats);
