@@ -298,7 +298,7 @@ async function runEventPromoPacingTick() {
     // 1. Eventos premium/ultra activos (no empezados) que aún no llegan a lo contratado
     const { data: events, error: eventsError } = await supabase
       .from('community_events')
-      .select('id, title, location, community_id, creator_id, promotion_plan, notification_count, notification_sent_count, event_date, audience_interested_only, categories')
+      .select('id, title, location, community_id, creator_id, promotion_plan, notification_count, notification_sent_count, event_date, audience_interested_only, categories, audience_center_lat, audience_center_lng, audience_radius_km')
       .in('promotion_plan', ['premium', 'ultra'])
       .gt('event_date', now.toISOString())
       .not('notification_count', 'is', null);
@@ -404,22 +404,36 @@ async function runEventPromoPacingTick() {
     //    Si NINGÚN evento del tick tiene categorías, no hay nada que cruzar
     //    y saltamos la carga completa.
     const anyEventUsesCategories = allByRatio.some(e => (e.categories || []).filter(Boolean).length > 0);
+    // Fase 110: si algún evento tiene filtro por ubicación, además
+    // cargamos home_lat/home_lng del pool para poder cribar por distancia.
+    // Se hace en el mismo paginado que los intereses para reducir round
+    // trips.
+    const anyEventUsesLocation = allByRatio.some(e => e.audience_center_lat != null && e.audience_radius_km != null);
     const interestsByUser = new Map();
-    if (anyEventUsesCategories) {
+    const homeByUser = new Map();
+    if (anyEventUsesCategories || anyEventUsesLocation) {
+      const selectCols = ['id'];
+      if (anyEventUsesCategories) selectCols.push('interests');
+      if (anyEventUsesLocation)   selectCols.push('home_lat', 'home_lng');
       const candidateIds = available.map(c => c.userId);
       const CHUNK = 500;
       for (let i = 0; i < candidateIds.length; i += CHUNK) {
         const slice = candidateIds.slice(i, i + CHUNK);
-        const { data: rows, error: interestsErr } = await supabase
+        const { data: rows, error: userDataErr } = await supabase
           .from('users')
-          .select('id, interests')
+          .select(selectCols.join(', '))
           .in('id', slice);
-        if (interestsErr) {
-          console.warn('[PROMO-PACING] error cargando intereses para filtro por intereses:', interestsErr.message);
+        if (userDataErr) {
+          console.warn('[PROMO-PACING] error cargando datos de usuario para filtros:', userDataErr.message);
           break;
         }
         (rows || []).forEach(r => {
-          interestsByUser.set(r.id, new Set((r.interests || []).filter(Boolean)));
+          if (anyEventUsesCategories) {
+            interestsByUser.set(r.id, new Set((r.interests || []).filter(Boolean)));
+          }
+          if (anyEventUsesLocation && r.home_lat != null && r.home_lng != null) {
+            homeByUser.set(r.id, { lat: Number(r.home_lat), lng: Number(r.home_lng) });
+          }
         });
       }
     }
@@ -466,34 +480,62 @@ async function runEventPromoPacingTick() {
           ...(everNotifiedByEvent.get(event.id) || []),
         ]);
 
-        // Fase 105: si el evento contrató "solo intereses", el candidato
-        // además tiene que compartir alguna categoría con el evento
-        // (users.interests ∩ event.categories no vacío). Si el evento no
-        // tiene categorías, no hay con qué cruzar y nadie pasa este filtro
-        // — mismo criterio que el frontend (interested=0 sin categorías).
+        // Filtros DUROS del evento (fase 105 + fase 110): un candidato
+        // debe pasarlos todos para poder recibir el push. Actualmente hay
+        // dos:
+        //   - audience_interested_only: users.interests debe intersectar
+        //     event.categories.
+        //   - audience_center_lat/lng + audience_radius_km: la ubicación
+        //     "home" del usuario debe caer dentro del círculo. Si el
+        //     usuario nunca reportó ubicación (homeByUser sin entrada),
+        //     no pasa el filtro — misma lógica que para intereses.
+        // Ambos se combinan en un solo predicate hardFilter — un candidato
+        // pasa si (no hay filtro de intereses O intereses matchean) Y
+        // (no hay filtro de ubicación O ubicación cae dentro). Si NO hay
+        // ningún filtro duro, hardFilter es null y el evento va por la
+        // Ronda 2 bidireccional como siempre.
         const eventCategories = new Set((event.categories || []).filter(Boolean));
-        const interestsFilter = event.audience_interested_only
-          ? (userId) => {
+        const hasInterestsFilter = !!event.audience_interested_only;
+        const hasLocationFilter = event.audience_center_lat != null && event.audience_radius_km != null;
+        let hardFilter = null;
+        if (hasInterestsFilter || hasLocationFilter) {
+          // Coordenadas y radio se resuelven una vez fuera del closure para
+          // evitar coerciones por candidato dentro del bucle.
+          const centerLat = hasLocationFilter ? Number(event.audience_center_lat) : null;
+          const centerLng = hasLocationFilter ? Number(event.audience_center_lng) : null;
+          const radiusKm  = hasLocationFilter ? Number(event.audience_radius_km) : null;
+          const { haversineKm } = require('../lib/homeLocation');
+          hardFilter = (userId) => {
+            if (hasInterestsFilter) {
               if (!eventCategories.size) return false;
               const userInterests = interestsByUser.get(userId);
               if (!userInterests || !userInterests.size) return false;
-              for (const cat of userInterests) if (eventCategories.has(cat)) return true;
-              return false;
+              let ok = false;
+              for (const cat of userInterests) if (eventCategories.has(cat)) { ok = true; break; }
+              if (!ok) return false;
             }
-          : null;
+            if (hasLocationFilter) {
+              const home = homeByUser.get(userId);
+              if (!home) return false;
+              if (haversineKm(centerLat, centerLng, home.lat, home.lng) > radiusKm) return false;
+            }
+            return true;
+          };
+        }
 
-        eventMeta.push({ event, remaining: chunkTarget, excludeSet, interestsFilter, eventCategories, chosen: [] });
+        eventMeta.push({ event, remaining: chunkTarget, excludeSet, hardFilter, eventCategories, chosen: [] });
       }
 
-      // Ronda 1 del grupo: filtros duros primero.
+      // Ronda 1 del grupo: eventos con filtro duro (intereses o ubicación)
+      // reservan primero a sus candidatos que pasen los filtros.
       for (const meta of eventMeta) {
-        if (!meta.interestsFilter || meta.remaining <= 0 || !available.length) continue;
+        if (!meta.hardFilter || meta.remaining <= 0 || !available.length) continue;
         const matched = [];
         const rest = [];
         for (const candidate of available) {
           const isMatch = matched.length < meta.remaining &&
             !meta.excludeSet.has(candidate.userId) &&
-            meta.interestsFilter(candidate.userId);
+            meta.hardFilter(candidate.userId);
           (isMatch ? matched : rest).push(candidate);
         }
         if (matched.length) {
@@ -520,7 +562,7 @@ async function runEventPromoPacingTick() {
       // Los eventos con filtro duro no entran aquí: sus matches ya se
       // resolvieron en Ronda 1 y no tienen fallback a candidatos no
       // coincidentes.
-      const noFilterMetas = eventMeta.filter(m => !m.interestsFilter);
+      const noFilterMetas = eventMeta.filter(m => !m.hardFilter);
       available = assignCandidatesBidirectional({
         candidates: available,
         eventMetas: noFilterMetas,

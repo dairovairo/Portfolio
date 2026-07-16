@@ -424,6 +424,15 @@ async function getMuteNewRafflesFilteredIds(candidateIds) {
 // intereses del EventAdConfigPage. Si no se manda ninguna categoría, se
 // responde categories_defined=false y interested=null (mismo contrato que
 // raffle-audience cuando la comunidad no tiene categorías definidas).
+//
+// Fase 110: con ?center_lat=X&center_lng=Y&radius_km=Z se añade también
+// nearby = cuántos usuarios notificables tienen home_lat/home_lng dentro
+// del círculo, e interested_nearby = intersección de ambos filtros. El
+// radio debe estar en [1, 500] km (constraint replicada en la BD, ver
+// supabase_schema_phase110_event_location_filter.sql). Si el usuario no
+// ha sido reportado nunca su ubicación (home_lat NULL), no cuenta como
+// notificable para nearby — es una limitación consciente, no cabreamos
+// a nadie mandándole publicidad "de cerca" cuando no sabemos dónde vive.
 router.get('/events/promotion-audience', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const wantInterested = req.query.filter === 'interested';
@@ -439,6 +448,24 @@ router.get('/events/promotion-audience', requireAuth, async (req, res) => {
       if (Array.isArray(parsed)) categories = parsed.filter(Boolean);
     } catch {
       return res.status(400).json({ error: 'categories debe ser un JSON array' });
+    }
+  }
+
+  // Fase 110: filtro por ubicación (opcional, "all-or-nothing")
+  const wantLocation = req.query.center_lat != null && req.query.center_lng != null && req.query.radius_km != null;
+  let centerLat, centerLng, radiusKm;
+  if (wantLocation) {
+    centerLat = Number(req.query.center_lat);
+    centerLng = Number(req.query.center_lng);
+    radiusKm = Number(req.query.radius_km);
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng) || !Number.isFinite(radiusKm)) {
+      return res.status(400).json({ error: 'center_lat/center_lng/radius_km deben ser numéricos' });
+    }
+    if (centerLat < -90 || centerLat > 90 || centerLng < -180 || centerLng > 180) {
+      return res.status(400).json({ error: 'center_lat/center_lng fuera de rango WGS-84' });
+    }
+    if (radiusKm < 1 || radiusKm > 500) {
+      return res.status(400).json({ error: 'radius_km debe estar entre 1 y 500' });
     }
   }
 
@@ -477,7 +504,49 @@ router.get('/events/promotion-audience', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({ total: totalCount || 0, interested, categories_defined: categoriesDefined });
+    let nearby = null;
+    let interestedNearby = null;
+    if (wantLocation) {
+      const { haversineKm } = require('../lib/homeLocation');
+      // Bounding-box en JS. 1 grado de lat ≈ 111 km; para lng se corrige por
+      // cos(centerLat). Es rápido (usa el índice users_home_coords_idx) y
+      // devuelve un superconjunto; la criba exacta la hace haversine abajo.
+      const latDelta = radiusKm / 111.0;
+      const cosLat = Math.cos((centerLat * Math.PI) / 180);
+      const lngDelta = cosLat > 0.0001 ? radiusKm / (111.0 * cosLat) : 180;
+      let bboxQuery = supabase
+        .from('users')
+        .select(`id, home_lat, home_lng${wantInterested && categories.length ? ', interests' : ''}`)
+        .neq('id', userId)
+        .not('home_lat', 'is', null)
+        .gte('home_lat', centerLat - latDelta)
+        .lte('home_lat', centerLat + latDelta)
+        .gte('home_lng', centerLng - lngDelta)
+        .lte('home_lng', centerLng + lngDelta);
+      if (excludedMemberIds.length) bboxQuery = bboxQuery.not('id', 'in', `(${excludedMemberIds.join(',')})`);
+      const { data: bboxUsers, error: bboxErr } = await bboxQuery;
+      if (bboxErr) throw bboxErr;
+
+      const inCircle = (bboxUsers || []).filter(u =>
+        haversineKm(centerLat, centerLng, Number(u.home_lat), Number(u.home_lng)) <= radiusKm
+      );
+      nearby = inCircle.length;
+
+      if (wantInterested && categories.length) {
+        const categorySet = new Set(categories);
+        interestedNearby = inCircle.filter(u =>
+          (u.interests || []).some(cat => categorySet.has(cat))
+        ).length;
+      }
+    }
+
+    res.json({
+      total: totalCount || 0,
+      interested,
+      categories_defined: categoriesDefined,
+      nearby,
+      interested_nearby: interestedNearby,
+    });
   } catch (err) {
     console.error('[community] GET /events/promotion-audience error:', err);
     res.status(500).json({ error: err.message || 'Error al calcular la audiencia' });
@@ -486,7 +555,7 @@ router.get('/events/promotion-audience', requireAuth, async (req, res) => {
 
 // POST /api/community/events
 router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
-  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count, audience_interested_only } = req.body;
+  const { title, description, category, event_date, ends_at, location, lat, lng, max_attendees, community_id, organization, url, price, additional_info, promotion_plan, notification_count, audience_interested_only, audience_center_lat, audience_center_lng, audience_radius_km } = req.body;
   const userId = req.user.id;
 
   const categories = parseCategories(req.body.categories ?? category);
@@ -557,6 +626,33 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     (resolvedPlan === 'premium' || resolvedPlan === 'ultra') &&
     (audience_interested_only === 'true' || audience_interested_only === true);
 
+  // Fase 110: filtro opcional por ubicación — círculo alrededor del punto
+  // del evento. Es all-or-nothing: los tres campos van juntos. Fuera de
+  // premium/ultra se ignora (basic no tiene alcance contratado). El radio
+  // debe caer en [1, 500] km, coherente con la constraint de BD.
+  let resolvedCenterLat = null;
+  let resolvedCenterLng = null;
+  let resolvedRadiusKm = null;
+  const wantsLocationFilter =
+    (resolvedPlan === 'premium' || resolvedPlan === 'ultra') &&
+    audience_center_lat != null && audience_center_lat !== '' &&
+    audience_center_lng != null && audience_center_lng !== '' &&
+    audience_radius_km != null && audience_radius_km !== '';
+  if (wantsLocationFilter) {
+    resolvedCenterLat = Number.parseFloat(audience_center_lat);
+    resolvedCenterLng = Number.parseFloat(audience_center_lng);
+    resolvedRadiusKm  = Number.parseFloat(audience_radius_km);
+    if (!Number.isFinite(resolvedCenterLat) || !Number.isFinite(resolvedCenterLng) || !Number.isFinite(resolvedRadiusKm)) {
+      return res.status(400).json({ error: 'Filtro por ubicación: valores numéricos inválidos' });
+    }
+    if (resolvedCenterLat < -90 || resolvedCenterLat > 90 || resolvedCenterLng < -180 || resolvedCenterLng > 180) {
+      return res.status(400).json({ error: 'Filtro por ubicación: coordenadas fuera de rango' });
+    }
+    if (resolvedRadiusKm < 1 || resolvedRadiusKm > 500) {
+      return res.status(400).json({ error: 'Filtro por ubicación: el radio debe estar entre 1 y 500 km' });
+    }
+  }
+
   try {
     await ensurePublicProfile(req.user);
 
@@ -575,15 +671,15 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
 
     // Política de bloqueo por audiencia insuficiente (debe reflejar
     // exactamente blockedByFilterShortfall en EventAdConfigPage.jsx): SOLO
-    // se bloquea si el filtro de intereses está activo y el pool
-    // resultante (excluyendo creador y, si aplica, miembros de la
-    // comunidad) no llega al mínimo contratable (NOTIF_MIN). SIN filtro,
-    // se deja publicar el evento aunque el pool notificable sea menor —
-    // esto favorece el crecimiento de la app cuando aún tiene pocos
-    // usuarios; el pacing (eventPromoPacing.js) ya reparte como mucho
-    // tantas notificaciones como quepan en el pool real.
-    if (resolvedInterestedOnly) {
-      if (!categories.length) {
+    // se bloquea si algún filtro DURO (intereses, ubicación o ambos) está
+    // activo y el pool resultante (excluyendo creador y, si aplica,
+    // miembros de la comunidad) no llega al mínimo contratable (NOTIF_MIN).
+    // SIN filtro, se deja publicar el evento aunque el pool notificable
+    // sea menor — esto favorece el crecimiento de la app cuando aún tiene
+    // pocos usuarios; el pacing (eventPromoPacing.js) ya reparte como
+    // mucho tantas notificaciones como quepan en el pool real.
+    if (resolvedInterestedOnly || wantsLocationFilter) {
+      if (resolvedInterestedOnly && !categories.length) {
         return res.status(400).json({ error: 'Define categorías en el evento para poder filtrar por intereses' });
       }
       // Fase 108: communityId siempre existe (validado arriba). Excluimos
@@ -596,17 +692,61 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         .eq('community_id', communityId);
       if (memErr) throw memErr;
       const excludedMemberIds = (members || []).map(m => m.user_id).filter(id => id !== userId);
-      let interestedQuery = supabase
-        .from('users')
-        .select('id', { count: 'exact', head: true })
-        .neq('id', userId)
-        .overlaps('interests', categories);
-      if (excludedMemberIds.length) interestedQuery = interestedQuery.not('id', 'in', `(${excludedMemberIds.join(',')})`);
-      const { count: interestedCount, error: interestedErr } = await interestedQuery;
-      if (interestedErr) throw interestedErr;
-      if ((interestedCount || 0) < NOTIF_MIN) {
+
+      // Cuenta el pool notificable respetando todos los filtros duros
+      // activos combinados: intereses (users.interests ∩ categories) y
+      // ubicación (users.home_lat/lng dentro del círculo). El código de
+      // aquí y el del endpoint /promotion-audience deben mantener el
+      // mismo criterio o la UI y el POST divergirán.
+      let filteredCount;
+      if (wantsLocationFilter) {
+        // Bounding-box + haversine JS. Fetch selecciona interests solo si
+        // hace falta cruzarlos.
+        const { haversineKm } = require('../lib/homeLocation');
+        const latDelta = resolvedRadiusKm / 111.0;
+        const cosLat = Math.cos((resolvedCenterLat * Math.PI) / 180);
+        const lngDelta = cosLat > 0.0001 ? resolvedRadiusKm / (111.0 * cosLat) : 180;
+        let bboxQuery = supabase
+          .from('users')
+          .select(`id, home_lat, home_lng${resolvedInterestedOnly ? ', interests' : ''}`)
+          .neq('id', userId)
+          .not('home_lat', 'is', null)
+          .gte('home_lat', resolvedCenterLat - latDelta)
+          .lte('home_lat', resolvedCenterLat + latDelta)
+          .gte('home_lng', resolvedCenterLng - lngDelta)
+          .lte('home_lng', resolvedCenterLng + lngDelta);
+        if (excludedMemberIds.length) bboxQuery = bboxQuery.not('id', 'in', `(${excludedMemberIds.join(',')})`);
+        const { data: bboxUsers, error: bboxErr } = await bboxQuery;
+        if (bboxErr) throw bboxErr;
+
+        let inCircle = (bboxUsers || []).filter(u =>
+          haversineKm(resolvedCenterLat, resolvedCenterLng, Number(u.home_lat), Number(u.home_lng)) <= resolvedRadiusKm
+        );
+        if (resolvedInterestedOnly) {
+          const categorySet = new Set(categories);
+          inCircle = inCircle.filter(u => (u.interests || []).some(cat => categorySet.has(cat)));
+        }
+        filteredCount = inCircle.length;
+      } else {
+        // Sin filtro por ubicación → mismo count query que antes (solo
+        // intereses).
+        let interestedQuery = supabase
+          .from('users')
+          .select('id', { count: 'exact', head: true })
+          .neq('id', userId)
+          .overlaps('interests', categories);
+        if (excludedMemberIds.length) interestedQuery = interestedQuery.not('id', 'in', `(${excludedMemberIds.join(',')})`);
+        const { count: interestedCount, error: interestedErr } = await interestedQuery;
+        if (interestedErr) throw interestedErr;
+        filteredCount = interestedCount || 0;
+      }
+
+      if (filteredCount < NOTIF_MIN) {
+        const filterLabels = [];
+        if (resolvedInterestedOnly) filterLabels.push('intereses');
+        if (wantsLocationFilter) filterLabels.push('ubicación');
         return res.status(400).json({
-          error: `Solo hay ${interestedCount || 0} usuarios interesados disponibles, por debajo del mínimo contratable (${NOTIF_MIN}): quita el filtro para poder publicar el evento`,
+          error: `Solo hay ${filteredCount} usuarios disponibles con los filtros aplicados (${filterLabels.join(' y ')}), por debajo del mínimo contratable (${NOTIF_MIN}): amplía o quita algún filtro para poder publicar el evento`,
         });
       }
     }
@@ -643,6 +783,9 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
         promotion_plan: resolvedPlan,
         notification_count: resolvedNotificationCount,
         audience_interested_only: resolvedInterestedOnly,
+        audience_center_lat: resolvedCenterLat,
+        audience_center_lng: resolvedCenterLng,
+        audience_radius_km: resolvedRadiusKm,
       })
       .select()
       .single();

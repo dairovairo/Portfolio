@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
+import AudienceCircleMap from '../components/AudienceCircleMap';
 
 // ── Configuración de publicidad de un evento Premium / Ultra ──────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -67,7 +68,12 @@ const PLAN_META = {
   },
 };
 
-function buildEventFormData(draft, plan, notificationCount) {
+function buildEventFormData(draft, plan, notificationCount, options = {}) {
+  const {
+    interestedOnly = false,
+    locationFilter = null, // { centerLat, centerLng, radiusKm } | null
+  } = options;
+
   const formData = new FormData();
   // Copiamos todo el draft salvo los metadatos internos y la portada, que
   // van aparte. `custom_category` ya está resuelta dentro de `categories`.
@@ -97,6 +103,18 @@ function buildEventFormData(draft, plan, notificationCount) {
   // comunidad. Se valida además en el propio POST /events (server), y la
   // guarda en useEffect de más abajo hace kick-out si el draft llegara sin él.
   formData.append('community_id', draft.communityId);
+
+  // Fase 105: filtro duro de intereses (opcional, solo Premium/Ultra).
+  if (interestedOnly) formData.append('audience_interested_only', 'true');
+
+  // Fase 110: filtro duro por ubicación (opcional, solo Premium/Ultra).
+  // El servidor exige los tres campos o ninguno.
+  if (locationFilter) {
+    formData.append('audience_center_lat', String(locationFilter.centerLat));
+    formData.append('audience_center_lng', String(locationFilter.centerLng));
+    formData.append('audience_radius_km',  String(locationFilter.radiusKm));
+  }
+
   if (draft.cover_file) formData.append('cover', draft.cover_file);
 
   return formData;
@@ -136,6 +154,25 @@ export default function EventAdConfigPage() {
   const [interested, setInterested] = useState(null);
   const [categoriesDefined, setCategoriesDefined] = useState(null);
 
+  // Fase 110: filtro por ubicación — círculo alrededor del punto del
+  // evento (draft.lat/draft.lng). Se activa/desactiva con el toggle; el
+  // radio (radiusKm) se ajusta con el slider y se debouncea a la hora de
+  // recontar audiencia para no saturar el endpoint mientras se arrastra.
+  //
+  // `nearby` es el conteo sin cruzar con intereses; `interestedNearby` es
+  // el cruce ambos-filtros — solo se calcula si además filterInterested
+  // está activo. Igual que interested, si el evento no trae lat/lng
+  // válidos (no debería pasar en el flujo normal pero por seguridad), el
+  // filtro no se puede activar.
+  const DEFAULT_RADIUS_KM = 25;
+  const canFilterLocation = draft?.lat != null && draft?.lng != null;
+  const [filterLocation, setFilterLocation] = useState(false);
+  const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
+  const [nearby, setNearby] = useState(null);
+  const [interestedNearby, setInterestedNearby] = useState(null);
+  const [loadingNearby, setLoadingNearby] = useState(false);
+  const nearbyDebounceRef = useRef(null);
+
   // Sin borrador (p. ej. recarga directa aquí) no hay nada que configurar
   // y volvemos al menú de comunidad. Igual si el borrador llegó sin
   // communityId — desde fase 108 los eventos deben pertenecer a una
@@ -174,29 +211,62 @@ export default function EventAdConfigPage() {
     if (draft?.communityId) loadTotal();
   }, [draft, loadTotal]);
 
-  // La audiencia realmente contratable ahora mismo: si el filtro de
-  // intereses está activo (y hay categorías con las que cruzar), el máximo
-  // pasa a ser el nº de interesados; si no, el total notificable. El
-  // Audiencia efectiva: si el filtro está activo (y hay categorías con
-  // las que cruzar), pasa a ser el nº de interesados; si no, el total
-  // notificable. Se usa SOLO para informar (banner ámbar bajo el slider);
-  // NO se usa para topar el máximo del slider — la empresa puede
-  // contratar hasta NOTIF_MAX aunque el pool sea menor. El pacing solo
-  // enviará las notificaciones que quepan y no se cobrará por el resto
-  // (ver eventPromoPacing.js).
-  const audienceCap = filterInterested
-    ? (categoriesDefined === false ? 0 : interested)
-    : total;
-  const audienceReady = audienceCap != null && !loadingInterested;
+  // Fase 110: recontar `nearby` cada vez que cambian los inputs (radio,
+  // toggle de ubicación, toggle de intereses) con 300 ms de debounce
+  // para el arrastre del slider. Si el filtro está desactivado, dejamos
+  // los conteos en null (nada que mostrar). Si además el filtro de
+  // intereses está activo, la misma llamada devuelve
+  // `interested_nearby` = intersección de ambos filtros.
+  useEffect(() => {
+    if (nearbyDebounceRef.current) clearTimeout(nearbyDebounceRef.current);
+    if (!filterLocation || !canFilterLocation || !draft?.communityId) {
+      setNearby(null);
+      setInterestedNearby(null);
+      return;
+    }
+    nearbyDebounceRef.current = setTimeout(async () => {
+      setLoadingNearby(true);
+      try {
+        const params = new URLSearchParams({
+          community_id: draft.communityId,
+          center_lat: String(draft.lat),
+          center_lng: String(draft.lng),
+          radius_km: String(radiusKm),
+        });
+        if (filterInterested && draftCategories.length) {
+          params.set('filter', 'interested');
+          params.set('categories', JSON.stringify(draftCategories));
+        }
+        const data = await api.get(`/community/events/promotion-audience?${params.toString()}`);
+        setNearby(data?.nearby ?? 0);
+        setInterestedNearby(data?.interested_nearby ?? null);
+      } catch (e) {
+        showToast(e.message || 'No se pudo calcular audiencia por ubicación', 'error');
+      } finally {
+        setLoadingNearby(false);
+      }
+    }, 300);
+    return () => { if (nearbyDebounceRef.current) clearTimeout(nearbyDebounceRef.current); };
+  }, [filterLocation, radiusKm, filterInterested, canFilterLocation, draft, draftCategories, showToast]);
+
+  // Audiencia efectiva teniendo en cuenta filtros activos. Si están los
+  // dos (intereses + ubicación), gana la intersección. Si solo uno, ese.
+  // Si ninguno, el total notificable.
+  const audienceCap = filterLocation && filterInterested
+    ? (categoriesDefined === false ? 0 : interestedNearby)
+    : filterLocation
+      ? nearby
+      : filterInterested
+        ? (categoriesDefined === false ? 0 : interested)
+        : total;
+  const audienceReady = audienceCap != null && !loadingInterested && !loadingNearby;
   const contractedExceedsAudience = audienceReady && notificationCount > audienceCap;
 
-  // Con el filtro de intereses activado, si el pool resultante no llega al
-  // mínimo contratable (NOTIF_MIN) bloqueamos la publicación y ocultamos
-  // el slider. SIN filtro, dejamos publicar el evento igualmente aunque el
-  // total de usuarios notificables todavía no llegue a NOTIF_MIN (fase de
-  // crecimiento con pocos usuarios) — el slider sigue apareciendo y no se
-  // bloquea, para no frenar la adopción temprana de la app.
-  const blockedByFilterShortfall = filterInterested && audienceReady && audienceCap < NOTIF_MIN;
+  // Con cualquier filtro DURO activo (intereses o ubicación), si el pool
+  // resultante no llega al mínimo contratable (NOTIF_MIN) bloqueamos la
+  // publicación y ocultamos el slider. SIN filtros duros, dejamos publicar
+  // aunque el pool no llegue (fase de crecimiento con pocos usuarios).
+  const blockedByFilterShortfall = (filterInterested || filterLocation) && audienceReady && audienceCap < NOTIF_MIN;
 
   async function handleToggleInterested() {
     const next = !filterInterested;
@@ -244,13 +314,15 @@ export default function EventAdConfigPage() {
     setSaving(true);
     setError('');
     try {
-      const formData = buildEventFormData(draft, plan, notificationCount);
-      // Fase 106: si el usuario activó el filtro de intereses, lo
-      // mandamos al servidor para que el pacing solo notifique a quienes
-      // tengan intereses coincidentes con el evento (users.interests ∩
-      // event.categories). Sin filtro, se manda a todo el pool como
-      // hasta ahora.
-      if (filterInterested) formData.append('audience_interested_only', 'true');
+      const formData = buildEventFormData(draft, plan, notificationCount, {
+        // Fase 106: filtro duro de intereses (solo Premium/Ultra).
+        interestedOnly: filterInterested,
+        // Fase 110: filtro duro por ubicación — círculo alrededor de la
+        // ubicación del evento con el radio elegido.
+        locationFilter: filterLocation && canFilterLocation
+          ? { centerLat: draft.lat, centerLng: draft.lng, radiusKm }
+          : null,
+      });
       await api.postForm('/community/events', formData);
       showToast('¡Evento creado! 🌐', 'success');
       navigate(backTarget, { replace: true });
@@ -451,6 +523,89 @@ export default function EventAdConfigPage() {
           )}
         </div>
 
+        {/* ── Filtro por ubicación (fase 110) ────────────────────────────
+            Círculo alrededor del punto del evento (draft.lat/lng). El
+            slider ajusta el radio de 1 a 500 km; el mapa se redibuja
+            en directo. Al activarse (o al mover el slider), se pide al
+            servidor cuántos usuarios notificables tienen home_lat/lng
+            dentro del círculo (y, si además hay filtro de intereses,
+            cuántos cumplen ambas cosas). El slider general se recalcula
+            con este número como techo. */}
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-display font-bold text-surface-text">📍 Filtrar por ubicación</p>
+              <p className="text-[11px] text-surface-muted mt-0.5 leading-relaxed">
+                {canFilterLocation
+                  ? 'Contrata solo entre los notificables que viven cerca del evento.'
+                  : 'El evento no tiene ubicación asignada, vuelve al paso anterior para ponerla.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={filterLocation}
+              onClick={() => canFilterLocation && setFilterLocation(v => !v)}
+              disabled={!canFilterLocation || loadingTotal || !!loadError}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full flex-shrink-0 transition-colors disabled:opacity-40 focus:outline-none ${
+                filterLocation
+                  ? (plan === 'ultra' ? 'bg-yellow-400' : 'bg-purple-500')
+                  : 'bg-surface-bg border border-surface-border'
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform ${
+                  filterLocation ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {filterLocation && canFilterLocation && (
+            <div className="space-y-3 border-t border-surface-border/60 pt-3">
+              <AudienceCircleMap
+                centerLat={draft.lat}
+                centerLng={draft.lng}
+                radiusKm={radiusKm}
+              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={500}
+                  step={1}
+                  value={radiusKm}
+                  onChange={(e) => setRadiusKm(Number(e.target.value))}
+                  className={`flex-1 accent-green-500`}
+                  aria-label="Radio en kilómetros"
+                />
+                <span className="text-xs font-mono text-surface-muted w-16 text-right">
+                  {radiusKm} km
+                </span>
+              </div>
+              <div className="text-center py-1">
+                {loadingNearby ? (
+                  <span className={`w-5 h-5 border-2 border-t-transparent rounded-full animate-spin inline-block ${plan === 'ultra' ? 'border-yellow-400' : 'border-purple-400'}`} />
+                ) : (
+                  <>
+                    <p className={`font-display font-bold text-2xl ${plan === 'ultra' ? 'text-yellow-300' : 'text-purple-300'}`}>
+                      {Number(
+                        filterInterested && interestedNearby != null ? interestedNearby : (nearby ?? 0)
+                      ).toLocaleString('es-ES')}
+                    </p>
+                    <p className="text-[11px] text-surface-muted mt-1">
+                      {filterInterested && interestedNearby != null
+                        ? `interesados cerca (radio ${radiusKm} km, cruce ambos filtros)`
+                        : `notificables en un radio de ${radiusKm} km`}
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Notificaciones a contratar — siempre operativo 500–50.000.
             Si la audiencia efectiva (con o sin filtro de intereses) queda
             por debajo de lo contratado, se avisa con banner ámbar; solo
@@ -493,7 +648,12 @@ export default function EventAdConfigPage() {
 
           {contractedExceedsAudience && (
             <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 leading-relaxed">
-              ⚠️ Solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios {filterInterested ? 'interesados' : 'notificables'}: se enviarán como mucho {Number(audienceCap).toLocaleString('es-ES')} notificaciones, y no se cobrará por el resto.
+              ⚠️ Solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios {
+                filterInterested && filterLocation ? 'interesados cerca'
+                : filterInterested ? 'interesados'
+                : filterLocation ? 'cerca'
+                : 'notificables'
+              }: se enviarán como mucho {Number(audienceCap).toLocaleString('es-ES')} notificaciones, y no se cobrará por el resto.
             </p>
           )}
 

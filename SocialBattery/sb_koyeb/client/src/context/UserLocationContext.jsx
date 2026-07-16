@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { api } from '../lib/api';
 
 // ── Ubicación del usuario (geolocalización del navegador) ─────────────────────
 // Se usa para ordenar/filtrar eventos por cercanía en CommunityPage. El
@@ -13,6 +14,13 @@ import { createContext, useContext, useState, useCallback, useRef } from 'react'
 //
 // La última posición conocida se cachea en localStorage para no depender de
 // que el navegador resuelva la geolocalización al instante en cada carga.
+//
+// Fase 110: cada vez que el navegador devuelve coords válidas (`granted`),
+// se reportan al servidor con POST /users/me/report-location, que actualiza
+// users.home_lat/home_lng con la regla de "doble confirmación de sitio
+// nuevo" (ver server/lib/homeLocation.js). Los errores del reporte se
+// tragan silenciosamente — la funcionalidad principal del contexto sigue
+// operando aunque el reporte falle (no bloqueamos la UI por esto).
 
 const UserLocationContext = createContext(null);
 
@@ -47,6 +55,10 @@ export function UserLocationProvider({ children }) {
         setCoords(next);
         setStatus('granted');
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+        // Fase 110: reportar al servidor para actualizar users.home_lat/lng
+        // según la regla de doble confirmación. Fire-and-forget — no
+        // afectamos a la UI si falla, la ubicación local sigue disponible.
+        api.post('/users/me/report-location', next).catch(() => {});
       },
       (err) => {
         const denied = err?.code === 1; /* PERMISSION_DENIED */

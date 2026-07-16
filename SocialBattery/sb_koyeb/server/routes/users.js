@@ -293,4 +293,81 @@ router.patch('/me', requireAuth, async (req, res) => {
   res.json({ user: applyBatteryExpiry(data) });
 });
 
+// ── POST /api/users/me/report-location ────────────────────────────────
+// Fase 110: recibe {lat, lng} del navegador (UserLocationContext los pide
+// al arrancar la app) y actualiza users.home_lat/home_lng con la regla de
+// "doble confirmación de sitio nuevo" para que el home refleje dónde vive
+// el usuario, no dónde abrió la app hoy. Toda la lógica de decisión está
+// en lib/homeLocation.js y cubierta por tests unitarios; aquí sólo hay
+// I/O.
+router.post('/me/report-location', requireAuth, async (req, res) => {
+  const { resolveHomeLocationUpdate } = require('../lib/homeLocation');
+  const { lat, lng } = req.body || {};
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return res.status(400).json({ error: 'lat/lng deben ser numéricos' });
+  }
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return res.status(400).json({ error: 'lat/lng fuera de rango WGS-84' });
+  }
+  try {
+    const { data: user, error: userErr } = await supabase
+      .from('users')
+      .select('home_lat, home_lng, pending_home_lat, pending_home_lng')
+      .eq('id', req.user.id)
+      .single();
+    if (userErr) throw userErr;
+
+    const current = user?.home_lat != null && user?.home_lng != null
+      ? { lat: Number(user.home_lat), lng: Number(user.home_lng) }
+      : null;
+    const pending = user?.pending_home_lat != null && user?.pending_home_lng != null
+      ? { lat: Number(user.pending_home_lat), lng: Number(user.pending_home_lng) }
+      : null;
+
+    const result = resolveHomeLocationUpdate({ current, pending, incoming: { lat, lng } });
+    const now = new Date().toISOString();
+    const updates = {};
+
+    // El home se toca si cambia (set_home, promote_pending_to_home) o si
+    // se confirma (queremos actualizar home_updated_at para saber "última
+    // vez visto ahí"). En confirm/discard el lat/lng no cambian.
+    if (result.change === 'set_home' || result.change === 'promote_pending_to_home') {
+      updates.home_lat = result.home.lat;
+      updates.home_lng = result.home.lng;
+      updates.home_updated_at = now;
+    } else if (result.change === 'confirm_home' || result.change === 'confirm_home_discard_pending') {
+      updates.home_updated_at = now;
+    }
+
+    if (result.pending) {
+      updates.pending_home_lat = result.pending.lat;
+      updates.pending_home_lng = result.pending.lng;
+      updates.pending_home_seen_at = now;
+    } else if (
+      result.change === 'promote_pending_to_home' ||
+      result.change === 'confirm_home_discard_pending' ||
+      result.change === 'confirm_home'
+    ) {
+      // Limpiar cualquier pending previo (aunque no lo había en confirm_home,
+      // el UPDATE con NULL es idempotente).
+      updates.pending_home_lat = null;
+      updates.pending_home_lng = null;
+      updates.pending_home_seen_at = null;
+    }
+
+    if (Object.keys(updates).length) {
+      const { error: updateErr } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', req.user.id);
+      if (updateErr) throw updateErr;
+    }
+
+    res.json({ change: result.change });
+  } catch (err) {
+    console.error('[users] POST /me/report-location error:', err);
+    res.status(500).json({ error: 'Error al registrar ubicación' });
+  }
+});
+
 module.exports = router;
