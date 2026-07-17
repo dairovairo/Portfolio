@@ -94,7 +94,28 @@ export function AuthProvider({ children }) {
   }, [session]);
 
   const signUp = async (email, password) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    // El link de confirmación de correo lo genera Supabase a partir de la
+    // "Site URL" configurada en su dashboard. Si esa Site URL se queda
+    // apuntando al dominio viejo (ha pasado ya al mover el proyecto a
+    // socialbattery.pro), el email lleva al usuario al frontend antiguo,
+    // que ya no tiene un backend accesible → el fetch a /auth/me falla
+    // sin llegar a hacer round-trip y salta "No se pudo conectar con el
+    // servidor" en móviles (en PC no se nota porque el usuario suele
+    // volver a la pestaña ya activa donde había hecho el signUp).
+    //
+    // Pasando emailRedirectTo desde el cliente, el link del email vuelve
+    // SIEMPRE al mismo origen desde el que se hizo el registro — con
+    // independencia de lo que ponga la Site URL. Es la manera de
+    // blindarnos ante futuros cambios de dominio: la config de Supabase
+    // seguirá siendo importante (Redirect URLs debe permitir este origen)
+    // pero deja de ser la única fuente de verdad. window.location.origin
+    // es el protocolo + host + puerto actual — exactamente el dominio que
+    // el usuario está viendo.
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin },
+    });
     if (error) {
       if (/already|registered|exists/i.test(error.message || '')) {
         throw new Error('Esta cuenta ya pertenece a un usuario');
