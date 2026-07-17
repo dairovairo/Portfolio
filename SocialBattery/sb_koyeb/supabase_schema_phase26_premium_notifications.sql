@@ -1,0 +1,27 @@
+-- Phase 26: Premium Promotion – global push notifications + sorting clarification
+-- ============================================================================
+-- No schema changes required for this phase.
+-- All changes are in server logic (routes/community.js) and the Service Worker.
+--
+-- Summary of behaviour after this phase:
+--
+--  Promotion plan | "Selección de app" rank | Push notification audience
+--  ───────────────┼─────────────────────────┼──────────────────────────────────
+--  basic          | sorted by likes+plans    | Community members only (if event
+--                 | (no tier boost)          | belongs to a community)
+--  premium        | TIER 1 – floats above    | ALL users with an active push
+--                 | basic events; tiebreaker | subscription (tag: premium-event-*)
+--                 | = likes + planificaciones | Standard notification treatment
+--  ultra          | TIER 2 – floats above    | ALL users with an active push
+--                 | premium & basic; same    | subscription (tag: ultra-event-*)
+--                 | tiebreaker               | requireInteraction=true + strong
+--                 |                          | vibration pattern
+--
+-- Service Worker (sw.js) update:
+--   · ultra-event-*   → requireInteraction:true, vibrate:[200,100,200,100,400]
+--   · premium-event-* → requireInteraction:false, vibrate:[150,80,150]
+--   · community-event / other → vibrate:[100]
+--   Cache bumped from v9 → v10 so updated SW is picked up automatically.
+--
+-- This file is intentionally a no-op SQL migration; run it to record the phase.
+SELECT 1;
