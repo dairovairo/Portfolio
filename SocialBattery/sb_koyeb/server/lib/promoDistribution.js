@@ -116,7 +116,32 @@ function assignCandidatesBidirectional({ candidates, eventMetas, interestsByUser
   return stillAvailable;
 }
 
+/**
+ * Fase 111 — Construye el clasificador de segmento que dispatchToEvent
+ * congela en event_promo_notifications.matched_interest.
+ *
+ * Devuelve null (= "este evento no es clasificable") si el evento no tiene
+ * categorías: sin categorías no hay nada que cruzar y etiquetar false sería
+ * mentir — el usuario no es que NO estuviera interesado, es que la pregunta
+ * no se puede formular. Lo mismo si el candidato no aparece en
+ * interestsByUser (la carga paginada se cortó por error): se prefiere NULL,
+ * "no lo sé", a un false inventado que ensuciaría el CTR por segmento.
+ *
+ * Un usuario con intereses cargados pero vacíos SÍ es un false legítimo: la
+ * pregunta se puede formular y la respuesta es que no coincide.
+ */
+function makeInterestClassifier(eventCategories, interestsByUser) {
+  if (!eventCategories?.size) return null;
+  return (userId) => {
+    const userInterests = interestsByUser.get(userId);
+    if (!userInterests) return null;
+    for (const cat of userInterests) if (eventCategories.has(cat)) return true;
+    return false;
+  };
+}
+
 module.exports = {
   pickRaffleFromRatioGroups,
   assignCandidatesBidirectional,
+  makeInterestClassifier,
 };

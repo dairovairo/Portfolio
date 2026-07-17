@@ -100,7 +100,7 @@ const { sendPushToSubscription } = require('../lib/webpush');
 const { getNotificationDayKey } = require('../lib/notificationDay');
 const { INSTANCE_ID } = require('../lib/instanceId');
 const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
-const { assignCandidatesBidirectional } = require('../lib/promoDistribution');
+const { assignCandidatesBidirectional, makeInterestClassifier } = require('../lib/promoDistribution');
 
 const FREE_THRESHOLD = 200;          // umbral mínimo de cobro — SOLO usado por community.js para bloqueo de renovación, no para pacing
 const BASE_CHUNK_PER_TICK = 50;      // cupo máximo que puede recibir un evento por tick
@@ -144,19 +144,26 @@ async function fetchEligiblePool(excludeUserIds) {
   return shuffle([...usersMap.values()]);
 }
 
+// ?src=promo — marca de atribución (fase 111). EventDetailPage la ve al
+// abrirse y registra el click contra event_promo_notifications (POST
+// /events/:id/ad-click), que es lo que alimenta el CTR del dashboard de
+// publicidad. Sin ella no se puede distinguir "abrió el evento desde la
+// notificación que le costó dinero al organizador" de "lo encontró
+// navegando". El aviso a miembros de la comunidad usa ?src=community (ver
+// POST /events en routes/community.js) para poder separar los dos flujos.
 function buildPayload(event) {
   if (event.promotion_plan === 'ultra') {
     return {
       title: '🚀 Evento destacado: ' + event.title,
       body:  `${event.location ? event.location + ' · ' : ''}¡No te lo pierdas!`,
-      url:   `/community/event/${event.id}`,
+      url:   `/community/event/${event.id}?src=promo`,
       tag:   `ultra-event-${event.id}`,
     };
   }
   return {
     title: '⚡ Nuevo evento Premium: ' + event.title,
     body:  `${event.location ? event.location + ' · ' : ''}¡Échale un vistazo!`,
-    url:   `/community/event/${event.id}`,
+    url:   `/community/event/${event.id}?src=promo`,
     tag:   `premium-event-${event.id}`,
   };
 }
@@ -217,8 +224,17 @@ async function releaseUnusedClaims(userIds, dayKey) {
  * se envía a quien gana la reserva), registra el envío en
  * event_promo_notifications y actualiza notification_sent_count del
  * evento con un incremento atómico en BD.
+ *
+ * Fase 111 — `isInterested` (opcional) clasifica cada envío por segmento:
+ * recibe un userId y devuelve true/false si se puede decidir, o null si no
+ * (evento sin categorías → nada con lo que cruzar). El resultado se congela
+ * en event_promo_notifications.matched_interest, porque los intereses del
+ * perfil cambian con el tiempo y a posteriori ya no se sabría a quién se le
+ * envió siendo qué. Es lo que permite al dashboard comparar el CTR de
+ * interesados vs no interesados en eventos SIN filtro duro — y por tanto
+ * responder a "¿me compensa pagar por audience_interested_only?".
  */
-async function dispatchToEvent(event, users, dayKey) {
+async function dispatchToEvent(event, users, dayKey, isInterested = null) {
   if (!users.length) return 0;
 
   // 1) Reservar el hueco del día ANTES de enviar nada: así, aunque haya
@@ -270,7 +286,12 @@ async function dispatchToEvent(event, users, dayKey) {
   const { error: logError } = await supabase
     .from('event_promo_notifications')
     .upsert(
-      successfulUserIds.map(userId => ({ event_id: event.id, user_id: userId })),
+      successfulUserIds.map(userId => ({
+        event_id: event.id,
+        user_id: userId,
+        source: 'promo',
+        matched_interest: isInterested ? isInterested(userId) : null,
+      })),
       { onConflict: 'event_id,user_id', ignoreDuplicates: true }
     );
   if (logError) {
@@ -571,7 +592,7 @@ async function runEventPromoPacingTick() {
 
       const groupAssignments = eventMeta
         .filter(meta => meta.chosen.length)
-        .map(meta => ({ event: meta.event, users: meta.chosen }));
+        .map(meta => ({ event: meta.event, users: meta.chosen, eventCategories: meta.eventCategories }));
 
       if (groupAssignments.length) {
         // El grupo consumió pool → este tick termina aquí. El resto de
@@ -585,8 +606,8 @@ async function runEventPromoPacingTick() {
     const assignments = allAssignments;
 
     // 8. Ejecutar envíos
-    for (const { event, users } of assignments) {
-      await dispatchToEvent(event, users, dayKey);
+    for (const { event, users, eventCategories } of assignments) {
+      await dispatchToEvent(event, users, dayKey, makeInterestClassifier(eventCategories, interestsByUser));
     }
   } catch (err) {
     console.error('[PROMO-PACING] runEventPromoPacingTick error:', err);

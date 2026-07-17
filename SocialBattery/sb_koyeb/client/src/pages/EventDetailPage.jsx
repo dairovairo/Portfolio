@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
@@ -648,6 +648,7 @@ function EndPromotionModal({ event, onClose, onEnded }) {
 export default function EventDetailPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isConversationMuted, setConversationMuted } = useSettings();
@@ -688,6 +689,30 @@ export default function EventDetailPage() {
   useEffect(() => {
     setUpdatesMuted(isConversationMuted('event', eventId));
   }, [eventId, isConversationMuted]);
+
+  // ── Atribución de click publicitario (fase 111) ────────────────────────────
+  // Las notificaciones de evento llegan con una marca en la URL: ?src=promo
+  // (push publicitario del pacing, el que cuesta dinero al organizador) o
+  // ?src=community (aviso a los miembros de la comunidad). Si está presente,
+  // se avisa al servidor de que este usuario abrió el evento DESDE la
+  // notificación — es lo que alimenta el CTR del dashboard de publicidad.
+  //
+  // El servidor solo marca la fila si a este usuario se le envió realmente
+  // esa notificación, así que reenviar el enlace a un amigo no infla nada.
+  // Después se limpia el parámetro de la URL (replace: true, sin entrada
+  // nueva en el historial) por dos motivos: que el "atrás" no vuelva a pasar
+  // por aquí, y que si el usuario comparte lo que ve en la barra de
+  // direcciones no propague una marca de atribución que no es suya.
+  useEffect(() => {
+    const src = searchParams.get('src');
+    if (!src || !eventId) return;
+
+    api.post(`/community/events/${eventId}/ad-click`, {}).catch(() => {});
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('src');
+    setSearchParams(next, { replace: true });
+  }, [eventId, searchParams, setSearchParams]);
 
   const handleToggleUpdatesMute = () => {
     const next = !updatesMuted;

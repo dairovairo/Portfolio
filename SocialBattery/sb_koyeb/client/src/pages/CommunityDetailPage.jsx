@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import LocationPicker from '../components/LocationPicker';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
@@ -1980,6 +1980,7 @@ export default function CommunityDetailPage() {
   const { communityId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { clearCommunityBadge, communitiesWithEvents } = useCommunityNotifications();
@@ -2027,6 +2028,29 @@ export default function CommunityDetailPage() {
     const t = setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400/70'), 2200);
     return () => clearTimeout(t);
   }, [raffles, location.hash]);
+
+  // ── Atribución de click de sorteo (fase 111) ───────────────────────────────
+  // El push de "nuevo sorteo" llega a /community/<id>?src=raffle#raffle-<id>.
+  // La avioneta ya registra su propio click al tocarla (ver
+  // RaffleBannerFlyover); esto cubre el otro camino, el de quien llega desde
+  // la notificación. El id del sorteo sale del hash, que es lo que ya usaba
+  // el deep-link de arriba.
+  //
+  // No depende de que los sorteos estén cargados: el click es del usuario,
+  // no de la tarjeta, y el servidor solo lo cuenta si a este usuario le
+  // tocaba ese banner. Se limpia el ?src= al terminar para que un refresco o
+  // un "atrás" no vuelvan a dispararlo (aunque el servidor solo cuenta el
+  // primero, no tiene sentido repetir la petición).
+  useEffect(() => {
+    if (searchParams.get('src') !== 'raffle') return;
+    const raffleId = location.hash?.startsWith('#raffle-') ? location.hash.slice('#raffle-'.length) : null;
+    if (raffleId) {
+      api.post(`/community/raffles/${raffleId}/banner-click`, {}).catch(() => {});
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('src');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, location.hash]);
 
   const loadPosts = useCallback(async () => {
     try {
@@ -2317,7 +2341,23 @@ export default function CommunityDetailPage() {
               {emoji}
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="font-display font-bold text-surface-text text-lg truncate">{community.name}</h1>
+              {/* El nombre no llena el ancho de la tarjeta salvo que sea muy
+                  largo: ese hueco a su derecha es donde vive el acceso al
+                  dashboard de publicidad, solo para el creador. El h1 sigue
+                  con min-w-0 + truncate, así que un nombre kilométrico se
+                  corta en vez de empujar al botón fuera de la tarjeta. */}
+              <div className="flex items-start gap-2">
+                <h1 className="font-display font-bold text-surface-text text-lg truncate min-w-0">{community.name}</h1>
+                {community.creator_id === profile?.id && (
+                  <button
+                    onClick={() => navigate(`/community/${communityId}/dashboard`)}
+                    title="Dashboard de publicidad"
+                    className="flex-shrink-0 flex items-center gap-1 text-[11px] font-display font-semibold px-2 py-1 rounded-lg bg-accent-primary/15 text-accent-glow border border-accent-primary/25 hover:bg-accent-primary/25 hover:border-accent-primary/40 transition-colors"
+                  >
+                    <span>📊</span> Dashboard
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2 flex-wrap mt-1.5">
                 {communityCategories.map(cat => (
                   <span

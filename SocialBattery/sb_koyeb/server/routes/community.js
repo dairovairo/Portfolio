@@ -840,17 +840,28 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           const notifiedUserIds = await notifyUsers(supabase, pushMemberIds, userId, {
             title: `📅 Nuevo evento ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
-            url:   `/community/event/${event.id}`,
+            url:   `/community/event/${event.id}?src=community`,
             tag:   `community-event-${event.id}`,
           });
 
           console.log(`[NOTIF-CAP] evento ${event.id}: push de comunidad entregado a ${notifiedUserIds?.length || 0}/${communityMemberIds.length} miembros.`);
 
           if (notifiedUserIds?.length) {
+            // Fase 111 — se etiqueta la fila con source='community' (este
+            // aviso NO consume cupo contratado, a diferencia de los envíos
+            // del pacing, que van con source='promo') y con si el miembro
+            // era o no "interesado" en el momento del envío. Sin lo primero
+            // el total de la tabla nunca cuadraría con notification_sent_count.
+            const interestedIds = await getInterestedUserIdSet(event.categories);
             const { error: logError } = await supabase
               .from('event_promo_notifications')
               .upsert(
-                notifiedUserIds.map(uid => ({ event_id: event.id, user_id: uid })),
+                notifiedUserIds.map(uid => ({
+                  event_id: event.id,
+                  user_id: uid,
+                  source: 'community',
+                  matched_interest: interestedIds ? interestedIds.has(uid) : null,
+                })),
                 { onConflict: 'event_id,user_id', ignoreDuplicates: true }
               );
             if (logError) {
@@ -956,7 +967,9 @@ router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
   try {
     const { data: event, error: eventError } = await supabase
       .from('community_events')
-      .select('id, title, location, creator_id, community_id, event_date, ends_at, promotion_plan, notification_sent_count')
+      // categories: necesario para clasificar el aviso de comunidad por
+      // intereses al re-notificar (fase 111, ver más abajo).
+      .select('id, title, location, creator_id, community_id, event_date, ends_at, promotion_plan, notification_sent_count, categories')
       .eq('id', id)
       .single();
 
@@ -1019,17 +1032,28 @@ router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
           const notifiedUserIds = await notifyUsers(supabase, pushMemberIds, userId, {
             title: `📅 Evento renovado ${communityLabel}`,
             body:  `${event.title}${event.location ? ` · ${event.location}` : ''}`,
-            url:   `/community/event/${event.id}`,
+            url:   `/community/event/${event.id}?src=community`,
             tag:   `community-event-${event.id}`,
           });
 
           console.log(`[NOTIF-CAP] renovación evento ${event.id}: push de comunidad entregado a ${notifiedUserIds?.length || 0}/${communityMemberIds.length} miembros.`);
 
           if (notifiedUserIds?.length) {
+            // Fase 111 — mismo etiquetado que en POST /events. Aquí el
+            // historial de event_promo_notifications se acaba de borrar
+            // (nuevo ciclo de promoción), así que estas filas arrancan
+            // limpias: los clicks del ciclo anterior no se arrastran al
+            // nuevo, que es justo lo que se quiere para comparar campañas.
+            const interestedIds = await getInterestedUserIdSet(event.categories);
             const { error: logError } = await supabase
               .from('event_promo_notifications')
               .upsert(
-                notifiedUserIds.map(uid => ({ event_id: event.id, user_id: uid })),
+                notifiedUserIds.map(uid => ({
+                  event_id: event.id,
+                  user_id: uid,
+                  source: 'community',
+                  matched_interest: interestedIds ? interestedIds.has(uid) : null,
+                })),
                 { onConflict: 'event_id,user_id', ignoreDuplicates: true }
               );
             if (logError) {
@@ -3403,6 +3427,31 @@ async function getCategoryMatchingUserIds(userIds, categories) {
   return new Set((data || []).map(u => u.id));
 }
 
+// Fase 111 — Igual que getCategoryMatchingUserIds pero SIN acotar a una
+// lista previa de userIds: devuelve el Set de TODOS los usuarios de la app
+// cuyos intereses cruzan con las categorías dadas. Se usa para etiquetar
+// matched_interest en el momento del envío/asignación (ver el dashboard de
+// publicidad), donde el conjunto a clasificar puede ser enorme: un sorteo
+// Volt asigna un target por cada usuario de la app, y meter 100.000 UUIDs
+// en un .in() significa una URL de varios MB que PostgREST rechaza. Aquí
+// se hace UNA consulta con overlaps (que aprovecha el índice sobre
+// interests) y la intersección se resuelve en memoria contra el Set.
+//
+// Devuelve null — no un Set vacío — si no hay categorías con las que
+// cruzar: son casos distintos y el dashboard los trata distinto. Set vacío
+// = "clasificado, no coincide nadie" (matched_interest = false para todos);
+// null = "no clasificable" (matched_interest se queda NULL).
+async function getInterestedUserIdSet(categories) {
+  const cats = (categories || []).filter(Boolean);
+  if (!cats.length) return null;
+  const { data, error } = await supabase
+    .from('users')
+    .select('id')
+    .overlaps('interests', cats);
+  if (error) throw error;
+  return new Set((data || []).map(u => u.id));
+}
+
 // ── Reparto del banner volador (avioneta con pancarta "¡Sorteo nuevo!") ────
 // Aplica a los tiers 'light', 'volt' y 'community' (los que incluyen banner
 // en el menú principal, ver RAFFLE_TIER_OPTIONS en CommunityDetailPage.jsx).
@@ -3443,7 +3492,19 @@ function shuffleInPlace(arr) {
 // usuario. El resto (sin coincidencia) rellena las plazas sobrantes,
 // también en orden aleatorio. Sin priorityIds, el comportamiento es el
 // aleatorio uniforme de siempre.
-async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = null, priorityIds = null) {
+//
+// matchedIds (opcional, Set<string> | null): usuarios cuyos intereses de
+// perfil cruzan con las categorías de la comunidad, tal como estaban EN
+// ESTE MOMENTO (ver getInterestedUserIdSet). Se congela por fila en
+// raffle_banner_targets.matched_interest para que el dashboard de
+// publicidad pueda desglosar visualizaciones y clicks por segmento sin
+// recalcularlo a posteriori (los intereses del perfil cambian con el
+// tiempo; lo que importa es a quién se le enseñó el banner cuando se le
+// enseñó). Con null se deja matched_interest a NULL = "no clasificable"
+// (comunidad sin categorías definidas). Ojo: no confundir con priorityIds
+// — priorityIds ORDENA el reparto, matchedIds solo lo ETIQUETA. Suelen
+// coincidir en Light sin filtro, pero son cosas independientes.
+async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = null, priorityIds = null, matchedIds = null) {
   try {
     let candidates = pool;
     if (!candidates) {
@@ -3468,7 +3529,11 @@ async function assignRaffleBannerTargets(raffleId, creatorId, capCount, pool = n
     const targetIds = capCount != null ? candidates.slice(0, Math.min(capCount, candidates.length)) : candidates;
     if (!targetIds.length) return [];
 
-    const rows = targetIds.map(userId => ({ raffle_id: raffleId, user_id: userId }));
+    const rows = targetIds.map(userId => ({
+      raffle_id: raffleId,
+      user_id: userId,
+      matched_interest: matchedIds ? matchedIds.has(userId) : null,
+    }));
     const { error: insertErr } = await supabase.from('raffle_banner_targets').insert(rows);
     if (insertErr) throw insertErr;
     return targetIds;
@@ -3543,10 +3608,16 @@ async function notifyCommunityRaffleTargets({ raffleId, communityId, communityNa
       )
     );
 
+    // ?src=raffle — marca de atribución (fase 111). Al aterrizar en la
+    // comunidad, CommunityDetailPage ve el parámetro y registra el click
+    // contra el target de este sorteo (POST /raffles/:raffleId/banner-click),
+    // igual que hace la avioneta al tocarla. Sin la marca no habría forma de
+    // distinguir "entró desde el push" de "entró por su cuenta". El hash va
+    // detrás del query string, que es el orden que exige una URL válida.
     notifyUsers(supabase, recipientIds, creatorId, {
       title: `🎉 Nuevo sorteo en ${communityName || 'tu comunidad'}`,
       body:  title || 'Se ha creado un nuevo sorteo',
-      url:   `/community/${communityId}#raffle-${raffleId}`,
+      url:   `/community/${communityId}?src=raffle#raffle-${raffleId}`,
       tag:   `raffle-banner-${raffleId}`,
     }).catch(() => {});
   } catch (err) {
@@ -4125,21 +4196,28 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
 
     if (error) throw error;
 
+    // Fase 111 — foto de "quién estaba interesado" en el instante de crear
+    // el sorteo, para etiquetar cada target (ver assignRaffleBannerTargets
+    // → matched_interest y el dashboard de publicidad). Una sola consulta,
+    // compartida por los tres tiers. Si la comunidad no tiene categorías
+    // definidas devuelve null y los targets quedan sin clasificar.
+    const interestedIds = await getInterestedUserIdSet(community.categories);
+
     if (raffleTier === 'light' && resolvedBannerViews) {
-      const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews, lightAudienceIds, lightPriorityIds);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews, lightAudienceIds, lightPriorityIds, interestedIds);
       await notifyCommunityRaffleTargets({
         raffleId: data.id, communityId, communityName: community.name,
         creatorId: userId, title: data.title, tier: raffleTier, targetIds,
       });
     } else if (raffleTier === 'volt') {
-      const targetIds = await assignRaffleBannerTargets(data.id, userId, null);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, null, null, null, interestedIds);
       await notifyCommunityRaffleTargets({
         raffleId: data.id, communityId, communityName: community.name,
         creatorId: userId, title: data.title, tier: raffleTier, targetIds,
       });
     } else if (raffleTier === 'community') {
       const memberIds = await getCommunityMemberIdsForBanner(communityId, userId);
-      const targetIds = await assignRaffleBannerTargets(data.id, userId, null, memberIds);
+      const targetIds = await assignRaffleBannerTargets(data.id, userId, null, memberIds, null, interestedIds);
       // Aquí memberIds y targetIds son el mismo conjunto (el pool YA estaba
       // restringido a los miembros), así que se lo pasamos ya calculado a
       // notifyCommunityRaffleTargets para no repetir la consulta.
@@ -4422,6 +4500,370 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
 
 // ── POST /api/community/communities/:id/raffles/:raffleId/draw — sortear ───
 // Solo el creador, y solo una vez pasada la fecha de fin.
+// ══════════════════════════════════════════════════════════════════════════
+// Fase 111 — Atribución de clicks y dashboard de publicidad
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── POST /api/community/events/:id/ad-click ────────────────────────────────
+// Registra que el usuario autenticado abrió el evento DESDE una notificación
+// (push promocional del pacing con ?src=promo, o aviso de comunidad con
+// ?src=community — ver buildPayload en jobs/eventPromoPacing.js y POST
+// /events). Lo llama EventDetailPage al montarse si detecta el parámetro.
+//
+// Es idempotente y anti-inflación por construcción: solo se marca la fila
+// (event_id, user_id) que YA existe en event_promo_notifications, es decir,
+// solo si a ese usuario se le envió realmente esa notificación. Si alguien
+// se pasa el enlace con ?src=promo a un amigo, o el propio usuario recarga
+// la página cinco veces, no hay fila que marcar o ya está marcada: no suma.
+// Se cuenta el PRIMER click, no las visitas repetidas — la métrica es
+// "cuánta gente convirtió", no "cuántas veces volvió".
+router.post('/events/:id/ad-click', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: row, error } = await supabase
+      .from('event_promo_notifications')
+      .select('id, clicked_at')
+      .eq('event_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (!row || row.clicked_at) return res.json({ registered: false });
+
+    // .is('clicked_at', null) cierra la carrera entre dos peticiones
+    // simultáneas (doble tap, reintento de red): solo una gana el UPDATE y
+    // el timestamp que queda es el del primer click, no el del último.
+    const { error: updateErr } = await supabase
+      .from('event_promo_notifications')
+      .update({ clicked_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .is('clicked_at', null);
+    if (updateErr) throw updateErr;
+
+    res.json({ registered: true });
+  } catch (err) {
+    console.error('[community] POST /events/:id/ad-click', err);
+    res.status(500).json({ error: 'Error al registrar el click' });
+  }
+});
+
+// ── POST /api/community/raffles/:raffleId/banner-click ─────────────────────
+// Equivalente para sorteos: lo llama RaffleBannerFlyover al tocar la
+// avioneta, y CommunityDetailPage al aterrizar desde el push del sorteo
+// (?src=raffle). Mismas garantías que arriba: solo marca una fila que ya
+// existe en raffle_banner_targets (o sea, alguien a quien le tocó ese
+// banner) y solo la primera vez.
+//
+// Detalle importante: si el click llega desde el PUSH, puede que la avioneta
+// todavía no se le haya mostrado (shown_at NULL) — el push es inmediato y el
+// banner se sirve diferido, la próxima vez que entre al menú principal. En
+// ese caso se marca también shown_at, por dos motivos:
+//
+//   · Honestidad de la métrica: el anuncio SÍ se le mostró (como
+//     notificación). Sin esto, el CTR del dashboard (clicks/mostrados)
+//     podría pasar del 100%, que es un sinsentido.
+//   · Utilidad: consume el banner pendiente, para no cruzarle luego la
+//     avioneta de un sorteo que ya ha visitado.
+//
+// Esto NO puede inflar la facturación de un sorteo Light: el push solo se
+// manda a targets que son MIEMBROS de la comunidad (ver
+// notifyCommunityRaffleTargets), y el pool de Light excluye precisamente a
+// los miembros (getRaffleLightAudienceIds), así que la intersección es
+// vacía. Solo llega a afectar a Volt y Community, que no tienen aforo
+// contratado ni cobro por visualización.
+router.post('/raffles/:raffleId/banner-click', requireAuth, async (req, res) => {
+  const { raffleId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: row, error } = await supabase
+      .from('raffle_banner_targets')
+      .select('id, shown_at, clicked_at')
+      .eq('raffle_id', raffleId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (!row || row.clicked_at) return res.json({ registered: false });
+
+    const nowIso = new Date().toISOString();
+    const patch = { clicked_at: nowIso };
+    if (!row.shown_at) patch.shown_at = nowIso;
+
+    const { error: updateErr } = await supabase
+      .from('raffle_banner_targets')
+      .update(patch)
+      .eq('id', row.id)
+      .is('clicked_at', null);
+    if (updateErr) throw updateErr;
+
+    res.json({ registered: true });
+  } catch (err) {
+    console.error('[community] POST /raffles/:raffleId/banner-click', err);
+    res.status(500).json({ error: 'Error al registrar el click' });
+  }
+});
+
+// Traduce el error de una RPC que no existe todavía en Supabase a algo
+// accionable. Sin esto, no haber ejecutado la migración de la fase 111 se
+// manifiesta como un 500 opaco en el dashboard.
+function adStatsError(err) {
+  const code = err?.code;
+  const message = err?.message || '';
+  if (code === 'PGRST202' || /could not find the function|does not exist/i.test(message)) {
+    return new Error(
+      'Faltan las funciones de métricas en la base de datos: ejecuta supabase_schema_phase111_ad_dashboard.sql en el SQL Editor de Supabase.'
+    );
+  }
+  return err;
+}
+
+function num(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Ratio en tanto por ciento con un decimal, o null si no hay base sobre la
+// que dividir. null y 0 son cosas distintas y el cliente las pinta distinto:
+// null = "todavía no hay datos", 0 = "hubo impresiones y nadie hizo click".
+function rate(numerator, denominator) {
+  if (!denominator) return null;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+// ── GET /api/community/communities/:id/dashboard ───────────────────────────
+// Métricas de toda la publicidad de una comunidad — eventos Premium/Ultra y
+// sorteos Light/Volt/Community — en una sola respuesta. Solo para el CREADOR
+// de la comunidad: es información de negocio (a cuánta gente llegó, quién
+// picó, qué se va a cobrar), no algo que deba ver un miembro cualquiera.
+//
+// Los conteos pesados se hacen con dos RPC de agregación (fase 111): un
+// sorteo Volt tiene una fila de target por CADA usuario de la app, así que
+// contar en JS no es una opción. Ver supabase_schema_phase111_ad_dashboard.sql.
+router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
+  const communityId = req.params.id;
+  const userId = req.user.id;
+
+  try {
+    const { data: community, error: communityErr } = await supabase
+      .from('communities')
+      .select('id, name, creator_id, categories')
+      .eq('id', communityId)
+      .maybeSingle();
+    if (communityErr) throw communityErr;
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (community.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador de la comunidad puede ver el dashboard' });
+    }
+
+    const [eventsRes, rafflesRes] = await Promise.all([
+      supabase
+        .from('community_events')
+        .select('id, title, event_date, ends_at, created_at, categories, promotion_plan, notification_count, notification_sent_count, audience_interested_only, audience_radius_km')
+        .eq('community_id', communityId)
+        .order('event_date', { ascending: false }),
+      supabase
+        .from('community_raffles')
+        .select('id, title, tier, ends_at, drawn_at, created_at, banner_views_contracted, banner_interested_only')
+        .eq('community_id', communityId)
+        .order('created_at', { ascending: false }),
+    ]);
+    if (eventsRes.error) throw eventsRes.error;
+    if (rafflesRes.error) throw rafflesRes.error;
+
+    const events = eventsRes.data || [];
+    const raffles = rafflesRes.data || [];
+
+    const [eventStatsRes, raffleStatsRes] = await Promise.all([
+      supabase.rpc('community_event_ad_stats', { p_community_id: communityId }),
+      supabase.rpc('community_raffle_ad_stats', { p_community_id: communityId }),
+    ]);
+    if (eventStatsRes.error) throw adStatsError(eventStatsRes.error);
+    if (raffleStatsRes.error) throw adStatsError(raffleStatsRes.error);
+
+    const eventStatsById = new Map((eventStatsRes.data || []).map(r => [r.stat_event_id, r]));
+    const raffleStatsById = new Map((raffleStatsRes.data || []).map(r => [r.stat_raffle_id, r]));
+
+    // Engagement "orgánico" del evento (apuntados y likes). Son tablas
+    // pequeñas comparadas con las de envíos, así que se cuentan en JS con
+    // dos consultas en vez de montar otra RPC.
+    const eventIds = events.map(e => e.id);
+    const attendeesByEvent = new Map();
+    const likesByEvent = new Map();
+    if (eventIds.length) {
+      const [attRes, likeRes] = await Promise.all([
+        supabase.from('community_event_attendees').select('event_id').in('event_id', eventIds),
+        supabase.from('community_event_likes').select('event_id').in('event_id', eventIds),
+      ]);
+      for (const row of attRes.data || []) {
+        attendeesByEvent.set(row.event_id, (attendeesByEvent.get(row.event_id) || 0) + 1);
+      }
+      for (const row of likeRes.data || []) {
+        likesByEvent.set(row.event_id, (likesByEvent.get(row.event_id) || 0) + 1);
+      }
+    }
+
+    // Participantes elegibles por tier (la regla cambia según el tipo de
+    // sorteo, ver getEligibleRaffleMembers). Se cachea por tier: como mucho
+    // son 3 consultas aunque la comunidad tenga 50 sorteos.
+    const eligibleByTier = new Map();
+    for (const tier of new Set(raffles.map(r => normalizeRaffleTier(r.tier)))) {
+      eligibleByTier.set(tier, (await getEligibleRaffleMembers(communityId, tier)).length);
+    }
+
+    const now = Date.now();
+
+    // Si la comunidad no tiene categorías, ningún sorteo suyo se pudo
+    // clasificar por intereses (no hay nada con lo que cruzar): se propaga a
+    // cada fila para que el dashboard explique el hueco en vez de dar por
+    // hecho que son datos viejos. En eventos la categoría es del propio
+    // evento, no de la comunidad, así que ahí se calcula evento a evento.
+    const communityHasCategories = (community.categories || []).filter(Boolean).length > 0;
+
+    const eventRows = events.map(e => {
+      const s = eventStatsById.get(e.id);
+      const promoted = e.promotion_plan === 'premium' || e.promotion_plan === 'ultra';
+
+      const sendsTotal      = num(s?.sends_total);
+      const sendsPromo      = num(s?.sends_promo);
+      const sendsCommunity  = num(s?.sends_community);
+      const sendsUnknownSrc = num(s?.sends_unknown_source);
+      const interested      = num(s?.sends_interested);
+      const notInterested   = num(s?.sends_not_interested);
+      const unknownInterest = num(s?.sends_unknown_interest);
+      const clicksTotal     = num(s?.clicks_total);
+      const clicksInterested    = num(s?.clicks_interested);
+      const clicksNotInterested = num(s?.clicks_not_interested);
+
+      const contracted = e.notification_count ?? null;
+      // notification_sent_count es la cifra oficial de envíos publicitarios
+      // (la que se factura, incrementada atómicamente por el pacing). El
+      // conteo de filas source='promo' debería coincidir; se exponen las dos
+      // para poder detectar una descuadre sin entrar en la BD.
+      const sentOfficial = num(e.notification_sent_count);
+      const started = new Date(e.event_date).getTime() <= now;
+
+      return {
+        id: e.id,
+        title: e.title,
+        event_date: e.event_date,
+        promotion_plan: e.promotion_plan,
+        promoted,
+        started,
+        audience_interested_only: !!e.audience_interested_only,
+        audience_radius_km: e.audience_radius_km != null ? Number(e.audience_radius_km) : null,
+        has_categories: (e.categories || []).filter(Boolean).length > 0,
+        contracted,
+        sent_official: sentOfficial,
+        progress: contracted ? rate(sentOfficial, contracted) : null,
+        sends: {
+          total: sendsTotal,
+          promo: sendsPromo,
+          community: sendsCommunity,
+          unknown_source: sendsUnknownSrc,
+        },
+        interest: { interested, not_interested: notInterested, unknown: unknownInterest },
+        clicks: {
+          total: clicksTotal,
+          interested: clicksInterested,
+          not_interested: clicksNotInterested,
+        },
+        ctr: rate(clicksTotal, sendsTotal),
+        ctr_interested: rate(clicksInterested, interested),
+        ctr_not_interested: rate(clicksNotInterested, notInterested),
+        last_click_at: s?.last_click_at || null,
+        attendees: attendeesByEvent.get(e.id) || 0,
+        likes: likesByEvent.get(e.id) || 0,
+        // El cobro se hace sobre lo REALMENTE enviado hasta el inicio del
+        // evento, y solo si se pasa el mínimo (ver FREE_THRESHOLD y el
+        // bloqueo de renovación más arriba).
+        billable: promoted && sentOfficial >= FREE_THRESHOLD,
+      };
+    });
+
+    const raffleRows = raffles.map(r => {
+      const tier = normalizeRaffleTier(r.tier);
+      const s = raffleStatsById.get(r.id);
+
+      const targets       = num(s?.targets_total);
+      const shown         = num(s?.shown_total);
+      const interested    = num(s?.shown_interested);
+      const notInterested = num(s?.shown_not_interested);
+      const unknown       = num(s?.shown_unknown_interest);
+      const clicksTotal   = num(s?.clicks_total);
+      const clicksInterested    = num(s?.clicks_interested);
+      const clicksNotInterested = num(s?.clicks_not_interested);
+
+      const contracted = tier === 'light' ? (r.banner_views_contracted ?? null) : null;
+
+      return {
+        id: r.id,
+        title: r.title,
+        tier,
+        tier_label: RAFFLE_TIERS[tier].label,
+        ends_at: r.ends_at,
+        drawn_at: r.drawn_at,
+        ended: !!r.drawn_at || new Date(r.ends_at).getTime() <= now,
+        banner_interested_only: !!r.banner_interested_only,
+        has_categories: communityHasCategories,
+        contracted,
+        // Targets asignados vs banners realmente enseñados: la diferencia es
+        // el reparto que aún está en cola (el banner se sirve diferido, la
+        // próxima vez que cada usuario entre al menú principal).
+        targets,
+        shown,
+        pending: Math.max(targets - shown, 0),
+        progress: contracted ? rate(shown, contracted) : null,
+        interest: { interested, not_interested: notInterested, unknown },
+        clicks: {
+          total: clicksTotal,
+          interested: clicksInterested,
+          not_interested: clicksNotInterested,
+        },
+        ctr: rate(clicksTotal, shown),
+        ctr_interested: rate(clicksInterested, interested),
+        ctr_not_interested: rate(clicksNotInterested, notInterested),
+        last_click_at: s?.last_click_at || null,
+        eligible_participants: eligibleByTier.get(tier) ?? null,
+      };
+    });
+
+    const sum = (rows, pick) => rows.reduce((acc, row) => acc + pick(row), 0);
+
+    const eventSends  = sum(eventRows, r => r.sends.total);
+    const eventClicks = sum(eventRows, r => r.clicks.total);
+    const raffleShown  = sum(raffleRows, r => r.shown);
+    const raffleClicks = sum(raffleRows, r => r.clicks.total);
+
+    res.json({
+      community: { id: community.id, name: community.name, categories: community.categories || [] },
+      summary: {
+        events_total: eventRows.length,
+        events_promoted: eventRows.filter(r => r.promoted).length,
+        event_sends: eventSends,
+        event_clicks: eventClicks,
+        event_ctr: rate(eventClicks, eventSends),
+        raffles_total: raffleRows.length,
+        raffle_targets: sum(raffleRows, r => r.targets),
+        raffle_shown: raffleShown,
+        raffle_clicks: raffleClicks,
+        raffle_ctr: rate(raffleClicks, raffleShown),
+        total_impressions: eventSends + raffleShown,
+        total_clicks: eventClicks + raffleClicks,
+        total_ctr: rate(eventClicks + raffleClicks, eventSends + raffleShown),
+        free_threshold: FREE_THRESHOLD,
+      },
+      events: eventRows,
+      raffles: raffleRows,
+    });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/dashboard', err);
+    res.status(500).json({ error: err.message || 'Error al obtener el dashboard' });
+  }
+});
+
 router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const { id: communityId, raffleId } = req.params;

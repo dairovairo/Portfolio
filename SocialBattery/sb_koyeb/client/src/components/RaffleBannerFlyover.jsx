@@ -78,6 +78,11 @@ export default function RaffleBannerFlyover() {
   }
 
   function handleClick() {
+    // Fase 111 — se registra el click ANTES de navegar (fire-and-forget: si
+    // falla, el usuario llega igual al sorteo, solo se pierde la métrica).
+    // No se espera al await a propósito: meter un round trip entre el dedo y
+    // la navegación se notaría, y la avioneta ya está desmontándose.
+    api.post(`/community/raffles/${banner.raffle_id}/banner-click`, {}).catch(() => {});
     setBanner(null);
     navigate(`/community/${banner.community_id}#raffle-${banner.raffle_id}`);
   }

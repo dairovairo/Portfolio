@@ -3,7 +3,7 @@
 //
 //   node --test server/test/promoDistribution.test.js
 //
-// Cubre las dos funciones extraídas a server/lib/promoDistribution.js:
+// Cubre las funciones extraídas a server/lib/promoDistribution.js:
 //
 //   - pickRaffleFromRatioGroups: elige qué avioneta enseñar al usuario
 //     cuando tiene varios sorteos pendientes de un mismo tier (Volt o
@@ -15,6 +15,10 @@
 //     por coincidencia de categoría del evento con los intereses del
 //     candidato.
 //
+//   - makeInterestClassifier: decide si un envío se etiqueta como
+//     interesado / no interesado / sin clasificar, que es lo que luego
+//     desglosa el dashboard de publicidad (fase 111).
+//
 // Cada test construye datos sintéticos mínimos, sin BD ni red.
 
 const test = require('node:test');
@@ -23,6 +27,7 @@ const assert = require('node:assert/strict');
 const {
   pickRaffleFromRatioGroups,
   assignCandidatesBidirectional,
+  makeInterestClassifier,
 } = require('../lib/promoDistribution');
 const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
 
@@ -413,4 +418,59 @@ test('assign: reparto MIXTO — cada usuario cae en su match, quien no matchea c
   assignCandidatesBidirectional({ candidates, eventMetas: [e1, e2], interestsByUser });
   assert.equal(e1.chosen.length, 2, 'u2 (match) + u3 (fallback peor ratio)');
   assert.equal(e2.chosen.length, 2, 'u1 y u4 (ambos matchean deporte)');
+});
+
+// ── makeInterestClassifier (fase 111) ──────────────────────────────────────
+// Decide qué se congela en event_promo_notifications.matched_interest en el
+// momento del envío, que es lo que luego alimenta el desglose
+// interesados/no interesados y el CTR por segmento del dashboard de
+// publicidad. La regla clave que cubren estos tests es la distinción entre
+// false ("se pudo preguntar y no coincide") y null ("no se pudo preguntar"):
+// confundirlos ensuciaría el CTR con ceros inventados.
+
+test('classifier: evento sin categorías no es clasificable (null, no una función)', () => {
+  assert.equal(makeInterestClassifier(new Set(), new Map()), null);
+  assert.equal(makeInterestClassifier(null, new Map()), null);
+  assert.equal(makeInterestClassifier(undefined, new Map()), null);
+});
+
+test('classifier: intereses que cruzan → true', () => {
+  const fn = makeInterestClassifier(
+    new Set(['Música', 'Deporte']),
+    new Map([['u1', new Set(['Deporte', 'Cine'])]])
+  );
+  assert.equal(fn('u1'), true);
+});
+
+test('classifier: intereses que no cruzan → false', () => {
+  const fn = makeInterestClassifier(
+    new Set(['Música']),
+    new Map([['u1', new Set(['Cine', 'Deporte'])]])
+  );
+  assert.equal(fn('u1'), false);
+});
+
+test('classifier: usuario con intereses vacíos → false (se pudo preguntar, no coincide)', () => {
+  const fn = makeInterestClassifier(
+    new Set(['Música']),
+    new Map([['u1', new Set()]])
+  );
+  assert.equal(fn('u1'), false);
+});
+
+test('classifier: usuario sin intereses cargados → null (no se pudo preguntar, no false)', () => {
+  const fn = makeInterestClassifier(new Set(['Música']), new Map());
+  assert.equal(fn('desconocido'), null);
+});
+
+test('classifier: basta una categoría en común de varias', () => {
+  const fn = makeInterestClassifier(
+    new Set(['Música', 'Arte', 'Deporte']),
+    new Map([
+      ['u1', new Set(['Cine', 'Arte'])],
+      ['u2', new Set(['Cine', 'Viajes'])],
+    ])
+  );
+  assert.equal(fn('u1'), true);
+  assert.equal(fn('u2'), false);
 });
