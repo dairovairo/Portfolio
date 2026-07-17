@@ -167,11 +167,13 @@ function rankScoreOf(event, rankKey) {
 }
 
 // Las dos secciones del selector (cercanía / cercanía e intereses) y (app /
-// planificaciones / likes) son compatibles entre sí: se puede tener una
-// opción activa en cada una a la vez. Sin criterio de cercanía se ordena solo
-// por el criterio elegido; sin criterio de "otros" se ordena solo por
-// cercanía; con ambos activos se combina un 50/50 (normalizado) de cercanía
-// y puntuación del criterio elegido.
+// planificaciones / likes) son EXCLUYENTES entre sí desde la UI (ver
+// handleEventProximityChange/handleEventRankChange en el componente): activar
+// una desactiva la otra, así que en la práctica solo llega proximityKey O
+// rankKey, nunca ambos a la vez. La función conserva el modo combinado (50/50
+// normalizado) como fallback defensivo por si algún caller futuro pasara los
+// dos a la vez, pero con el flujo actual siempre se ordena solo por
+// cercanía o solo por el criterio elegido en "Otros".
 function sortEventsBy(eventList = [], { proximityKey = null, rankKey = 'app', userCoords, userInterests = [] } = {}) {
   let list = eventList;
   if (proximityKey === 'cercania_intereses') {
@@ -231,10 +233,11 @@ function matchesEventDateFilter(event, dateFilter) {
 // escritorio. Se sustituye por un menú propio (mismo patrón que el menú ⋯ de
 // GroupChatPage: botón + panel absoluto + cierre al hacer click fuera) para
 // que se vea exactamente igual en cualquier dispositivo.
-// Las dos secciones son compatibles entre sí: se puede tener una opción
-// activa en "Cercanía" y otra en "Otros" a la vez (ver sortEventsBy). Por
-// eso cada grupo lleva su propio value/onChange, en vez de un único value
-// plano como antes.
+// Las dos secciones son EXCLUYENTES entre sí: activar una opción de
+// "Cercanía" desactiva la de "Otros" y viceversa (ver
+// handleEventProximityChange/handleEventRankChange más abajo y sortEventsBy).
+// Por eso cada grupo lleva su propio value/onChange, en vez de un único
+// value plano como antes, pero solo uno de los dos puede estar activo.
 const EVENT_PROXIMITY_OPTIONS = [
   { key: 'cercania', label: '📍 Cercanía' },
   { key: 'cercania_intereses', label: '📍✨ Cercanía e intereses' },
@@ -281,7 +284,7 @@ function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRan
               <button
                 key={opt.key}
                 type="button"
-                onClick={() => onProximityChange(proximityValue === opt.key ? null : opt.key)}
+                onClick={() => onProximityChange(opt.key)}
                 className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
                   proximityValue === opt.key
                     ? 'text-accent-glow bg-accent-primary/10'
@@ -300,7 +303,7 @@ function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRan
               <button
                 key={opt.key}
                 type="button"
-                onClick={() => onRankChange(rankValue === opt.key ? null : opt.key)}
+                onClick={() => onRankChange(opt.key)}
                 className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
                   rankValue === opt.key
                     ? 'text-accent-glow bg-accent-primary/10'
@@ -404,7 +407,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
 
   // Ring de borde por plan de pago (se mantiene: distingue visualmente sin afectar orden)
   const RING_META = {
-    ultra:   { ring: 'border-sky-400/55' },
+    ultra:   { ring: 'border-accent-primary/55' },
     premium: { ring: 'border-purple-400/50' },
   };
   const ringOverride = RING_META[event.promotion_plan];
@@ -415,7 +418,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
 
   // Pill de plan: visible para los 3 planes (basic incluido)
   const PILL_META = {
-    ultra:   { pill: '🚀 Ultra',   pillClass: 'text-sky-300 bg-sky-500/10 border border-sky-500/25' },
+    ultra:   { pill: '🚀 Ultra',   pillClass: 'text-accent-glow bg-accent-primary/10 border border-accent-primary/25' },
     premium: { pill: '⚡ Premium', pillClass: 'text-purple-300 bg-purple-500/10 border border-purple-500/25' },
     basic:   { pill: '📋 Basic',   pillClass: 'text-slate-300 bg-slate-500/10 border border-slate-500/25' },
   };
@@ -1330,10 +1333,23 @@ export default function CommunityPage() {
   const [eventCategoryFilter, setEventCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [eventPriceFilter, setEventPriceFilter] = useState('all'); // 'all' | 'free' | 'paid'
   const [eventDateFilter, setEventDateFilter] = useState('all'); // 'week' | 'month' | 'all'
-  // Dos secciones compatibles entre sí (ver sortEventsBy): se puede tener una
-  // opción activa en cada una a la vez, o solo en una, o en ninguna.
-  const [eventProximitySort, setEventProximitySort] = useState('cercania'); // null | 'cercania' | 'cercania_intereses'
-  const [eventRankSort, setEventRankSort] = useState(null); // null | 'app' | 'planificaciones' | 'likes'
+  // Las dos secciones son EXCLUYENTES entre sí (ver sortEventsBy y los
+  // handlers handleProximityChange/handleRankChange más abajo): activar una
+  // opción de "Cercanía" desactiva la de "Otros" y viceversa, nunca hay una
+  // opción activa en ambas secciones a la vez. Por defecto va seleccionada
+  // "Selección" (app) dentro de "Otros".
+  const [eventProximitySort, setEventProximitySort] = useState(null); // null | 'cercania' | 'cercania_intereses'
+  const [eventRankSort, setEventRankSort] = useState('app'); // null | 'app' | 'planificaciones' | 'likes'
+
+  const handleEventProximityChange = useCallback((key) => {
+    setEventProximitySort(current => current === key ? null : key);
+    setEventRankSort(null);
+  }, []);
+
+  const handleEventRankChange = useCallback((key) => {
+    setEventRankSort(current => current === key ? null : key);
+    setEventProximitySort(null);
+  }, []);
   const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
@@ -1680,9 +1696,9 @@ export default function CommunityPage() {
                 </FilterDropdown>
                 <EventSortDropdown
                   proximityValue={eventProximitySort}
-                  onProximityChange={setEventProximitySort}
+                  onProximityChange={handleEventProximityChange}
                   rankValue={eventRankSort}
-                  onRankChange={setEventRankSort}
+                  onRankChange={handleEventRankChange}
                 />
               </div>
             </div>
@@ -1758,8 +1774,8 @@ export default function CommunityPage() {
                     setEventCategoryFilter(ALL_EVENT_CATEGORIES);
                     setEventPriceFilter('all');
                     setEventDateFilter('all');
-                    setEventProximitySort('cercania');
-                    setEventRankSort(null);
+                    setEventProximitySort(null);
+                    setEventRankSort('app');
                   }}
                   className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                 >
