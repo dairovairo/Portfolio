@@ -385,7 +385,9 @@ function RenewPromotionModal({ event, onClose, onRenewed }) {
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPlan('basic'); } }}
             className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
               plan === 'basic'
-                ? 'border-accent-primary bg-accent-primary/10'
+                // Basic (plan por defecto/gratuito): solo borde acento, sin
+                // tinte de relleno, para distinguirlo de Premium/Ultra.
+                ? 'border-accent-primary bg-surface-card'
                 : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
             }`}
           >

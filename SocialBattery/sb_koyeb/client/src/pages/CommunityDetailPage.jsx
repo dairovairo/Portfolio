@@ -607,7 +607,10 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'basic'); } }}
                 className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
                   form.promotion_plan === 'basic'
-                    ? 'border-accent-primary bg-accent-primary/10'
+                    // Basic es el plan por defecto/gratuito: dejamos solo el
+                    // borde acento y el fondo neutro (surface-card) para que
+                    // se distinga de Premium/Ultra, que sí llevan tinte.
+                    ? 'border-accent-primary bg-surface-card'
                     : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
                 }`}
               >
