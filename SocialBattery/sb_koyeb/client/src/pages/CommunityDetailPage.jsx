@@ -689,15 +689,15 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'ultra'); } }}
                 className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
                   form.promotion_plan === 'ultra'
-                    ? 'border-yellow-400 bg-yellow-500/10'
-                    : 'border-surface-border bg-surface-bg hover:border-yellow-400/30'
+                    ? 'border-accent-primary bg-accent-primary/10'
+                    : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
                 }`}
               >
                 <span className="text-xl mt-0.5">🚀</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
-                    <span className="text-xs font-mono font-semibold text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
+                    <span className="text-xs font-mono font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
                   </div>
                   <button
                     type="button"
@@ -720,7 +720,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                   )}
                 </div>
                 {form.promotion_plan === 'ultra' && (
-                  <span className="absolute top-3 right-3 text-yellow-300 text-base">✓</span>
+                  <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
                 )}
               </div>
             </div>
