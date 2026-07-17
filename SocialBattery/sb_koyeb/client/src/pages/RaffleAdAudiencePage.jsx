@@ -59,7 +59,17 @@ export default function RaffleAdAudiencePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
+  // Fase 112 — la misma página cubre creación (state.draft, viene del
+  // modal de crear sorteo) y renovación (state.renewRaffle, viene del
+  // dashboard o de la tarjeta del sorteo). En renovación el sorteo ya
+  // existe: solo se retocan aforo y filtro de intereses, y al confirmar
+  // se llama a POST /raffles/:raffleId/renew-promotion en vez de crearlo.
+  // El resto del formulario (título, tier, fecha) no se puede cambiar
+  // por aquí — para eso habría que crear otro sorteo. Volt no llega
+  // nunca a esta página en renovación (no tiene publicidad de pago).
   const draft = location.state?.draft || null;
+  const renewRaffle = location.state?.renewRaffle || null;
+  const isRenew = !!renewRaffle;
   const communityName = location.state?.communityName || 'tu comunidad';
 
   const [loadingTotal, setLoadingTotal] = useState(true);
@@ -71,15 +81,26 @@ export default function RaffleAdAudiencePage() {
   const [interested, setInterested] = useState(null);
   const [categoriesDefined, setCategoriesDefined] = useState(null);
 
-  const [bannerViews, setBannerViews] = useState(VIEWS_MIN);
+  const [bannerViews, setBannerViews] = useState(
+    isRenew && renewRaffle?.banner_views_contracted
+      ? Math.min(Math.max(Number(renewRaffle.banner_views_contracted), VIEWS_MIN), VIEWS_MAX)
+      : VIEWS_MIN
+  );
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  // Sin borrador (p. ej. si se ha recargado la página directamente aquí) no
-  // hay nada que configurar: de vuelta a la comunidad.
+  // Prerrellenar el toggle de intereses con el estado del ciclo actual —
+  // así renovar "tal cual" no cambia nada por accidente.
   useEffect(() => {
-    if (!draft) navigate(`/community/${communityId}`, { replace: true });
-  }, [draft, communityId, navigate]);
+    if (isRenew && renewRaffle?.banner_interested_only) setFilterInterested(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRenew]);
+
+  // Sin borrador (creación) ni renewRaffle (renovación): recarga directa
+  // o navegación manual — volvemos al menú de la comunidad.
+  useEffect(() => {
+    if (!draft && !renewRaffle) navigate(`/community/${communityId}`, { replace: true });
+  }, [draft, renewRaffle, communityId, navigate]);
 
   const loadTotal = useCallback(async () => {
     setLoadingTotal(true);
@@ -95,8 +116,8 @@ export default function RaffleAdAudiencePage() {
   }, [communityId]);
 
   useEffect(() => {
-    if (draft) loadTotal();
-  }, [draft, loadTotal]);
+    if (draft || isRenew) loadTotal();
+  }, [draft, isRenew, loadTotal]);
 
   // Audiencia efectiva: si el filtro de intereses está activo (y hay
   // categorías con las que cruzar), pasa a ser el nº de interesados; si no,
@@ -144,10 +165,24 @@ export default function RaffleAdAudiencePage() {
   }
 
   async function handleCreate() {
-    if (!draft || !audienceReady || blockedByFilterShortfall) return;
+    if (!audienceReady || blockedByFilterShortfall) return;
     setCreating(true);
     setCreateError('');
     try {
+      if (isRenew) {
+        // Renovación: solo aforo y filtro de intereses. El tier y la fecha
+        // del sorteo se mantienen. El servidor borra los targets del ciclo
+        // anterior, resetea promo_ended_at y reasigna un ciclo nuevo con los
+        // parámetros que llegan aquí (ver renew-promotion en community.js).
+        await api.post(`/community/raffles/${renewRaffle.id}/renew-promotion`, {
+          banner_views_contracted: bannerViews,
+          banner_interested_only: filterInterested,
+        });
+        showToast('¡Publicidad renovada! 🔄', 'success');
+        navigate(`/community/${communityId}`, { replace: true });
+        return;
+      }
+      if (!draft) return;
       const formData = new FormData();
       formData.append('title', draft.title);
       if (draft.description?.trim()) formData.append('description', draft.description.trim());
@@ -160,7 +195,7 @@ export default function RaffleAdAudiencePage() {
       showToast('¡Sorteo creado! 🎁', 'success');
       navigate(`/community/${communityId}`, { replace: true });
     } catch (e) {
-      setCreateError(e.message || 'Error al crear el sorteo');
+      setCreateError(e.message || (isRenew ? 'Error al renovar la publicidad' : 'Error al crear el sorteo'));
     } finally {
       setCreating(false);
     }
@@ -171,7 +206,7 @@ export default function RaffleAdAudiencePage() {
     return 'usuarios notificables';
   }, [filterInterested]);
 
-  if (!draft) return null;
+  if (!draft && !isRenew) return null;
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -191,10 +226,19 @@ export default function RaffleAdAudiencePage() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 pb-32 pt-4 space-y-4">
+        {isRenew && (
+          <div className="bg-surface-card border border-amber-500/30 rounded-2xl p-5 space-y-2">
+            <p className="text-sm font-display font-bold text-surface-text">🔄 Renovando publicidad</p>
+            <p className="text-[12px] text-surface-muted leading-relaxed">
+              Estás renovando la publicidad de <span className="text-surface-text">{renewRaffle.title}</span>. Al confirmar, se cierra el ciclo actual: los banners pendientes se borran y se reasignan a otros usuarios con los nuevos parámetros. El sorteo en sí (fecha, tier, participantes) se mantiene.
+            </p>
+          </div>
+        )}
+
         {/* Resumen del sorteo en creación */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-1">
           <h2 className="font-display font-bold text-surface-text text-sm truncate">
-            {draft.title || 'Nuevo sorteo'}
+            {isRenew ? renewRaffle.title : (draft?.title || 'Nuevo sorteo')}
           </h2>
           <p className="text-xs font-mono text-surface-muted truncate">
             👥 {communityName}
@@ -377,7 +421,9 @@ export default function RaffleAdAudiencePage() {
           disabled={creating || !audienceReady || blockedByFilterShortfall}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${LIGHT_META.button}`}
         >
-          {creating ? 'Creando...' : '🎁 Crear sorteo Light'}
+          {creating
+            ? (isRenew ? 'Renovando...' : 'Creando...')
+            : (isRenew ? '🔄 Renovar publicidad' : '🎁 Crear sorteo Light')}
         </button>
       </main>
     </div>

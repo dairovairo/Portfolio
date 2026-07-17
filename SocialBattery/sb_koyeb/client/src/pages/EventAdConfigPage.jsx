@@ -125,15 +125,36 @@ export default function EventAdConfigPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
+  // Fase 112 — la misma página cubre dos flujos:
+  //
+  //   · CREACIÓN (state.draft): viene del modal de crear evento. El evento
+  //     todavía no existe; al confirmar se llama a POST /community/events
+  //     y el evento nace con los datos del formulario + los que se eligen
+  //     aquí (plan, cuota, filtros).
+  //
+  //   · RENOVACIÓN (state.renewEvent): viene del dashboard de publicidad o
+  //     del detalle del propio evento. El evento YA existe; aquí solo se
+  //     retocan plan y cuota, y al confirmar se llama a POST
+  //     /events/:id/renew-promotion. Ni el título ni la audiencia se pueden
+  //     tocar en este flujo — para eso hay que crear otro evento.
+  //
+  // Se distinguen por qué objeto trae el state; los dos son excluyentes.
   const draft = location.state?.draft || null;
+  const renewEvent = location.state?.renewEvent || null;
+  const isRenew = !!renewEvent;
 
-  // El plan inicial es el que el usuario escogió en el modal
-  // (premium | ultra). Si por lo que sea el draft no trae un plan
-  // válido, arrancamos en premium.
-  const initialPlan = draft?.promotion_plan === 'ultra' ? 'ultra' : 'premium';
+  // El plan inicial: en creación, lo que trae el draft del modal; en
+  // renovación, el plan que YA tiene contratado el evento (así al usuario
+  // le sale prerreadatado exactamente lo que iba a renovar).
+  const initialPlan = isRenew
+    ? (renewEvent.promotion_plan === 'ultra' ? 'ultra' : 'premium')
+    : (draft?.promotion_plan === 'ultra' ? 'ultra' : 'premium');
   const [plan, setPlan] = useState(initialPlan);
+  const initialCount = isRenew
+    ? Number(renewEvent.notification_count) || NOTIF_MIN
+    : Number(draft?.notification_count) || NOTIF_MIN;
   const [notificationCount, setNotificationCount] = useState(
-    Math.min(Math.max(Number(draft?.notification_count) || NOTIF_MIN, NOTIF_MIN), NOTIF_MAX)
+    Math.min(Math.max(initialCount, NOTIF_MIN), NOTIF_MAX)
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -173,20 +194,25 @@ export default function EventAdConfigPage() {
   const [loadingNearby, setLoadingNearby] = useState(false);
   const nearbyDebounceRef = useRef(null);
 
-  // Sin borrador (p. ej. recarga directa aquí) no hay nada que configurar
-  // y volvemos al menú de comunidad. Igual si el borrador llegó sin
-  // communityId — desde fase 108 los eventos deben pertenecer a una
-  // comunidad, no debería ocurrir con el flujo normal desde
-  // CommunityDetailPage, pero es guarda ante navegación manual/estado
-  // corrupto.
+  // Sin borrador (creación) ni renewEvent (renovación) no hay nada que
+  // configurar y volvemos al menú de comunidad. Igual si el borrador de
+  // creación llegó sin communityId — desde fase 108 los eventos deben
+  // pertenecer a una comunidad, no debería ocurrir con el flujo normal
+  // desde CommunityDetailPage, pero es guarda ante navegación
+  // manual/estado corrupto. En renovación no se pide communityId porque
+  // se navega al detalle del evento, no a la comunidad.
   useEffect(() => {
+    if (isRenew) {
+      if (!renewEvent?.id) navigate('/community', { replace: true });
+      return;
+    }
     if (draft?.communityId) return;
     navigate('/community', { replace: true });
-  }, [draft, navigate]);
+  }, [draft, renewEvent, isRenew, navigate]);
 
   const draftCategories = useMemo(
-    () => (Array.isArray(draft?.categories) ? draft.categories.filter(Boolean) : []),
-    [draft]
+    () => (isRenew ? [] : Array.isArray(draft?.categories) ? draft.categories.filter(Boolean) : []),
+    [draft, isRenew]
   );
   const categoriesQueryParam = useMemo(
     () => (draftCategories.length ? encodeURIComponent(JSON.stringify(draftCategories)) : ''),
@@ -194,6 +220,14 @@ export default function EventAdConfigPage() {
   );
 
   const loadTotal = useCallback(async () => {
+    if (isRenew) {
+      // Renovación: la audiencia del evento ya está fijada. Simulamos
+      // "carga terminada" para que el gate audienceReady deje pasar al
+      // botón de renovar sin bloquear.
+      setLoadingTotal(false);
+      setTotal(null);
+      return;
+    }
     setLoadingTotal(true);
     setLoadError('');
     try {
@@ -205,11 +239,11 @@ export default function EventAdConfigPage() {
     } finally {
       setLoadingTotal(false);
     }
-  }, [draft]);
+  }, [draft, isRenew]);
 
   useEffect(() => {
-    if (draft?.communityId) loadTotal();
-  }, [draft, loadTotal]);
+    if (isRenew || draft?.communityId) loadTotal();
+  }, [draft, isRenew, loadTotal]);
 
   // Fase 110: recontar `nearby` cada vez que cambian los inputs (radio,
   // toggle de ubicación, toggle de intereses) con 300 ms de debounce
@@ -251,22 +285,28 @@ export default function EventAdConfigPage() {
 
   // Audiencia efectiva teniendo en cuenta filtros activos. Si están los
   // dos (intereses + ubicación), gana la intersección. Si solo uno, ese.
-  // Si ninguno, el total notificable.
-  const audienceCap = filterLocation && filterInterested
-    ? (categoriesDefined === false ? 0 : interestedNearby)
-    : filterLocation
-      ? nearby
-      : filterInterested
-        ? (categoriesDefined === false ? 0 : interested)
-        : total;
-  const audienceReady = audienceCap != null && !loadingInterested && !loadingNearby;
-  const contractedExceedsAudience = audienceReady && notificationCount > audienceCap;
+  // Si ninguno, el total notificable. En renovación la audiencia no se
+  // recalcula (el evento ya existe con la suya fijada), así que se
+  // "corta" antes: audienceReady=true incondicional para no bloquear el
+  // botón, y blockedByFilterShortfall=false por el mismo motivo.
+  const audienceCap = isRenew
+    ? null
+    : filterLocation && filterInterested
+      ? (categoriesDefined === false ? 0 : interestedNearby)
+      : filterLocation
+        ? nearby
+        : filterInterested
+          ? (categoriesDefined === false ? 0 : interested)
+          : total;
+  const audienceReady = isRenew || (audienceCap != null && !loadingInterested && !loadingNearby);
+  const contractedExceedsAudience = !isRenew && audienceReady && notificationCount > audienceCap;
 
   // Con cualquier filtro DURO activo (intereses o ubicación), si el pool
   // resultante no llega al mínimo contratable (NOTIF_MIN) bloqueamos la
   // publicación y ocultamos el slider. SIN filtros duros, dejamos publicar
-  // aunque el pool no llegue (fase de crecimiento con pocos usuarios).
-  const blockedByFilterShortfall = (filterInterested || filterLocation) && audienceReady && audienceCap < NOTIF_MIN;
+  // aunque el pool no llegue (fase de crecimiento con pocos usuarios). En
+  // renovación no hay filtros a cambiar aquí, así que esto no aplica.
+  const blockedByFilterShortfall = !isRenew && (filterInterested || filterLocation) && audienceReady && audienceCap < NOTIF_MIN;
 
   async function handleToggleInterested() {
     const next = !filterInterested;
@@ -298,42 +338,58 @@ export default function EventAdConfigPage() {
 
   const meta = PLAN_META[plan] || PLAN_META.premium;
 
-  // Fase 108: draft.communityId siempre existe (el guard de arriba echa
-  // fuera cualquier draft sin él). Simplificado sin fallback a '/community'.
+  // En creación se vuelve al perfil de la comunidad; en renovación, al
+  // detalle del propio evento (donde estaba el botón "Renovar publicidad"
+  // que arrancó el flujo, ver EventDetailPage.jsx). Ese es también el
+  // sitio donde el usuario ve el efecto del cambio nada más terminar.
   const backTarget = useMemo(
-    () => `/community/${draft?.communityId ?? ''}`,
-    [draft]
+    () => (isRenew
+      ? `/community/event/${renewEvent.id}`
+      : `/community/${draft?.communityId ?? ''}`),
+    [draft, isRenew, renewEvent]
   );
 
-  const headerSubtitle = draft?.communityName
-    ? `Evento en ${draft.communityName}`
-    : 'Nuevo evento';
+  const headerSubtitle = isRenew
+    ? `Renovar publicidad de ${renewEvent.title}`
+    : (draft?.communityName ? `Evento en ${draft.communityName}` : 'Nuevo evento');
 
   async function handlePublish() {
-    if (!draft || !audienceReady || blockedByFilterShortfall) return;
+    if (!audienceReady || blockedByFilterShortfall) return;
     setSaving(true);
     setError('');
     try {
-      const formData = buildEventFormData(draft, plan, notificationCount, {
-        // Fase 106: filtro duro de intereses (solo Premium/Ultra).
-        interestedOnly: filterInterested,
-        // Fase 110: filtro duro por ubicación — círculo alrededor de la
-        // ubicación del evento con el radio elegido.
-        locationFilter: filterLocation && canFilterLocation
-          ? { centerLat: draft.lat, centerLng: draft.lng, radiusKm }
-          : null,
-      });
-      await api.postForm('/community/events', formData);
-      showToast('¡Evento creado! 🌐', 'success');
+      if (isRenew) {
+        // Renovación: el endpoint solo acepta plan y cuota (los filtros de
+        // audiencia son atributos del evento y no se cambian por aquí). Al
+        // completar, el ciclo actual queda cerrado y arranca uno nuevo:
+        // notification_sent_count vuelve a 0 y se re-notifica a los
+        // miembros de la comunidad.
+        await api.post(`/community/events/${renewEvent.id}/renew-promotion`, {
+          promotion_plan: plan,
+          notification_count: notificationCount,
+        });
+        showToast('¡Publicidad renovada! 🔄', 'success');
+      } else {
+        if (!draft) return;
+        const formData = buildEventFormData(draft, plan, notificationCount, {
+          interestedOnly: filterInterested,
+          locationFilter: filterLocation && canFilterLocation
+            ? { centerLat: draft.lat, centerLng: draft.lng, radiusKm }
+            : null,
+        });
+        await api.postForm('/community/events', formData);
+        showToast('¡Evento creado! 🌐', 'success');
+      }
       navigate(backTarget, { replace: true });
     } catch (e) {
-      setError(e.message || 'Error al crear el evento');
+      setError(e.message || (isRenew ? 'Error al renovar la publicidad' : 'Error al crear el evento'));
     } finally {
       setSaving(false);
     }
   }
 
-  if (!draft?.communityId) return null;
+  if (!isRenew && !draft?.communityId) return null;
+  if (isRenew && !renewEvent?.id) return null;
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -425,6 +481,15 @@ export default function EventAdConfigPage() {
           </ul>
         </div>
 
+        {isRenew ? (
+          <div className="bg-surface-card border border-accent-primary/30 rounded-2xl p-5 space-y-2">
+            <p className="text-sm font-display font-bold text-surface-text">🔄 Renovando publicidad</p>
+            <p className="text-[12px] text-surface-muted leading-relaxed">
+              Estás renovando la publicidad de <span className="text-surface-text">{renewEvent.title}</span>. Solo se pueden cambiar el plan y la cuota — la audiencia y los filtros del evento se mantienen. Al confirmar, se cierra el ciclo actual y arranca uno nuevo: el contador de envíos vuelve a cero y se re-notifica a los miembros de la comunidad.
+            </p>
+          </div>
+        ) : (
+        <>
         {/* ── Audiencia total notificable ────────────────────────────────
             Usuarios de la app (fuera del propio creador) a los que puede
             llegar la notificación Premium/Ultra de este evento. Es el
@@ -605,6 +670,8 @@ export default function EventAdConfigPage() {
             </div>
           )}
         </div>
+        </>
+        )}
 
         {/* Notificaciones a contratar — siempre operativo 500–50.000.
             Si la audiencia efectiva (con o sin filtro de intereses) queda
@@ -693,7 +760,7 @@ export default function EventAdConfigPage() {
           disabled={saving || !audienceReady || blockedByFilterShortfall}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${meta.button}`}
         >
-          {saving ? 'Publicando...' : `🌐 Publicar evento ${meta.label}`}
+          {saving ? (isRenew ? 'Renovando...' : 'Publicando...') : (isRenew ? `🔄 Renovar como ${meta.label}` : `🌐 Publicar evento ${meta.label}`)}
         </button>
       </main>
     </div>

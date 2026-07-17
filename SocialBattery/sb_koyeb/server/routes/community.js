@@ -3664,6 +3664,12 @@ function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, 
     price_cents: tierMeta.price_cents,
     banner_views_contracted: raffle.banner_views_contracted ?? null,
     banner_views_sent: hasBanner ? (bannerViewsSent ?? 0) : null,
+    // Fase 112 — necesarios para pintar los botones de renovar/finalizar
+    // publicidad del sorteo en CommunityDetailPage (solo los ve el creador).
+    // banner_interested_only se prellena en el toggle de la página de
+    // renovación para partir del mismo estado que el ciclo actual.
+    banner_interested_only: !!raffle.banner_interested_only,
+    promo_ended_at: raffle.promo_ended_at || null,
     is_creator: currentUserId ? raffle.creator_id === currentUserId : undefined,
     can_participate: currentUserId
       ? (raffle.creator_id !== currentUserId && (isEligible ?? true))
@@ -4040,6 +4046,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
       .select(`
         id, community_id, creator_id, title, description, image_url,
         ends_at, drawn_at, created_at, tier, banner_views_contracted,
+        banner_interested_only, promo_ended_at,
         winner:winner_id(id, username, avatar_url)
       `)
       .eq('community_id', communityId)
@@ -4282,7 +4289,7 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
       .select(`
         id, created_at,
         raffle:raffle_id(
-          id, community_id, title, ends_at, drawn_at, tier, image_url, banner_views_contracted, banner_interested_only,
+          id, community_id, title, ends_at, drawn_at, tier, image_url, banner_views_contracted, banner_interested_only, promo_ended_at,
           community:community_id(id, name, categories)
         )
       `)
@@ -4292,13 +4299,17 @@ router.get('/raffle-banner', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
-    // Solo cuentan sorteos que siguen activos (no sorteados ni terminados);
-    // si el sorteo ya terminó, se descarta sin mostrarlo pero tampoco se
-    // "gasta" la visualización de otro sorteo por error.
+    // Solo cuentan sorteos que siguen activos (no sorteados, no terminados
+    // y con la promoción abierta — fase 112). Si el sorteo ya terminó o su
+    // reparto se cerró antes de tiempo, se descarta sin mostrarlo pero
+    // tampoco se "gasta" la visualización de otro sorteo por error.
     const now = new Date();
     const activeRows = (pending || []).filter(row => {
       const raffle = row.raffle;
-      return raffle && !raffle.drawn_at && new Date(raffle.ends_at) > now;
+      return raffle
+        && !raffle.drawn_at
+        && !raffle.promo_ended_at
+        && new Date(raffle.ends_at) > now;
     });
 
     // Comunidades de las que el usuario es miembro: dentro de cada tier, un
@@ -4606,6 +4617,244 @@ router.post('/raffles/:raffleId/banner-click', requireAuth, async (req, res) => 
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// Fase 112 — Fin y renovación de la publicidad de un sorteo
+// ══════════════════════════════════════════════════════════════════════════
+
+// Mismo umbral que los eventos (FREE_THRESHOLD = 200 envíos): banners
+// realmente enseñados por debajo de los cuales no se puede finalizar ni
+// renovar, para que no se pueda encadenar "ciclo + cancelación instantánea"
+// y regalarse aforo. Se llama RAFFLE_ para distinguirlo léxicamente en las
+// trazas, aunque hoy coincida con el de eventos.
+const RAFFLE_FREE_THRESHOLD = 200;
+
+// Volt es gratis: no hay nada que "cobrar" ni sentido en cerrar/renovar su
+// promo — su reparto se acaba cuando el sorteo termina y punto. Estos dos
+// endpoints solo aceptan Light y Community.
+const RAFFLE_LIFECYCLE_TIERS = new Set(['light', 'community']);
+
+// Cuenta los banners realmente enseñados de un sorteo (shown_at IS NOT
+// NULL). Es lo que decide si se supera el umbral de cobro. Usa
+// count: 'exact', head: true para no traer las filas: en un sorteo Light
+// contratado al máximo son 100k, y en un Volt es una por usuario de la app.
+async function countRaffleShown(raffleId) {
+  const { count, error } = await supabase
+    .from('raffle_banner_targets')
+    .select('*', { count: 'exact', head: true })
+    .eq('raffle_id', raffleId)
+    .not('shown_at', 'is', null);
+  if (error) throw error;
+  return count || 0;
+}
+
+// ── POST /api/community/raffles/:raffleId/end-promotion ────────────────────
+// Cierra el reparto de banners de un sorteo antes de tiempo: los targets
+// pendientes (shown_at NULL) dejan de servirse al filtrar por promo_ended_at
+// en GET /raffle-banner. El sorteo en sí sigue vivo hasta su ends_at o
+// drawn_at — cerrar la promo NO es sortear.
+router.post('/raffles/:raffleId/end-promotion', requireAuth, async (req, res) => {
+  const { raffleId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data: raffle, error: fetchErr } = await supabase
+      .from('community_raffles')
+      .select('id, title, creator_id, community_id, tier, ends_at, drawn_at, promo_ended_at')
+      .eq('id', raffleId)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!raffle) return res.status(404).json({ error: 'Sorteo no encontrado' });
+    if (raffle.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador del sorteo puede finalizar su publicidad' });
+    }
+
+    const tier = normalizeRaffleTier(raffle.tier);
+    if (!RAFFLE_LIFECYCLE_TIERS.has(tier)) {
+      return res.status(400).json({
+        error: 'Los sorteos Volt no tienen publicidad de pago que finalizar.',
+      });
+    }
+    if (raffle.promo_ended_at) {
+      return res.status(400).json({ error: 'La publicidad de este sorteo ya está finalizada' });
+    }
+    if (raffle.drawn_at) {
+      return res.status(400).json({ error: 'Este sorteo ya está sorteado' });
+    }
+    if (new Date(raffle.ends_at) <= new Date()) {
+      return res.status(400).json({ error: 'Este sorteo ya ha terminado' });
+    }
+
+    const shownCount = await countRaffleShown(raffleId);
+    if (shownCount < RAFFLE_FREE_THRESHOLD) {
+      return res.status(400).json({
+        error: `Aún no puedes finalizar: hace falta alcanzar el mínimo de ${RAFFLE_FREE_THRESHOLD} banners enseñados para que se pueda cobrar (llevas ${shownCount}/${RAFFLE_FREE_THRESHOLD}).`,
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: updateErr } = await supabase
+      .from('community_raffles')
+      .update({ promo_ended_at: nowIso })
+      .eq('id', raffleId)
+      .is('promo_ended_at', null) // idempotencia bajo carrera: dos peticiones simultáneas ganan solo una
+      .select()
+      .single();
+    if (updateErr) throw updateErr;
+
+    res.json({ raffle: updated });
+  } catch (err) {
+    console.error('[community] POST /raffles/:raffleId/end-promotion error:', err);
+    res.status(500).json({ error: err.message || 'Error al finalizar la publicidad del sorteo' });
+  }
+});
+
+// ── POST /api/community/raffles/:raffleId/renew-promotion ──────────────────
+// Cierra el ciclo actual y arranca uno nuevo: borra los targets del ciclo
+// que se acaba, resetea promo_ended_at a NULL, y llama al mismo
+// assignRaffleBannerTargets que se usa al crear un sorteo, esta vez con los
+// parámetros que se acaban de contratar (banner_views_contracted y
+// banner_interested_only para Light — Community mantiene aforo ilimitado
+// entre sus miembros). Los clicks y las visualizaciones del ciclo anterior
+// se pierden — es lo mismo que hace renew-promotion de eventos con
+// event_promo_notifications, y por el mismo motivo: cada renovación es un
+// ciclo limpio a efectos de métricas y de facturación.
+//
+// No se puede cambiar de tier (afectaría al pool de participantes, que ya
+// están comprometidos con este sorteo) ni la fecha (ends_at es del sorteo,
+// no de la publicidad). Solo se retoca el reparto.
+router.post('/raffles/:raffleId/renew-promotion', requireAuth, async (req, res) => {
+  const { raffleId } = req.params;
+  const userId = req.user.id;
+  const { banner_views_contracted, banner_interested_only } = req.body || {};
+
+  try {
+    const { data: raffle, error: fetchErr } = await supabase
+      .from('community_raffles')
+      .select('id, title, creator_id, community_id, tier, ends_at, drawn_at, promo_ended_at, banner_views_contracted, banner_interested_only')
+      .eq('id', raffleId)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!raffle) return res.status(404).json({ error: 'Sorteo no encontrado' });
+    if (raffle.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador del sorteo puede renovar su publicidad' });
+    }
+
+    const tier = normalizeRaffleTier(raffle.tier);
+    if (!RAFFLE_LIFECYCLE_TIERS.has(tier)) {
+      return res.status(400).json({
+        error: 'Los sorteos Volt no tienen publicidad de pago que renovar.',
+      });
+    }
+    if (raffle.drawn_at) {
+      return res.status(400).json({ error: 'Este sorteo ya está sorteado' });
+    }
+    if (new Date(raffle.ends_at) <= new Date()) {
+      return res.status(400).json({ error: 'Este sorteo ya ha terminado' });
+    }
+
+    const shownCount = await countRaffleShown(raffleId);
+    if (shownCount < RAFFLE_FREE_THRESHOLD) {
+      return res.status(400).json({
+        error: `Aún no puedes renovar: hace falta alcanzar el mínimo de ${RAFFLE_FREE_THRESHOLD} banners enseñados para que se pueda cobrar (llevas ${shownCount}/${RAFFLE_FREE_THRESHOLD}).`,
+      });
+    }
+
+    // Aforo del nuevo ciclo. En Light se puede cambiar (por eso se acepta en
+    // el body) pero se valida contra el rango de siempre. En Community el
+    // aforo no aplica (memberIds manda), así que se ignora lo que llegue.
+    let resolvedBannerViews = null;
+    if (tier === 'light') {
+      const parsed = Number.parseInt(banner_views_contracted, 10);
+      if (!Number.isFinite(parsed) || parsed < BANNER_VIEWS_MIN || parsed > BANNER_VIEWS_MAX) {
+        return res.status(400).json({
+          error: `Elige cuántas visualizaciones quieres contratar (entre ${BANNER_VIEWS_MIN} y ${BANNER_VIEWS_MAX})`,
+        });
+      }
+      resolvedBannerViews = parsed;
+    }
+
+    const resolvedInterestedOnly = !!banner_interested_only;
+
+    // Datos de la comunidad — se necesitan para calcular el pool (Light) y
+    // el conjunto de "interesados" para etiquetar los targets del nuevo
+    // ciclo (fase 111).
+    const { data: community, error: commErr } = await supabase
+      .from('communities')
+      .select('id, name, categories')
+      .eq('id', raffle.community_id)
+      .single();
+    if (commErr || !community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+
+    // Ciclo limpio: se borran los targets del ciclo anterior (clicks,
+    // visualizaciones e historial). Los datos históricos del dashboard se
+    // pierden — mismo comportamiento que en eventos y por la misma razón.
+    const { error: delErr } = await supabase
+      .from('raffle_banner_targets')
+      .delete()
+      .eq('raffle_id', raffleId);
+    if (delErr) throw delErr;
+
+    // Actualiza el sorteo con los nuevos parámetros. Se reabre la promo
+    // (promo_ended_at = null) tanto si estaba cerrada como si no — la
+    // renovación cubre los dos casos de uso: "ya se cumplió el aforo,
+    // quiero otro ciclo" y "cerré antes de tiempo, me arrepiento".
+    const { data: updated, error: updateErr } = await supabase
+      .from('community_raffles')
+      .update({
+        promo_ended_at: null,
+        banner_views_contracted: resolvedBannerViews,
+        banner_interested_only: resolvedInterestedOnly,
+      })
+      .eq('id', raffleId)
+      .select()
+      .single();
+    if (updateErr) throw updateErr;
+
+    // Reasignación del nuevo ciclo — misma lógica que al crear el sorteo
+    // (ver POST /communities/:id/raffles más arriba). Se replica en lugar
+    // de extraerse a un helper porque los dos flujos tienen validaciones
+    // previas distintas y compartir tres bloques de código con lambdas
+    // acabaría siendo menos legible que la duplicación explícita.
+    const interestedIds = await getInterestedUserIdSet(community.categories);
+    let targetIds = [];
+    if (tier === 'light') {
+      const { ids, categoriesDefined } = await getRaffleLightAudienceIds(raffle.community_id, userId, { interestedOnly: resolvedInterestedOnly });
+      if (resolvedInterestedOnly && !categoriesDefined) {
+        return res.status(400).json({ error: 'Tu comunidad no tiene categorías de intereses definidas: no se puede filtrar por interesados' });
+      }
+      if (resolvedInterestedOnly && ids.length < BANNER_VIEWS_MIN) {
+        return res.status(400).json({
+          error: `Solo hay ${ids.length} usuarios interesados disponibles, por debajo del mínimo contratable (${BANNER_VIEWS_MIN}): quita el filtro para poder renovar`,
+        });
+      }
+      // Sin filtro, se calcula el subconjunto con match de categoría para
+      // repartir con prioridad (mismo comportamiento que al crear).
+      const lightPriorityIds = resolvedInterestedOnly
+        ? null
+        : await getCategoryMatchingUserIds(ids, community.categories);
+      targetIds = await assignRaffleBannerTargets(raffleId, userId, resolvedBannerViews, ids, lightPriorityIds, interestedIds);
+    } else if (tier === 'community') {
+      const memberIds = await getCommunityMemberIdsForBanner(raffle.community_id, userId);
+      targetIds = await assignRaffleBannerTargets(raffleId, userId, null, memberIds, null, interestedIds);
+    }
+
+    await notifyCommunityRaffleTargets({
+      raffleId,
+      communityId: raffle.community_id,
+      communityName: community.name,
+      creatorId: userId,
+      title: raffle.title,
+      tier,
+      targetIds,
+    });
+
+    res.json({ raffle: updated, target_count: targetIds.length });
+  } catch (err) {
+    console.error('[community] POST /raffles/:raffleId/renew-promotion error:', err);
+    res.status(500).json({ error: err.message || 'Error al renovar la publicidad del sorteo' });
+  }
+});
+
 // Traduce el error de una RPC que no existe todavía en Supabase a algo
 // accionable. Sin esto, no haber ejecutado la migración de la fase 111 se
 // manifiesta como un 500 opaco en el dashboard.
@@ -4666,7 +4915,7 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         .order('event_date', { ascending: false }),
       supabase
         .from('community_raffles')
-        .select('id, title, tier, ends_at, drawn_at, created_at, banner_views_contracted, banner_interested_only')
+        .select('id, title, tier, ends_at, drawn_at, created_at, banner_views_contracted, banner_interested_only, promo_ended_at')
         .eq('community_id', communityId)
         .order('created_at', { ascending: false }),
     ]);
@@ -4780,6 +5029,13 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         // evento, y solo si se pasa el mínimo (ver FREE_THRESHOLD y el
         // bloqueo de renovación más arriba).
         billable: promoted && sentOfficial >= FREE_THRESHOLD,
+        // Flags de acción para el dashboard. Se calculan aquí y no en el
+        // cliente para que el UI no tenga que replicar las reglas de
+        // negocio (evento ya empezado / plan actual / umbral) — el cliente
+        // solo pinta un botón si el servidor dice que sí y, aun así, la
+        // petición vuelve a validarlo entera antes de aplicar el cambio.
+        can_end:   promoted && !started && sentOfficial >= FREE_THRESHOLD,
+        can_renew: promoted && !started && sentOfficial >= FREE_THRESHOLD,
       };
     });
 
@@ -4798,6 +5054,22 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
 
       const contracted = tier === 'light' ? (r.banner_views_contracted ?? null) : null;
 
+      // Reglas de fin/renovación de sorteo (fase 112): mismas que en el
+      // endpoint (RAFFLE_LIFECYCLE_TIERS + umbral), calculadas aquí para
+      // que el dashboard sepa cuándo pintar los botones. Volt queda fuera
+      // — no hay nada facturable —, y ambos requieren:
+      //   · sorteo vivo (no sorteado, no expirado),
+      //   · publicidad enseñada por encima del umbral de cobro.
+      // Finalizar exige además que la promo esté abierta; renovar la
+      // reabre si estaba cerrada, así que se puede tanto renovar una
+      // promo activa como resucitar una que ya se había cerrado.
+      const promoEndedAt = r.promo_ended_at || null;
+      const ended = !!r.drawn_at || new Date(r.ends_at).getTime() <= now;
+      const lifecycleTier = tier === 'light' || tier === 'community';
+      const meetsThreshold = shown >= FREE_THRESHOLD;
+      const canEnd   = lifecycleTier && !ended && !promoEndedAt && meetsThreshold;
+      const canRenew = lifecycleTier && !ended && meetsThreshold;
+
       return {
         id: r.id,
         title: r.title,
@@ -4805,7 +5077,8 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         tier_label: RAFFLE_TIERS[tier].label,
         ends_at: r.ends_at,
         drawn_at: r.drawn_at,
-        ended: !!r.drawn_at || new Date(r.ends_at).getTime() <= now,
+        ended,
+        promo_ended_at: promoEndedAt,
         banner_interested_only: !!r.banner_interested_only,
         has_categories: communityHasCategories,
         contracted,
@@ -4827,6 +5100,8 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         ctr_not_interested: rate(clicksNotInterested, notInterested),
         last_click_at: s?.last_click_at || null,
         eligible_participants: eligibleByTier.get(tier) ?? null,
+        can_end:   canEnd,
+        can_renew: canRenew,
       };
     });
 

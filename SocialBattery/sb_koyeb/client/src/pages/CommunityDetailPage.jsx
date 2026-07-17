@@ -828,11 +828,28 @@ const RAFFLE_TIER_SELECTED_STYLES = {
   light: 'border-amber-400/60 bg-amber-400/10',
 };
 
-function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
+function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo }) {
   const [drawing, setDrawing] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [endingPromo, setEndingPromo] = useState(false);
   const hasEnded = new Date(raffle.ends_at) <= new Date();
   const isDrawn = Boolean(raffle.winner);
+
+  // Fase 112 — condiciones para pintar los botones de gestión de
+  // publicidad. Coinciden con las del servidor (POST /raffles/:raffleId/
+  // {end,renew}-promotion) para evitar peticiones que se sabe que van a
+  // rebotar: solo el creador, solo Light/Community (Volt no tiene
+  // publicidad de pago), solo si sigue vivo y por encima del umbral de
+  // cobro. La lógica del umbral se hace en el servidor y llega ya
+  // resuelta indirectamente (banner_views_sent); aquí solo se filtra el
+  // caso obvio de "todavía no ha alcanzado el mínimo".
+  const RAFFLE_FREE_THRESHOLD = 200;
+  const lifecycleTier = raffle.tier === 'light' || raffle.tier === 'community';
+  const shown = raffle.banner_views_sent ?? 0;
+  const meetsThreshold = shown >= RAFFLE_FREE_THRESHOLD;
+  const canManagePromo = isCreator && lifecycleTier && !isDrawn && !hasEnded;
+  const canEndPromo   = canManagePromo && !raffle.promo_ended_at && meetsThreshold;
+  const canRenewPromo = canManagePromo && meetsThreshold;
 
   async function runDraw() {
     setDrawing(true);
@@ -842,6 +859,12 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
   async function runShare() {
     setSharing(true);
     try { await onShare(raffle); } finally { setSharing(false); }
+  }
+
+  async function runEndPromo() {
+    if (!window.confirm(`¿Finalizar la publicidad de "${raffle.title}"? Los banners pendientes dejarán de mostrarse. El sorteo en sí se mantiene y podrás renovar la publicidad si te arrepientes.`)) return;
+    setEndingPromo(true);
+    try { await onEndPromo(raffle); } finally { setEndingPromo(false); }
   }
 
   return (
@@ -884,6 +907,51 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare }) {
           <p className="text-[11px] text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-1.5">
             📣 {Number(raffle.banner_views_sent).toLocaleString('es-ES')}
             {raffle.banner_views_contracted ? ` / ${Number(raffle.banner_views_contracted).toLocaleString('es-ES')}` : ''} usuarios notificados
+          </p>
+        )}
+
+        {canManagePromo && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => onRenew(raffle)}
+              disabled={!canRenewPromo}
+              title={!meetsThreshold
+                ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para renovar (${shown}/${RAFFLE_FREE_THRESHOLD})`
+                : 'Renovar publicidad del sorteo'}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
+                canRenewPromo
+                  ? 'border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20'
+                  : 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
+              }`}
+            >
+              🔄 Renovar publicidad
+            </button>
+            <button
+              onClick={runEndPromo}
+              disabled={!canEndPromo || endingPromo}
+              title={!meetsThreshold
+                ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para finalizar (${shown}/${RAFFLE_FREE_THRESHOLD})`
+                : raffle.promo_ended_at ? 'La publicidad ya está finalizada' : 'Finalizar publicidad del sorteo'}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
+                canEndPromo && !endingPromo
+                  ? 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
+                  : 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
+              }`}
+            >
+              {endingPromo ? '…' : '⏹ Finalizar'}
+            </button>
+          </div>
+        )}
+
+        {isCreator && raffle.promo_ended_at && !isDrawn && !hasEnded && (
+          <p className="text-[11px] font-mono text-red-300/80 bg-red-500/10 border border-red-500/25 rounded-xl px-3 py-2 leading-relaxed">
+            ⏹ Publicidad finalizada. Los banners pendientes ya no se enseñan. Puedes reabrirla con "Renovar publicidad".
+          </p>
+        )}
+
+        {isCreator && lifecycleTier && !isDrawn && !hasEnded && !meetsThreshold && (
+          <p className="text-[11px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 leading-relaxed">
+            🔒 Aún no puedes gestionar la publicidad: hace falta alcanzar el mínimo de {RAFFLE_FREE_THRESHOLD} banners enseñados para que se pueda cobrar ({shown}/{RAFFLE_FREE_THRESHOLD}).
           </p>
         )}
 
@@ -2149,6 +2217,37 @@ export default function CommunityDetailPage() {
     }
   }
 
+  // Fase 112 — desde la tarjeta del sorteo, el creador puede saltar a la
+  // página de configuración de publicidad en modo renovación (ver
+  // RaffleAdAudiencePage y su rama isRenew) o cerrar el ciclo actual de
+  // golpe. Renovar necesita elegir aforo/filtro, así que se navega; en
+  // cambio finalizar no tiene parámetros y se envía directamente. El
+  // window.confirm ya vive en el propio botón del RaffleCard (runEndPromo).
+  function handleRenewRafflePromo(raffle) {
+    navigate(`/community/${communityId}/raffle-publicidad`, {
+      state: {
+        renewRaffle: {
+          id: raffle.id,
+          title: raffle.title,
+          tier: raffle.tier,
+          banner_views_contracted: raffle.banner_views_contracted,
+          banner_interested_only: raffle.banner_interested_only,
+        },
+        communityName: community?.name || '',
+      },
+    });
+  }
+
+  async function handleEndRafflePromo(raffle) {
+    try {
+      await api.post(`/community/raffles/${raffle.id}/end-promotion`, {});
+      showToast('Publicidad finalizada', 'success');
+      await loadRaffles();
+    } catch (e) {
+      showToast(e.message || 'No se pudo finalizar la publicidad', 'error');
+    }
+  }
+
   async function handleShareRaffle(raffle) {
     try {
       if (raffle.image_url) {
@@ -2505,6 +2604,8 @@ export default function CommunityDetailPage() {
                   isCreator={community.creator_id === profile?.id}
                   onDraw={handleDrawRaffle}
                   onShare={handleShareRaffle}
+                  onRenew={handleRenewRafflePromo}
+                  onEndPromo={handleEndRafflePromo}
                 />
               ))}
             </div>

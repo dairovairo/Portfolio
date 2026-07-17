@@ -4,6 +4,16 @@ import BottomNav from '../components/BottomNav';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 
+// ── Acciones sobre una promoción (fase 112) ────────────────────────────────
+// Renovar y finalizar reutilizan el mismo modelo de dos botones al pie de
+// cada tarjeta. Renovar navega a la página de configuración correspondiente
+// (EventAdConfigPage / RaffleAdAudiencePage) — donde el usuario ajusta plan,
+// aforo o filtros y confirma —, así que aquí solo se dispara la navegación.
+// Finalizar hace el POST directamente porque no hay parámetros que elegir:
+// cerrar es cerrar. Por eso finalizar sí necesita confirmación explícita
+// (modal), mientras que renovar no (la propia página de config es la
+// oportunidad de dar marcha atrás con "Atrás").
+
 // ── Dashboard de publicidad de una comunidad ────────────────────────────────
 // Se llega desde el botón 📊 del primer banner del perfil de comunidad, que
 // solo ve el creador (ver CommunityDetailPage.jsx). Reúne en una pantalla
@@ -61,6 +71,94 @@ function Pill({ className = '', children }) {
     <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border whitespace-nowrap ${className}`}>
       {children}
     </span>
+  );
+}
+
+// ── Modal de confirmación para finalizar ──────────────────────────────────
+// Se abre desde PromotionActions cuando el usuario pulsa "Finalizar". No
+// hay parámetros que elegir, solo confirmar. Se cierra con Esc / click fuera
+// o pulsando cualquiera de los dos botones — mientras se envía el POST se
+// deshabilita "Sí, finalizar" y se pone un spinner, para que un doble tap
+// no dispare dos peticiones.
+function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }) {
+  if (!open) return null;
+  const label = kind === 'event' ? 'la publicidad de este evento' : 'la publicidad de este sorteo';
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-4 pb-safe"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-surface-card border border-surface-border rounded-2xl p-5 max-w-sm w-full space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div>
+          <p className="font-display font-bold text-surface-text text-sm">Finalizar publicidad</p>
+          <p className="text-[12px] text-surface-muted mt-1 leading-relaxed">
+            Vas a cerrar {label} de <span className="text-surface-text">{title}</span>.
+          </p>
+          <p className="text-[11px] text-surface-muted mt-2 leading-relaxed">
+            Los envíos publicitarios se detienen inmediatamente. El {kind === 'event' ? 'evento' : 'sorteo'} en sí sigue igual — esto solo cierra la promoción. Después podrás renovarla si te arrepientes.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 py-2 rounded-xl border border-surface-border text-surface-text text-xs font-display font-semibold disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 py-2 rounded-xl bg-red-500/90 hover:bg-red-500 text-white text-xs font-display font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {busy && <span className="w-3 h-3 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />}
+            Sí, finalizar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Renderiza los dos botones de acción (Renovar / Finalizar) al pie de la
+// tarjeta. Los flags can_end y can_renew los calcula el servidor: si un
+// botón está deshabilitado es porque falta el mínimo de cobro o el
+// evento/sorteo ya está fuera de ventana; el hint lo explica en corto.
+function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold }) {
+  const canRenew = row.can_renew;
+  const canEnd = row.can_end;
+  if (!canRenew && !canEnd) return null;
+
+  const sent = kind === 'event' ? row.sent_official : row.shown;
+  const belowThreshold = sent < freeThreshold;
+
+  return (
+    <div className="border-t border-surface-border/60 pt-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onRenew}
+          disabled={!canRenew}
+          className="flex-1 py-2 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/30 hover:bg-accent-primary/25 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          🔄 Renovar
+        </button>
+        <button
+          onClick={onEnd}
+          disabled={!canEnd}
+          className="flex-1 py-2 rounded-xl bg-surface-bg border border-red-500/25 text-red-300 hover:bg-red-500/10 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ⏹ Finalizar
+        </button>
+      </div>
+      {belowThreshold && (
+        <p className="text-[10px] text-surface-muted leading-relaxed">
+          Todavía no puedes actuar sobre esta promoción: hace falta llegar al mínimo de {freeThreshold} {kind === 'event' ? 'envíos' : 'banners enseñados'} para que pueda cobrarse ({sent}/{freeThreshold}).
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -203,7 +301,7 @@ function InterestBreakdown({ data, filtered, unit, filteredNote }) {
   );
 }
 
-function EventCard({ event, freeThreshold, onOpen }) {
+function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
   const plan = PLAN_STYLE[event.promotion_plan] || PLAN_STYLE.basic;
 
   return (
@@ -272,11 +370,19 @@ function EventCard({ event, freeThreshold, onOpen }) {
         <span>👥 {fmt(event.attendees)} apuntados</span>
         <span>❤️ {fmt(event.likes)} likes</span>
       </div>
+
+      <PromotionActions
+        row={event}
+        kind="event"
+        onRenew={() => onRenew(event)}
+        onEnd={() => onEnd(event)}
+        freeThreshold={freeThreshold}
+      />
     </div>
   );
 }
 
-function RaffleCard({ raffle, onOpen }) {
+function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
   const style = TIER_STYLE[raffle.tier] || TIER_STYLE.light;
 
   return (
@@ -340,6 +446,23 @@ function RaffleCard({ raffle, onOpen }) {
           🎁 {fmt(raffle.eligible_participants)} participantes elegibles
         </div>
       )}
+
+      {raffle.promo_ended_at && !raffle.ended && (
+        <div className="border-t border-surface-border/60 pt-3">
+          <Pill className="bg-red-500/10 text-red-300 border-red-500/25">⏹ Publicidad finalizada</Pill>
+          <p className="text-[11px] text-surface-muted mt-2 leading-relaxed">
+            Cerraste el reparto el {fmtDate(raffle.promo_ended_at)}. Los banners pendientes ya no se enseñan. Puedes reabrirla con "Renovar".
+          </p>
+        </div>
+      )}
+
+      <PromotionActions
+        row={raffle}
+        kind="raffle"
+        onRenew={() => onRenew(raffle)}
+        onEnd={() => onEnd(raffle)}
+        freeThreshold={freeThreshold}
+      />
     </div>
   );
 }
@@ -353,6 +476,13 @@ export default function CommunityDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('events');
+
+  // Estado del modal de finalización. Un único slot — nunca se puede tener
+  // dos confirmaciones abiertas a la vez, así que basta con "qué fila y de
+  // qué tipo". `endingBusy` bloquea el botón de confirmar mientras vuela el
+  // POST, para que un doble tap no dispare dos peticiones.
+  const [ending, setEnding] = useState(null); // { kind, row } | null
+  const [endingBusy, setEndingBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -370,6 +500,70 @@ export default function CommunityDashboardPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // ── Handlers de acciones de promoción ─────────────────────────────────────
+  // Renovar navega a la página de configuración correspondiente con el
+  // estado necesario para arrancar en modo renovación (renewEvent/renewRaffle
+  // en el state). Es lo que interpretan EventAdConfigPage y
+  // RaffleAdAudiencePage: si detectan estos objetos, prellenan el formulario
+  // con los valores actuales y al confirmar llaman al endpoint renew-promotion
+  // en vez de al de creación. Sin ese state las páginas siguen siendo las de
+  // crear un evento/sorteo nuevo — no rompemos el flujo original.
+  const handleRenewEvent = useCallback((event) => {
+    navigate('/community/event-publicidad', {
+      state: {
+        renewEvent: {
+          id: event.id,
+          title: event.title,
+          promotion_plan: event.promotion_plan,
+          notification_count: event.contracted,
+          communityId,
+          communityName: data?.community?.name || '',
+        },
+      },
+    });
+  }, [navigate, communityId, data]);
+
+  const handleRenewRaffle = useCallback((raffle) => {
+    navigate(`/community/${communityId}/raffle-publicidad`, {
+      state: {
+        renewRaffle: {
+          id: raffle.id,
+          title: raffle.title,
+          tier: raffle.tier,
+          banner_views_contracted: raffle.contracted,
+          banner_interested_only: raffle.banner_interested_only,
+        },
+        communityName: data?.community?.name || '',
+      },
+    });
+  }, [navigate, communityId, data]);
+
+  // Finalizar sí es acción destructiva y no lleva parámetros: se dispara con
+  // confirmación en modal. Se refresca el dashboard al terminar para que el
+  // usuario vea el nuevo estado (promo_ended_at pintado, botones ajustados)
+  // sin tener que tirar del pull-to-refresh.
+  const askEnd = useCallback((kind, row) => {
+    setEnding({ kind, row });
+  }, []);
+
+  const confirmEnd = useCallback(async () => {
+    if (!ending) return;
+    const path = ending.kind === 'event'
+      ? `/community/events/${ending.row.id}/end-promotion`
+      : `/community/raffles/${ending.row.id}/end-promotion`;
+    setEndingBusy(true);
+    try {
+      await api.post(path, {});
+      showToast('Publicidad finalizada', 'success');
+      setEnding(null);
+      await load();
+    } catch (e) {
+      showToast(e.message || 'No se pudo finalizar', 'error');
+    } finally {
+      setEndingBusy(false);
+    }
+  }, [ending, load, showToast]);
 
   // Se ordenan por clicks: lo primero que quieres ver al abrir esto es qué
   // campaña funcionó, no cuál publicaste antes. A igualdad de clicks manda
@@ -519,18 +713,32 @@ export default function CommunityDashboardPage() {
                     event={e}
                     freeThreshold={s.free_threshold}
                     onOpen={id => navigate(`/community/event/${id}`)}
+                    onRenew={handleRenewEvent}
+                    onEnd={row => askEnd('event', row)}
                   />
                 ))
               : raffles.map(r => (
                   <RaffleCard
                     key={r.id}
                     raffle={r}
+                    freeThreshold={s.free_threshold}
                     onOpen={id => navigate(`/community/${communityId}#raffle-${id}`)}
+                    onRenew={handleRenewRaffle}
+                    onEnd={row => askEnd('raffle', row)}
                   />
                 ))}
           </div>
         )}
       </main>
+
+      <ConfirmEndModal
+        open={!!ending}
+        kind={ending?.kind}
+        title={ending?.row?.title || ''}
+        busy={endingBusy}
+        onCancel={() => !endingBusy && setEnding(null)}
+        onConfirm={confirmEnd}
+      />
 
       <BottomNav />
     </div>

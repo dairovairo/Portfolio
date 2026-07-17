@@ -332,246 +332,11 @@ function CreatePollModal({ onClose, onCreate }) {
   );
 }
 
-// ── Renew promotion modal ───────────────────────────────────────────────────
-// Mismo selector de planes (Basic/Premium/Ultra) y misma especificación que
-// en la creación de evento (CommunityDetailPage.jsx → CreateCommunityEventModal),
-// pero apuntando al endpoint de renovación en vez de al de creación.
-function RenewPromotionModal({ event, onClose, onRenewed }) {
-  const { showToast } = useToast();
-  const [expandedPlan, setExpandedPlan] = useState(null); // 'basic' | 'premium' | 'ultra' | null
-  const [plan, setPlan] = useState(event?.promotion_plan || 'basic');
-  const [notificationCount, setNotificationCount] = useState(event?.notification_count || 500);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleRenew() {
-    if (saving) return;
-    setError('');
-    setSaving(true);
-    try {
-      const body = { promotion_plan: plan };
-      if (plan === 'premium' || plan === 'ultra') body.notification_count = notificationCount;
-      const data = await api.post(`/community/events/${event.id}/renew-promotion`, body);
-      showToast('¡Promoción renovada! 🔁', 'success');
-      onRenewed?.(data.event);
-      onClose();
-    } catch (e) {
-      setError(e.message || 'Error al renovar la promoción');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
-        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-xl">🔁</span>
-          <div className="flex-1">
-            <h2 className="font-display font-bold text-surface-text">Renovar promoción</h2>
-            <p className="text-xs text-surface-muted">Elige el plan para el nuevo ciclo de notificaciones</p>
-          </div>
-          <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-2">
-          {/* Basic */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setPlan('basic')}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPlan('basic'); } }}
-            className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
-              plan === 'basic'
-                // Basic (plan por defecto/gratuito): solo borde acento, sin
-                // tinte de relleno, para distinguirlo de Premium/Ultra.
-                ? 'border-accent-primary bg-surface-card'
-                : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
-            }`}
-          >
-            <span className="text-xl mt-0.5">📋</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-display font-bold text-surface-text">Basic Promotion</span>
-                <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
-              </div>
-              <p className="text-xs text-surface-muted mt-0.5">Listado estándar en la sección de eventos de la comunidad.</p>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'basic' ? null : 'basic'); }}
-                className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
-              >
-                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
-                  {expandedPlan === 'basic' ? '−' : '+'}
-                </span>
-                {expandedPlan === 'basic' ? 'Ocultar detalles' : 'Ver qué incluye'}
-              </button>
-              {expandedPlan === 'basic' && (
-                <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
-                  <li>· Aparición en lista de eventos</li>
-                  <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
-                </ul>
-              )}
-            </div>
-            {plan === 'basic' && (
-              <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
-            )}
-          </div>
-
-          {/* Premium */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setPlan('premium')}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPlan('premium'); } }}
-            className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
-              plan === 'premium'
-                ? 'border-purple-400 bg-purple-500/10'
-                : 'border-surface-border bg-surface-bg hover:border-purple-400/30'
-            }`}
-          >
-            <span className="text-xl mt-0.5">⚡</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
-                <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
-              </div>
-              <p className="text-xs text-surface-muted mt-0.5">Etiqueta ⚡ Premium · Notificación push a usuarios seleccionados de la app al publicar.</p>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'premium' ? null : 'premium'); }}
-                className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
-              >
-                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
-                  {expandedPlan === 'premium' ? '−' : '+'}
-                </span>
-                {expandedPlan === 'premium' ? 'Ocultar detalles' : 'Ver qué incluye'}
-              </button>
-              {expandedPlan === 'premium' && (
-                <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
-                  <li>· Aparición en lista de eventos</li>
-                  <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
-                  <li>· Notificaciones a número de usuarios contratado</li>
-                </ul>
-              )}
-            </div>
-            {plan === 'premium' && (
-              <span className="absolute top-3 right-3 text-purple-300 text-base">✓</span>
-            )}
-          </div>
-
-          {/* Ultra */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setPlan('ultra')}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPlan('ultra'); } }}
-            className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
-              plan === 'ultra'
-                // Subimos el relleno a /20 (antes /10) para que el "azul" del
-                // acento se lea igual que el morado de la tarjeta premium.
-                ? 'border-accent-primary bg-accent-primary/20'
-                : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
-            }`}
-          >
-            <span className="text-xl mt-0.5">🚀</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
-                <span className="text-xs font-mono font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
-              </div>
-              <p className="text-xs text-surface-muted mt-0.5">Todo lo de Premium · Notificación push prominente a más usuarios (requiere interacción) · Insignia 🚀 Ultra.</p>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setExpandedPlan(p => p === 'ultra' ? null : 'ultra'); }}
-                className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-surface-muted hover:text-surface-text transition-colors"
-              >
-                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-surface-border leading-none">
-                  {expandedPlan === 'ultra' ? '−' : '+'}
-                </span>
-                {expandedPlan === 'ultra' ? 'Ocultar detalles' : 'Ver qué incluye'}
-              </button>
-              {expandedPlan === 'ultra' && (
-                <ul className="mt-1.5 space-y-1 text-[11px] font-mono text-surface-muted">
-                  <li>· Aparición en lista de eventos</li>
-                  <li>· Notificaciones a usuarios de la comunidad (si existe)</li>
-                  <li>· Notificaciones a número de usuarios contratado</li>
-                  <li>· Apariciones en banner menú principal</li>
-                </ul>
-              )}
-            </div>
-            {plan === 'ultra' && (
-              <span className="absolute top-3 right-3 text-accent-glow text-base">✓</span>
-            )}
-          </div>
-        </div>
-
-        {(plan === 'premium' || plan === 'ultra') && (
-          <>
-            <div className="mt-2 p-3 rounded-xl border border-surface-border bg-surface-bg space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-xs font-mono text-surface-muted">
-                  📨 Notificaciones a contratar (on-demand)
-                </label>
-                <span className="text-xs font-mono font-semibold text-surface-text">
-                  {Number(notificationCount).toLocaleString('es-ES')}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={500}
-                max={50000}
-                step={500}
-                value={notificationCount}
-                onChange={e => setNotificationCount(Number(e.target.value))}
-                className="w-full accent-accent-primary cursor-pointer"
-              />
-              <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-                <span>Mín. 500</span>
-                <span>Máx. 50.000</span>
-              </div>
-              <p className="text-[10px] font-mono text-surface-muted">
-                ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
-              </p>
-            </div>
-            <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-              💳 El pago se efectuará tras el inicio del evento, en base a las notificaciones enviadas hasta su comienzo.
-            </p>
-            <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-              📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
-            </p>
-            <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-              🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
-            </p>
-            <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-              🔁 En cada promoción cada usuario se notifica una vez, para que usuarios ya notificados vuelvan a serlo, se debe renovar la promoción desde el evento creado.
-            </p>
-            <p className="mt-2 text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-              💶 La promoción se cobrará al empezar el evento automáticamente o al renovar la promoción.
-            </p>
-          </>
-        )}
-
-        {error && <p className="mt-3 text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
-
-        <div className="flex gap-2 mt-4">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
-            Cancelar
-          </button>
-          <button
-            onClick={handleRenew}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-semibold disabled:opacity-50 transition-all"
-          >
-            {saving ? 'Renovando...' : '🔁 Renovar promoción'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Fase 112 — se retiró el RenewPromotionModal integrado. El botón
+// "Renovar" del cabecero ahora navega a EventAdConfigPage (state
+// renewEvent), que reutiliza la misma UI que la contratación inicial
+// — slider de cuota, toggle Premium/Ultra, previsualización de
+// audiencia — en lugar de mantener dos implementaciones divergentes.
 
 // ── End promotion modal ──────────────────────────────────────────────────────
 // Confirmación para finalizar antes de tiempo una promoción premium/ultra:
@@ -663,7 +428,6 @@ export default function EventDetailPage() {
   const [liking, setLiking] = useState(false);
   const [reminderSaving, setReminderSaving] = useState(false);
   const [sharingStory, setSharingStory] = useState(false);
-  const [showRenewModal, setShowRenewModal] = useState(false);
   const [showEndPromoModal, setShowEndPromoModal] = useState(false);
 
   // Silenciar avisos/actualizaciones de este evento (asistente, no organizador)
@@ -1106,7 +870,29 @@ export default function EventDetailPage() {
             {isCreator && !isPast && (
               <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                 <button
-                  onClick={() => { if (!belowRenewThreshold) setShowRenewModal(true); }}
+                  onClick={() => {
+                    if (belowRenewThreshold) return;
+                    // Fase 112 — el flujo unificado es: renovar SIEMPRE
+                    // pasa por la página de configuración de publicidad
+                    // (EventAdConfigPage), tanto desde aquí como desde el
+                    // dashboard. Se detecta como renovación por el state
+                    // `renewEvent`. Antes se abría un modal inline; se
+                    // sustituyó por la página completa para tener slider
+                    // de audiencia, toggle Ultra/Premium y el mismo
+                    // contexto que al crear.
+                    navigate('/community/event-publicidad', {
+                      state: {
+                        renewEvent: {
+                          id: event.id,
+                          title: event.title,
+                          promotion_plan: event.promotion_plan,
+                          notification_count: event.notification_count,
+                          communityId: event.community_id,
+                          communityName: event.community?.name || event.community_name || '',
+                        },
+                      },
+                    });
+                  }}
                   disabled={belowRenewThreshold}
                   title={belowRenewThreshold
                     ? `Necesitas alcanzar ${PROMO_FREE_THRESHOLD} notificaciones enviadas para renovar (${promoSentCount}/${PROMO_FREE_THRESHOLD})`
@@ -1422,13 +1208,6 @@ export default function EventDetailPage() {
         </div>
       </main>
 
-      {showRenewModal && event && (
-        <RenewPromotionModal
-          event={event}
-          onClose={() => setShowRenewModal(false)}
-          onRenewed={() => fetchEvent()}
-        />
-      )}
 
       {showEndPromoModal && event && (
         <EndPromotionModal
