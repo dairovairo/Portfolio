@@ -53,11 +53,11 @@ const PLAN_META = {
     label: 'Ultra',
     price: '20 €',
     accent: 'blue',
-    ring: 'border-accent-primary bg-accent-primary/10',
-    pill: 'text-accent-glow bg-accent-primary/10 border border-accent-primary/20',
-    check: 'text-accent-glow',
-    slider: 'accent-accent-primary',
-    button: 'bg-accent-primary hover:bg-accent-primary/80 text-white',
+    ring: 'border-blue-400 bg-blue-500/10',
+    pill: 'text-blue-300 bg-blue-500/10 border border-blue-500/20',
+    check: 'text-blue-300',
+    slider: 'accent-blue-400',
+    button: 'bg-blue-500 hover:bg-blue-400 text-white',
     includes: [
       'Aparición en lista de eventos',
       'Notificaciones a miembros de la comunidad',
@@ -448,7 +448,7 @@ export default function EventAdConfigPage() {
               </button>
             </div>
           ) : (
-            <p className={`font-display font-bold text-4xl ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
+            <p className={`font-display font-bold text-4xl ${plan === 'ultra' ? 'text-blue-300' : 'text-purple-300'}`}>
               {Number(total).toLocaleString('es-ES')}
             </p>
           )}
@@ -479,7 +479,7 @@ export default function EventAdConfigPage() {
               disabled={loadingTotal || !!loadError}
               className={`relative inline-flex h-7 w-12 items-center rounded-full flex-shrink-0 transition-colors disabled:opacity-40 focus:outline-none ${
                 filterInterested
-                  ? (plan === 'ultra' ? 'bg-accent-primary' : 'bg-purple-500')
+                  ? (plan === 'ultra' ? 'bg-blue-500' : 'bg-purple-500')
                   : 'bg-surface-bg border border-surface-border'
               }`}
             >
@@ -495,7 +495,7 @@ export default function EventAdConfigPage() {
           {filterInterested && (
             loadingInterested ? (
               <div className="text-center py-2">
-                <span className={`w-5 h-5 border-2 border-t-transparent rounded-full animate-spin inline-block ${plan === 'ultra' ? 'border-accent-primary' : 'border-purple-400'}`} />
+                <span className={`w-5 h-5 border-2 border-t-transparent rounded-full animate-spin inline-block ${plan === 'ultra' ? 'border-blue-400' : 'border-purple-400'}`} />
               </div>
             ) : categoriesDefined === false ? (
               <div className="text-center py-1 space-y-2 border-t border-surface-border/60 pt-3">
@@ -512,7 +512,7 @@ export default function EventAdConfigPage() {
               </div>
             ) : (
               <div className="text-center py-1 border-t border-surface-border/60 pt-3">
-                <p className={`font-display font-bold text-2xl ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
+                <p className={`font-display font-bold text-2xl ${plan === 'ultra' ? 'text-blue-300' : 'text-purple-300'}`}>
                   {Number(interested).toLocaleString('es-ES')}
                 </p>
                 <p className="text-[11px] text-surface-muted mt-1">
@@ -549,7 +549,7 @@ export default function EventAdConfigPage() {
               disabled={!canFilterLocation || loadingTotal || !!loadError}
               className={`relative inline-flex h-7 w-12 items-center rounded-full flex-shrink-0 transition-colors disabled:opacity-40 focus:outline-none ${
                 filterLocation
-                  ? (plan === 'ultra' ? 'bg-accent-primary' : 'bg-purple-500')
+                  ? (plan === 'ultra' ? 'bg-blue-500' : 'bg-purple-500')
                   : 'bg-surface-bg border border-surface-border'
               }`}
             >
@@ -586,10 +586,10 @@ export default function EventAdConfigPage() {
               </div>
               <div className="text-center py-1">
                 {loadingNearby ? (
-                  <span className={`w-5 h-5 border-2 border-t-transparent rounded-full animate-spin inline-block ${plan === 'ultra' ? 'border-accent-primary' : 'border-purple-400'}`} />
+                  <span className={`w-5 h-5 border-2 border-t-transparent rounded-full animate-spin inline-block ${plan === 'ultra' ? 'border-blue-400' : 'border-purple-400'}`} />
                 ) : (
                   <>
-                    <p className={`font-display font-bold text-2xl ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
+                    <p className={`font-display font-bold text-2xl ${plan === 'ultra' ? 'text-blue-300' : 'text-purple-300'}`}>
                       {Number(
                         filterInterested && interestedNearby != null ? interestedNearby : (nearby ?? 0)
                       ).toLocaleString('es-ES')}
