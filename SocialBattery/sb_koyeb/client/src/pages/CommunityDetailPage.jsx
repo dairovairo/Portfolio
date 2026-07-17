@@ -1013,91 +1013,6 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Título *</label>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Ej: Sorteamos una camiseta oficial"
-              maxLength={120}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Descripción <span className="text-slate-600">(opcional)</span>
-            </label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="¿En qué consiste el premio? ¿Alguna condición?"
-              rows={3}
-              maxLength={1000}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha de fin *</label>
-            <input
-              type="datetime-local"
-              value={endsAt}
-              onChange={e => setEndsAt(e.target.value)}
-              min={defaultDate}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Foto <span className="text-slate-600">(opcional)</span>
-            </label>
-            {imagePreview ? (
-              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
-                <div className="aspect-[16/9]">
-                  <img src={imagePreview} alt="" className="h-full w-full object-cover" />
-                </div>
-                <div className="flex items-center justify-between gap-2 px-3 py-2">
-                  <span className="truncate text-xs text-surface-muted">{imageFile?.name}</span>
-                  <button
-                    type="button"
-                    onClick={clearImage}
-                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
-                  >
-                    Quitar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowPhotoMenu(true)}
-                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
-              >
-                Elegir foto
-              </button>
-            )}
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageChange}
-            />
-            <input
-              ref={imageCameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleImageChange}
-            />
-            <PhotoSourceMenu
-              open={showPhotoMenu}
-              onClose={() => setShowPhotoMenu(false)}
-              onCamera={() => imageCameraRef.current?.click()}
-              onGallery={() => imageInputRef.current?.click()}
-            />
-          </div>
-
-          <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-mono text-surface-muted">Tipo de sorteo *</label>
               <button
@@ -1195,6 +1110,91 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                 </p>
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Título *</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Ej: Sorteamos una camiseta oficial"
+              maxLength={120}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Descripción <span className="text-slate-600">(opcional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="¿En qué consiste el premio? ¿Alguna condición?"
+              rows={3}
+              maxLength={1000}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha de fin *</label>
+            <input
+              type="datetime-local"
+              value={endsAt}
+              onChange={e => setEndsAt(e.target.value)}
+              min={defaultDate}
+              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Foto <span className="text-slate-600">(opcional)</span>
+            </label>
+            {imagePreview ? (
+              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
+                <div className="aspect-[16/9]">
+                  <img src={imagePreview} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="truncate text-xs text-surface-muted">{imageFile?.name}</span>
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowPhotoMenu(true)}
+                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
+              >
+                Elegir foto
+              </button>
+            )}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+            <input
+              ref={imageCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+            <PhotoSourceMenu
+              open={showPhotoMenu}
+              onClose={() => setShowPhotoMenu(false)}
+              onCamera={() => imageCameraRef.current?.click()}
+              onGallery={() => imageInputRef.current?.click()}
+            />
           </div>
 
           <p className="text-[11px] text-surface-muted italic">

@@ -369,7 +369,6 @@ export default function SettingsPage() {
     muteCommunityChats, setMuteCommunityChats,
     muteCommunityThreads, setMuteCommunityThreads,
     muteNewEvents, setMuteNewEvents,
-    muteNewRaffles, setMuteNewRaffles,
     muteNewPools, setMuteNewPools,
     muteEventReminders, setMuteEventReminders,
     mutePoolReminders, setMutePoolReminders,
@@ -966,21 +965,6 @@ export default function SettingsPage() {
                   <Toggle
                     enabled={muteNewEvents}
                     onToggle={() => setMuteNewEvents(!muteNewEvents)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-display font-semibold text-surface-text">
-                      Silenciar nuevos sorteos de tus comunidades
-                    </div>
-                    <div className="text-xs text-surface-muted">
-                      No te avisaremos cuando se cree un nuevo sorteo en tus comunidades, ni con la app abierta ni en segundo plano
-                    </div>
-                  </div>
-                  <Toggle
-                    enabled={muteNewRaffles}
-                    onToggle={() => setMuteNewRaffles(!muteNewRaffles)}
                   />
                 </div>
 

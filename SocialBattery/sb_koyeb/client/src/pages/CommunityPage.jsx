@@ -404,7 +404,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
 
   // Ring de borde por plan de pago (se mantiene: distingue visualmente sin afectar orden)
   const RING_META = {
-    ultra:   { ring: 'border-accent-primary/55' },
+    ultra:   { ring: 'border-sky-400/55' },
     premium: { ring: 'border-purple-400/50' },
   };
   const ringOverride = RING_META[event.promotion_plan];
@@ -415,7 +415,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
 
   // Pill de plan: visible para los 3 planes (basic incluido)
   const PILL_META = {
-    ultra:   { pill: '🚀 Ultra',   pillClass: 'text-accent-glow bg-accent-primary/10 border border-accent-primary/25' },
+    ultra:   { pill: '🚀 Ultra',   pillClass: 'text-sky-300 bg-sky-500/10 border border-sky-500/25' },
     premium: { pill: '⚡ Premium', pillClass: 'text-purple-300 bg-purple-500/10 border border-purple-500/25' },
     basic:   { pill: '📋 Basic',   pillClass: 'text-slate-300 bg-slate-500/10 border border-slate-500/25' },
   };
