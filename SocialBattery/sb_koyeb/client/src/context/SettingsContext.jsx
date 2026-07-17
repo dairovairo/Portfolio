@@ -127,6 +127,7 @@ const STORAGE_KEYS = {
   muteCommunityChats:    'sb-mute-community-chats',
   muteCommunityThreads:  'sb-mute-community-threads',
   muteNewEvents:         'sb-mute-new-events',
+  muteNewRaffles:        'sb-mute-new-raffles',
   muteNewPools:          'sb-mute-new-pools',
   muteEventReminders:        'sb-mute-event-reminders',
   mutePoolReminders:         'sb-mute-pool-reminders',
@@ -298,6 +299,9 @@ export function SettingsProvider({ children }) {
   );
   const [muteNewEvents, setMuteNewEventsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteNewEvents, 'false') === 'true'
+  );
+  const [muteNewRaffles, setMuteNewRafflesState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteNewRaffles, 'false') === 'true'
   );
   const [muteNewPools, setMuteNewPoolsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteNewPools, 'false') === 'true'
@@ -484,6 +488,20 @@ export function SettingsProvider({ children }) {
     });
   }, []);
 
+  const setMuteNewRaffles = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteNewRaffles, String(v));
+    setMuteNewRafflesState(v);
+    // El aviso de "nuevo sorteo en tu comunidad" (avioneta inmediata) es un
+    // broadcast + web-push real que manda el servidor al crear el sorteo
+    // (routes/community.js, notifyCommunityRaffleTargets) y que llega igual
+    // con la app en foreground o en segundo plano/cerrada, así que este
+    // ajuste tiene que persistir en el usuario (users.mute_new_raffles,
+    // fase 107) — mismo patrón que mute_new_events / mute_new_pools.
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_new_raffles: v }).catch(() => {});
+    });
+  }, []);
+
   const setMuteNewPools = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteNewPools, String(v));
     setMuteNewPoolsState(v);
@@ -604,6 +622,10 @@ export function SettingsProvider({ children }) {
     if (typeof profile.mute_new_events === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteNewEvents, String(profile.mute_new_events));
       setMuteNewEventsState(profile.mute_new_events);
+    }
+    if (typeof profile.mute_new_raffles === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.muteNewRaffles, String(profile.mute_new_raffles));
+      setMuteNewRafflesState(profile.mute_new_raffles);
     }
     if (typeof profile.mute_event_recommendations === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteEventRecommendations, String(profile.mute_event_recommendations));
@@ -749,6 +771,7 @@ export function SettingsProvider({ children }) {
       muteCommunityChats, setMuteCommunityChats,
       muteCommunityThreads, setMuteCommunityThreads,
       muteNewEvents, setMuteNewEvents,
+      muteNewRaffles, setMuteNewRaffles,
       muteNewPools, setMuteNewPools,
       muteEventReminders, setMuteEventReminders,
       mutePoolReminders, setMutePoolReminders,
