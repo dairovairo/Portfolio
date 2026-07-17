@@ -468,7 +468,9 @@ function RenewPromotionModal({ event, onClose, onRenewed }) {
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPlan('ultra'); } }}
             className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
               plan === 'ultra'
-                ? 'border-accent-primary bg-accent-primary/10'
+                // Subimos el relleno a /20 (antes /10) para que el "azul" del
+                // acento se lea igual que el morado de la tarjeta premium.
+                ? 'border-accent-primary bg-accent-primary/20'
                 : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
             }`}
           >

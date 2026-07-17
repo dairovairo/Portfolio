@@ -407,7 +407,10 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
 
   // Ring de borde por plan de pago (se mantiene: distingue visualmente sin afectar orden)
   const RING_META = {
-    ultra:   { ring: 'border-accent-primary/55' },
+    // Ultra: mismo tono que el botón "Actualizar batería" del menú principal
+    // (bg-accent-primary). Antes iba en /55 y quedaba muy tenue: subimos a
+    // plena opacidad para que se lea claramente el "azul del acento".
+    ultra:   { ring: 'border-accent-primary' },
     premium: { ring: 'border-purple-400/50' },
   };
   const ringOverride = RING_META[event.promotion_plan];

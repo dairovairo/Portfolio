@@ -689,7 +689,10 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('promotion_plan', 'ultra'); } }}
                 className={`relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
                   form.promotion_plan === 'ultra'
-                    ? 'border-accent-primary bg-accent-primary/10'
+                    // El accent-primary (teal por defecto) al 10% quedaba casi
+                    // invisible; subimos a /20 para que el relleno "azul" se
+                    // note igual que el morado de la tarjeta premium.
+                    ? 'border-accent-primary bg-accent-primary/20'
                     : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
                 }`}
               >
