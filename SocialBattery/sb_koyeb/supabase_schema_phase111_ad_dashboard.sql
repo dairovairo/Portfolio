@@ -40,6 +40,12 @@
 --      cuadraría con el notification_sent_count que se enseña en el resto
 --      de la app.
 --
+--      NOTA: la columna se llama `ad_source` (no `source` a secas) porque
+--      event_promo_notifications ya tenía en producción una columna
+--      `source` NOT NULL de otro sistema, ajena a esta fase. Para no
+--      arriesgarnos a pisarla sin saber qué la usa, esta migración no la
+--      toca en absoluto y usa un nombre propio.
+--
 -- Filas anteriores a esta fase se quedan con NULL en las tres columnas
 -- nuevas: son datos que no se capturaron en su momento y no se inventan.
 -- El dashboard los agrupa aparte como "sin clasificar" (ver
@@ -49,32 +55,30 @@
 ALTER TABLE public.event_promo_notifications
   ADD COLUMN IF NOT EXISTS clicked_at       TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS matched_interest BOOLEAN,
-  ADD COLUMN IF NOT EXISTS source           TEXT;
+  ADD COLUMN IF NOT EXISTS ad_source        TEXT;
 
--- Defensivo: si esta migración (u otra cosa) ya dejó algún valor en
--- `source` que no sea uno de los dos válidos — por ejemplo un reintento
--- parcial de este mismo script, o una cadena vacía en vez de NULL — se
--- normaliza a NULL ANTES de añadir la constraint, para que "añadir la
--- CHECK" nunca falle por datos ya existentes. NULL sigue significando lo
--- mismo de siempre: "fila anterior a la fase 111 / sin clasificar", así
--- que no se pierde información real, solo se descarta un valor que ya
--- era inválido de por sí.
+-- Defensivo: si esta migración se llegó a ejecutar parcialmente antes
+-- (reintento tras un error) `ad_source` puede tener algún valor que no
+-- sea uno de los dos válidos. Se normaliza a NULL ANTES de añadir la
+-- constraint, para que "añadir la CHECK" nunca falle por datos ya
+-- existentes. NULL sigue significando lo mismo de siempre: "fila anterior
+-- a la fase 111 / sin clasificar", así que no se pierde información real.
 UPDATE public.event_promo_notifications
-  SET source = NULL
-  WHERE source IS NOT NULL AND source NOT IN ('community', 'promo');
+  SET ad_source = NULL
+  WHERE ad_source IS NOT NULL AND ad_source NOT IN ('community', 'promo');
 
 ALTER TABLE public.event_promo_notifications
-  DROP CONSTRAINT IF EXISTS event_promo_notifications_source_check;
+  DROP CONSTRAINT IF EXISTS event_promo_notifications_ad_source_check;
 ALTER TABLE public.event_promo_notifications
-  ADD CONSTRAINT event_promo_notifications_source_check
-    CHECK (source IS NULL OR source IN ('community', 'promo'));
+  ADD CONSTRAINT event_promo_notifications_ad_source_check
+    CHECK (ad_source IS NULL OR ad_source IN ('community', 'promo'));
 
 COMMENT ON COLUMN public.event_promo_notifications.clicked_at IS
   'Momento en que el usuario abrió el evento desde la notificación (?src= en la URL del push → POST /events/:id/ad-click). NULL = enviada pero no tocada. Solo se marca la PRIMERA vez.';
 COMMENT ON COLUMN public.event_promo_notifications.matched_interest IS
   'TRUE si en el momento del envío users.interests cruzaba con community_events.categories. NULL = no clasificable (evento sin categorías, o fila anterior a la fase 111).';
-COMMENT ON COLUMN public.event_promo_notifications.source IS
-  'community = aviso inmediato a miembros de la comunidad (no cuenta contra el cupo contratado). promo = envío publicitario del job de pacing (sí cuenta, base de facturación). NULL = fila anterior a la fase 111.';
+COMMENT ON COLUMN public.event_promo_notifications.ad_source IS
+  'community = aviso inmediato a miembros de la comunidad (no cuenta contra el cupo contratado). promo = envío publicitario del job de pacing (sí cuenta, base de facturación). NULL = fila anterior a la fase 111. Se llama ad_source y no source porque la tabla ya tenía en producción una columna source NOT NULL ajena a esta fase.';
 
 -- Índice para el conteo de clicks por evento del dashboard.
 CREATE INDEX IF NOT EXISTS idx_event_promo_notifications_clicked
@@ -133,9 +137,9 @@ AS $$
   SELECT
     n.event_id,
     COUNT(*),
-    COUNT(*) FILTER (WHERE n.source = 'community'),
-    COUNT(*) FILTER (WHERE n.source = 'promo'),
-    COUNT(*) FILTER (WHERE n.source IS NULL),
+    COUNT(*) FILTER (WHERE n.ad_source = 'community'),
+    COUNT(*) FILTER (WHERE n.ad_source = 'promo'),
+    COUNT(*) FILTER (WHERE n.ad_source IS NULL),
     COUNT(*) FILTER (WHERE n.matched_interest IS TRUE),
     COUNT(*) FILTER (WHERE n.matched_interest IS FALSE),
     COUNT(*) FILTER (WHERE n.matched_interest IS NULL),

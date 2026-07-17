@@ -289,7 +289,7 @@ async function dispatchToEvent(event, users, dayKey, isInterested = null) {
       successfulUserIds.map(userId => ({
         event_id: event.id,
         user_id: userId,
-        source: 'promo',
+        ad_source: 'promo',
         matched_interest: isInterested ? isInterested(userId) : null,
       })),
       { onConflict: 'event_id,user_id', ignoreDuplicates: true }

@@ -847,9 +847,9 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
           console.log(`[NOTIF-CAP] evento ${event.id}: push de comunidad entregado a ${notifiedUserIds?.length || 0}/${communityMemberIds.length} miembros.`);
 
           if (notifiedUserIds?.length) {
-            // Fase 111 — se etiqueta la fila con source='community' (este
+            // Fase 111 — se etiqueta la fila con ad_source='community' (este
             // aviso NO consume cupo contratado, a diferencia de los envíos
-            // del pacing, que van con source='promo') y con si el miembro
+            // del pacing, que van con ad_source='promo') y con si el miembro
             // era o no "interesado" en el momento del envío. Sin lo primero
             // el total de la tabla nunca cuadraría con notification_sent_count.
             const interestedIds = await getInterestedUserIdSet(event.categories);
@@ -859,7 +859,7 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
                 notifiedUserIds.map(uid => ({
                   event_id: event.id,
                   user_id: uid,
-                  source: 'community',
+                  ad_source: 'community',
                   matched_interest: interestedIds ? interestedIds.has(uid) : null,
                 })),
                 { onConflict: 'event_id,user_id', ignoreDuplicates: true }
@@ -1051,7 +1051,7 @@ router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
                 notifiedUserIds.map(uid => ({
                   event_id: event.id,
                   user_id: uid,
-                  source: 'community',
+                  ad_source: 'community',
                   matched_interest: interestedIds ? interestedIds.has(uid) : null,
                 })),
                 { onConflict: 'event_id,user_id', ignoreDuplicates: true }
@@ -4740,7 +4740,7 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
       const contracted = e.notification_count ?? null;
       // notification_sent_count es la cifra oficial de envíos publicitarios
       // (la que se factura, incrementada atómicamente por el pacing). El
-      // conteo de filas source='promo' debería coincidir; se exponen las dos
+      // conteo de filas ad_source='promo' debería coincidir; se exponen las dos
       // para poder detectar una descuadre sin entrar en la BD.
       const sentOfficial = num(e.notification_sent_count);
       const started = new Date(e.event_date).getTime() <= now;
