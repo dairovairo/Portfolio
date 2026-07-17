@@ -21,8 +21,8 @@
   --sb-text:       #e2e8f0;
   --sb-muted:      #64748b;
   --sb-subtle:     #334155;
-  --sb-accent:     rgb(0, 148, 158);
-  --sb-accent-glow:rgb(45, 212, 220);
+  --sb-accent:     0 148 158;
+  --sb-accent-glow:45 212 220;
   color-scheme: dark;
 }
 
@@ -35,8 +35,8 @@
   --sb-text:       #1a1a2e;
   --sb-muted:      #6b7280;
   --sb-subtle:     #9ca3af;
-  --sb-accent:     rgb(0, 148, 158);
-  --sb-accent-glow:rgb(0, 120, 128);
+  --sb-accent:     0 148 158;
+  --sb-accent-glow:0 120 128;
   color-scheme: light;
 }
 
@@ -50,8 +50,8 @@
   --sb-text:       #f0e6ff;
   --sb-muted:      #8b7aad;
   --sb-subtle:     #4a3d70;
-  --sb-accent:     rgb(220, 80, 120);
-  --sb-accent-glow:rgb(255, 130, 160);
+  --sb-accent:     220 80 120;
+  --sb-accent-glow:255 130 160;
   color-scheme: dark;
 }
 
@@ -65,8 +65,8 @@
   --sb-text:       #1e2a4a;
   --sb-muted:      #7a90b8;
   --sb-subtle:     #b0c8e8;
-  --sb-accent:     rgb(80, 150, 230);
-  --sb-accent-glow:rgb(50, 120, 210);
+  --sb-accent:     80 150 230;
+  --sb-accent-glow:50 120 210;
   color-scheme: light;
 }
 
@@ -80,8 +80,8 @@
   --sb-text:       #1a2e1a;
   --sb-muted:      #5a7a5a;
   --sb-subtle:     #8aaa8a;
-  --sb-accent:     rgb(34, 110, 54);
-  --sb-accent-glow:rgb(22, 80, 40);
+  --sb-accent:     34 110 54;
+  --sb-accent-glow:22 80 40;
   color-scheme: light;
 }
 
@@ -95,8 +95,8 @@
   --sb-text:       #fff3e0;
   --sb-muted:      #a07850;
   --sb-subtle:     #5c3a1a;
-  --sb-accent:     rgb(234, 120, 30);
-  --sb-accent-glow:rgb(255, 180, 80);
+  --sb-accent:     234 120 30;
+  --sb-accent-glow:255 180 80;
   color-scheme: dark;
 }
 

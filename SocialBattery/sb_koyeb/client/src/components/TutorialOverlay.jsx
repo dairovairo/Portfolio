@@ -300,7 +300,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
                       style={{
                         width: i === step ? 16 : 5,
                         height: 5,
-                        background: i <= step ? 'var(--sb-accent)' : 'var(--sb-border)',
+                        background: i <= step ? 'rgb(var(--sb-accent))' : 'var(--sb-border)',
                         opacity: i < step ? 0.55 : 1,
                       }}
                     />
@@ -393,7 +393,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
                         style={{
                           width: i === step ? 20 : 7,
                           height: 7,
-                          background: i <= step ? 'var(--sb-accent)' : 'var(--sb-border)',
+                          background: i <= step ? 'rgb(var(--sb-accent))' : 'var(--sb-border)',
                           opacity: i < step ? 0.55 : 1,
                         }}
                       />

@@ -25,8 +25,13 @@ export default {
           muted:  'var(--sb-muted)',
         },
         accent: {
-          primary: 'var(--sb-accent)',
-          glow:    'var(--sb-accent-glow)',
+          // Los CSS vars están definidos como valores raw "R G B" (sin
+          // rgb() envolvente) precisamente para poder componer opacidades
+          // vía el modificador /xx de Tailwind. NO cambies el formato de
+          // --sb-accent / --sb-accent-glow en index.css sin actualizar
+          // también esto y los usos directos de var(--sb-accent...).
+          primary: 'rgb(var(--sb-accent) / <alpha-value>)',
+          glow:    'rgb(var(--sb-accent-glow) / <alpha-value>)',
         },
       },
       animation: {

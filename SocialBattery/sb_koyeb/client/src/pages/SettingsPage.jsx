@@ -318,7 +318,7 @@ function Toggle({ enabled, onToggle }) {
         border: 'none',
         cursor: 'pointer',
         transition: 'background 0.2s',
-        background: enabled ? 'var(--sb-accent)' : 'var(--sb-border)',
+        background: enabled ? 'rgb(var(--sb-accent))' : 'var(--sb-border)',
         padding: 0,
       }}
     >

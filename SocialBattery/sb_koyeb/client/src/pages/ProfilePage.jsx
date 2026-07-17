@@ -254,7 +254,7 @@ export default function ProfilePage() {
           {/* Banner */}
           <div
             className="h-20 w-full"
-            style={{ background: `linear-gradient(135deg, ${color.hex}30 0%, var(--sb-accent)20 100%)` }}
+            style={{ background: `linear-gradient(135deg, ${color.hex}30 0%, rgb(var(--sb-accent) / 0.125) 100%)` }}
           />
 
           <div className="px-5 pb-5 -mt-10">
