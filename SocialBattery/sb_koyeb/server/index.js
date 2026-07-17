@@ -37,8 +37,29 @@ app.set('trust proxy', 1);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
+// CLIENT_URL admite una lista separada por comas (p.ej.
+// "https://socialbattery.pro,https://www.socialbattery.pro,https://portfolio-nmc3.onrender.com")
+// para poder servir el frontend desde el dominio propio Y desde los dominios
+// de plataforma (onrender/vercel/etc) a la vez sin que el navegador bloquee
+// las peticiones por CORS. Antes `origin` era un único string, así que en
+// cuanto el dominio del frontend cambiaba (p.ej. al mover el proyecto a
+// socialbattery.pro) el origin permitido se quedaba apuntando al dominio
+// viejo y el login empezaba a fallar con "Access-Control-Allow-Origin ...
+// that is not equal to the supplied origin" — hay que actualizar la env var
+// CLIENT_URL en el hosting (Railway/Koyeb) para que incluya el dominio
+// actual del frontend.
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin(origin, callback) {
+    // Peticiones sin header Origin (curl, health checks, server-to-server)
+    // no llevan CORS, así que se dejan pasar.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`Origin no permitido por CORS: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
