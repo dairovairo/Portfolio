@@ -94,7 +94,27 @@ export function AuthProvider({ children }) {
     setLoadingProfile(true);
     api.get('/auth/me')
       .then(({ user }) => setProfile(user))
-      .catch(() => setProfile(null))
+      .catch((err) => {
+        // Distinguir "usuario no existe/token inválido" (401/404) — donde
+        // TIENE sentido limpiar el perfil y que App.jsx redirija al login
+        // o al onboarding — de errores transitorios (429 rate limit, 5xx,
+        // red caída) donde NO queremos tocar el perfil porque no significa
+        // que el usuario haya perdido acceso.
+        //
+        // Antes cualquier error hacía setProfile(null) y en pareja de
+        // hermanos compartiendo IP el 429 nos "sacaba" al onboarding y
+        // luego a la landing.
+        const status = err?.status;
+        if (status === 401 || status === 404) {
+          setProfile(null);
+        } else {
+          // Error transitorio — mantenemos lo que hubiera (o null si es
+          // el primer intento) y confiamos en el reintento automático
+          // que hace api.js sobre 429 GETs. Si el usuario recarga o el
+          // session cambia, este useEffect vuelve a correr.
+          console.warn('[auth/me] error transitorio, manteniendo perfil:', status || err?.message);
+        }
+      })
       .finally(() => setLoadingProfile(false));
   }, [session]);
 

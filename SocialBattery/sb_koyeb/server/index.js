@@ -67,7 +67,61 @@ app.use(express.json({ limit: '1mb' }));
 const uploadLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
 app.use('/api/users/avatar', uploadLimiter);
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+// Rate limit general de la API.
+//
+// Antes: max=150 / 15min por IP → 10 req/min. Con `keyGenerator` por
+// defecto de express-rate-limit, el "cubo" se comparte entre TODAS las
+// personas que salen a Internet por la misma IP pública. En una red
+// doméstica (dos hermanos usando la app en el mismo WiFi) los contadores
+// de ambos se suman y los 429 llegan MUY rápido — cerrándonos a los dos
+// de golpe. Para una SPA con polling de mensajes, batería y notifs eso
+// se agotaba en minutos.
+//
+// Cambios:
+//   1. `keyGenerator` extrae el user id del JWT (payload.sub), con
+//      fallback a la IP para peticiones sin auth (login, signup, etc).
+//      Así cada usuario tiene SU propio cubo y no se pisan aunque
+//      compartan router.
+//   2. `max` sube de 150 → 600 requests / 15min. Con SPA + polling da
+//      margen sobrado (40 req/min por usuario) sin dejar la puerta
+//      abierta a bots. Ajustable si volvemos a ver 429 en producción.
+//   3. Devolvemos `Retry-After` en cabecera estándar (comportamiento
+//      por defecto de express-rate-limit, lo hacemos explícito con
+//      `standardHeaders: true`) para que el cliente pueda esperar el
+//      tiempo justo antes de reintentar (ver src/lib/api.js).
+//
+// La extracción del `sub` del JWT es sin verificar la firma — sólo la
+// usamos como key del cubo, no como identidad autenticada. Verificar
+// firma aquí sería innecesario (encarecería cada request) y además ya
+// la valida el resto del stack cuando toca datos reales.
+function jwtSubjectFromRequest(req) {
+  const auth = req.headers.authorization || '';
+  if (!auth.startsWith('Bearer ')) return null;
+  const token = auth.slice(7);
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'),
+    );
+    return payload?.sub || null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const sub = jwtSubjectFromRequest(req);
+    // Prefijo 'u:' vs 'ip:' para que un usuario auth no comparta cubo
+    // con las peticiones anónimas que puedan salir de su misma IP.
+    return sub ? `u:${sub}` : `ip:${req.ip}`;
+  },
+});
 app.use('/api', limiter);
 
 // ── Routes ─────────────────────────────────────────────────────────────────

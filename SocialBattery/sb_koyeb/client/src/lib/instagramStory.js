@@ -550,7 +550,12 @@ export async function generateInviteBlob({ username, mascot, hex }) {
 // ── Share / Download ──────────────────────────────────────────────────────────
 
 export async function shareOrDownloadBlob(blob, filename = 'story.png', title = 'SocialBattery') {
-  const APP_URL = 'https://portfolio-nmc3.onrender.com';
+  // URL canónica de la app para el share por redes sociales. Antes
+  // apuntaba a portfolio-nmc3.onrender.com — dominio de despliegue viejo
+  // desde antes de comprar socialbattery.pro. Se actualiza aquí para
+  // que las stories de Instagram / links compartidos lleven a la home
+  // real y no al despliegue histórico.
+  const APP_URL = 'https://socialbattery.pro';
   const file = new File([blob], filename, { type: 'image/png' });
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {

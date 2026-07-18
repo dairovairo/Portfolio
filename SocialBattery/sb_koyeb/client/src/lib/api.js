@@ -87,6 +87,40 @@ async function apiFetch(path, options = {}, retries = 3) {
     return apiFetch(path, options, 0); // retries=0 prevents infinite loop
   }
 
+  // 429 → rate limit del servidor. Antes se propagaba como error
+  // genérico "HTTP 429", que en algunas páginas caía en el catch-all
+  // que cierra sesión y "sacaba" al usuario de la app — típicamente
+  // cuando dos personas del mismo WiFi (misma IP) llenaban entre las
+  // dos el cubo compartido.
+  //
+  // Ahora hacemos dos cosas:
+  //  1. Reintento automático en métodos idempotentes (GET/HEAD)
+  //     respetando la cabecera Retry-After del servidor. Con
+  //     `standardHeaders: true` en express-rate-limit esa cabecera
+  //     viene en segundos, así que la usamos tal cual (con un tope
+  //     defensivo de 10s para no dejar la UI colgada eternamente).
+  //  2. Si es POST/PATCH/DELETE o se acabaron los reintentos, lanzamos
+  //     un error CON MENSAJE HUMANO en castellano y con status=429 en
+  //     el objeto, para que quien lo capture pueda distinguirlo de un
+  //     error de auth y NO cierre sesión por esto.
+  if (res.status === 429) {
+    if (canRetry && retries > 0) {
+      const retryAfterRaw = Number(res.headers.get('retry-after'));
+      // Retry-After puede venir en segundos o no venir; default 2s,
+      // cap 10s.
+      const waitMs = Math.min(
+        Math.max(Number.isFinite(retryAfterRaw) ? retryAfterRaw : 2, 1),
+        10,
+      ) * 1000;
+      await new Promise(r => setTimeout(r, waitMs));
+      return apiFetch(path, options, retries - 1);
+    }
+    throw Object.assign(
+      new Error('Estás yendo demasiado rápido. Espera unos segundos e inténtalo otra vez.'),
+      { status: 429 },
+    );
+  }
+
   const text = await res.text();
   let data = {};
   if (text) {
