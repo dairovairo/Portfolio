@@ -13,13 +13,21 @@
 
   IMAGEN DEL LOGO:
     Se sirve desde https://socialbattery.pro/logo-full.png
-    (ya está en client/public/, así que Vercel/Koyeb lo sirven en /logo-full.png).
-    Si el dominio cambia, actualiza la URL del <img> más abajo.
+    (ya está en client/public/, así que Render/Koyeb lo sirven en
+    /logo-full.png). Si el dominio cambia, actualiza la URL del
+    <img> más abajo.
+
+  COLORES:
+    Coinciden con los tokens de acento de la app (ver client/src/index.css):
+      #00949E (--sb-accent, teal base)   — CTA button
+      #2DD4DC (--sb-accent-glow, cyan)   — highlights / hover / links
+    Antes usaba morado (#7c5cff) que no encajaba con la paleta real.
 
   NOTA SOBRE COMPATIBILIDAD:
-    El HTML está pensado para Gmail / Outlook / Apple Mail. Usa estilos
-    inline y colores hex (nada de CSS variables) porque los clientes de
-    correo ignoran <style> o clases externas de forma inconsistente.
+    HTML pensado para Gmail / Outlook / Apple Mail. Estilos inline y
+    colores hex (nada de CSS variables) porque los clientes de correo
+    ignoran <style> o clases externas de forma inconsistente. VML para
+    el botón CTA en Outlook (que no entiende border-radius).
 -->
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -84,7 +92,7 @@
                 <!--[if mso]>
                 <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
                              href="{{ .ConfirmationURL }}" style="height:48px;v-text-anchor:middle;width:280px;"
-                             arcsize="25%" stroke="f" fillcolor="#7c5cff">
+                             arcsize="25%" stroke="f" fillcolor="#00949E">
                   <w:anchorlock/>
                   <center style="color:#ffffff;font-family:sans-serif;font-size:15px;font-weight:bold;">
                     Confirmar mi cuenta
@@ -93,7 +101,7 @@
                 <![endif]-->
                 <!--[if !mso]><!-- -->
                 <a href="{{ .ConfirmationURL }}"
-                   style="display:inline-block; background-color:#7c5cff; color:#ffffff; text-decoration:none; font-weight:600; font-size:15px; padding: 14px 32px; border-radius:12px; letter-spacing:0.01em;">
+                   style="display:inline-block; background-color:#00949E; color:#ffffff; text-decoration:none; font-weight:600; font-size:15px; padding: 14px 32px; border-radius:12px; letter-spacing:0.01em;">
                   Confirmar mi cuenta
                 </a>
                 <!--<![endif]-->
@@ -107,7 +115,7 @@
                   ¿No funciona el botón? Copia y pega este enlace en tu navegador:
                 </p>
                 <p style="margin:0; font-size:12px; line-height:1.5; word-break:break-all;">
-                  <a href="{{ .ConfirmationURL }}" style="color:#a68dff; text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                  <a href="{{ .ConfirmationURL }}" style="color:#2DD4DC; text-decoration:underline;">{{ .ConfirmationURL }}</a>
                 </p>
               </td>
             </tr>
