@@ -28,6 +28,7 @@ import CommunityDashboardPage from './pages/CommunityDashboardPage';
 import EventAdConfigPage from './pages/EventAdConfigPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import LandingPage from './pages/LandingPage';
 import ShopPage from './pages/ShopPage';
 import CalendarPage from './pages/CalendarPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
@@ -118,8 +119,9 @@ function AppRoutes() {
   if (!isAuthenticated) {
     return (
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
-        <Route path="*" element={<Navigate to="/auth" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
