@@ -77,26 +77,30 @@ function AppRoutes() {
   // cambia sin desmontar AppRoutes) pero ANTES que cualquier chequeo de
   // sesión (isLoading / isAuthenticated / hasProfile).
   //
-  // Aquí incluimos también "/" con la LandingPage: si esperáramos a
-  // que isLoading resolviera, durante los milisegundos que tarda
-  // supabase.auth.getSession() el bot de Google Cloud (que ejecuta JS
-  // headless para verificar el OAuth consent screen) solo vería el
-  // spinner "Cargando..." — sin `<h1>SocialBattery</h1>` ni descripción
-  // del propósito de la app. Eso disparaba exactamente los dos errores
-  // de verificación:
-  //   "el nombre no coincide con la pantalla de consentimiento"
-  //   "no se explica el propósito de la app"
-  // porque en el momento que el bot capturaba el DOM, la landing aún no
-  // había montado. Renderizándola directamente en "/" sin gating por
-  // sesión, el bot ve inmediatamente el contenido correcto.
+  // Caso especial "/" → LandingPage:
+  //   Sólo se sirve la landing en "/" si el usuario NO está autenticado
+  //   (o si aún estamos resolviendo la sesión). Si ya hay sesión, dejamos
+  //   caer el flujo a los checks de más abajo para que "/" acabe llevando
+  //   a la home real de la app — sin este condicional el usuario que
+  //   acababa de completar el onboarding se quedaba pillado en la
+  //   landing en vez de entrar a la app.
   //
-  // Para usuarios autenticados que naveguen a "/", el redirect a
-  // /home lo hace el propio botón/flujo de la landing (o el useEffect
-  // más abajo si volvieran a montar la app desde cero). En cualquier
-  // caso mostrar brevemente la landing a un usuario autenticado no es
-  // problema, es igualmente contenido válido de la app.
+  //   ¿Por qué "/" no espera a que isLoading resuelva? Porque durante
+  //   los milisegundos que tarda supabase.auth.getSession() el bot de
+  //   Google Cloud (que ejecuta JS headless para verificar el OAuth
+  //   consent screen) solo vería el spinner "Cargando..." — sin el
+  //   <h1>SocialBattery</h1> ni la descripción del propósito. Eso
+  //   disparaba los dos errores de verificación:
+  //     "el nombre no coincide con la pantalla de consentimiento"
+  //     "no se explica el propósito de la app"
+  //   Como el bot nunca está autenticado, para él siempre entra por esta
+  //   rama y ve la landing completa desde el primer render.
+  //
+  // "/privacidad" en cambio es pública SIEMPRE (autenticado o no), porque
+  // debe seguir accesible desde dentro de la app (link en el footer).
+  const isRootUnauthed = location.pathname === '/' && !isAuthenticated;
   const PUBLIC_ROUTES = {
-    '/': LandingPage,
+    ...(isRootUnauthed ? { '/': LandingPage } : {}),
     '/privacidad': PrivacyPolicyPage,
   };
   const PublicPage = PUBLIC_ROUTES[location.pathname];

@@ -190,6 +190,42 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const signInWithApple = async () => {
+    // OAuth con Apple via Supabase (flujo web con Services ID + JWT
+    // secret). Requiere config previa en dos sitios que NO se hacen desde
+    // este código:
+    //   1. Apple Developer Console (developer.apple.com/account):
+    //      · App ID con capacidad "Sign In with Apple"
+    //      · Services ID (será el "client_id" del flujo web) con Domains
+    //        y Return URLs apuntando a la callback de Supabase
+    //        (https://<project-ref>.supabase.co/auth/v1/callback)
+    //      · Key (.p8) con permiso "Sign in with Apple"
+    //   2. Supabase → Authentication → Providers → Apple:
+    //      · Enable toggle ON
+    //      · Client IDs: el Services ID creado arriba (primero de la lista
+    //        si algún día añades apps nativas iOS con bundle IDs distintos)
+    //      · Secret Key (for OAuth): JWT firmado con el .p8, generable
+    //        desde la misma pantalla del dashboard con "Generate secret"
+    //        — ese JWT caduca (máx 6 meses según Apple) así que hay que
+    //        regenerarlo periódicamente
+    //      · "Allow users without an email" ACTIVADO — Apple permite al
+    //        usuario ocultar su email real (usa un email relay tipo
+    //        xxx@privaterelay.appleid.com). Si este toggle está apagado,
+    //        esos usuarios fallan al iniciar sesión sin mensaje claro.
+    //
+    // Igual que con Google, signInWithOAuth redirige la ventana entera;
+    // al volver, Supabase dispara SIGNED_IN sobre onAuthStateChange que
+    // ya está escuchando en el useEffect de arriba.
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -229,6 +265,7 @@ export function AuthProvider({ children }) {
       signUp,
       signIn,
       signInWithGoogle,
+      signInWithApple,
       signOut,
       updatePassword,
       clearPasswordRecovery,

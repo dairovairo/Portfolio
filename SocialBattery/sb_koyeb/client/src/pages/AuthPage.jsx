@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import LogoWordmark from '../components/LogoWordmark';
 
 export default function AuthPage() {
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
   const [email, setEmail] = useState('');
@@ -29,6 +29,22 @@ export default function AuthPage() {
       await signInWithGoogle();
     } catch (err) {
       setError(err.message || 'No se pudo iniciar sesión con Google');
+      setLoading(false);
+    }
+  }
+
+  async function handleAppleSignIn() {
+    if (loading) return;
+    setError('');
+    setLoading(true);
+    try {
+      // Igual comportamiento que Google: redirige la ventana entera y
+      // este await raramente resuelve — sólo si hay error antes del
+      // redirect (Apple provider no configurado, JWT secret caducado,
+      // Services ID mal, etc.).
+      await signInWithApple();
+    } catch (err) {
+      setError(err.message || 'No se pudo iniciar sesión con Apple');
       setLoading(false);
     }
   }
@@ -315,6 +331,29 @@ export default function AuthPage() {
                 </svg>
                 <span className="text-sm">
                   {mode === 'login' ? 'Entrar con Google' : 'Registrarse con Google'}
+                </span>
+              </button>
+
+              {/* ── Apple sign-in ──
+                  Fuera del <form> por la misma razón que Google. Estilo
+                  negro con logo blanco siguiendo las guías oficiales de
+                  branding de "Sign in with Apple" (fondo oscuro, logo y
+                  texto blancos, radios de esquina similares al de Google
+                  para coherencia visual dentro de la propia app). */}
+              <button
+                type="button"
+                onClick={handleAppleSignIn}
+                disabled={loading}
+                className="w-full mt-3 flex items-center justify-center gap-3 bg-black hover:bg-neutral-900 disabled:opacity-50 text-white font-display font-semibold py-3 rounded-xl transition-all duration-200 border border-neutral-800"
+              >
+                {/* Logo manzana de Apple en SVG inline (path oficial,
+                    no un asset de red ni una fuente) — así el botón es
+                    autocontenido y no depende de descargar nada extra. */}
+                <svg width="16" height="18" viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path fill="currentColor" d="M13.245 9.583c-.02-2.09 1.707-3.106 1.786-3.153-.974-1.423-2.487-1.618-3.023-1.638-1.287-.13-2.512.759-3.164.759-.66 0-1.667-.741-2.741-.72-1.41.02-2.71.82-3.436 2.084-1.465 2.54-.375 6.297 1.052 8.361.699 1.011 1.53 2.145 2.62 2.105 1.052-.043 1.448-.681 2.719-.681s1.628.681 2.74.658c1.13-.02 1.847-1.03 2.541-2.048.804-1.176 1.135-2.313 1.155-2.372-.025-.011-2.222-.852-2.249-3.355zM11.157 3.435c.582-.706.973-1.686.867-2.657-.837.034-1.85.557-2.451 1.263-.54.624-1.011 1.62-.885 2.573.933.072 1.886-.474 2.469-1.18z"/>
+                </svg>
+                <span className="text-sm">
+                  {mode === 'login' ? 'Entrar con Apple' : 'Registrarse con Apple'}
                 </span>
               </button>
             </>
