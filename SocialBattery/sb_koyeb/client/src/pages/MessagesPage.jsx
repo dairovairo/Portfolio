@@ -1106,7 +1106,7 @@ export default function MessagesPage() {
   const friendOnline = friend ? isOnline(friend.last_seen_at) : false;
 
   return (
-    <div className="min-h-screen bg-surface-bg flex flex-col">
+    <div className="h-dvh bg-surface-bg flex flex-col overflow-hidden">
 
       {/* Toast */}
       {toast && (
@@ -1236,7 +1236,7 @@ export default function MessagesPage() {
 
       {/* Messages area */}
       <div
-        className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3 relative"
+        className="flex-1 min-h-0 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3 relative"
         style={chatWallpaper ? {
           backgroundImage: `url(${chatWallpaper})`,
           backgroundSize: 'cover',

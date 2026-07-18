@@ -1076,7 +1076,7 @@ export default function PoolChatPage() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-surface-bg flex flex-col">
+    <div className="h-dvh bg-surface-bg flex flex-col overflow-hidden">
       {toast && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl font-display text-sm font-semibold shadow-2xl animate-slide-up ${
           toast.type === 'error'
@@ -1140,7 +1140,7 @@ export default function PoolChatPage() {
       </nav>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
         {loading ? (
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
             Cargando mensajes...
