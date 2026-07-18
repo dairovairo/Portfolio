@@ -4,499 +4,26 @@ import BottomNav from '../components/BottomNav';
 import TutorialOverlay from '../components/TutorialOverlay';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
-import { isOnline } from '../hooks/usePresence';
-import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 import { usePoolInviteNotifications } from '../context/PoolInviteNotificationsContext';
-import MascotDisplay from '../components/MascotDisplay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import LocationPicker from '../components/LocationPicker';
-
-// ── Activity emoji mapping ────────────────────────────────────────────────────
-function getActivityEmoji(activity = '') {
-  const a = activity.toLowerCase();
-  if (/café|cafe|coffee|cafetera/.test(a)) return '☕';
-  if (/cine|película|pelicula|movie/.test(a)) return '🎬';
-  if (/cerveza|bar|birra|drink|copa/.test(a)) return '🍺';
-  if (/comida|comer|restaurante|almuerzo|cena/.test(a)) return '🍽️';
-  if (/parque|paseo|walk|caminar|jardín/.test(a)) return '🌳';
-  if (/deporte|gym|fútbol|futbol|tenis|paddle|sport/.test(a)) return '⚽';
-  if (/playa|piscina|pool|swim/.test(a)) return '🏊';
-  if (/música|musica|concierto|concert/.test(a)) return '🎵';
-  if (/juego|gaming|videojuego|partida/.test(a)) return '🎮';
-  if (/estudio|estudiar|trabajo|trabajar|biblioteca/.test(a)) return '📚';
-  if (/fiesta|party|celebrar/.test(a)) return '🎉';
-  if (/yoga|meditación|meditacion/.test(a)) return '🧘';
-  if (/senderismo|hiking|montaña|montana/.test(a)) return '🥾';
-  if (/compras|shopping/.test(a)) return '🛍️';
-  return '🤝';
-}
-
-// ── Date formatting ───────────────────────────────────────────────────────────
-function formatPoolDate(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = d - now;
-  const diffHours = diffMs / (1000 * 60 * 60);
-
-  if (diffMs < 0) return 'Ya pasó';
-  if (diffHours < 1) {
-    const mins = Math.floor(diffMs / 60000);
-    return `En ${mins} min`;
-  }
-  if (diffHours < 24) {
-    return `Hoy a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
-  }
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (d.toDateString() === tomorrow.toDateString()) {
-    return `Mañana a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
-  }
-  return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
-
-// Margen de "actividad" para quedadas sin ends_at: se consideran en curso
-// durante 2 horas desde el inicio. Mismo criterio que isActive() más abajo.
-const NO_END_GRACE_MS = 2 * 60 * 60 * 1000;
-
-function getPoolEffectiveEnd(pool) {
-  if (pool?.ends_at) return new Date(pool.ends_at);
-  return new Date(new Date(pool?.scheduled_at).getTime() + NO_END_GRACE_MS);
-}
-
-function formatPoolDateRange(pool) {
-  const now = new Date();
-  const start = new Date(pool.scheduled_at);
-  const end = getPoolEffectiveEnd(pool);
-
-  // En curso: desde que empieza hasta que llega ends_at (o, si no hay
-  // ends_at, hasta que pasen 2 horas desde el inicio).
-  if (start <= now && now < end) {
-    if (pool.ends_at) {
-      const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      return `🟢 Activo ahora - fin ${endLabel}`;
-    }
-    return '🟢 Activo ahora';
-  }
-
-  const startLabel = formatPoolDate(pool.scheduled_at);
-  if (!pool.ends_at) return startLabel;
-  if (Number.isNaN(end.getTime())) return startLabel;
-  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return `${startLabel} - fin ${endLabel}`;
-}
+import {
+  getActivityEmoji,
+  getPoolEffectiveEnd,
+  formatPoolDateRange,
+  StatusBadge,
+  UnreadChatDot,
+  CapacityBar,
+  PARTICIPANT_MASCOTS_VISIBLE,
+  MiniMascot,
+} from '../components/PoolShared';
 
 function formatInputDateTime(dateStr) {
   const d = new Date(dateStr);
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-function StatusBadge({ status }) {
-  const map = {
-    open:      { label: 'Abierto',   cls: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    full:      { label: 'Completo',  cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-    closed:    { label: 'Cerrado',   cls: 'bg-slate-600/30 text-surface-muted border-slate-600/30' },
-    cancelled: { label: 'Cancelado', cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
-  };
-  const cfg = map[status] || map.open;
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full border font-mono ${cfg.cls}`}>
-      {cfg.label}
-    </span>
-  );
-}
-
-// ── Punto de "mensaje sin leer" (chat de la quedada) ──────────────────────────
-function UnreadChatDot({ className = '' }) {
-  return (
-    <span className={`absolute flex h-3 w-3 ${className}`}>
-      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-surface-card" />
-    </span>
-  );
-}
-
-// ── Pool capacity bar ─────────────────────────────────────────────────────────
-function CapacityBar({ current, max }) {
-  if (max === null || max === undefined) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 bg-surface-bg rounded-full overflow-hidden">
-          <div className="h-full rounded-full" style={{ width: '0%' }} />
-        </div>
-        <span className="text-xs font-mono text-surface-muted flex-shrink-0">
-          {current} personas
-        </span>
-      </div>
-    );
-  }
-  const pct = Math.min(100, (current / max) * 100);
-  const color = pct >= 100 ? '#f97316' : pct >= 75 ? '#facc15' : '#4ade80';
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-surface-bg rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, backgroundColor: color, boxShadow: `0 0 6px ${color}60` }}
-        />
-      </div>
-      <span className="text-xs font-mono text-surface-muted flex-shrink-0">
-        {current}/{max}
-      </span>
-    </div>
-  );
-}
-
-// Nº de mascotas de participantes que se muestran en el panel de la
-// quedada antes de agrupar el resto en un "+N" (ver PoolCard más abajo).
-const PARTICIPANT_MASCOTS_VISIBLE = 5;
-
-// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
-// HomePage.jsx / FriendCard.jsx / GroupChatPage.jsx): 0-33 → low, 34-66 →
-// mid, 67-100 → high.
-function getMascotTier(level) {
-  if (level <= 33) return 'low';
-  if (level <= 66) return 'mid';
-  return 'high';
-}
-
-// Mascota en miniatura — mismo criterio que en el panel de integrantes del
-// grupo (GroupChatPage.jsx): capa base según tier de batería + overlay
-// "horneado" (mascot_preview_url) con la personalización del usuario.
-//
-// Si el participante es el propio usuario (isMe), NO se usa
-// mascot_preview_url: ese PNG lo sube MascotPreviewSync con debounce (1.2s)
-// + red, así que cambiar de outfit/accesorios/actividad y ver la lista de
-// participantes seguía enseñando la ropa anterior hasta refrescar. En su
-// lugar, MascotDisplay se monta sin overrides para que lea directamente el
-// equipado real del contexto (useMascot) — se ve al instante.
-function MiniMascot({ user, size = 32 }) {
-  const { profile } = useAuth();
-  const isMe = Boolean(profile?.id) && user?.id === profile.id;
-  const color = getBatteryColor(user?.battery_level ?? 50);
-  const tier = getMascotTier(user?.battery_level ?? 50);
-
-  if (isMe) {
-    return (
-      <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-        <MascotDisplay tier={tier} size={size} glowColor={color.hex} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-      <MascotDisplay
-        tier={tier}
-        size={size}
-        glowColor={color.hex}
-        outfitSrc={null}
-        feetSrc={null}
-        headSrc={null}
-        accessories={[]}
-        activityLayers={[]}
-      />
-      {user?.mascot_preview_url && (
-        <img
-          src={user.mascot_preview_url}
-          alt=""
-          draggable={false}
-          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-        />
-      )}
-    </div>
-  );
-}
-
-// Cuadrito de texto con nombre + descripción de la insignia (mismo
-// componente que en GroupChatPage.jsx). `placement` controla si se abre
-// hacia arriba ('top', por defecto) o hacia abajo ('bottom') del icono —
-// necesario para el primer apuntado de la lista, donde abrir hacia arriba
-// lo corta contra el borde superior del panel con scroll.
-function BadgeDescriptionPopover({ badge, align = 'left', placement = 'top' }) {
-  return (
-    <div
-      className={`absolute z-50 ${placement === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'} ${align === 'right' ? 'right-0' : 'left-0'} w-52 max-w-[70vw] bg-surface-card border border-surface-border rounded-xl p-3 shadow-2xl text-left animate-fade-in`}
-      onClick={e => e.stopPropagation()}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-lg leading-none">{badge.emoji}</span>
-        <span className="font-display font-bold text-surface-text text-sm">{badge.name}</span>
-      </div>
-      <p className="text-xs text-surface-muted leading-relaxed">{badge.description}</p>
-    </div>
-  );
-}
-
-// Insignia pulsable (mismo componente que en GroupChatPage.jsx): al
-// tocarla muestra su descripción en un cuadrito de texto. `size` = 'panel'
-// es el único tamaño usado aquí, con el nombre debajo del icono.
-function IdentityBadge({ identity, size = 'panel', align = 'left', showName = false, popoverPlacement = 'top' }) {
-  const [open, setOpen] = useState(false);
-
-  const buttonClass = {
-    // +10% sobre el tamaño base (w-9 h-9 / text-xl), igual que en el panel
-    // de integrantes del grupo.
-    panel: 'w-[2.475rem] h-[2.475rem] rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-[1.375rem]',
-  }[size];
-
-  return (
-    <div className="relative flex-shrink-0 flex flex-col items-center gap-0.5">
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
-        className={buttonClass}
-      >
-        {identity.badge.emoji}
-      </button>
-      {showName && (
-        <span className="text-[9px] text-accent-glow font-display font-semibold text-center leading-tight max-w-[56px] truncate">
-          {identity.badge.name}
-        </span>
-      )}
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <BadgeDescriptionPopover badge={identity.badge} align={align} placement={popoverPlacement} />
-        </>
-      )}
-    </div>
-  );
-}
-
-// ── Participants sheet (bottom drawer) ────────────────────────────────────────
-function ParticipantsSheet({ pool, onClose, onJoin, onLeave, onReminderChange, onToast, joining, leaving, reminderSaving }) {
-  const navigate = useNavigate();
-  const { hasUnreadPoolChat } = usePoolChatNotifications();
-  const hasUnreadChat = hasUnreadPoolChat(pool.id);
-  // Fetch full participant list
-  const [participants, setParticipants] = useState(pool.participants_preview || []);
-  const [loading, setLoading] = useState(false);
-  const [badgeData, setBadgeData] = useState({ assignments: [] });
-
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      api.get(`/pools/${pool.id}`),
-      api.get(`/badges/pool/${pool.id}`).catch(() => ({ assignments: [] })),
-    ])
-      .then(([{ pool: full }, badges]) => {
-        setParticipants(full.participants || []);
-        setBadgeData({ assignments: badges.assignments || [] });
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [pool.id]);
-
-  const identitiesByUser = badgeData.assignments.reduce((acc, assignment) => {
-    if (!acc[assignment.userId]) acc[assignment.userId] = [];
-    acc[assignment.userId].push(assignment);
-    return acc;
-  }, {});
-
-  const isPast = new Date(pool.scheduled_at) <= new Date();
-  const canJoin = pool.status === 'open' && !pool.has_joined && !isPast && pool.status !== 'cancelled';
-  const canLeave = pool.has_joined && !pool.is_creator && !isPast;
-  const canAdjustReminder = pool.has_joined && !isPast && pool.status !== 'cancelled' && pool.status !== 'closed';
-
-  return (
-    <>
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div
-        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl flex flex-col max-h-[85vh]"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Handle — fijo */}
-        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-1 flex-shrink-0" />
-
-        {/* Header — fijo */}
-        <div className="flex-shrink-0 px-5 py-3 border-b border-surface-border">
-          {pool.cover_image_url && (
-            <div className="-mt-1 mb-3 aspect-[16/9] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
-              <img src={pool.cover_image_url} alt="" className="h-full w-full object-cover" />
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">{getActivityEmoji(pool.activity)}</span>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-display font-bold text-surface-text truncate">{pool.activity}</h3>
-              <p className="text-xs text-surface-muted font-mono">{formatPoolDateRange(pool)}</p>
-            </div>
-            <button
-              onClick={() => navigate(`/pools/${pool.id}/sniffer`)}
-              title="Ver la ubicación de la quedada en el mapa"
-              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-pink-500/15 text-pink-400 border border-pink-500/25 hover:bg-pink-500/25 hover:border-pink-500/40 hover:text-pink-300 transition-colors transform scale-[1.15] -translate-x-1.5 origin-left"
-            >
-              <span>🐽</span> Sniffer
-            </button>
-            <button
-              onClick={() => navigate(`/pools/${pool.id}/chat`)}
-              title="Abrir chat de la quedada"
-              className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors transform scale-[1.15] origin-left"
-            >
-              <span>💬</span> Chat
-              {hasUnreadChat && <UnreadChatDot className="-top-1 -right-1" />}
-            </button>
-          </div>
-          {pool.description && (
-            <p className="text-sm text-surface-muted mt-2 leading-relaxed">{pool.description}</p>
-          )}
-          {pool.location_hint && (
-            <p className="text-xs text-surface-muted mt-1 flex items-center gap-1.5">
-              <span>📍</span>{pool.location_hint}
-            </p>
-          )}
-        </div>
-
-        {/* Lista de participantes — ocupa el espacio restante y hace scroll */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-display font-bold text-surface-text">Apuntados</h4>
-            <span className="text-xs font-mono text-surface-muted">
-              {pool.max_people !== null && pool.max_people !== undefined
-                ? `${pool.participant_count}/${pool.max_people}`
-                : `${pool.participant_count} apuntados`}
-            </span>
-          </div>
-
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-10 bg-surface-bg rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : participants.length === 0 ? (
-            <p className="text-surface-muted text-sm text-center py-4">Nadie apuntado aún</p>
-          ) : (
-            <div className="space-y-2">
-              {participants.map((p, idx) => {
-                const batteryColor = getBatteryColor(p.battery_level ?? 50);
-                const isFirst = idx === 0;
-                const identity = (identitiesByUser[p.id] || [])[0] || null;
-                return (
-                  <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-bg/50 transition-colors">
-                    <div className="relative flex-shrink-0">
-                      <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-display font-bold border-2 flex-shrink-0"
-                        style={{ borderColor: batteryColor?.hex, background: `${batteryColor?.hex}15` }}
-                      >
-                        {p.avatar_url
-                          ? <img src={p.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                          : (p.username?.[0] || '?').toUpperCase()
-                        }
-                      </div>
-                      {/* Mascota — izquierda-abajo del avatar, mismo patrón
-                          que en el panel de integrantes del grupo
-                          (GroupChatPage.jsx). */}
-                      <div className="absolute" style={{ bottom: 'calc(-0.25rem - 8%)', left: 'calc(-0.25rem - 6%)' }}>
-                        <MiniMascot user={p} size={35} />
-                      </div>
-                      {/* Punto de en línea — derecha-abajo, mismo patrón que FriendCard.jsx / GroupChatPage.jsx */}
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-card ${isOnline(p.last_seen_at) ? 'bg-green-400' : 'bg-slate-600'}`}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-display font-semibold text-surface-text truncate flex items-center gap-1.5">
-                        {p.username}
-                        {isFirst && (
-                          <span className="text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-full">
-                            Organiza
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {/* Insignia — a la izquierda del % de batería, centrada
-                        verticalmente (la fila ya usa items-center). */}
-                    {identity && (
-                      <IdentityBadge identity={identity} size="panel" showName align="right" popoverPlacement={isFirst ? 'bottom' : 'top'} />
-                    )}
-                    {/* % de batería — ancho fijo para que no desplace la
-                        insignia al pasar de 1 a 2 dígitos (mismo motivo que
-                        en el panel de integrantes del grupo). */}
-                    {p.battery_level != null && (
-                      <div
-                        className="font-display font-bold tabular-nums text-sm text-center flex-shrink-0"
-                        style={{ color: batteryColor?.hex, width: 38 }}
-                      >
-                        {p.battery_level}%
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Plazas vacías — solo si hay límite */}
-          {pool.spots_left !== null && pool.spots_left > 0 && pool.status === 'open' && (
-            <div className="mt-3 space-y-1.5">
-              {Array.from({ length: Math.min(pool.spots_left, 3) }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-2 rounded-xl border border-dashed border-surface-border/50 opacity-40">
-                  <div className="w-10 h-10 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
-                    <span className="text-slate-600 text-xs">?</span>
-                  </div>
-                  <span className="text-xs text-slate-600 font-mono">Plaza libre</span>
-                </div>
-              ))}
-              {pool.spots_left > 3 && (
-                <p className="text-xs text-slate-600 font-mono text-center">
-                  +{pool.spots_left - 3} plazas libres más
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Botones — siempre visibles, pegados al fondo */}
-        <div className="flex-shrink-0 border-t border-surface-border px-5 py-3">
-          {canAdjustReminder && (
-            <div className="mb-2">
-              <ReminderBellButton
-                value={pool.current_user_reminder_minutes_before}
-                defaultMinutes={DEFAULT_POOL_REMINDER_MINUTES}
-                saving={reminderSaving === pool.id}
-                onChange={minutes => onReminderChange(pool.id, minutes)}
-                placement="top"
-                wide
-              />
-            </div>
-          )}
-          {canJoin && (
-            <button
-              onClick={() => { onJoin(pool.id); onClose(); }}
-              disabled={joining === pool.id || pool.status === 'full'}
-              className="w-full py-3 rounded-2xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-bold transition-all disabled:opacity-50"
-            >
-              {joining === pool.id ? 'Uniéndose...' : '🚀 Unirse al plan'}
-            </button>
-          )}
-          {canLeave && (
-            <button
-              onClick={() => { onLeave(pool.id); onClose(); }}
-              disabled={leaving === pool.id}
-              className="w-full py-3 rounded-2xl bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-400 text-sm font-display font-bold border border-slate-600/30 hover:border-red-500/30 transition-all disabled:opacity-50"
-            >
-              {leaving === pool.id ? 'Saliendo...' : 'Salir del plan'}
-            </button>
-          )}
-          <button
-            onClick={onClose}
-            className="w-full mt-2 py-2 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
-    </>
-  );
 }
 
 // ── Invitar / Solicitar invitación (quedadas privadas) ──────────────────────
@@ -1368,9 +895,7 @@ export default function PoolsPage() {
   const [createInitialGroupId, setCreateInitialGroupId] = useState(null);
   const [joining, setJoining] = useState(null);
   const [leaving, setLeaving] = useState(null);
-  const [reminderSaving, setReminderSaving] = useState(null);
   const [toast, setToast] = useState(null);
-  const [detailPool, setDetailPool] = useState(null); // pool for participants sheet
   const visiblePoolIdsRef = useRef(new Set());
   const poolsRefreshTimerRef = useRef(null);
   const { poolInviteBadgeCount, markPoolNotificationsSeen } = usePoolInviteNotifications();
@@ -1441,17 +966,8 @@ export default function PoolsPage() {
   useEffect(() => {
     const poolId = searchParams.get('pool');
     if (!poolId) return;
-
-    api.get(`/pools/${poolId}`)
-      .then(({ pool: full }) => setDetailPool(full))
-      .catch(() => showToast('No se pudo abrir esa quedada', 'error'));
-
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.delete('pool');
-      return next;
-    }, { replace: true });
-  }, [searchParams]);
+    navigate(`/pools/${poolId}`);
+  }, [searchParams, navigate]);
 
   // Deep-link desde el atajo "Quedada" del chat de un grupo (ver
   // GroupChatPage.jsx): ?createPool=1&groupId=<id> abre directamente el
@@ -1538,39 +1054,11 @@ export default function PoolsPage() {
     }
   }
 
-  function applyPoolReminder(poolId, minutes) {
-    const updatePool = pool => pool.id === poolId
-      ? { ...pool, current_user_reminder_minutes_before: minutes }
-      : pool;
-
-    setPools(prev => prev.map(updatePool));
-    setMyCreated(prev => prev.map(updatePool));
-    setMyJoined(prev => prev.map(updatePool));
-    setDetailPool(prev => prev?.id === poolId ? updatePool(prev) : prev);
-  }
-
-  async function handlePoolReminderChange(poolId, minutes) {
-    if (reminderSaving) return;
-    setReminderSaving(poolId);
-    try {
-      const data = await api.patch(`/pools/${poolId}/reminder`, {
-        reminder_minutes_before: minutes,
-      });
-      const nextMinutes = data.reminder_minutes_before || minutes;
-      applyPoolReminder(poolId, nextMinutes);
-      showToast('Aviso actualizado');
-    } catch (e) {
-      showToast(e.message || 'Error al cambiar el aviso', 'error');
-    } finally {
-      setReminderSaving(null);
-    }
-  }
-
   const poolCardProps = {
     onJoin: handleJoin,
     onLeave: handleLeave,
     onCancel: handleCancel,
-    onOpenDetail: setDetailPool,
+    onOpenDetail: pool => navigate(`/pools/${pool.id}`),
     onToast: showToast,
     joining,
     leaving,
@@ -1744,20 +1232,6 @@ export default function PoolsPage() {
         )}
       </main>
 
-      {/* Participants sheet */}
-      {detailPool && (
-        <ParticipantsSheet
-          pool={detailPool}
-          onClose={() => setDetailPool(null)}
-          onJoin={handleJoin}
-          onLeave={handleLeave}
-          onReminderChange={handlePoolReminderChange}
-          onToast={showToast}
-          joining={joining}
-          leaving={leaving}
-          reminderSaving={reminderSaving}
-        />
-      )}
 
       {/* Create Pool Modal */}
       {showCreate && (

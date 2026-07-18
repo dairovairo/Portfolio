@@ -2579,7 +2579,7 @@ export default function CommunityDetailPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[416px] overflow-y-auto pr-1">
               {posts.map(post => (
                 <CommunityPostCard
                   key={post.id}
