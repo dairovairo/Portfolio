@@ -1,6 +1,11 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
+import {
+  interpretSignUpResult,
+  isAlreadyConfirmedError,
+  isEmailUnconfirmed,
+} from '../lib/authFlow';
 import { usePresenceBroadcast } from '../hooks/usePresence';
 import { useMessageNotifications } from '../hooks/useMessageNotifications';
 import { useSettings } from './SettingsContext';
@@ -123,33 +128,18 @@ export function AuthProvider({ children }) {
       // ofuscada (ver más abajo).
       throw error;
     }
-    // Supabase, cuando "Confirm email" está activo, ofusca el caso de
-    // email ya registrado: devuelve un data.user con identities=[] y sin
-    // error, para evitar enumeración de correos. El problema es que no
-    // podemos distinguir aquí entre:
-    //   (a) cuenta ya existe Y CONFIRMADA → hay que decir que está en uso
-    //   (b) cuenta existe pero SIN CONFIRMAR → hay que reenviarle el mail
-    //       de confirmación y llevarle a "revisa tu email"
-    // La forma robusta de distinguirlos es intentar el resend:
-    //   - si el usuario existe sin confirmar, el resend funciona y el
-    //     correo sale de nuevo → tratamos el signUp como exitoso, la
-    //     UI muestra la pantalla de "te hemos enviado un correo".
-    //   - si el usuario ya está confirmado, resend falla con un error
-    //     tipo "User already confirmed" / "already been confirmed"
-    //     → mostramos "esta cuenta ya pertenece a un usuario".
-    // Si el resend falla por rate limit u otro motivo transitorio,
-    // seguimos llevándole a la pantalla de "revisa tu email" (la cuenta
-    // existe, así que es la instrucción correcta) en vez de dar un error
-    // que le haría pensar que el registro no ha ocurrido.
-    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    // Ver client/src/lib/authFlow.js — helpers puros con tests.
+    // 'obfuscated' significa que Supabase nos ocultó un email ya
+    // registrado; hay que probar resend para distinguir confirmado vs no.
+    const result = interpretSignUpResult(data);
+    if (result.kind === 'obfuscated') {
       const { error: resendError } = await supabase.auth.resend({
         type: 'signup',
         email,
         options: { emailRedirectTo: window.location.origin },
       });
       if (resendError) {
-        const msg = resendError.message || '';
-        if (/already.*confirmed|confirmed.*already|has been confirmed/i.test(msg)) {
+        if (isAlreadyConfirmedError(resendError)) {
           throw new Error('Esta cuenta ya pertenece a un usuario');
         }
         // Rate limit / otro: no bloqueamos el flujo, la cuenta existe y
@@ -163,19 +153,40 @@ export function AuthProvider({ children }) {
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    // Puerta de confirmación de email en el cliente. Si el proyecto de
-    // Supabase tiene "Confirm email" activo, signInWithPassword ya falla
-    // antes con "Email not confirmed" y este check es redundante. Pero si
-    // ese ajuste está apagado (o se apaga por error en el dashboard), sin
-    // este check una cuenta que se acaba de registrar y no ha pinchado el
-    // enlace del correo entraría igual — que es justo el bug reportado.
-    // Comprobamos ambos campos porque las versiones antiguas de gotrue
-    // usaban confirmed_at y las nuevas email_confirmed_at.
-    const u = data?.user;
-    if (u && !u.email_confirmed_at && !u.confirmed_at) {
+    // Puerta de confirmación en el cliente (ver isEmailUnconfirmed en
+    // authFlow.js). Si el "Confirm email" del dashboard está apagado,
+    // esta comprobación evita que cuentas sin confirmar entren igualmente.
+    if (isEmailUnconfirmed(data?.user)) {
       await supabase.auth.signOut();
       throw new Error('Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada (y la carpeta de spam).');
     }
+    return data;
+  };
+
+  const signInWithGoogle = async () => {
+    // OAuth con Google via Supabase. Requiere que el provider "Google" esté
+    // activado en el dashboard (Auth → Providers → Google) con Client ID y
+    // Secret de Google Cloud Console, y que este origen esté en la lista de
+    // "Redirect URLs" de Supabase.
+    //
+    // No hace navigate/setSession aquí: signInWithOAuth redirige la ventana
+    // entera a la pantalla de Google, y al volver Supabase dispara el evento
+    // SIGNED_IN sobre onAuthStateChange que ya tenemos escuchando arriba.
+    //
+    // redirectTo = window.location.origin para que, igual que en el signUp,
+    // el callback vuelva al mismo dominio desde el que se inició el login
+    // (protege ante cambios de dominio en la Site URL).
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+        // queryParams para forzar selector de cuenta cada vez — útil en
+        // móviles compartidos y en desarrollo. Si molesta a los usuarios
+        // habituales se puede quitar sin más.
+        queryParams: { prompt: 'select_account' },
+      },
+    });
+    if (error) throw error;
     return data;
   };
 
@@ -217,6 +228,7 @@ export function AuthProvider({ children }) {
       isPasswordRecovery,
       signUp,
       signIn,
+      signInWithGoogle,
       signOut,
       updatePassword,
       clearPasswordRecovery,

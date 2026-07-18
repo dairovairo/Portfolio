@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
@@ -27,6 +27,7 @@ import RaffleAdAudiencePage from './pages/RaffleAdAudiencePage';
 import CommunityDashboardPage from './pages/CommunityDashboardPage';
 import EventAdConfigPage from './pages/EventAdConfigPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import ShopPage from './pages/ShopPage';
 import CalendarPage from './pages/CalendarPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
@@ -40,6 +41,7 @@ import MascotPreviewSync from './components/MascotPreviewSync';
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { requestLocationOnce } = useUserLocation();
 
   // Se pide el permiso de ubicación una única vez, nada más entrar en la app
@@ -68,6 +70,30 @@ function AppRoutes() {
     navigator.serviceWorker.addEventListener('message', handleMessage);
     return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
   }, [navigate]);
+
+  // Rutas 100% públicas — se comprueban DESPUÉS de declarar todos los
+  // hooks de arriba (para no romper las reglas de hooks si el pathname
+  // cambia sin desmontar AppRoutes) pero ANTES que cualquier chequeo de
+  // sesión (isLoading / isAuthenticated / hasProfile). Necesario para
+  // páginas como /privacidad: el bot de verificación de Google Cloud
+  // (OAuth consent screen → Privacy Policy link) la visita sin cookies
+  // de sesión, y cualquier usuario debe poder leerla antes de
+  // registrarse. Si esto viviera dentro del bloque !isAuthenticated de
+  // más abajo, Google vería primero el spinner de "Cargando..."
+  // (mientras supabase.auth.getSession() resuelve) y, si el bot no
+  // ejecuta ese ciclo completo, podría acabar en el catch-all que
+  // redirige a /auth — dejando la política inaccesible.
+  const PUBLIC_ROUTES = {
+    '/privacidad': PrivacyPolicyPage,
+  };
+  const PublicPage = PUBLIC_ROUTES[location.pathname];
+  if (PublicPage) {
+    return (
+      <Routes>
+        <Route path={location.pathname} element={<PublicPage />} />
+      </Routes>
+    );
+  }
 
   if (isLoading) {
     return (
