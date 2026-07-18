@@ -9,6 +9,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SocialBattery" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Verificación de propiedad en Google Search Console (property tipo
+         "Prefijo de URL"). NOTA: esto NO sustituye a la verificación de
+         Propiedad de Dominio por TXT que exige específicamente el OAuth
+         consent screen de Google Cloud — esa sólo se puede hacer vía DNS,
+         no vía meta tag. Se deja aquí igualmente porque no estorba y sirve
+         para otros usos de Search Console (indexación, rendimiento, etc). -->
+    <meta name="google-site-verification" content="0S8sE5xYXBOYvnMGy2H4IM5VF-lLx1oMH0gYunPJOkQ" />
 
     <!-- Open Graph -->
     <meta property="og:title" content="SocialBattery" />
@@ -28,7 +35,37 @@
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!--
+        Contenido estático de respaldo, visible en el HTML crudo antes de
+        que React monte. React lo sustituye en cuanto arranca (ver
+        ReactDOM.createRoot(...).render(...) en main.jsx), así que un
+        usuario normal con JS activado nunca llega a verlo — pero
+        cualquier crawler que NO ejecute JavaScript (o lo haga de forma
+        limitada), como el verificador de marca de Google Cloud OAuth,
+        sí lo lee directamente aquí.
+
+        Google rechazó la verificación dos veces con "no se explica el
+        propósito de la app" y "el nombre no coincide con la pantalla de
+        consentimiento" — a pesar de que LandingPage.jsx ya tenía ese
+        mismo contenido — porque ese componente solo existe una vez
+        ejecutado el bundle de JS. Este bloque replica el mismo texto
+        (nombre exacto "SocialBattery" + descripción del propósito) para
+        que esté presente sin depender de JS en absoluto.
+      -->
+      <h1>SocialBattery</h1>
+      <p>
+        SocialBattery es una app social para compartir tu energía social
+        del día, chatear con amigos, unirte a comunidades, participar en
+        quedadas y eventos, y descubrir sorteos cerca de ti.
+      </p>
+      <p>
+        Con SocialBattery puedes indicar tu nivel de energía social,
+        chatear en privado o en grupo, unirte a quedadas organizadas por
+        otros usuarios, participar en eventos y sorteos de tu comunidad,
+        y personalizar tu perfil.
+      </p>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
       // Register service worker
