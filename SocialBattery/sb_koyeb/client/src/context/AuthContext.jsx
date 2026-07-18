@@ -117,13 +117,45 @@ export function AuthProvider({ children }) {
       options: { emailRedirectTo: window.location.origin },
     });
     if (error) {
-      if (/already|registered|exists/i.test(error.message || '')) {
-        throw new Error('Esta cuenta ya pertenece a un usuario');
-      }
+      // Errores "reales" del signUp (contraseña débil, email inválido,
+      // rate limit, etc). No los intentamos mapear a "cuenta ya existe"
+      // porque para ese caso Supabase NO devuelve error, sino data
+      // ofuscada (ver más abajo).
       throw error;
     }
+    // Supabase, cuando "Confirm email" está activo, ofusca el caso de
+    // email ya registrado: devuelve un data.user con identities=[] y sin
+    // error, para evitar enumeración de correos. El problema es que no
+    // podemos distinguir aquí entre:
+    //   (a) cuenta ya existe Y CONFIRMADA → hay que decir que está en uso
+    //   (b) cuenta existe pero SIN CONFIRMAR → hay que reenviarle el mail
+    //       de confirmación y llevarle a "revisa tu email"
+    // La forma robusta de distinguirlos es intentar el resend:
+    //   - si el usuario existe sin confirmar, el resend funciona y el
+    //     correo sale de nuevo → tratamos el signUp como exitoso, la
+    //     UI muestra la pantalla de "te hemos enviado un correo".
+    //   - si el usuario ya está confirmado, resend falla con un error
+    //     tipo "User already confirmed" / "already been confirmed"
+    //     → mostramos "esta cuenta ya pertenece a un usuario".
+    // Si el resend falla por rate limit u otro motivo transitorio,
+    // seguimos llevándole a la pantalla de "revisa tu email" (la cuenta
+    // existe, así que es la instrucción correcta) en vez de dar un error
+    // que le haría pensar que el registro no ha ocurrido.
     if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-      throw new Error('Esta cuenta ya pertenece a un usuario');
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (resendError) {
+        const msg = resendError.message || '';
+        if (/already.*confirmed|confirmed.*already|has been confirmed/i.test(msg)) {
+          throw new Error('Esta cuenta ya pertenece a un usuario');
+        }
+        // Rate limit / otro: no bloqueamos el flujo, la cuenta existe y
+        // el usuario debe seguir mirando su correo. La pantalla siguiente
+        // tiene botón de "reenviar" con cooldown para reintentar.
+      }
     }
     return data;
   };
@@ -131,6 +163,19 @@ export function AuthProvider({ children }) {
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    // Puerta de confirmación de email en el cliente. Si el proyecto de
+    // Supabase tiene "Confirm email" activo, signInWithPassword ya falla
+    // antes con "Email not confirmed" y este check es redundante. Pero si
+    // ese ajuste está apagado (o se apaga por error en el dashboard), sin
+    // este check una cuenta que se acaba de registrar y no ha pinchado el
+    // enlace del correo entraría igual — que es justo el bug reportado.
+    // Comprobamos ambos campos porque las versiones antiguas de gotrue
+    // usaban confirmed_at y las nuevas email_confirmed_at.
+    const u = data?.user;
+    if (u && !u.email_confirmed_at && !u.confirmed_at) {
+      await supabase.auth.signOut();
+      throw new Error('Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada (y la carpeta de spam).');
+    }
     return data;
   };
 
