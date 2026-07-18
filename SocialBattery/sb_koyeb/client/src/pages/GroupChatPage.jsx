@@ -7,6 +7,7 @@ import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 import MascotDisplay from '../components/MascotDisplay';
+import { MASCOT_PREVIEW_OVERLAY_STYLE } from '../lib/mascotRenderer';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 
 // ── Mark group as read in localStorage ───────────────────────────────────────
@@ -63,7 +64,8 @@ function MiniMascot({ user, size = 32 }) {
           src={user.mascot_preview_url}
           alt=""
           draggable={false}
-          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+          className="absolute select-none pointer-events-none"
+          style={MASCOT_PREVIEW_OVERLAY_STYLE}
         />
       )}
     </div>

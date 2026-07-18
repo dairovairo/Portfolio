@@ -270,12 +270,17 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
       );
     } else if (acc.isRinon) {
       // Ver comentario detallado en components/MascotDisplay.jsx:
-      // ajuste 3 (otros 3% a la derecha, sin cambio de tamaño):
-      // left=-0.0725, top base=51.91625, width=152.145, height=59.1675.
+      // ajuste 4 (otro 2% a la derecha, solo traslación):
+      // left=1.9275, top base=51.91625, width=152.145, height=59.1675.
+      // Debe coincidir EXACTAMENTE con MascotDisplay.jsx (mismo baseLeft),
+      // para que el "retrato" horneado (mascot_preview_url) que ven los
+      // amigos quede en la misma posición que la mascota en vivo (tienda,
+      // menú principal). Antes valía -0.0725 (se quedó en el ajuste 3) y la
+      // riñonera aparecía ~2% desplazada respecto a la tienda.
       // rinonScale/rinonOffsetX (por ítem) recentran y desplazan la caja
       // base para colores cuyo PNG tiene más margen interno — misma
       // fórmula que en MascotDisplay.jsx.
-      const baseLeft = -0.0725;
+      const baseLeft = 1.9275;
       const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
       const baseWidth = 152.145;
       const baseHeight = 59.1675;
@@ -325,6 +330,37 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
 
 // ── Overlay para la tarjeta de amigos ──────────────────────────────────────────
 
+// Margen (fracción del lado de la mascota) que se reserva ALREDEDOR del
+// cuadrado de la mascota al hornear el retrato. La riñonera es el único ítem
+// cuyo dibujo sobresale del cuadrado de la mascota (~5-6% por la derecha):
+// en la tienda / menú principal se ve completa porque el <img> puede
+// desbordar su contenedor, pero al "hornearla" en un lienzo del tamaño justo
+// del cuadrado, ese trozo que sobresalía se recortaba y en las tarjetas de
+// amigo (quedadas, grupos…) la riñonera salía cortada/desplazada. Reservando
+// este margen el retrato incluye el desbordamiento completo.
+//
+// El retrato se sigue mostrando alineado con la mascota base porque los
+// consumidores (FriendCard, GroupChatPage, PoolsPage…) pintan el <img> con
+// MASCOT_PREVIEW_OVERLAY_STYLE, que lo agranda y recentra exactamente en la
+// misma proporción (ver más abajo).
+export const MASCOT_PREVIEW_PAD = 0.1;
+
+// Estilo con el que TODOS los consumidores deben pintar el <img> del retrato
+// horneado (mascot_preview_url) por encima de la mascota base. Reemplaza al
+// antiguo `absolute inset-0 w-full h-full object-contain`: agranda la imagen
+// (1 + 2·PAD) y la desplaza -PAD en ambos ejes, de modo que el cuadrado
+// interno de la mascota vuelve a coincidir 1:1 con la base, y el margen extra
+// (con el desbordamiento de la riñonera) queda fuera del cuadrado sin
+// recortarse. Debe usarse junto a las clases `absolute select-none
+// pointer-events-none`.
+export const MASCOT_PREVIEW_OVERLAY_STYLE = {
+  left: `${-MASCOT_PREVIEW_PAD * 100}%`,
+  top: `${-MASCOT_PREVIEW_PAD * 100}%`,
+  width: `${(1 + 2 * MASCOT_PREVIEW_PAD) * 100}%`,
+  height: `${(1 + 2 * MASCOT_PREVIEW_PAD) * 100}%`,
+  objectFit: 'contain',
+};
+
 /**
  * renderMascotOverlayBlob — genera un PNG cuadrado y transparente con SOLO
  * las capas equipadas por encima de la mascota base (calzado, torso, gorro,
@@ -354,13 +390,21 @@ export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   );
   if (!hasAnyLayer) return null;
 
+  // El lienzo lleva un margen extra (MASCOT_PREVIEW_PAD) alrededor del
+  // cuadrado de la mascota (`size`) para no recortar el desbordamiento de la
+  // riñonera. La mascota se dibuja centrada dentro de ese margen; los
+  // consumidores la vuelven a alinear con MASCOT_PREVIEW_OVERLAY_STYLE.
+  const inner = size;
+  const off = Math.round(inner * MASCOT_PREVIEW_PAD);
+  const total = inner + off * 2;
+
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = total;
+  canvas.height = total;
   const ctx = canvas.getContext('2d');
 
   // `base: null` a propósito — ver comentario de la función.
-  await drawMascotOnCanvas(ctx, { ...resolved, base: null }, 0, 0, size);
+  await drawMascotOnCanvas(ctx, { ...resolved, base: null }, off, off, inner);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
