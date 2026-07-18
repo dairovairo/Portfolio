@@ -75,16 +75,28 @@ function AppRoutes() {
   // Rutas 100% públicas — se comprueban DESPUÉS de declarar todos los
   // hooks de arriba (para no romper las reglas de hooks si el pathname
   // cambia sin desmontar AppRoutes) pero ANTES que cualquier chequeo de
-  // sesión (isLoading / isAuthenticated / hasProfile). Necesario para
-  // páginas como /privacidad: el bot de verificación de Google Cloud
-  // (OAuth consent screen → Privacy Policy link) la visita sin cookies
-  // de sesión, y cualquier usuario debe poder leerla antes de
-  // registrarse. Si esto viviera dentro del bloque !isAuthenticated de
-  // más abajo, Google vería primero el spinner de "Cargando..."
-  // (mientras supabase.auth.getSession() resuelve) y, si el bot no
-  // ejecuta ese ciclo completo, podría acabar en el catch-all que
-  // redirige a /auth — dejando la política inaccesible.
+  // sesión (isLoading / isAuthenticated / hasProfile).
+  //
+  // Aquí incluimos también "/" con la LandingPage: si esperáramos a
+  // que isLoading resolviera, durante los milisegundos que tarda
+  // supabase.auth.getSession() el bot de Google Cloud (que ejecuta JS
+  // headless para verificar el OAuth consent screen) solo vería el
+  // spinner "Cargando..." — sin `<h1>SocialBattery</h1>` ni descripción
+  // del propósito de la app. Eso disparaba exactamente los dos errores
+  // de verificación:
+  //   "el nombre no coincide con la pantalla de consentimiento"
+  //   "no se explica el propósito de la app"
+  // porque en el momento que el bot capturaba el DOM, la landing aún no
+  // había montado. Renderizándola directamente en "/" sin gating por
+  // sesión, el bot ve inmediatamente el contenido correcto.
+  //
+  // Para usuarios autenticados que naveguen a "/", el redirect a
+  // /home lo hace el propio botón/flujo de la landing (o el useEffect
+  // más abajo si volvieran a montar la app desde cero). En cualquier
+  // caso mostrar brevemente la landing a un usuario autenticado no es
+  // problema, es igualmente contenido válido de la app.
   const PUBLIC_ROUTES = {
+    '/': LandingPage,
     '/privacidad': PrivacyPolicyPage,
   };
   const PublicPage = PUBLIC_ROUTES[location.pathname];

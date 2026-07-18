@@ -1,5 +1,5 @@
 // SocialBattery Service Worker — Phase 12 (soft in-app navigation on notification click)
-const CACHE_NAME = 'socialbattery-v13';
+const CACHE_NAME = 'socialbattery-v14';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 // Install: cache static shell
