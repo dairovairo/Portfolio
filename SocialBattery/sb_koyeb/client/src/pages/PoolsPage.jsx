@@ -11,7 +11,6 @@ import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 import { usePoolInviteNotifications } from '../context/PoolInviteNotificationsContext';
 import MascotDisplay from '../components/MascotDisplay';
-import { MASCOT_PREVIEW_OVERLAY_STYLE } from '../lib/mascotRenderer';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import LocationPicker from '../components/LocationPicker';
 
@@ -207,8 +206,7 @@ function MiniMascot({ user, size = 32 }) {
           src={user.mascot_preview_url}
           alt=""
           draggable={false}
-          className="absolute select-none pointer-events-none"
-          style={MASCOT_PREVIEW_OVERLAY_STYLE}
+          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
         />
       )}
     </div>

@@ -2,7 +2,6 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { isOnline } from '../hooks/usePresence';
 import { useSettings } from '../context/SettingsContext';
 import MascotDisplay from './MascotDisplay';
-import { MASCOT_PREVIEW_OVERLAY_STYLE } from '../lib/mascotRenderer';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
@@ -92,8 +91,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
               src={friend.mascot_preview_url}
               alt=""
               draggable={false}
-              className="absolute select-none pointer-events-none"
-              style={MASCOT_PREVIEW_OVERLAY_STYLE}
+              className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
             />
           )}
         </div>
