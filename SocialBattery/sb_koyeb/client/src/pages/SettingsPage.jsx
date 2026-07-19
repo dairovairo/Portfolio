@@ -380,6 +380,7 @@ export default function SettingsPage() {
     showInterests, setShowInterests,
     showPublicStats, setShowPublicStats,
     showBadges, setShowBadges,
+    discoverable, setDiscoverable,
   } = useSettings();
 
   // Only one section open at a time
@@ -837,6 +838,23 @@ export default function SettingsPage() {
                 <Toggle
                   enabled={showBadges}
                   onToggle={() => setShowBadges(!showBadges)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-display font-semibold text-surface-text">
+                    Aparecer en Descubrir
+                  </div>
+                  <div className="text-xs text-surface-muted">
+                    {discoverable
+                      ? 'Otros usuarios pueden encontrarte en "Cerca de ti" y "Quizás conozcas"'
+                      : 'No apareces en las sugerencias de gente cerca ni de amigos en común'}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={discoverable}
+                  onToggle={() => setDiscoverable(!discoverable)}
                 />
               </div>
             </div>

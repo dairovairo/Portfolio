@@ -139,6 +139,7 @@ const STORAGE_KEYS = {
   showInterests:         'sb-show-interests',
   showPublicStats:       'sb-show-public-stats',
   showBadges:            'sb-show-badges',
+  discoverable:          'sb-discoverable',
 };
 
 const MESSAGING_FIELDS = [
@@ -341,6 +342,11 @@ export function SettingsProvider({ children }) {
 
   const [showBadges, setShowBadgesState] = useState(
     () => loadStorage(STORAGE_KEYS.showBadges, 'true') === 'true'
+  );
+
+  // Aparecer en "Descubrir" (cerca de ti / quizás conozcas) — phase 113.
+  const [discoverable, setDiscoverableState] = useState(
+    () => loadStorage(STORAGE_KEYS.discoverable, 'true') === 'true'
   );
 
   // ── setters ──────────────────────────────────────────────────────────────
@@ -584,6 +590,14 @@ export function SettingsProvider({ children }) {
     });
   }, []);
 
+  const setDiscoverable = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.discoverable, String(v));
+    setDiscoverableState(v);
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { discoverable: v }).catch(() => {});
+    });
+  }, []);
+
   // Sync privacy toggles from server profile (called on login / profile load)
   const syncPrivacyFromProfile = useCallback((profile) => {
     if (!profile) return;
@@ -598,6 +612,10 @@ export function SettingsProvider({ children }) {
     if (typeof profile.show_badges === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.showBadges, String(profile.show_badges));
       setShowBadgesState(profile.show_badges);
+    }
+    if (typeof profile.discoverable === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.discoverable, String(profile.discoverable));
+      setDiscoverableState(profile.discoverable);
     }
     if (typeof profile.mute_new_pools === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteNewPools, String(profile.mute_new_pools));
@@ -783,6 +801,7 @@ export function SettingsProvider({ children }) {
       showInterests, setShowInterests,
       showPublicStats, setShowPublicStats,
       showBadges, setShowBadges,
+      discoverable, setDiscoverable,
       syncPrivacyFromProfile,
     }}>
       {children}
