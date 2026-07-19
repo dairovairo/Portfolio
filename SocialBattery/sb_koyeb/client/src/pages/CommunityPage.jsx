@@ -670,12 +670,16 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
             <img src={community.cover_image_url} alt="" className="h-full w-full object-cover" />
           ) : emoji}
         </div>
-        {hasNewEvents && (
-          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-surface-card" />
-        )}
-        {hasNewThreadPost && (
-          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-accent-primary rounded-full border-2 border-surface-card" />
-        )}
+        {/* Un solo indicador en la esquina: si hay evento/sorteo nuevo, el
+            punto rojo tiene prioridad y sobrescribe al del hilo (no
+            conviven dos puntos a la vez). Si solo hay mensaje nuevo en el
+            hilo, se muestra más grande y con resplandor para que sea más
+            visible que antes. */}
+        {hasNewEvents ? (
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-surface-card animate-pulse" />
+        ) : hasNewThreadPost ? (
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-accent-primary rounded-full border-2 border-surface-card shadow-[0_0_8px_2px_rgba(0,224,255,0.65)] animate-pulse" />
+        ) : null}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -693,7 +697,10 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
               📅 Evento próximo
             </span>
           )}
-          {hasNewThreadPost && (
+          {/* Si ya hay evento/sorteo nuevo (badge rojo), este chip queda
+              sobrescrito igual que el punto de la esquina — evita mostrar
+              dos "cosas nuevas" a la vez cuando lo prioritario es el rojo. */}
+          {hasNewThreadPost && !hasNewEvents && (
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/20 text-accent-glow border border-accent-primary/40 flex-shrink-0">
               🧵 Nuevo en el hilo
             </span>
@@ -1324,8 +1331,10 @@ export default function CommunityPage() {
   const location = useLocation();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates, communitiesWithNewThreadPosts, clearThreadPostBadge } = useCommunityNotifications();
-  const communitiesNeedingAttention = new Set([...communitiesWithEvents, ...communitiesWithNewThreadPosts]);
+  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates, communitiesWithNewThreadPosts, clearThreadPostBadge, communitiesWithNewRaffles } = useCommunityNotifications();
+  // Badge rojo: evento nuevo O sorteo nuevo (mismo peso, misma prioridad).
+  const communitiesWithRedBadge = new Set([...communitiesWithEvents, ...communitiesWithNewRaffles]);
+  const communitiesNeedingAttention = new Set([...communitiesWithRedBadge, ...communitiesWithNewThreadPosts]);
 
   const [tab, setTab] = useState(location.state?.tab || 'events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -2029,7 +2038,7 @@ export default function CommunityPage() {
                       onLeave={handleLeaveCommunity}
                       onOpen={(id) => { clearCommunityBadge(id); clearThreadPostBadge(id); navigate(`/community/${id}`); }}
                       currentUserId={profile?.id}
-                      hasNewEvents={communitiesWithEvents.has(community.id)}
+                      hasNewEvents={communitiesWithRedBadge.has(community.id)}
                       hasNewThreadPost={communitiesWithNewThreadPosts.has(community.id)}
                     />
                     ))}

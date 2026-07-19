@@ -18,6 +18,8 @@ const CommunityNotificationsContext = createContext({
   threadPostBadgeCount: 0,
   communitiesWithNewThreadPosts: new Set(),
   clearThreadPostBadge: () => {},
+  // sorteo nuevo (banner volador) — cuenta hacia el badge rojo, igual que eventos
+  communitiesWithNewRaffles: new Set(),
 });
 
 export function useCommunityNotifications() {
@@ -28,6 +30,7 @@ const STORAGE_KEY           = 'sb_community_events_badge';
 const STORAGE_KEY_BY_COM    = 'sb_community_events_by_community';
 const STORAGE_KEY_UPDATES   = 'sb_event_updates_badge'; // Set<eventId> serialized as JSON array
 const STORAGE_KEY_THREAD_POSTS_BY_COM = 'sb_community_thread_posts_by_community';
+const STORAGE_KEY_RAFFLES_BY_COM      = 'sb_community_new_raffles_by_community';
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -111,6 +114,22 @@ function saveThreadPostsByComMap(map) {
   try { localStorage.setItem(STORAGE_KEY_THREAD_POSTS_BY_COM, JSON.stringify(map)); } catch {}
 }
 
+// ── Serialize / deserialize el mapa { communityId -> count } de sorteos
+//    nuevos (banner volador) — mismo patrón que eventsByCommunity, se usa
+//    para que un sorteo nuevo también dispare el badge rojo del panel de
+//    comunidades (antes solo disparaba una notificación local puntual, sin
+//    quedar reflejado como "pendiente de ver" en la lista) ────────────────
+function loadRafflesByComMap() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_RAFFLES_BY_COM);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveRafflesByComMap(map) {
+  try { localStorage.setItem(STORAGE_KEY_RAFFLES_BY_COM, JSON.stringify(map)); } catch {}
+}
+
 // ── Serialize / deserialize el Set<eventId> de actualizaciones no leídas ─────
 function loadUpdatesSet() {
   try {
@@ -133,6 +152,11 @@ export function CommunityNotificationsProvider({ children }) {
   // postsByCommunity: { [communityId: string]: number } — mensajes nuevos
   // en el hilo (siempre del creador de la comunidad) todavía no vistos.
   const [postsByCommunity, setPostsByCommunity] = useState(loadThreadPostsByComMap);
+
+  // rafflesByCommunity: { [communityId: string]: number } — sorteos nuevos
+  // (banner volador) todavía no vistos, cuentan hacia el badge rojo junto
+  // con eventsByCommunity.
+  const [rafflesByCommunity, setRafflesByCommunity] = useState(loadRafflesByComMap);
 
   // eventsWithUpdates: Set<eventId> — eventos planificados con actualizaciones no leídas
   const [eventsWithUpdates, setEventsWithUpdates] = useState(loadUpdatesSet);
@@ -164,6 +188,12 @@ export function CommunityNotificationsProvider({ children }) {
       .map(([id]) => id)
   );
 
+  const communitiesWithNewRaffles = new Set(
+    Object.entries(rafflesByCommunity)
+      .filter(([, n]) => n > 0)
+      .map(([id]) => id)
+  );
+
   // ── Persistencia ───────────────────────────────────────────────────────────
   useEffect(() => {
     saveByComMap(eventsByCommunity);
@@ -177,6 +207,10 @@ export function CommunityNotificationsProvider({ children }) {
   useEffect(() => {
     saveThreadPostsByComMap(postsByCommunity);
   }, [postsByCommunity]);
+
+  useEffect(() => {
+    saveRafflesByComMap(rafflesByCommunity);
+  }, [rafflesByCommunity]);
 
   // ── Carga los IDs de comunidades + eventos a los que pertenece el usuario ──
   const refreshJoinedCommunities = useCallback(async () => {
@@ -485,6 +519,16 @@ export function CommunityNotificationsProvider({ children }) {
         if (!data?.raffle_id || !data?.community_id) return;
         if (data.creator_id === profile.id) return;
 
+        // Cuenta hacia el badge rojo del panel de comunidades (igual que un
+        // evento nuevo) — antes un sorteo nuevo solo disparaba la
+        // notificación local puntual de abajo y no dejaba ningún rastro
+        // "pendiente de ver" en la lista si el usuario no estaba mirando en
+        // ese momento.
+        setRafflesByCommunity(prev => ({
+          ...prev,
+          [data.community_id]: (prev[data.community_id] || 0) + 1,
+        }));
+
         const settings = settingsRef.current;
         if (settings.muteAllNotifications) return;
 
@@ -514,6 +558,14 @@ export function CommunityNotificationsProvider({ children }) {
   const clearCommunityBadge = useCallback((communityId) => {
     if (!communityId) return;
     setEventsByCommunity(prev => {
+      const next = { ...prev };
+      delete next[communityId];
+      return next;
+    });
+    // El badge rojo agrupa eventos Y sorteos nuevos — al entrar a la
+    // comunidad se limpian ambos a la vez, no solo el de eventos.
+    setRafflesByCommunity(prev => {
+      if (!prev[communityId]) return prev;
       const next = { ...prev };
       delete next[communityId];
       return next;
@@ -561,6 +613,7 @@ export function CommunityNotificationsProvider({ children }) {
         threadPostBadgeCount,
         communitiesWithNewThreadPosts,
         clearThreadPostBadge,
+        communitiesWithNewRaffles,
       }}
     >
       {children}
