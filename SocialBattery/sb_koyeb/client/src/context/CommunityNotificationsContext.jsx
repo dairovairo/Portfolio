@@ -14,6 +14,10 @@ const CommunityNotificationsContext = createContext({
   planningUpdateCount: 0,
   clearEventUpdateBadge: () => {},
   clearAllEventUpdateBadges: () => {},
+  // community thread post badges (nuevo mensaje del creador en el hilo)
+  threadPostBadgeCount: 0,
+  communitiesWithNewThreadPosts: new Set(),
+  clearThreadPostBadge: () => {},
 });
 
 export function useCommunityNotifications() {
@@ -23,6 +27,7 @@ export function useCommunityNotifications() {
 const STORAGE_KEY           = 'sb_community_events_badge';
 const STORAGE_KEY_BY_COM    = 'sb_community_events_by_community';
 const STORAGE_KEY_UPDATES   = 'sb_event_updates_badge'; // Set<eventId> serialized as JSON array
+const STORAGE_KEY_THREAD_POSTS_BY_COM = 'sb_community_thread_posts_by_community';
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -92,6 +97,20 @@ function totalCount(map) {
   return Object.values(map).reduce((acc, n) => acc + n, 0);
 }
 
+// ── Serialize / deserialize el mapa { communityId -> count } de mensajes
+//    nuevos en el hilo (siempre del creador — es el único que puede
+//    publicar ahí, ver POST /communities/:id/posts en community.js) ────────
+function loadThreadPostsByComMap() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_THREAD_POSTS_BY_COM);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveThreadPostsByComMap(map) {
+  try { localStorage.setItem(STORAGE_KEY_THREAD_POSTS_BY_COM, JSON.stringify(map)); } catch {}
+}
+
 // ── Serialize / deserialize el Set<eventId> de actualizaciones no leídas ─────
 function loadUpdatesSet() {
   try {
@@ -110,6 +129,10 @@ export function CommunityNotificationsProvider({ children }) {
 
   // eventsByCommunity: { [communityId: string]: number }
   const [eventsByCommunity, setEventsByCommunity] = useState(loadByComMap);
+
+  // postsByCommunity: { [communityId: string]: number } — mensajes nuevos
+  // en el hilo (siempre del creador de la comunidad) todavía no vistos.
+  const [postsByCommunity, setPostsByCommunity] = useState(loadThreadPostsByComMap);
 
   // eventsWithUpdates: Set<eventId> — eventos planificados con actualizaciones no leídas
   const [eventsWithUpdates, setEventsWithUpdates] = useState(loadUpdatesSet);
@@ -134,6 +157,13 @@ export function CommunityNotificationsProvider({ children }) {
   );
   const planningUpdateCount = eventsWithUpdates.size;
 
+  const threadPostBadgeCount = totalCount(postsByCommunity);
+  const communitiesWithNewThreadPosts = new Set(
+    Object.entries(postsByCommunity)
+      .filter(([, n]) => n > 0)
+      .map(([id]) => id)
+  );
+
   // ── Persistencia ───────────────────────────────────────────────────────────
   useEffect(() => {
     saveByComMap(eventsByCommunity);
@@ -143,6 +173,10 @@ export function CommunityNotificationsProvider({ children }) {
   useEffect(() => {
     saveUpdatesSet(eventsWithUpdates);
   }, [eventsWithUpdates]);
+
+  useEffect(() => {
+    saveThreadPostsByComMap(postsByCommunity);
+  }, [postsByCommunity]);
 
   // ── Carga los IDs de comunidades + eventos a los que pertenece el usuario ──
   const refreshJoinedCommunities = useCallback(async () => {
@@ -355,6 +389,14 @@ export function CommunityNotificationsProvider({ children }) {
         if (!data?.community_id) return;
         if (data.creator_id === profile.id) return;
 
+        // El badge se incrementa siempre (igual que con eventsByCommunity),
+        // aunque el hilo esté silenciado — el silencio solo afecta al aviso
+        // push/local, no a si aparece como "no leído" en la UI.
+        setPostsByCommunity(prev => ({
+          ...prev,
+          [data.community_id]: (prev[data.community_id] || 0) + 1,
+        }));
+
         const settings = settingsRef.current;
         if (settings.muteAllNotifications) return;
         if (settings.muteCommunityThreads) return;
@@ -488,6 +530,17 @@ export function CommunityNotificationsProvider({ children }) {
     });
   }, []);
 
+  // ── Limpia el badge de mensajes nuevos del hilo de una comunidad concreta ──
+  const clearThreadPostBadge = useCallback((communityId) => {
+    if (!communityId) return;
+    setPostsByCommunity(prev => {
+      if (!prev[communityId]) return prev;
+      const next = { ...prev };
+      delete next[communityId];
+      return next;
+    });
+  }, []);
+
   // ── Limpia todos los badges de actualizaciones ────────────────────────────
   const clearAllEventUpdateBadges = useCallback(() => {
     setEventsWithUpdates(new Set());
@@ -505,6 +558,9 @@ export function CommunityNotificationsProvider({ children }) {
         planningUpdateCount,
         clearEventUpdateBadge,
         clearAllEventUpdateBadges,
+        threadPostBadgeCount,
+        communitiesWithNewThreadPosts,
+        clearThreadPostBadge,
       }}
     >
       {children}

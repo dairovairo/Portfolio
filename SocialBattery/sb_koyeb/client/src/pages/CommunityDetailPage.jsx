@@ -2051,7 +2051,7 @@ export default function CommunityDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearCommunityBadge, communitiesWithEvents } = useCommunityNotifications();
+  const { clearCommunityBadge, communitiesWithEvents, communitiesWithNewThreadPosts, clearThreadPostBadge } = useCommunityNotifications();
   const { isConversationMuted, setConversationMuted } = useSettings();
   const [threadMuted, setThreadMuted] = useState(() => isConversationMuted('community_thread', communityId));
   useEffect(() => {
@@ -2159,8 +2159,9 @@ export default function CommunityDetailPage() {
   useEffect(() => {
     if (!loading && community) {
       clearCommunityBadge(communityId);
+      clearThreadPostBadge(communityId);
     }
-  }, [loading, community, communityId, clearCommunityBadge]);
+  }, [loading, community, communityId, clearCommunityBadge, clearThreadPostBadge]);
 
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
@@ -2384,7 +2385,7 @@ export default function CommunityDetailPage() {
               <p className="text-xs text-surface-muted font-mono">
                 {community.member_count || 0} miembros{community.is_admin ? ' · admin' : ''}
               </p>
-              {communitiesWithEvents.has(communityId) && (
+              {(communitiesWithEvents.has(communityId) || communitiesWithNewThreadPosts.has(communityId)) && (
                 <span className="flex-shrink-0 w-2.5 h-2.5 bg-red-500 rounded-full" />
               )}
             </div>
@@ -2547,7 +2548,14 @@ export default function CommunityDetailPage() {
 
         <section className="space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h2 className="font-display font-bold text-surface-text text-sm">Hilo de la comunidad</h2>
+            <h2 className="font-display font-bold text-surface-text text-sm flex items-center gap-1.5">
+              Hilo de la comunidad
+              {communitiesWithNewThreadPosts.has(communityId) && (
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/40">
+                  Nuevo
+                </span>
+              )}
+            </h2>
             <div className="flex-shrink-0 flex items-center gap-1.5">
               <button
                 onClick={toggleThreadMuted}

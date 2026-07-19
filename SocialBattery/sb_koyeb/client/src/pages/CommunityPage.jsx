@@ -626,7 +626,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
 }
 
 // ── Community Card ────────────────────────────────────────────────────────────
-function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasNewEvents }) {
+function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasNewEvents, hasNewThreadPost }) {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const isMember = community.members?.includes(currentUserId);
@@ -673,6 +673,9 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
         {hasNewEvents && (
           <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-surface-card" />
         )}
+        {hasNewThreadPost && (
+          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-accent-primary rounded-full border-2 border-surface-card" />
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -688,6 +691,11 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
           {community.has_upcoming_event && (
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/40 flex-shrink-0">
               📅 Evento próximo
+            </span>
+          )}
+          {hasNewThreadPost && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/20 text-accent-glow border border-accent-primary/40 flex-shrink-0">
+              🧵 Nuevo en el hilo
             </span>
           )}
           {communityCategories.map(cat => (
@@ -1316,7 +1324,8 @@ export default function CommunityPage() {
   const location = useLocation();
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates } = useCommunityNotifications();
+  const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates, communitiesWithNewThreadPosts, clearThreadPostBadge } = useCommunityNotifications();
+  const communitiesNeedingAttention = new Set([...communitiesWithEvents, ...communitiesWithNewThreadPosts]);
 
   const [tab, setTab] = useState(location.state?.tab || 'events'); // 'events' | 'communities'
   const [events, setEvents] = useState([]);
@@ -1599,9 +1608,9 @@ export default function CommunityPage() {
               }`}
             >
               👥 Comunidades
-              {communitiesWithEvents.size > 0 && (
+              {communitiesNeedingAttention.size > 0 && (
                 <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
-                  {communitiesWithEvents.size > 9 ? '9+' : communitiesWithEvents.size}
+                  {communitiesNeedingAttention.size > 9 ? '9+' : communitiesNeedingAttention.size}
                 </span>
               )}
             </button>
@@ -2018,9 +2027,10 @@ export default function CommunityPage() {
                       community={{ ...community, members: community.member_ids || [] }}
                       onJoin={handleJoinCommunity}
                       onLeave={handleLeaveCommunity}
-                      onOpen={(id) => { clearCommunityBadge(id); navigate(`/community/${id}`); }}
+                      onOpen={(id) => { clearCommunityBadge(id); clearThreadPostBadge(id); navigate(`/community/${id}`); }}
                       currentUserId={profile?.id}
                       hasNewEvents={communitiesWithEvents.has(community.id)}
+                      hasNewThreadPost={communitiesWithNewThreadPosts.has(community.id)}
                     />
                     ))}
                   </div>
