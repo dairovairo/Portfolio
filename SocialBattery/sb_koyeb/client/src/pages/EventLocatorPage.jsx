@@ -4,6 +4,8 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useUserLocation } from '../context/UserLocationContext';
 import GlobeLocationView from '../components/GlobeLocationView';
+import MascotDisplay from '../components/MascotDisplay';
+import { getBatteryColor } from '../lib/battery';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 
@@ -19,6 +21,58 @@ function LocatorAvatar({ user }) {
   return (
     <div className="w-9 h-9 rounded-full bg-accent-primary/20 border border-accent-primary/30 flex items-center justify-center text-xs font-display font-bold text-accent-glow flex-shrink-0">
       {(user?.username || '?').charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// FriendCard.jsx / PoolSnifferPage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
+function getMascotTier(level) {
+  if (level <= 33) return 'low';
+  if (level <= 66) return 'mid';
+  return 'high';
+}
+
+// Mascota en miniatura para la lista de miembros del grupo de
+// localización — mismo patrón que MiniMascot en PoolSnifferPage.jsx: capa
+// base según tier de batería + overlay "horneado" (mascot_preview_url). Si
+// es la mascota propia, se monta MascotDisplay sin overrides para leer el
+// equipado real del contexto al instante (ver comentario original en
+// PoolSnifferPage.jsx sobre por qué no usar mascot_preview_url para "mí").
+function LocatorMiniMascot({ user, size = 34 }) {
+  const { profile } = useAuth();
+  const isMe = Boolean(profile?.id) && user?.id === profile.id;
+  const color = getBatteryColor(user?.battery_level ?? 50);
+  const tier = getMascotTier(user?.battery_level ?? 50);
+
+  if (isMe) {
+    return (
+      <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+        <MascotDisplay tier={tier} size={size} glowColor={color.hex} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <MascotDisplay
+        tier={tier}
+        size={size}
+        glowColor={color.hex}
+        outfitSrc={null}
+        feetSrc={null}
+        headSrc={null}
+        accessories={[]}
+        activityLayers={[]}
+      />
+      {user?.mascot_preview_url && (
+        <img
+          src={user.mascot_preview_url}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+        />
+      )}
     </div>
   );
 }
@@ -245,6 +299,8 @@ export default function EventLocatorPage() {
         user_id: m.user_id,
         username: m.user?.username,
         avatar_url: m.user?.avatar_url,
+        battery_level: m.user?.battery_level,
+        mascot_preview_url: m.user?.mascot_preview_url,
         isMe: m.user_id === profile?.id,
         lat: live?.lat ?? m.lat ?? null,
         lng: live?.lng ?? m.lng ?? null,
@@ -434,6 +490,7 @@ export default function EventLocatorPage() {
                   <div key={m.user_id} className="flex items-center gap-3 bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                     <LocatorAvatar user={m.user} />
                     <span className="flex-1 min-w-0 text-sm text-surface-text truncate">{m.user?.username || 'Usuario'}</span>
+                    <LocatorMiniMascot user={m.user} />
                     <span className={`flex-shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-full border ${meta.className}`}>
                       {meta.label}
                     </span>

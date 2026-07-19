@@ -640,7 +640,7 @@ router.get('/:id/sniffer/checkins', requireAuth, async (req, res) => {
     const { data: checkins, error } = await supabase
       .from('pool_sniffer_checkins')
       .select(`
-        id, checked_in_at,
+        id, checked_in_at, lat, lng,
         user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)
       `)
       .eq('pool_id', req.params.id)
@@ -651,6 +651,8 @@ router.get('/:id/sniffer/checkins', requireAuth, async (req, res) => {
       checkins: (checkins || []).map(c => ({
         id: c.id,
         checked_in_at: c.checked_in_at,
+        lat: c.lat,
+        lng: c.lng,
         user: applyBatteryExpiry(c.user),
       })),
     });
@@ -697,7 +699,7 @@ router.post('/:id/sniffer/checkin', requireAuth, async (req, res) => {
     // cual (se conserva la hora de la primera confirmación).
     const { data: existing } = await supabase
       .from('pool_sniffer_checkins')
-      .select(`id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
+      .select(`id, checked_in_at, lat, lng, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
       .eq('pool_id', req.params.id)
       .eq('user_id', userId)
       .maybeSingle();
@@ -708,8 +710,8 @@ router.post('/:id/sniffer/checkin', requireAuth, async (req, res) => {
 
     const { data: inserted, error: insertError } = await supabase
       .from('pool_sniffer_checkins')
-      .insert({ pool_id: req.params.id, user_id: userId })
-      .select(`id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
+      .insert({ pool_id: req.params.id, user_id: userId, lat, lng })
+      .select(`id, checked_in_at, lat, lng, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
       .single();
 
     if (insertError) {
@@ -725,7 +727,7 @@ router.post('/:id/sniffer/checkin', requireAuth, async (req, res) => {
       if (insertError.code === '23505') {
         const { data: raceWinner } = await supabase
           .from('pool_sniffer_checkins')
-          .select(`id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
+          .select(`id, checked_in_at, lat, lng, user:user_id(id, username, avatar_url, battery_level, battery_is_estimated, battery_updated_at, mascot_preview_url)`)
           .eq('pool_id', req.params.id)
           .eq('user_id', userId)
           .single();

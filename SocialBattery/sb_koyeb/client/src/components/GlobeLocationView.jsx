@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { MASCOT_BASE } from '../context/MascotContext';
 
 /**
- * GlobeLocationView — mapa de ubicación para EventLocatorPage.
+ * GlobeLocationView — mapa de ubicación para EventLocatorPage y
+ * PoolSnifferPage.
  *
  * Mapa 2D detallado (Leaflet) con teselas oscuras o claras según el tema
  * de la app (CARTO dark_all / light_all — sin API key), con precisión y
@@ -11,8 +13,18 @@ import { useTheme } from '../context/ThemeContext';
  * Props:
  *   lat, lng {number}
  *   label    {string|null}
- *   friends  {Array<{user_id, username, avatar_url, lat, lng, isMe}>}
+ *   friends  {Array<{user_id, username, avatar_url, battery_level, mascot_preview_url, lat, lng, isMe}>}
  */
+
+// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
+// FriendCard.jsx / HomePage.jsx / PoolSnifferPage.jsx): 0-33 → low, 34-66 →
+// mid, 67-100 → high.
+function tierFromBatteryLevel(level) {
+  const l = level ?? 50;
+  if (l <= 33) return 'low';
+  if (l <= 66) return 'mid';
+  return 'high';
+}
 
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS  = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.js';
@@ -37,15 +49,30 @@ function loadLeaflet() {
   return leafletLoadPromise;
 }
 
+// Marcador combinado: la mascota (capa base según tier + overlay
+// "horneado" con su personalización, mismo patrón que FriendCard.jsx /
+// MiniMascot en PoolSnifferPage.jsx) como icono principal, con la foto de
+// perfil como insignia pequeña en la esquina — así se ve tanto la mascota
+// como la foto de usuario en el propio mapa, no solo en las listas.
 function friendMarkerHtml(friend) {
   const initial = (friend.username || '?').charAt(0).toUpperCase();
   const ringColor = friend.isMe ? '#fbbf24' : '#60a5fa';
-  const inner = friend.avatar_url
+  const baseSrc = MASCOT_BASE[tierFromBatteryLevel(friend.battery_level)];
+  const overlay = friend.mascot_preview_url
+    ? `<img src="${friend.mascot_preview_url}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;" />`
+    : '';
+  const avatarInner = friend.avatar_url
     ? `<img src="${friend.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:9999px;display:block;" />`
-    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;background:#1e293b;">${initial}</div>`;
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;background:#1e293b;border-radius:9999px;">${initial}</div>`;
   return `
-    <div style="position:relative;width:30px;height:30px;">
-      <div style="width:28px;height:28px;border-radius:9999px;border:2px solid ${ringColor};overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.55);">${inner}</div>
+    <div style="position:relative;width:42px;height:42px;">
+      <div style="position:absolute;inset:0;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));">
+        <img src="${baseSrc}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;" />
+        ${overlay}
+      </div>
+      <div style="position:absolute;bottom:-3px;right:-3px;width:18px;height:18px;border-radius:9999px;border:2px solid ${ringColor};overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.6);background:#0f172a;">
+        ${avatarInner}
+      </div>
     </div>
   `;
 }
@@ -73,7 +100,7 @@ function FlatMapView({ lat, lng, label, isDark, friends, radiusCircleMeters }) {
       if (existing) {
         existing.setLatLng([f.lat, f.lng]);
       } else {
-        const icon = L.divIcon({ html: friendMarkerHtml(f), className: '', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -16] });
+        const icon = L.divIcon({ html: friendMarkerHtml(f), className: '', iconSize: [42, 42], iconAnchor: [21, 21], popupAnchor: [0, -22] });
         const marker = L.marker([f.lat, f.lng], { icon, zIndexOffset: 500 }).addTo(map);
         marker.bindPopup(
           `<span style="font-size:12px;font-family:monospace;">${f.isMe ? 'Tú' : (f.username || 'Amigo')}</span>`,

@@ -174,7 +174,7 @@ export default function PoolSnifferPage() {
       }, async (payload) => {
         const { data } = await supabase
           .from('pool_sniffer_checkins')
-          .select('id, checked_in_at, user:user_id(id, username, avatar_url, battery_level, mascot_preview_url)')
+          .select('id, checked_in_at, lat, lng, user:user_id(id, username, avatar_url, battery_level, mascot_preview_url)')
           .eq('id', payload.new.id)
           .single();
         if (data) {
@@ -272,6 +272,24 @@ export default function PoolSnifferPage() {
     () => checkins.some(c => c.user?.id === profile?.id),
     [checkins, profile?.id]
   );
+
+  // Marcadores en el mapa: uno por cada usuario que ya ha marcado "Estoy
+  // dentro" y tiene lat/lng guardadas (check-ins de antes de la fase 114
+  // no las tienen y simplemente no salen en el mapa, se quedan solo en la
+  // lista de abajo). GlobeLocationView pinta mascota + foto de perfil para
+  // cada uno, igual que hace ya el Locator de eventos.
+  const checkinMarkers = useMemo(() => checkins
+    .filter(c => c.lat != null && c.lng != null)
+    .map(c => ({
+      user_id: c.user?.id,
+      username: c.user?.username,
+      avatar_url: c.user?.avatar_url,
+      battery_level: c.user?.battery_level,
+      mascot_preview_url: c.user?.mascot_preview_url,
+      isMe: c.user?.id === profile?.id,
+      lat: c.lat,
+      lng: c.lng,
+    })), [checkins, profile?.id]);
 
   const handleCheckIn = async () => {
     if (alreadyCheckedIn || checkingIn) return;
@@ -384,6 +402,7 @@ export default function PoolSnifferPage() {
                     lng={coords.lng}
                     label={pool.location_hint}
                     radiusCircleMeters={SNIFFER_RADIUS_METERS}
+                    friends={checkinMarkers}
                   />
 
                   <button

@@ -2451,13 +2451,19 @@ router.get('/events/:id/locator', requireAuth, async (req, res) => {
 
     const { data: members, error: membersErr } = await supabase
       .from('event_locator_group_members')
-      .select('user_id, status, created_at, responded_at, lat, lng, location_updated_at, user:user_id(id, username, avatar_url)')
+      .select('user_id, status, created_at, responded_at, lat, lng, location_updated_at, user:user_id(id, username, avatar_url, battery_level, battery_updated_at, mascot_preview_url, mascot_name)')
       .eq('group_id', group.id)
       .order('created_at', { ascending: true });
 
     if (membersErr) throw membersErr;
 
-    const myMember = (members || []).find(m => m.user_id === userId);
+    // Se aplica el mismo criterio de caducidad de batería que en el resto
+    // de la app (chats, quedadas...) — necesario aquí porque battery_level
+    // ahora se usa también para elegir el tier de la mascota en el mapa y
+    // en la lista del grupo de localización (ver EventLocatorPage.jsx).
+    const membersWithBattery = (members || []).map(m => ({ ...m, user: applyBatteryExpiry(m.user) }));
+
+    const myMember = membersWithBattery.find(m => m.user_id === userId);
 
     res.json({
       group: {
@@ -2465,7 +2471,7 @@ router.get('/events/:id/locator', requireAuth, async (req, res) => {
         creator_id: group.creator_id,
         is_creator: group.creator_id === userId,
         my_status: myMember?.status || null,
-        members: members || [],
+        members: membersWithBattery,
       },
     });
   } catch (err) {
