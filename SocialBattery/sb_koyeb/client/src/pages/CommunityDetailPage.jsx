@@ -658,7 +658,6 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-display font-bold text-surface-text">Premium Promotion</span>
-                    <span className="text-xs font-mono font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full flex-shrink-0">10 €</span>
                   </div>
                   <button
                     type="button"
@@ -703,7 +702,6 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-display font-bold text-surface-text">Ultra Promotion</span>
-                    <span className="text-xs font-mono font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-2 py-0.5 rounded-full flex-shrink-0">20 €</span>
                   </div>
                   <button
                     type="button"
@@ -787,10 +785,24 @@ const RAFFLE_TIER_OPTIONS = [
     rules: 'Participan los miembros de la comunidad con suscripción Volt de la app.',
     includes: [
       'Notificaciones a toda la comunidad',
-      'Apariciones de banner esporádico al número de usuarios disponibles',
+      'Apariciones de banner esporádico a número de usuarios disponibles (sin límite)',
       'Duración máxima 2 semanas',
     ],
     emoji: '⚡',
+  },
+  {
+    key: 'light',
+    label: 'Sorteo Light',
+    // El precio de Light depende del número de visualizaciones contratadas
+    // en el siguiente paso (Configurar publicidad), así que aquí ya no se
+    // muestra un precio fijo — antes decía "20 €" y no era real.
+    priceLabel: null,
+    rules: 'Participan todos los miembros de la comunidad.',
+    includes: [
+      'Notificaciones a toda la comunidad',
+      'Apariciones de banner esporádico al número de usuarios contratado',
+    ],
+    emoji: '🎫',
   },
   {
     key: 'community',
@@ -802,17 +814,6 @@ const RAFFLE_TIER_OPTIONS = [
       'Apariciones de banner esporádico a todos los miembros de la comunidad',
     ],
     emoji: '🤝',
-  },
-  {
-    key: 'light',
-    label: 'Sorteo Light',
-    priceLabel: '20 €',
-    rules: 'Participan todos los miembros de la comunidad.',
-    includes: [
-      'Notificaciones a toda la comunidad',
-      'Apariciones de banner esporádico al número de usuarios contratado',
-    ],
-    emoji: '🎫',
   },
 ];
 
@@ -1201,13 +1202,15 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                       <span className="flex items-center gap-1.5 text-sm font-display font-bold text-surface-text">
                         <span>{opt.emoji}</span> {opt.label}
                       </span>
-                      <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${
-                        opt.priceLabel === 'Gratis'
-                          ? 'bg-emerald-500/15 text-emerald-400'
-                          : 'bg-surface-card text-surface-muted border border-surface-border'
-                      }`}>
-                        {opt.priceLabel}
-                      </span>
+                      {opt.priceLabel && (
+                        <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${
+                          opt.priceLabel === 'Gratis'
+                            ? 'bg-emerald-500/15 text-emerald-400'
+                            : 'bg-surface-card text-surface-muted border border-surface-border'
+                        }`}>
+                          {opt.priceLabel}
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-surface-muted leading-relaxed mt-1">{opt.rules}</p>
                     {showTierDetails && (
@@ -1225,25 +1228,12 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
               })}
             </div>
 
-            {tier === 'light' && (
-              <div className="mt-2 space-y-2">
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🎯 El número de visualizaciones a contratar y el filtro de interesados se eligen en el siguiente paso, al pulsar "Configurar publicidad".
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  💳 Se aplicará una retencion al comenzar el sorteo, el pago se efectuará al renovar o finalizar el contrato publicitario, o en su defecto al finalizar el sorteo.
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  📶 Las apariciones de banners publicitarios tienen preferencia en sorteos Light frente a sorteos Volt.
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🔁 Se notificará como máximo una vez a cada usuario dentro de una misma promoción; para repetir notificaciones a usuarios se deberá crear otra promoción.
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  📡 Los banners se enviarán conforme los usuarios estén disponibles.
-                </p>
-              </div>
-            )}
+            {/* Fase 113 — el bloque de especificaciones técnicas del tier
+                Light (retención, preferencia de banners, límite de un
+                banner por usuario, envío conforme disponibilidad) vivía
+                duplicado aquí y en RaffleAdAudiencePage.jsx (paso
+                "Configurar publicidad"). Se deja solo en ese segundo paso,
+                que es donde de verdad se contrata la publicidad. */}
 
             {tier === 'volt' && (
               <div className="mt-2 space-y-2">
