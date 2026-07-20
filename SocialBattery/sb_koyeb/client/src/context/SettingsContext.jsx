@@ -129,6 +129,7 @@ const STORAGE_KEYS = {
   muteNewEvents:         'sb-mute-new-events',
   muteNewRaffles:        'sb-mute-new-raffles',
   muteNewPools:          'sb-mute-new-pools',
+  muteSnifferCheckins:   'sb-mute-sniffer-checkins',
   muteEventReminders:        'sb-mute-event-reminders',
   mutePoolReminders:         'sb-mute-pool-reminders',
   muteEventRecommendations:  'sb-mute-event-recommendations',
@@ -306,6 +307,9 @@ export function SettingsProvider({ children }) {
   );
   const [muteNewPools, setMuteNewPoolsState] = useState(
     () => loadStorage(STORAGE_KEYS.muteNewPools, 'false') === 'true'
+  );
+  const [muteSnifferCheckins, setMuteSnifferCheckinsState] = useState(
+    () => loadStorage(STORAGE_KEYS.muteSnifferCheckins, 'false') === 'true'
   );
   const [muteEventReminders, setMuteEventRemindersState] = useState(
     () => loadStorage(STORAGE_KEYS.muteEventReminders, 'false') === 'true'
@@ -523,6 +527,19 @@ export function SettingsProvider({ children }) {
     });
   }, []);
 
+  const setMuteSnifferCheckins = useCallback((v) => {
+    localStorage.setItem(STORAGE_KEYS.muteSnifferCheckins, String(v));
+    setMuteSnifferCheckinsState(v);
+    // El aviso de "alguien se ha registrado en el círculo" del Sniffer es
+    // un web-push real (routes/pools.js, broadcastSnifferCheckin) que llega
+    // igual con la app en foreground o en segundo plano/cerrada, así que
+    // este ajuste tiene que persistir en el usuario (users.mute_pool_sniffer,
+    // fase 118) — no basta con localStorage. Mismo patrón que mute_pool_chats.
+    import('../lib/api').then(({ api }) => {
+      api.patch('/users/me', { mute_pool_sniffer: v }).catch(() => {});
+    });
+  }, []);
+
   const setMuteEventReminders = useCallback((v) => {
     localStorage.setItem(STORAGE_KEYS.muteEventReminders, String(v));
     setMuteEventRemindersState(v);
@@ -620,6 +637,10 @@ export function SettingsProvider({ children }) {
     if (typeof profile.mute_new_pools === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.muteNewPools, String(profile.mute_new_pools));
       setMuteNewPoolsState(profile.mute_new_pools);
+    }
+    if (typeof profile.mute_pool_sniffer === 'boolean') {
+      localStorage.setItem(STORAGE_KEYS.muteSnifferCheckins, String(profile.mute_pool_sniffer));
+      setMuteSnifferCheckinsState(profile.mute_pool_sniffer);
     }
     if (typeof profile.mute_pool_chats === 'boolean') {
       localStorage.setItem(STORAGE_KEYS.mutePoolChats, String(profile.mute_pool_chats));
@@ -791,6 +812,7 @@ export function SettingsProvider({ children }) {
       muteNewEvents, setMuteNewEvents,
       muteNewRaffles, setMuteNewRaffles,
       muteNewPools, setMuteNewPools,
+      muteSnifferCheckins, setMuteSnifferCheckins,
       muteEventReminders, setMuteEventReminders,
       mutePoolReminders, setMutePoolReminders,
       muteEventRecommendations, setMuteEventRecommendations,

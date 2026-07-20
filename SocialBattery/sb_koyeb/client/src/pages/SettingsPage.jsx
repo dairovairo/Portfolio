@@ -371,6 +371,7 @@ export default function SettingsPage() {
     muteNewEvents, setMuteNewEvents,
     muteNewRaffles, setMuteNewRaffles,
     muteNewPools, setMuteNewPools,
+    muteSnifferCheckins, setMuteSnifferCheckins,
     muteEventReminders, setMuteEventReminders,
     mutePoolReminders, setMutePoolReminders,
     muteEventRecommendations, setMuteEventRecommendations,
@@ -1044,6 +1045,21 @@ export default function SettingsPage() {
                   <Toggle
                     enabled={muteCommunityThreads}
                     onToggle={() => setMuteCommunityThreads(!muteCommunityThreads)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-display font-semibold text-surface-text">
+                      Silenciar Sniffer de quedadas
+                    </div>
+                    <div className="text-xs text-surface-muted">
+                      No recibirás notificaciones cuando alguien se registre en el círculo, ni con la app abierta ni en segundo plano
+                    </div>
+                  </div>
+                  <Toggle
+                    enabled={muteSnifferCheckins}
+                    onToggle={() => setMuteSnifferCheckins(!muteSnifferCheckins)}
                   />
                 </div>
 

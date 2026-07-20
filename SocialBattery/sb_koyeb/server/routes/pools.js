@@ -205,6 +205,84 @@ async function getPoolChatMuteFilteredIds(candidateIds) {
   }
 }
 
+/**
+ * Notifica al resto de apuntados de una quedada cuando alguien marca
+ * "Estoy dentro" en el modo Sniffer (entra en el círculo verde). Mismo
+ * patrón que broadcastPoolChatMessage: un broadcast por-usuario para el
+ * "en directo" con la app abierta, más un web-push real para quien la
+ * tenga en segundo plano/cerrada — filtrando por el silencio global
+ * (users.mute_pool_sniffer, fase 118).
+ */
+async function broadcastSnifferCheckin({ poolId, checkedInUserId, checkedInUsername }) {
+  try {
+    const [{ data: pool }, { data: participants }] = await Promise.all([
+      supabase.from('hangout_pools').select('activity').eq('id', poolId).single(),
+      supabase
+        .from('pool_participants')
+        .select('user_id')
+        .eq('pool_id', poolId)
+        .neq('user_id', checkedInUserId),
+    ]);
+
+    const activityLabel = pool?.activity || 'la quedada';
+    const recipientIds = (participants || []).map(p => p.user_id);
+    if (!recipientIds.length) return;
+
+    const broadcastPayload = {
+      pool_id: poolId,
+      activity: activityLabel,
+      checked_in_user_id: checkedInUserId,
+      checked_in_username: checkedInUsername,
+    };
+
+    await Promise.allSettled(
+      recipientIds.map(recipientId =>
+        supabase
+          .channel(`sniffer-checkin-notif-${recipientId}`)
+          .send({
+            type: 'broadcast',
+            event: 'sniffer_checkin',
+            payload: broadcastPayload,
+          })
+      )
+    );
+
+    // No mandar el push a quien tenga activado el silencio global de
+    // "Sniffer de quedadas" (users.mute_pool_sniffer, fase 118) — ese
+    // ajuste debe aplicar tanto en foreground (useMessageNotifications)
+    // como en background/app cerrada, y el push real es lo único que
+    // llega en ese segundo caso.
+    const mutedIds = await getSnifferMuteFilteredIds(recipientIds);
+    const pushRecipientIds = recipientIds.filter(id => !mutedIds.has(id));
+
+    await notifyUsers(supabase, pushRecipientIds, checkedInUserId, {
+      title: `📍 ${activityLabel}`,
+      body: `${checkedInUsername} se ha registrado en el círculo`,
+      url: `/pools/${poolId}/sniffer`,
+      tag: `sniffer-${poolId}`,
+    });
+  } catch (err) {
+    console.error('[POOLS] broadcastSnifferCheckin error:', err);
+  }
+}
+
+// Devuelve el subconjunto de candidateIds que tiene activado el silencio
+// global del Sniffer de quedadas (users.mute_pool_sniffer, fase 118).
+// Mismo patrón que getPoolChatMuteFilteredIds.
+async function getSnifferMuteFilteredIds(candidateIds) {
+  if (!candidateIds.length) return new Set();
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', candidateIds)
+      .eq('mute_pool_sniffer', true);
+    return new Set((data || []).map(u => u.id));
+  } catch {
+    return new Set();
+  }
+}
+
 // Construye el resumen de una encuesta (recuentos por opción + voto propio)
 // a partir de las opciones y las filas de pool_message_poll_votes de esa
 // encuesta. Mismo criterio que buildPollSummary en routes/community.js.
@@ -737,6 +815,15 @@ router.post('/:id/sniffer/checkin', requireAuth, async (req, res) => {
       }
       throw insertError;
     }
+
+    // Notificar al resto de apuntados solo en el check-in NUEVO (no en los
+    // casos de "ya estaba registrado" ni en el perdedor de la carrera de
+    // arriba, para no duplicar el aviso).
+    broadcastSnifferCheckin({
+      poolId: req.params.id,
+      checkedInUserId: userId,
+      checkedInUsername: inserted.user?.username || 'Alguien',
+    });
 
     res.json({ checkin: { ...inserted, user: applyBatteryExpiry(inserted.user) }, already_checked_in: false });
   } catch (err) {

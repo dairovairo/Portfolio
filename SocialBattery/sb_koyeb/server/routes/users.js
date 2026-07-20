@@ -251,7 +251,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, discoverable, mascot_name, mute_new_pools, mute_pool_chats, mute_community_chats, mute_community_threads, mute_group_chats, mute_new_events, mute_event_recommendations, mute_new_raffles } = req.body;
+  const { avatar_url, bio, interests, show_interests, show_public_stats, show_badges, discoverable, mascot_name, mute_new_pools, mute_pool_chats, mute_community_chats, mute_community_threads, mute_group_chats, mute_new_events, mute_event_recommendations, mute_new_raffles, mute_pool_sniffer } = req.body;
   const updates = {};
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
   if (bio !== undefined) updates.bio = bio ? bio.trim().slice(0, 160) : null;
@@ -278,6 +278,7 @@ router.patch('/me', requireAuth, async (req, res) => {
   if (mute_new_events !== undefined) updates.mute_new_events = Boolean(mute_new_events);
   if (mute_event_recommendations !== undefined) updates.mute_event_recommendations = Boolean(mute_event_recommendations);
   if (mute_new_raffles !== undefined) updates.mute_new_raffles = Boolean(mute_new_raffles);
+  if (mute_pool_sniffer !== undefined) updates.mute_pool_sniffer = Boolean(mute_pool_sniffer);
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });

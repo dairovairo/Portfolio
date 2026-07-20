@@ -299,6 +299,39 @@ export function useMessageNotifications(profile, settings) {
         .subscribe();
       channels.push(communityMsgBroadcastCh);
 
+      // ── 4d. Sniffer check-ins — broadcast per-user channel ──────────────────
+      // El servidor emite un broadcast a `sniffer-checkin-notif-{userId}` para
+      // cada apuntado de la quedada cuando otro marca "Estoy dentro" del
+      // círculo verde (broadcastSnifferCheckin en server/routes/pools.js),
+      // mismo patrón que grupos/quedadas/comunidad. El web-push real (mismo
+      // evento, para segundo plano/app cerrada) ya se manda desde el propio
+      // servidor filtrado por mute_pool_sniffer.
+      const snifferCheckinCh = supabase
+        .channel(`sniffer-checkin-notif-${profile.id}`)
+        .on('broadcast', { event: 'sniffer_checkin' }, (msg) => {
+          const s = settingsRef.current;
+          if (s.muteAllNotifications || s.muteSnifferCheckins) return;
+
+          const data = msg.payload;
+          if (!data?.pool_id) return;
+          if (data.checked_in_user_id === profile.id) return;
+
+          const snifferPath = `/pools/${data.pool_id}/sniffer`;
+          if (!shouldNotify(locationRef.current, snifferPath)) return;
+
+          const activityLabel = data.activity || 'la quedada';
+          const username = data.checked_in_username || 'Alguien';
+
+          fireNotification({
+            title:      `📍 ${activityLabel}`,
+            body:       `${username} se ha registrado en el círculo`,
+            tag:        `sniffer-${data.pool_id}`,
+            navigateTo: snifferPath,
+          });
+        })
+        .subscribe();
+      channels.push(snifferCheckinCh);
+
       // ── 5. Battery changes ──────────────────────────────────────────────────
       // Listen to updates on the users table and filter by preloaded friend IDs.
       // We cache battery_updated_at per friend so we only notify when the battery
