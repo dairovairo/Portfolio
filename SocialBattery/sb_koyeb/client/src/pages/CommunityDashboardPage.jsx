@@ -572,6 +572,11 @@ export default function CommunityDashboardPage() {
           id: raffle.id,
           title: raffle.title,
           tier: raffle.tier,
+          // Categorías propias del sorteo (fase 116): las usa
+          // RaffleAdAudiencePage para pedir el conteo de "interesados"
+          // contra las categorías del sorteo (con fallback a comunidad si
+          // el sorteo no tiene). El dashboard ya las expone en la fila.
+          categories: raffle.categories,
           banner_views_contracted: raffle.contracted,
           banner_interested_only: raffle.banner_interested_only,
         },

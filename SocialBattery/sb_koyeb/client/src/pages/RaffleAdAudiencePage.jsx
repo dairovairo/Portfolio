@@ -102,18 +102,41 @@ export default function RaffleAdAudiencePage() {
     if (!draft && !renewRaffle) navigate(`/community/${communityId}`, { replace: true });
   }, [draft, renewRaffle, communityId, navigate]);
 
+  // Categorías propias del sorteo — en creación vienen del borrador del
+  // modal, en renovación vienen de la fila del sorteo ya creado. Si las
+  // hay, se mandan al backend en las llamadas de audiencia para que el
+  // filtro de "solo interesados" se calcule contra las categorías del
+  // sorteo (fase 116), no contra las de la comunidad. Si el sorteo no
+  // tiene categorías propias, el backend usa las de la comunidad como
+  // fallback (mismo esquema que ya usan los eventos con sus propias
+  // categorías).
+  const raffleCategories = useMemo(() => {
+    const src = isRenew ? renewRaffle?.categories : draft?.categories;
+    return Array.isArray(src) ? src.filter(Boolean) : [];
+  }, [isRenew, renewRaffle, draft]);
+
+  const categoriesQuery = raffleCategories.length
+    ? `categories=${encodeURIComponent(JSON.stringify(raffleCategories))}`
+    : '';
+
   const loadTotal = useCallback(async () => {
     setLoadingTotal(true);
     setLoadError('');
     try {
-      const data = await api.get(`/community/communities/${communityId}/raffle-audience`);
+      // El total notificable no depende de categorías, pero se manda igual
+      // el parámetro por consistencia con la llamada de "interesados" — el
+      // backend lo ignora salvo con ?filter=interested.
+      const url = categoriesQuery
+        ? `/community/communities/${communityId}/raffle-audience?${categoriesQuery}`
+        : `/community/communities/${communityId}/raffle-audience`;
+      const data = await api.get(url);
       setTotal(data?.total ?? 0);
     } catch (e) {
       setLoadError(e.message || 'No se pudo calcular la audiencia');
     } finally {
       setLoadingTotal(false);
     }
-  }, [communityId]);
+  }, [communityId, categoriesQuery]);
 
   useEffect(() => {
     if (draft || isRenew) loadTotal();
@@ -153,7 +176,10 @@ export default function RaffleAdAudiencePage() {
     if (interested != null || categoriesDefined === false) return;
     setLoadingInterested(true);
     try {
-      const data = await api.get(`/community/communities/${communityId}/raffle-audience?filter=interested`);
+      const url = categoriesQuery
+        ? `/community/communities/${communityId}/raffle-audience?filter=interested&${categoriesQuery}`
+        : `/community/communities/${communityId}/raffle-audience?filter=interested`;
+      const data = await api.get(url);
       setInterested(data?.interested ?? null);
       setCategoriesDefined(Boolean(data?.categories_defined));
     } catch (e) {
@@ -324,7 +350,7 @@ export default function RaffleAdAudiencePage() {
             ) : categoriesDefined === false ? (
               <div className="text-center py-1 space-y-2 border-t border-surface-border/60 pt-3">
                 <p className="text-xs text-surface-muted leading-relaxed">
-                  No definiste ninguna categoría de intereses en tu comunidad, puedes editar el perfil de la comunidad aún.
+                  Ni el sorteo ni la comunidad tienen categorías de intereses definidas. Añade categorías al sorteo o edita el perfil de la comunidad para poder filtrar por interesados.
                 </p>
                 <button
                   type="button"

@@ -1655,11 +1655,28 @@ router.patch('/communities/:id', requireAuth, uploadCommunityCover, async (req, 
 // conoce — misma razón por la que Light excluye miembros del pool, ver
 // getRaffleLightAudienceIds). Con ?filter=interested se añade además cuántos
 // de esos usuarios notificables tienen entre sus intereses alguna de las
-// categorías de la comunidad (users.interests ∩ communities.categories).
+// CATEGORÍAS EFECTIVAS DEL SORTEO: las del propio sorteo (fase 116) si el
+// cliente las manda por ?categories=<JSON array> — el sorteo aún no existe
+// en el flujo de creación, así que el borrador viaja por query — o las de
+// la comunidad como fallback si el sorteo no tiene o el cliente no las
+// manda. Mismo esquema que ya usan los eventos con sus propias categorías.
 router.get('/communities/:id/raffle-audience', requireAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
   const wantInterested = req.query.filter === 'interested';
+
+  // Parseo tolerante: si el cliente manda ?categories=[…] mal formado, en
+  // vez de romper la carga de la pantalla se ignora y se cae al fallback
+  // de comunidad — el peor caso es enseñar el número "clásico".
+  let raffleCategories = null;
+  if (req.query.categories) {
+    try {
+      const parsed = JSON.parse(req.query.categories);
+      if (Array.isArray(parsed)) raffleCategories = parsed.filter(Boolean);
+    } catch (_) {
+      raffleCategories = null;
+    }
+  }
 
   try {
     const { data: community, error: communityErr } = await supabase
@@ -1675,7 +1692,7 @@ router.get('/communities/:id/raffle-audience', requireAuth, async (req, res) => 
     let interested = null;
     let categoriesDefined = null;
     if (wantInterested) {
-      const { ids: interestedIds, categoriesDefined: hasCategories } = await getRaffleLightAudienceIds(id, userId, { interestedOnly: true });
+      const { ids: interestedIds, categoriesDefined: hasCategories } = await getRaffleLightAudienceIds(id, userId, { interestedOnly: true, raffleCategories });
       categoriesDefined = hasCategories;
       interested = hasCategories ? interestedIds.length : null;
     }
@@ -3383,13 +3400,18 @@ async function getEligibleRaffleMembers(communityId, tier) {
 // la app EXCEPTO el propio creador Y EXCEPTO quienes ya son miembros de esa
 // comunidad (no tiene sentido pagar por publicidad a quien ya la conoce).
 // Si interestedOnly es true, se filtra además a quienes tengan algún
-// interés de perfil en común con las categorías de la comunidad. Se usa
-// tanto para calcular el tamaño de la audiencia (GET .../raffle-audience)
-// como para el reparto real del banner al crear el sorteo, así el número
-// que se le enseña al creador en la pantalla de configuración de publicidad
-// coincide exactamente con el pool real del que luego se sortean los
-// targets.
-async function getRaffleLightAudienceIds(communityId, creatorId, { interestedOnly = false } = {}) {
+// interés de perfil en común con las CATEGORÍAS EFECTIVAS DEL SORTEO — las
+// del propio sorteo (fase 116) si están definidas, o las de la comunidad
+// como fallback (mismo esquema que ya usan los eventos, que se clasifican
+// por sus propias categorías). El caller resuelve el fallback y pasa el
+// resultado en `raffleCategories`; si no lo pasa (llamada antigua o
+// preview sin borrador), se cae al comportamiento histórico y se cargan
+// las categorías de la comunidad aquí dentro. Se usa tanto para calcular
+// el tamaño de la audiencia (GET .../raffle-audience) como para el reparto
+// real del banner al crear el sorteo, así el número que se le enseña al
+// creador en la pantalla de configuración de publicidad coincide
+// exactamente con el pool real del que luego se sortean los targets.
+async function getRaffleLightAudienceIds(communityId, creatorId, { interestedOnly = false, raffleCategories = null } = {}) {
   const { data: members, error: memErr } = await supabase
     .from('community_members')
     .select('user_id')
@@ -3400,13 +3422,18 @@ async function getRaffleLightAudienceIds(communityId, creatorId, { interestedOnl
 
   let query = supabase.from('users').select('id');
   if (interestedOnly) {
-    const { data: community, error: communityErr } = await supabase
-      .from('communities')
-      .select('categories')
-      .eq('id', communityId)
-      .maybeSingle();
-    if (communityErr) throw communityErr;
-    const categories = (community?.categories || []).filter(Boolean);
+    let categories = Array.isArray(raffleCategories) ? raffleCategories.filter(Boolean) : null;
+    if (!categories || !categories.length) {
+      // Fallback: sin categorías propias del sorteo, se usan las de la
+      // comunidad (comportamiento previo a la fase 116).
+      const { data: community, error: communityErr } = await supabase
+        .from('communities')
+        .select('categories')
+        .eq('id', communityId)
+        .maybeSingle();
+      if (communityErr) throw communityErr;
+      categories = (community?.categories || []).filter(Boolean);
+    }
     if (!categories.length) return { ids: [], categoriesDefined: false };
     query = query.overlaps('interests', categories);
   }
@@ -3415,6 +3442,19 @@ async function getRaffleLightAudienceIds(communityId, creatorId, { interestedOnl
   if (error) throw error;
   const ids = (users || []).map(u => u.id).filter(id => !excludedIds.has(id));
   return { ids, categoriesDefined: true };
+}
+
+// Helper de conveniencia: dado el sorteo (o borrador) y la comunidad,
+// devuelve las categorías efectivas para clasificar interesados — las
+// propias del sorteo si tiene, si no las de la comunidad. Se usa como
+// fuente única de verdad en la creación, la renovación y el tagging de
+// matched_interest, para que el número que ve el creador en la pantalla
+// de publicidad coincida con el reparto real y con la clasificación del
+// dashboard.
+function resolveRaffleEffectiveCategories(raffleCategories, communityCategories) {
+  const own = Array.isArray(raffleCategories) ? raffleCategories.filter(Boolean) : [];
+  if (own.length) return own;
+  return (communityCategories || []).filter(Boolean);
 }
 
 // Devuelve el subconjunto (Set) de userIds cuyos intereses de perfil solapan
@@ -4165,12 +4205,20 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     // BANNER_VIEWS_MIN) — esto favorece el crecimiento de la app cuando
     // aún tiene pocos usuarios; assignRaffleBannerTargets ya se encarga de
     // repartir como mucho tantos banners como quepan en el pool real.
+    // Categorías efectivas del sorteo para clasificar interesados: las del
+    // propio sorteo si el creador eligió (fase 116), o las de la comunidad
+    // como fallback — mismo esquema que ya usan los eventos con sus propias
+    // categorías. Se calcula una vez y se usa en TODO lo que dependa de
+    // "interés": pool Light filtrado, prioridad de reparto y tagging de
+    // matched_interest (dashboard).
+    const effectiveCategories = resolveRaffleEffectiveCategories(categories, community.categories);
+
     let lightAudienceIds = null;
     let lightPriorityIds = null;
     if (raffleTier === 'light') {
-      const { ids, categoriesDefined } = await getRaffleLightAudienceIds(communityId, userId, { interestedOnly: resolvedInterestedOnly });
+      const { ids, categoriesDefined } = await getRaffleLightAudienceIds(communityId, userId, { interestedOnly: resolvedInterestedOnly, raffleCategories: effectiveCategories });
       if (resolvedInterestedOnly && !categoriesDefined) {
-        return res.status(400).json({ error: 'Tu comunidad no tiene categorías de intereses definidas: no se puede filtrar por interesados' });
+        return res.status(400).json({ error: 'Ni el sorteo ni la comunidad tienen categorías de intereses definidas: no se puede filtrar por interesados' });
       }
       if (resolvedInterestedOnly && ids.length < BANNER_VIEWS_MIN) {
         return res.status(400).json({
@@ -4181,10 +4229,10 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
       // Si el pool ya viene filtrado a "solo interesados" coincide entero
       // con la categoría, así que no hace falta calcular prioridad (todos
       // están al mismo nivel). Si el pool es el general (sin filtro), sí se
-      // calcula qué subconjunto coincide categoría de evento con categoría
+      // calcula qué subconjunto coincide categoría de sorteo con categoría
       // de usuario, para priorizarlo en el reparto del banner.
       if (!resolvedInterestedOnly) {
-        lightPriorityIds = await getCategoryMatchingUserIds(lightAudienceIds, community.categories);
+        lightPriorityIds = await getCategoryMatchingUserIds(lightAudienceIds, effectiveCategories);
       }
     }
 
@@ -4219,9 +4267,11 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     // Fase 111 — foto de "quién estaba interesado" en el instante de crear
     // el sorteo, para etiquetar cada target (ver assignRaffleBannerTargets
     // → matched_interest y el dashboard de publicidad). Una sola consulta,
-    // compartida por los tres tiers. Si la comunidad no tiene categorías
-    // definidas devuelve null y los targets quedan sin clasificar.
-    const interestedIds = await getInterestedUserIdSet(community.categories);
+    // compartida por los tres tiers. Se clasifica por las categorías
+    // efectivas del sorteo (propias si tiene, si no las de la comunidad —
+    // ver resolveRaffleEffectiveCategories arriba); si no hay ni unas ni
+    // otras devuelve null y los targets quedan sin clasificar.
+    const interestedIds = await getInterestedUserIdSet(effectiveCategories);
 
     if (raffleTier === 'light' && resolvedBannerViews) {
       const targetIds = await assignRaffleBannerTargets(data.id, userId, resolvedBannerViews, lightAudienceIds, lightPriorityIds, interestedIds);
@@ -4743,7 +4793,7 @@ router.post('/raffles/:raffleId/renew-promotion', requireAuth, async (req, res) 
   try {
     const { data: raffle, error: fetchErr } = await supabase
       .from('community_raffles')
-      .select('id, title, creator_id, community_id, tier, ends_at, drawn_at, promo_ended_at, banner_views_contracted, banner_interested_only')
+      .select('id, title, creator_id, community_id, tier, categories, ends_at, drawn_at, promo_ended_at, banner_views_contracted, banner_interested_only')
       .eq('id', raffleId)
       .maybeSingle();
     if (fetchErr) throw fetchErr;
@@ -4828,12 +4878,17 @@ router.post('/raffles/:raffleId/renew-promotion', requireAuth, async (req, res) 
     // de extraerse a un helper porque los dos flujos tienen validaciones
     // previas distintas y compartir tres bloques de código con lambdas
     // acabaría siendo menos legible que la duplicación explícita.
-    const interestedIds = await getInterestedUserIdSet(community.categories);
+    // Mismo cálculo de categorías efectivas que al crear: propias del
+    // sorteo si tiene (fase 116), si no las de la comunidad. La renovación
+    // NO puede tocar las categorías del sorteo (esta pantalla solo edita
+    // aforo y filtro), así que se leen tal cual de la fila.
+    const effectiveCategories = resolveRaffleEffectiveCategories(raffle.categories, community.categories);
+    const interestedIds = await getInterestedUserIdSet(effectiveCategories);
     let targetIds = [];
     if (tier === 'light') {
-      const { ids, categoriesDefined } = await getRaffleLightAudienceIds(raffle.community_id, userId, { interestedOnly: resolvedInterestedOnly });
+      const { ids, categoriesDefined } = await getRaffleLightAudienceIds(raffle.community_id, userId, { interestedOnly: resolvedInterestedOnly, raffleCategories: effectiveCategories });
       if (resolvedInterestedOnly && !categoriesDefined) {
-        return res.status(400).json({ error: 'Tu comunidad no tiene categorías de intereses definidas: no se puede filtrar por interesados' });
+        return res.status(400).json({ error: 'Ni el sorteo ni la comunidad tienen categorías de intereses definidas: no se puede filtrar por interesados' });
       }
       if (resolvedInterestedOnly && ids.length < BANNER_VIEWS_MIN) {
         return res.status(400).json({
@@ -4844,7 +4899,7 @@ router.post('/raffles/:raffleId/renew-promotion', requireAuth, async (req, res) 
       // repartir con prioridad (mismo comportamiento que al crear).
       const lightPriorityIds = resolvedInterestedOnly
         ? null
-        : await getCategoryMatchingUserIds(ids, community.categories);
+        : await getCategoryMatchingUserIds(ids, effectiveCategories);
       targetIds = await assignRaffleBannerTargets(raffleId, userId, resolvedBannerViews, ids, lightPriorityIds, interestedIds);
     } else if (tier === 'community') {
       const memberIds = await getCommunityMemberIdsForBanner(raffle.community_id, userId);
@@ -4928,7 +4983,7 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         .order('event_date', { ascending: false }),
       supabase
         .from('community_raffles')
-        .select('id, title, tier, ends_at, drawn_at, created_at, banner_views_contracted, banner_interested_only, promo_ended_at')
+        .select('id, title, tier, categories, ends_at, drawn_at, created_at, banner_views_contracted, banner_interested_only, promo_ended_at')
         .eq('community_id', communityId)
         .order('created_at', { ascending: false }),
     ]);
@@ -5083,17 +5138,27 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
       const canEnd   = lifecycleTier && !ended && !promoEndedAt && meetsThreshold;
       const canRenew = lifecycleTier && !ended && meetsThreshold;
 
+      // Categorías efectivas del sorteo — propias si tiene (fase 116), si
+      // no las de la comunidad — mismo criterio que usa el reparto y el
+      // tagging de matched_interest. has_categories se calcula sobre ellas
+      // para que el dashboard sepa si el sorteo pudo clasificarse por
+      // intereses (idéntico esquema al de eventos, donde se mira
+      // event.categories fila a fila).
+      const raffleCategories = Array.isArray(r.categories) ? r.categories.filter(Boolean) : [];
+      const hasEffectiveCategories = raffleCategories.length > 0 || communityHasCategories;
+
       return {
         id: r.id,
         title: r.title,
         tier,
         tier_label: RAFFLE_TIERS[tier].label,
+        categories: raffleCategories,
         ends_at: r.ends_at,
         drawn_at: r.drawn_at,
         ended,
         promo_ended_at: promoEndedAt,
         banner_interested_only: !!r.banner_interested_only,
-        has_categories: communityHasCategories,
+        has_categories: hasEffectiveCategories,
         contracted,
         // Targets asignados vs banners realmente enseñados: la diferencia es
         // el reparto que aún está en cola (el banner se sirve diferido, la
