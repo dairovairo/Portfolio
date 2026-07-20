@@ -66,8 +66,21 @@ function getDaysLabel(dateStr) {
   if (!dateStr) return null;
   const diffMs = new Date(dateStr).getTime() - Date.now();
   if (diffMs < 0) return null;
-  const days = Math.ceil(diffMs / 86400000);
-  if (days === 0) return 'Empieza hoy';
+  // Menos de 24 h: mostramos horas/minutos en vez de saltar directo a
+  // "Mañana"/"Empieza hoy" para dar contexto real al usuario.
+  const MIN_MS = 60 * 1000;
+  const HOUR_MS = 60 * MIN_MS;
+  const DAY_MS = 24 * HOUR_MS;
+  if (diffMs < MIN_MS) return 'Empieza ya';
+  if (diffMs < HOUR_MS) {
+    const mins = Math.max(1, Math.round(diffMs / MIN_MS));
+    return mins === 1 ? 'En 1 min' : `En ${mins} min`;
+  }
+  if (diffMs < DAY_MS) {
+    const hours = Math.max(1, Math.round(diffMs / HOUR_MS));
+    return hours === 1 ? 'En 1 hora' : `En ${hours} horas`;
+  }
+  const days = Math.ceil(diffMs / DAY_MS);
   if (days === 1) return 'Mañana';
   return `En ${days} días`;
 }
@@ -867,60 +880,87 @@ export default function EventDetailPage() {
                 )}
               </div>
             </div>
-            {isCreator && !isPast && (
+            {/* Botones de gestión de la promoción. Antes se ocultaban por
+                completo si el evento ya había pasado (`!isPast`); ahora
+                se enseñan siempre para el creador cuando haya contrato
+                de promoción (paid) o cuando aún se pueda contratar
+                (evento futuro), pero deshabilitados con un tooltip
+                explicativo si no se pueden usar. Reglas de habilitación:
+                – Renovar: bloqueado si el evento ya pasó (no tiene
+                  sentido renovar una promo de algo terminado) o si aún
+                  no se ha llegado al mínimo cobrable.
+                – Finalizar: solo aparece si hay contrato de pago
+                  (premium/ultra) y se bloquea si el evento ya pasó
+                  (la promo se ha agotado sola) o si aún no se ha
+                  llegado al mínimo cobrable. */}
+            {isCreator && (isPaidPromotion || !isPast) && (
               <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                <button
-                  onClick={() => {
-                    if (belowRenewThreshold) return;
-                    // Fase 112 — el flujo unificado es: renovar SIEMPRE
-                    // pasa por la página de configuración de publicidad
-                    // (EventAdConfigPage), tanto desde aquí como desde el
-                    // dashboard. Se detecta como renovación por el state
-                    // `renewEvent`. Antes se abría un modal inline; se
-                    // sustituyó por la página completa para tener slider
-                    // de audiencia, toggle Ultra/Premium y el mismo
-                    // contexto que al crear.
-                    navigate('/community/event-publicidad', {
-                      state: {
-                        renewEvent: {
-                          id: event.id,
-                          title: event.title,
-                          promotion_plan: event.promotion_plan,
-                          notification_count: event.notification_count,
-                          communityId: event.community_id,
-                          communityName: event.community?.name || event.community_name || '',
-                        },
-                      },
-                    });
-                  }}
-                  disabled={belowRenewThreshold}
-                  title={belowRenewThreshold
-                    ? `Necesitas alcanzar ${PROMO_FREE_THRESHOLD} notificaciones enviadas para renovar (${promoSentCount}/${PROMO_FREE_THRESHOLD})`
-                    : 'Renovar promoción del evento'}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
-                    belowRenewThreshold
-                      ? 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
-                      : 'border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20'
-                  }`}
-                >
-                  🔁 Renovar
-                </button>
-                {isPaidPromotion && (
-                  <button
-                    onClick={() => { if (!belowRenewThreshold) setShowEndPromoModal(true); }}
-                    disabled={belowRenewThreshold}
-                    title={belowRenewThreshold
+                {(() => {
+                  const renewDisabled = belowRenewThreshold || isPast;
+                  const renewTitle = isPast
+                    ? 'El evento ya ha terminado — no se puede renovar la promoción'
+                    : belowRenewThreshold
+                      ? `Necesitas alcanzar ${PROMO_FREE_THRESHOLD} notificaciones enviadas para renovar (${promoSentCount}/${PROMO_FREE_THRESHOLD})`
+                      : 'Renovar promoción del evento';
+                  return (
+                    <button
+                      onClick={() => {
+                        if (renewDisabled) return;
+                        // Fase 112 — el flujo unificado es: renovar SIEMPRE
+                        // pasa por la página de configuración de publicidad
+                        // (EventAdConfigPage), tanto desde aquí como desde el
+                        // dashboard. Se detecta como renovación por el state
+                        // `renewEvent`. Antes se abría un modal inline; se
+                        // sustituyó por la página completa para tener slider
+                        // de audiencia, toggle Ultra/Premium y el mismo
+                        // contexto que al crear.
+                        navigate('/community/event-publicidad', {
+                          state: {
+                            renewEvent: {
+                              id: event.id,
+                              title: event.title,
+                              promotion_plan: event.promotion_plan,
+                              notification_count: event.notification_count,
+                              communityId: event.community_id,
+                              communityName: event.community?.name || event.community_name || '',
+                            },
+                          },
+                        });
+                      }}
+                      disabled={renewDisabled}
+                      title={renewTitle}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
+                        renewDisabled
+                          ? 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
+                          : 'border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20'
+                      }`}
+                    >
+                      🔁 Renovar
+                    </button>
+                  );
+                })()}
+                {isPaidPromotion && (() => {
+                  const endDisabled = belowRenewThreshold || isPast;
+                  const endTitle = isPast
+                    ? 'El evento ya ha terminado — la promoción se ha cerrado sola'
+                    : belowRenewThreshold
                       ? `Necesitas alcanzar ${PROMO_FREE_THRESHOLD} notificaciones enviadas para finalizar (${promoSentCount}/${PROMO_FREE_THRESHOLD})`
-                      : 'Finalizar promoción del evento'}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
-                      belowRenewThreshold
-                        ? 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
-                        : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
-                    }`}
-                  >
-                    🏁 Finalizar
-                  </button>
-                )}
+                      : 'Finalizar promoción del evento';
+                  return (
+                    <button
+                      onClick={() => { if (!endDisabled) setShowEndPromoModal(true); }}
+                      disabled={endDisabled}
+                      title={endTitle}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
+                        endDisabled
+                          ? 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
+                          : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
+                      }`}
+                    >
+                      🏁 Finalizar
+                    </button>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -928,6 +968,12 @@ export default function EventDetailPage() {
           {isCreator && !isPast && belowRenewThreshold && (
             <p className="mt-3 text-[11px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
               🔒 Aún no puedes renovar/finalizar la promoción: hace falta alcanzar el mínimo de {PROMO_FREE_THRESHOLD} notificaciones enviadas para que se pueda cobrar ({promoSentCount}/{PROMO_FREE_THRESHOLD} enviadas).
+            </p>
+          )}
+
+          {isCreator && isPast && isPaidPromotion && (
+            <p className="mt-3 text-[11px] font-mono text-slate-400 bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+              🏁 El evento ya ha terminado. La promoción se cerró sola cuando acabó — se enseñan los controles como referencia, pero ya no se pueden accionar.
             </p>
           )}
 

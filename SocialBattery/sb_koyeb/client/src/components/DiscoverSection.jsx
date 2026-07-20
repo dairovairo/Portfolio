@@ -114,7 +114,15 @@ export default function DiscoverSection() {
     }
   }
 
-  const showNearbyPrompt = !loading && !hasLocation && locationStatus === 'denied';
+  // Antes solo se enseñaba si locationStatus === 'denied' exactamente, así
+  // que si por lo que fuera el permiso se quedaba en 'idle' (p.ej. el
+  // usuario navegó aquí antes de que App.jsx terminase de pedirlo) o en
+  // 'unsupported'/'error', el aviso no aparecía y "Cerca de ti" se quedaba
+  // vacío sin explicar por qué. Ahora se enseña con cualquier estado que no
+  // sea 'granted' ni 'requesting' (mientras el navegador está resolviendo
+  // el permiso no queremos que parpadee).
+  const showNearbyPrompt = !loading && !hasLocation
+    && locationStatus !== 'granted' && locationStatus !== 'requesting';
   const showNearbyRow = nearby.length > 0;
   const showSuggestedRow = suggested.length > 0;
 
@@ -149,6 +157,14 @@ export default function DiscoverSection() {
                     />
                   ))}
                 </ScrollRow>
+              ) : locationStatus === 'unsupported' ? (
+                <div className="w-full bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-3 text-left">
+                  <span className="text-2xl flex-shrink-0 opacity-60">📍</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-display font-semibold text-surface-muted">Ubicación no disponible</div>
+                    <div className="text-xs text-surface-muted">Tu navegador no permite compartir ubicación</div>
+                  </div>
+                </div>
               ) : (
                 <button
                   onClick={requestLocation}

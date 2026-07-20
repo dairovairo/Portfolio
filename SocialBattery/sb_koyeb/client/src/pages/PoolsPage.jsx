@@ -13,6 +13,7 @@ import {
   getActivityEmoji,
   getPoolEffectiveEnd,
   formatPoolDateRange,
+  getPoolDaysUntilLabel,
   StatusBadge,
   UnreadChatDot,
   CapacityBar,
@@ -330,9 +331,21 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
 
       {/* Meta */}
       <div className="space-y-1.5 mb-3">
-        <div className="flex items-center gap-2 text-xs text-surface-muted">
+        <div className="flex items-center gap-2 text-xs text-surface-muted flex-wrap">
           <span>🕐</span>
           <span className="font-mono">{formatPoolDateRange(pool)}</span>
+          {/* Reloj de arena amarillo con "cuánto falta" — mismo estilo que
+              las tarjetas de eventos. Solo aparece si la quedada aún no
+              ha empezado (el helper devuelve '' si diffMs < 0). */}
+          {(() => {
+            const untilLabel = getPoolDaysUntilLabel(pool.scheduled_at);
+            if (!untilLabel) return null;
+            return (
+              <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">
+                ⏳ {untilLabel}
+              </span>
+            );
+          })()}
         </div>
         {pool.location_hint && (
           <div className="flex items-center gap-2 text-xs text-surface-muted">

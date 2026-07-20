@@ -47,6 +47,33 @@ export function formatPoolDate(dateStr) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// Etiqueta "cuánto falta" para la tarjeta de una quedada — mismo estilo
+// que en eventos (con reloj de arena amarillo). Baja a horas/minutos
+// cuando queda menos de un día para no quedarnos en "Falta 1 día" durante
+// las últimas horas antes del inicio.
+export function getPoolDaysUntilLabel(dateStr) {
+  if (!dateStr) return '';
+  const time = new Date(dateStr).getTime();
+  if (Number.isNaN(time)) return '';
+  const diffMs = time - Date.now();
+  if (diffMs < 0) return '';
+  const MIN_MS = 60 * 1000;
+  const HOUR_MS = 60 * MIN_MS;
+  const DAY_MS = 24 * HOUR_MS;
+  if (diffMs < MIN_MS) return 'Empieza ya';
+  if (diffMs < HOUR_MS) {
+    const mins = Math.max(1, Math.round(diffMs / MIN_MS));
+    return mins === 1 ? 'Falta 1 min' : `Faltan ${mins} min`;
+  }
+  if (diffMs < DAY_MS) {
+    const hours = Math.max(1, Math.round(diffMs / HOUR_MS));
+    return hours === 1 ? 'Falta 1 hora' : `Faltan ${hours} horas`;
+  }
+  const days = Math.ceil(diffMs / DAY_MS);
+  if (days === 1) return 'Falta 1 día';
+  return `Faltan ${days} días`;
+}
+
 // Margen de "actividad" para quedadas sin ends_at: se consideran en curso
 // durante 2 horas desde el inicio. Mismo criterio que isActive() en PoolsPage.jsx.
 const NO_END_GRACE_MS = 2 * 60 * 60 * 1000;

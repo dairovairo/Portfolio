@@ -62,8 +62,21 @@ function getDaysUntilLabel(dateStr) {
   if (Number.isNaN(time)) return '';
   const diffMs = time - Date.now();
   if (diffMs < 0) return 'Ya empezó';
-  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return 'Empieza hoy';
+  // Menos de 24 h: bajamos a horas/minutos para no quedarnos en "Falta 1 día"
+  // durante todas las últimas horas antes del evento.
+  const MIN_MS = 60 * 1000;
+  const HOUR_MS = 60 * MIN_MS;
+  const DAY_MS = 24 * HOUR_MS;
+  if (diffMs < MIN_MS) return 'Empieza ya';
+  if (diffMs < HOUR_MS) {
+    const mins = Math.max(1, Math.round(diffMs / MIN_MS));
+    return mins === 1 ? 'Falta 1 min' : `Faltan ${mins} min`;
+  }
+  if (diffMs < DAY_MS) {
+    const hours = Math.max(1, Math.round(diffMs / HOUR_MS));
+    return hours === 1 ? 'Falta 1 hora' : `Faltan ${hours} horas`;
+  }
+  const days = Math.ceil(diffMs / DAY_MS);
   if (days === 1) return 'Falta 1 día';
   return `Faltan ${days} días`;
 }
@@ -1724,21 +1737,24 @@ export default function CommunityPage() {
               </div>
             </div>
 
-            {/* Aviso de ubicación: solo si el orden activo la necesita y aún
-                no tenemos coordenadas (permiso pendiente, denegado o no
-                soportado). Se comprueba también locationStatus === 'denied'
-                explícitamente (no solo !userCoords) por si quedaran coords
-                cacheadas de una concesión de permiso anterior a que el
-                usuario desactivase la ubicación. requestLocation reintenta
-                la petición nativa. */}
-            {(eventProximitySort === 'cercania' || eventProximitySort === 'cercania_intereses') && (!userCoords || locationStatus === 'denied') && (
+            {/* Aviso de ubicación: antes solo aparecía si el usuario ya
+                había elegido ordenar por cercanía (huevo y gallina: para
+                descubrir que existe el orden por cercanía primero había
+                que activar la ubicación sin saber por qué). Ahora se
+                enseña siempre que no tengamos coordenadas, para que el
+                usuario sepa que puede activarla y ver eventos cerca de
+                él — igual que se pide una vez al entrar en la app, pero
+                por si lo denegó entonces o el navegador no respondió a
+                tiempo. Se oculta mientras el navegador está resolviendo
+                el permiso ('requesting') para no parpadear al arrancar. */}
+            {locationStatus !== 'requesting' && locationStatus !== 'granted' && !userCoords && (
               <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
                 <span>
                   📍 {locationStatus === 'denied'
-                    ? 'Has denegado la ubicación: activa el permiso para ordenar por cercanía.'
+                    ? 'Has denegado la ubicación: actívala para ver eventos cerca de ti y ordenarlos por cercanía.'
                     : locationStatus === 'unsupported'
                       ? 'Tu navegador no permite compartir ubicación.'
-                      : 'Activa tu ubicación para ordenar los eventos por cercanía.'}
+                      : 'Activa tu ubicación para ver eventos cerca de ti y ordenarlos por cercanía.'}
                 </span>
                 {locationStatus !== 'unsupported' && (
                   <button

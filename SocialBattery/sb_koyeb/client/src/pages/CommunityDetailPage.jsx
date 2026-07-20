@@ -56,8 +56,21 @@ function getDaysUntilLabel(dateStr) {
   if (Number.isNaN(time)) return '';
   const diffMs = time - Date.now();
   if (diffMs < 0) return 'Ya empezó';
-  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return 'Empieza hoy';
+  // Menos de 24 h: bajamos a horas/minutos para no quedarnos en "Falta 1 día"
+  // durante todas las últimas horas antes del evento.
+  const MIN_MS = 60 * 1000;
+  const HOUR_MS = 60 * MIN_MS;
+  const DAY_MS = 24 * HOUR_MS;
+  if (diffMs < MIN_MS) return 'Empieza ya';
+  if (diffMs < HOUR_MS) {
+    const mins = Math.max(1, Math.round(diffMs / MIN_MS));
+    return mins === 1 ? 'Falta 1 min' : `Faltan ${mins} min`;
+  }
+  if (diffMs < DAY_MS) {
+    const hours = Math.max(1, Math.round(diffMs / HOUR_MS));
+    return hours === 1 ? 'Falta 1 hora' : `Faltan ${hours} horas`;
+  }
+  const days = Math.ceil(diffMs / DAY_MS);
   if (days === 1) return 'Falta 1 día';
   return `Faltan ${days} días`;
 }
@@ -840,17 +853,38 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo })
   // publicidad. Coinciden con las del servidor (POST /raffles/:raffleId/
   // {end,renew}-promotion) para evitar peticiones que se sabe que van a
   // rebotar: solo el creador, solo Light/Community (Volt no tiene
-  // publicidad de pago), solo si sigue vivo y por encima del umbral de
-  // cobro. La lógica del umbral se hace en el servidor y llega ya
-  // resuelta indirectamente (banner_views_sent); aquí solo se filtra el
-  // caso obvio de "todavía no ha alcanzado el mínimo".
+  // publicidad de pago), y por encima del umbral de cobro. La lógica
+  // del umbral se hace en el servidor y llega ya resuelta
+  // indirectamente (banner_views_sent); aquí solo se filtra el caso
+  // obvio de "todavía no ha alcanzado el mínimo".
+  //
+  // Los botones se enseñan SIEMPRE (para el creador y en un tier de pago)
+  // aunque el sorteo ya haya terminado o se haya sorteado — así el
+  // creador ve el histórico de la promoción. Se deshabilitan con un
+  // tooltip explicativo si no se puede accionar. En particular no se
+  // puede renovar la publicidad de un sorteo ya acabado (el sorteo ha
+  // terminado y ya no hay a quién enseñar el banner); pensado para
+  // cuando se llena el cupo antes de que acabe.
   const RAFFLE_FREE_THRESHOLD = 200;
   const lifecycleTier = raffle.tier === 'light' || raffle.tier === 'community';
   const shown = raffle.banner_views_sent ?? 0;
   const meetsThreshold = shown >= RAFFLE_FREE_THRESHOLD;
-  const canManagePromo = isCreator && lifecycleTier && !isDrawn && !hasEnded;
-  const canEndPromo   = canManagePromo && !raffle.promo_ended_at && meetsThreshold;
-  const canRenewPromo = canManagePromo && meetsThreshold;
+  const showPromoControls = isCreator && lifecycleTier;
+  const canRenewPromo = showPromoControls && meetsThreshold && !isDrawn && !hasEnded;
+  const canEndPromo   = showPromoControls && meetsThreshold && !raffle.promo_ended_at && !isDrawn && !hasEnded;
+
+  const renewDisabledReason =
+    hasEnded ? 'El sorteo ya ha terminado — no se puede renovar la publicidad'
+    : isDrawn ? 'El sorteo ya se ha realizado — no se puede renovar la publicidad'
+    : !meetsThreshold ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para renovar (${shown}/${RAFFLE_FREE_THRESHOLD})`
+    : 'Renovar publicidad del sorteo';
+
+  const endDisabledReason =
+    hasEnded ? 'El sorteo ya ha terminado — la publicidad se cerró sola'
+    : isDrawn ? 'El sorteo ya se ha realizado'
+    : raffle.promo_ended_at ? 'La publicidad ya está finalizada'
+    : !meetsThreshold ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para finalizar (${shown}/${RAFFLE_FREE_THRESHOLD})`
+    : 'Finalizar publicidad del sorteo';
 
   async function runDraw() {
     setDrawing(true);
@@ -911,14 +945,12 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo })
           </p>
         )}
 
-        {canManagePromo && (
+        {showPromoControls && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
-              onClick={() => onRenew(raffle)}
+              onClick={() => { if (canRenewPromo) onRenew(raffle); }}
               disabled={!canRenewPromo}
-              title={!meetsThreshold
-                ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para renovar (${shown}/${RAFFLE_FREE_THRESHOLD})`
-                : 'Renovar publicidad del sorteo'}
+              title={renewDisabledReason}
               className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
                 canRenewPromo
                   ? 'border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20'
@@ -928,11 +960,9 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo })
               🔄 Renovar publicidad
             </button>
             <button
-              onClick={runEndPromo}
+              onClick={() => { if (canEndPromo && !endingPromo) runEndPromo(); }}
               disabled={!canEndPromo || endingPromo}
-              title={!meetsThreshold
-                ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para finalizar (${shown}/${RAFFLE_FREE_THRESHOLD})`
-                : raffle.promo_ended_at ? 'La publicidad ya está finalizada' : 'Finalizar publicidad del sorteo'}
+              title={endDisabledReason}
               className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
                 canEndPromo && !endingPromo
                   ? 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
@@ -953,6 +983,14 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo })
         {isCreator && lifecycleTier && !isDrawn && !hasEnded && !meetsThreshold && (
           <p className="text-[11px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 leading-relaxed">
             🔒 Aún no puedes gestionar la publicidad: hace falta alcanzar el mínimo de {RAFFLE_FREE_THRESHOLD} banners enseñados para que se pueda cobrar ({shown}/{RAFFLE_FREE_THRESHOLD}).
+          </p>
+        )}
+
+        {showPromoControls && (hasEnded || isDrawn) && (
+          <p className="text-[11px] font-mono text-slate-400 bg-surface-bg border border-surface-border rounded-xl px-3 py-2 leading-relaxed">
+            {isDrawn
+              ? '🎉 El sorteo ya se ha realizado. Los controles de publicidad se enseñan como referencia, pero ya no se pueden accionar.'
+              : '🏁 El sorteo ya ha terminado. La publicidad se cerró sola al acabar — los controles se enseñan como referencia.'}
           </p>
         )}
 

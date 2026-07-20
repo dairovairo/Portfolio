@@ -25,6 +25,22 @@ import {
 const NOMINATIM = 'https://nominatim.openstreetmap.org';
 const geocodeCache = new Map();
 
+// Formatea una fecha completa (día de la semana + día + mes + año + hora)
+// para las filas "Fecha de inicio" / "Fecha de fin" del detalle. Mismo
+// nivel de legibilidad que el formatDateTime que usa EventDetailPage.
+function formatPoolFullDateTime(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '—';
+  const datePart = d.toLocaleDateString('es-ES', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const timePart = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  // Capitalizamos la primera letra del día de la semana
+  const nice = datePart.charAt(0).toUpperCase() + datePart.slice(1);
+  return `${nice} · ${timePart}`;
+}
+
 async function geocodeLocation(query) {
   if (geocodeCache.has(query)) return geocodeCache.get(query);
   try {
@@ -249,6 +265,29 @@ export default function PoolDetailPage() {
           </div>
           {pool.description && (
             <p className="text-sm text-surface-muted mt-3 leading-relaxed">{pool.description}</p>
+          )}
+        </div>
+
+        {/* Fecha y hora — se muestra dentro de la quedada al abrirla (mismo
+            patrón que en el detalle de evento: "Fecha de inicio" / "Fecha
+            de fin"). Antes solo aparecía en formato compacto en el
+            cabecero; aquí se enseña legible y por separado. */}
+        <div className="rounded-2xl border border-surface-border bg-surface-card overflow-hidden">
+          <div className="flex items-start gap-3 px-4 py-3">
+            <span className="text-lg flex-shrink-0 mt-0.5">📅</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-mono uppercase tracking-wide text-surface-muted">Fecha de inicio</p>
+              <p className="text-sm text-surface-text font-display">{formatPoolFullDateTime(pool.scheduled_at)}</p>
+            </div>
+          </div>
+          {pool.ends_at && (
+            <div className="flex items-start gap-3 px-4 py-3 border-t border-surface-border">
+              <span className="text-lg flex-shrink-0 mt-0.5">🏁</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-mono uppercase tracking-wide text-surface-muted">Fecha de fin</p>
+                <p className="text-sm text-surface-text font-display">{formatPoolFullDateTime(pool.ends_at)}</p>
+              </div>
+            </div>
           )}
         </div>
 
