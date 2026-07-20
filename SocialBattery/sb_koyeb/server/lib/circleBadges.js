@@ -7,9 +7,12 @@ const CIRCLE_BADGES = [
     // menos se apunta a quedadas), solo cambia cómo se llama. Igual que
     // se hizo con "tapado" → "Average Joe/Jane" en la fase 62: el id no
     // se toca para no romper las filas ya existentes en user_badges.
+    // Emoji: 🥔 (patata) en vez de 🛋️ (sofá+lámpara) — el sofá renderiza
+    // muy a color/vistoso comparado con el resto de iconos del catálogo,
+    // más apagados; la patata mantiene el juego de palabras y es más sobria.
     id: 'lone_wolf',
     name: 'Couch Potato',
-    emoji: '🛋️',
+    emoji: '🥔',
     description: 'Quien menos se apunta a quedadas dentro del circulo.',
     category: 'circle',
   },

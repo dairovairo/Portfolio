@@ -32,10 +32,10 @@ export function formatPoolDate(dateStr) {
   const diffHours = diffMs / (1000 * 60 * 60);
 
   if (diffMs < 0) return 'Ya pasó';
-  if (diffHours < 1) {
-    const mins = Math.floor(diffMs / 60000);
-    return `En ${mins} min`;
-  }
+  // Antes, si faltaba menos de una hora, aquí se mostraba "En X min" — pero
+  // eso quedaba duplicado con el reloj de arena ámbar (getPoolDaysUntilLabel)
+  // que se pinta justo al lado en la tarjeta. Esta función ahora solo da la
+  // hora concreta; "cuánto falta" es responsabilidad exclusiva del ⏳.
   if (diffHours < 24) {
     return `Hoy a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
   }

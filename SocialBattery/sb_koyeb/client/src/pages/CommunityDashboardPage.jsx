@@ -127,13 +127,46 @@ function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }) {
 // tarjeta. Los flags can_end y can_renew los calcula el servidor: si un
 // botón está deshabilitado es porque falta el mínimo de cobro o el
 // evento/sorteo ya está fuera de ventana; el hint lo explica en corto.
-function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold }) {
+//
+// `hasContract` (lo calcula quien llama: event.promoted / tier light|
+// community) decide si el bloque se enseña EN ABSOLUTO — solo se oculta
+// del todo cuando nunca hubo contrato de pago (evento basic, sorteo Volt),
+// que es el único caso en que no hay nada que renovar o finalizar. Antes
+// se ocultaba también cuando SÍ había contrato pero no se podía actuar
+// ahora mismo (ya terminado, o por debajo del mínimo de cobro) — eso
+// escondía la opción justo cuando el usuario más la necesitaba ver
+// (aunque fuese deshabilitada, con el motivo). Ahora en ese caso los
+// botones se enseñan igual, deshabilitados y con el motivo explicado.
+function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, hasContract }) {
+  if (!hasContract) return null;
+
   const canRenew = row.can_renew;
   const canEnd = row.can_end;
-  if (!canRenew && !canEnd) return null;
-
   const sent = kind === 'event' ? row.sent_official : row.shown;
   const belowThreshold = sent < freeThreshold;
+  const unitLabel = kind === 'event' ? 'envíos' : 'banners enseñados';
+  // "Terminado" cubre tanto el evento ya empezado como el sorteo ya
+  // acabado/sorteado — en ambos casos la promoción ya no se puede tocar,
+  // así que en vez de solo deshabilitar el botón se explica el porqué.
+  const isOver = kind === 'event' ? row.started : row.ended;
+  const isDrawn = kind === 'raffle' && !!row.drawn_at;
+  const overLabel = kind === 'event'
+    ? 'El evento ya ha terminado'
+    : isDrawn ? 'El sorteo ya se ha realizado' : 'El sorteo ya ha terminado';
+
+  const renewTitle = isOver
+    ? `${overLabel} — no se puede renovar`
+    : belowThreshold
+      ? `Necesitas alcanzar ${freeThreshold} ${unitLabel} para renovar (${sent}/${freeThreshold})`
+      : kind === 'event' ? 'Renovar promoción del evento' : 'Renovar publicidad del sorteo';
+
+  const endTitle = isOver
+    ? `${overLabel} — la promoción se cerró sola`
+    : kind === 'raffle' && row.promo_ended_at
+      ? 'La publicidad ya está finalizada'
+      : belowThreshold
+        ? `Necesitas alcanzar ${freeThreshold} ${unitLabel} para finalizar (${sent}/${freeThreshold})`
+        : kind === 'event' ? 'Finalizar promoción del evento' : 'Finalizar publicidad del sorteo';
 
   return (
     <div className="border-t border-surface-border/60 pt-3 space-y-2">
@@ -141,6 +174,7 @@ function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold }) {
         <button
           onClick={onRenew}
           disabled={!canRenew}
+          title={renewTitle}
           className="flex-1 py-2 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/30 hover:bg-accent-primary/25 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
           🔄 Renovar
@@ -148,16 +182,21 @@ function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold }) {
         <button
           onClick={onEnd}
           disabled={!canEnd}
+          title={endTitle}
           className="flex-1 py-2 rounded-xl bg-surface-bg border border-red-500/25 text-red-300 hover:bg-red-500/10 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
           ⏹ Finalizar
         </button>
       </div>
-      {belowThreshold && (
+      {isOver ? (
         <p className="text-[10px] text-surface-muted leading-relaxed">
-          Todavía no puedes actuar sobre esta promoción: hace falta llegar al mínimo de {freeThreshold} {kind === 'event' ? 'envíos' : 'banners enseñados'} para que pueda cobrarse ({sent}/{freeThreshold}).
+          {overLabel}. Los botones se enseñan como referencia, pero ya no se pueden accionar.
         </p>
-      )}
+      ) : belowThreshold ? (
+        <p className="text-[10px] text-surface-muted leading-relaxed">
+          Todavía no puedes actuar sobre esta promoción: hace falta llegar al mínimo de {freeThreshold} {unitLabel} para que pueda cobrarse ({sent}/{freeThreshold}).
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -377,6 +416,7 @@ function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
         onRenew={() => onRenew(event)}
         onEnd={() => onEnd(event)}
         freeThreshold={freeThreshold}
+        hasContract={event.promoted}
       />
     </div>
   );
@@ -462,6 +502,7 @@ function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
         onRenew={() => onRenew(raffle)}
         onEnd={() => onEnd(raffle)}
         freeThreshold={freeThreshold}
+        hasContract={raffle.tier === 'light' || raffle.tier === 'community'}
       />
     </div>
   );

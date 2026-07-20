@@ -21,7 +21,7 @@
 --                        veces llega el último (según check-ins de Sniffer)
 --      'ghost'        : "Ghost"         — se apunta y menos se presenta
 
-UPDATE public.badges SET name = 'Couch Potato', emoji = '🛋️' WHERE id = 'lone_wolf';
+UPDATE public.badges SET name = 'Couch Potato', emoji = '🥔' WHERE id = 'lone_wolf';
 UPDATE public.badges SET name = 'Connector' WHERE id = 'instigator';
 
 INSERT INTO public.badges (id, name, emoji, description, category) VALUES
