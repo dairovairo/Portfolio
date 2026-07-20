@@ -1424,11 +1424,13 @@ export default function ShopPage() {
 
   // Pies: ítem base ("Sin calzado") → botón ResetButton encima de los
   // carruseles. Retro colores → carrusel. Chunky colores → carrusel.
-  // El resto (mocasines, oxford…) → grid vertical.
+  // El resto (mocasines, oxford…) → grid vertical. "Brazos" se excluye de
+  // aquí aunque viva en MASCOT_FEET — se enseña solo en la pestaña
+  // Accesorios (ver `armsFeetItem`/`shownInAccessoriesTab` más abajo).
   const baseFeet   = MASCOT_FEET.find(f => f.isBase) ?? null;
   const basicFeet  = MASCOT_FEET.filter(f => f.isBasic);
   const basicFeet2 = MASCOT_FEET.filter(f => f.isBasic2);
-  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBasic2 && !f.isBase);
+  const restFeet   = MASCOT_FEET.filter(f => !f.isBasic && !f.isBasic2 && !f.isBase && !f.shownInAccessoriesTab);
 
   // Cabeza: ítem base ("Sin prenda") → botón ResetButton encima de los
   // carruseles. Gorras lisas → carrusel. Gorras bicolor → carrusel.
@@ -1460,6 +1462,11 @@ export default function ShopPage() {
   const restAccessories    = MASCOT_ACCESSORIES.filter(
     a => !a.isChain && !a.isGrillz && !a.isGlasses && !a.isTie && !a.isBowTie && !a.isRinon && !a.isBase
   );
+  // "Brazos" — mecánicamente es un ítem de PIES (ver comentario en
+  // MASCOT_FEET), pero se enseña como la última tarjeta de la pestaña
+  // Accesorios. Se busca por flag en vez de por id para que quede claro
+  // que cualquier ítem futuro marcado igual seguiría el mismo patrón.
+  const armsFeetItem = MASCOT_FEET.find(f => f.shownInAccessoriesTab) ?? null;
 
   // Una tarjeta "Sin X" de grupo se muestra como activa cuando ningún otro
   // miembro de su mismo grupo está equipado (representa "grupo vacío"; su
@@ -2400,6 +2407,28 @@ export default function ShopPage() {
                   previewTier={previewTier}
                 />
               ))}
+
+              {/* "Brazos" — a propósito la última tarjeta de toda la
+                  pestaña Accesorios y el ítem más caro de la tienda.
+                  Aunque se enseña aquí, mecánicamente es un ítem de PIES
+                  (FeetCard + handleBuyFeet/handleEquipFeet, no los
+                  handlers de accesorios): al equiparlo sustituye a
+                  cualquier calzado puesto, y cualquier calzado lo
+                  sustituye a él — ver comentario en MASCOT_FEET. */}
+              {armsFeetItem && (
+                <FeetCard
+                  key={armsFeetItem.id}
+                  feet={armsFeetItem}
+                  isUnlocked={unlockedFeet.has(armsFeetItem.id)}
+                  isActive={activeFeet === armsFeetItem.id}
+                  canAfford={coins >= armsFeetItem.price}
+                  onBuy={() => handleBuyFeet(armsFeetItem)}
+                  onEquip={() => handleEquipFeet(armsFeetItem)}
+                  onCustomize={() => handleOpenCustomizeNew(armsFeetItem)}
+                  isCustomized={hasAnyCustomizationOf(armsFeetItem.id)}
+                  previewTier={previewTier}
+                />
+              )}
             </div>
           </div>
         )}

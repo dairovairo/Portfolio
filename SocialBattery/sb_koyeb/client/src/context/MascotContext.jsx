@@ -1513,6 +1513,25 @@ export const MASCOT_FEET = [
     // sin tocar la base de la mascota).
     offsetY: '10%',
   },
+  {
+    // "Brazos" — mecánicamente vive en el catálogo de PIES (ocupa la misma
+    // capa que el calzado, capa 2, justo debajo del torso — ver
+    // mascotRenderer.js/MascotDisplay.jsx — y por tanto sustituye a
+    // cualquier zapatilla puesta, y viceversa: es un slot único, no un
+    // accesorio combinable). Sin embargo, en la tienda se enseña dentro de
+    // la pestaña "Accesorios" en vez de en "Pies" — ver `shownInAccessoriesTab`
+    // más abajo, que lo excluye de `restFeet` (grid de Pies) en ShopPage.jsx
+    // y lo añade como última tarjeta de la rejilla de Accesorios. Es el
+    // ítem más caro de toda la tienda a propósito.
+    id: 'feet_arms',
+    name: 'Brazos',
+    desc: 'Un par de brazos sueltos para tu mascota. El accesorio definitivo.',
+    emoji: '💪',
+    src: '/outfit-feet-arms.png',
+    price: 1000,
+    isBase: false,
+    shownInAccessoriesTab: true,
+  },
 ];
 
 // ── Catálogo de CABEZA (sub-categoría de Outfit) ───────────────────────────────
