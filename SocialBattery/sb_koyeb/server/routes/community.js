@@ -3659,6 +3659,7 @@ function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, 
     title: raffle.title,
     description: raffle.description,
     image_url: raffle.image_url,
+    categories: Array.isArray(raffle.categories) ? raffle.categories : [],
     ends_at: raffle.ends_at,
     created_at: raffle.created_at,
     drawn_at: raffle.drawn_at,
@@ -4051,7 +4052,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
       .from('community_raffles')
       .select(`
         id, community_id, creator_id, title, description, image_url,
-        ends_at, drawn_at, created_at, tier, banner_views_contracted,
+        ends_at, drawn_at, created_at, tier, categories, banner_views_contracted,
         banner_interested_only, promo_ended_at,
         winner:winner_id(id, username, avatar_url)
       `)
@@ -4103,6 +4104,11 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     return res.status(400).json({ error: 'Tipo de sorteo no válido' });
   }
   const raffleTier = normalizeRaffleTier(tier);
+
+  const categories = parseCategories(req.body.categories);
+  if (categories.length > MAX_CATEGORIES) {
+    return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
+  }
 
   const endsAtDate = new Date(ends_at);
   if (Number.isNaN(endsAtDate.getTime())) {
@@ -4201,10 +4207,11 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
         image_url: imageUrl,
         ends_at: endsAtDate.toISOString(),
         tier: raffleTier,
+        categories,
         banner_views_contracted: resolvedBannerViews,
         banner_interested_only: resolvedInterestedOnly,
       })
-      .select('id, community_id, creator_id, title, description, image_url, ends_at, drawn_at, created_at, tier, banner_views_contracted, banner_interested_only')
+      .select('id, community_id, creator_id, title, description, image_url, ends_at, drawn_at, created_at, tier, categories, banner_views_contracted, banner_interested_only')
       .single();
 
     if (error) throw error;

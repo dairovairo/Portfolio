@@ -188,6 +188,7 @@ export default function RaffleAdAudiencePage() {
       if (draft.description?.trim()) formData.append('description', draft.description.trim());
       formData.append('ends_at', draft.ends_at);
       formData.append('tier', draft.tier || 'light');
+      if (draft.categories?.length) formData.append('categories', JSON.stringify(draft.categories));
       formData.append('banner_views_contracted', bannerViews);
       formData.append('banner_interested_only', filterInterested ? 'true' : 'false');
       if (draft.image_file) formData.append('image', draft.image_file);

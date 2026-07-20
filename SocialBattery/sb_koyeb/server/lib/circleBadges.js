@@ -60,7 +60,12 @@ const CIRCLE_BADGES = [
   {
     id: 'last_minute_joiner',
     name: 'Last Minute Joiner',
-    emoji: '⏱️',
+    // Sin el selector de presentación a color (U+FE0F): igual que el resto
+    // de símbolos de línea del proyecto (🔓︎/🔒︎/⚙︎, ver .sb-symbol en
+    // index.css), este glifo por defecto ya es de línea/monocromo — el
+    // FE0F que tenía antes lo forzaba a un estopwatch a color, desentonando
+    // con el resto del catálogo de insignias.
+    emoji: '⏱',
     description: 'Quien mas veces entra ultimo a una quedada antes de que se cierre.',
     category: 'circle',
   },

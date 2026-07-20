@@ -102,6 +102,7 @@ const MAX_CATEGORIES = 3;
 // Mismo listado que en CommunityPage (ver src/constants/categories.js).
 const EVENT_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 const COMMUNITY_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
+const RAFFLE_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -932,6 +933,14 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo })
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border">
             {raffle.price_cents ? `${(raffle.price_cents / 100).toFixed(2)} €` : 'Gratis'}
           </span>
+          {getEntityCategories(raffle).map(cat => (
+            <span
+              key={cat}
+              className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border"
+            >
+              {getEventEmoji(cat)} {cat}
+            </span>
+          ))}
         </div>
 
         {raffle.tier_rules && (
@@ -1047,6 +1056,8 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [endsAt, setEndsAt] = useState(defaultDate);
+  const [categories, setCategories] = useState([]);
+  const [customCategory, setCustomCategory] = useState('');
   const [tier, setTier] = useState(RAFFLE_TIER_OPTIONS[0].key);
   const [showTierDetails, setShowTierDetails] = useState(false);
   const [imageFile, setImageFile] = useState(null);
@@ -1074,15 +1085,36 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
     if (imageCameraRef.current) imageCameraRef.current.value = '';
   }
 
+  function selectCategory(cat) {
+    setCategories(prev => {
+      const isSelected = prev.includes(cat);
+      if (isSelected) {
+        if (cat === OTHER_CATEGORY) setCustomCategory('');
+        return prev.filter(c => c !== cat);
+      }
+      if (prev.length >= MAX_CATEGORIES) return prev;
+      return [...prev, cat];
+    });
+  }
+
   async function handleSubmit() {
     if (!title.trim()) { setError('El título es obligatorio'); return; }
     if (!endsAt) { setError('La fecha de fin es obligatoria'); return; }
     if (new Date(endsAt) <= new Date()) { setError('La fecha de fin debe ser en el futuro'); return; }
+    if (categories.includes(OTHER_CATEGORY) && !customCategory.trim()) {
+      setError('Escribe la categoría personalizada');
+      return;
+    }
+
+    const resolvedCategories = categories
+      .map(cat => (cat === OTHER_CATEGORY ? customCategory.trim() : cat))
+      .filter(Boolean);
 
     const draft = {
       title: title.trim(),
       description: description.trim(),
       ends_at: new Date(endsAt).toISOString(),
+      categories: resolvedCategories,
       tier,
       image_file: imageFile,
       image_preview: imagePreview,
@@ -1157,6 +1189,44 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
               min={defaultDate}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">
+              Categorías <span className="text-slate-600">({categories.length}/{MAX_CATEGORIES}, opcional)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {RAFFLE_CATEGORIES.map(cat => {
+                const selected = categories.includes(cat);
+                const disabled = !selected && categories.length >= MAX_CATEGORIES;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => selectCategory(cat)}
+                    disabled={disabled}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      selected
+                        ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
+                        : disabled
+                          ? 'border-surface-border text-slate-700 opacity-40 cursor-not-allowed'
+                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
+                    }`}
+                  >
+                    {getEventEmoji(cat)} {cat}
+                  </button>
+                );
+              })}
+            </div>
+            {categories.includes(OTHER_CATEGORY) && (
+              <input
+                type="text"
+                value={customCategory}
+                onChange={e => setCustomCategory(e.target.value)}
+                placeholder="Escribe la categoría"
+                maxLength={60}
+                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+            )}
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
@@ -2209,6 +2279,7 @@ export default function CommunityDetailPage() {
     if (form.description?.trim()) formData.append('description', form.description.trim());
     formData.append('ends_at', form.ends_at);
     formData.append('tier', form.tier || 'light');
+    if (form.categories?.length) formData.append('categories', JSON.stringify(form.categories));
     if (form.banner_views_contracted != null) formData.append('banner_views_contracted', form.banner_views_contracted);
     if (form.image_file) formData.append('image', form.image_file);
     await api.postForm(`/community/communities/${communityId}/raffles`, formData);
