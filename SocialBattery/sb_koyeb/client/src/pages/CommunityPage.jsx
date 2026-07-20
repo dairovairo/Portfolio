@@ -261,6 +261,93 @@ const EVENT_RANK_OPTIONS = [
   { key: 'likes', label: '♥ Likes' },
 ];
 
+// ── Sorteos: sort options ────────────────────────────────────────────────
+// Mismo patrón que EVENT_RANK_OPTIONS pero adaptado a lo que sabemos de un
+// sorteo (community_raffles no guarda likes, ver phase79/116). "Selección"
+// es la puntuación ponderada por defecto — sin likes disponibles, la
+// implementación actual cae en el propio participant_count (ver
+// raffleRankScoreOf). Si en el futuro se añaden likes a los sorteos, aquí
+// habrá que cambiar la mezcla, no en más sitios.
+// "Intereses" NO es un sort en sí, es un filtro por matching de categorías
+// del sorteo con los intereses del usuario, exactamente igual que
+// 'cercania_intereses' pero sin la parte de cercanía (porque en sorteos no
+// tiene sentido — la ubicación del sorteo no existe). Se ordena entonces
+// por participant_count desc dentro de los que hacen match.
+const RAFFLE_RANK_OPTIONS = [
+  { key: 'app',          label: '✨ Selección' },
+  { key: 'participantes', label: '👥 Participantes' },
+  { key: 'intereses',    label: '✨ Intereses' },
+];
+
+function raffleRankScoreOf(raffle, rankKey) {
+  const participants = raffle.participant_count || 0;
+  // Cuando/si se añadan likes a los sorteos, "app" se convertirá en
+  // participants * 1.5 + likes (igual que promotionScore para eventos).
+  return participants;
+}
+
+// Filtro por categorías: mismo criterio que matchesUserInterests, pero
+// mirando primero las categorías propias del sorteo (fase 116) y con
+// fallback a las de la comunidad si el sorteo no las trajera. En eventos
+// getEntityCategories ya hace ese fallback vía category → categories, pero
+// aquí las categorías de la comunidad viven en raffle.community.categories.
+function getRaffleCategories(raffle) {
+  const own = getEntityCategories(raffle);
+  if (own.length > 0) return own;
+  const commCats = Array.isArray(raffle.community?.categories) ? raffle.community.categories : [];
+  return commCats.filter(Boolean);
+}
+
+function matchesRaffleInterests(raffle, userInterests = []) {
+  if (!userInterests.length) return true;
+  const raffleCats = getRaffleCategories(raffle).map(normalizeText);
+  const normalizedInterests = userInterests.map(normalizeText);
+  return raffleCats.some(cat => normalizedInterests.includes(cat));
+}
+
+function matchesRaffleCategory(raffle, selectedCategory) {
+  if (selectedCategory === ALL_EVENT_CATEGORIES) return true;
+  const cats = getRaffleCategories(raffle);
+  return cats.some(c => c === selectedCategory);
+}
+
+// Ventana de tiempo aplicada sobre ends_at (fecha de cierre del sorteo),
+// no sobre event_date — es lo que tiene sentido para "termina esta
+// semana / este mes".
+function matchesRaffleDateFilter(raffle, dateFilter) {
+  if (dateFilter === 'all') return true;
+  const endTime = new Date(raffle.ends_at).getTime();
+  if (Number.isNaN(endTime)) return true;
+  const now = Date.now();
+  if (dateFilter === 'week') return endTime <= now + 7 * 24 * 60 * 60 * 1000;
+  if (dateFilter === 'month') return endTime <= now + 30 * 24 * 60 * 60 * 1000;
+  return true;
+}
+
+function sortRafflesBy(raffleList = [], { rankKey = 'app', userInterests = [] } = {}) {
+  let list = raffleList;
+  if (rankKey === 'intereses') {
+    list = list.filter(raffle => matchesRaffleInterests(raffle, userInterests));
+  }
+  return [...list].sort((a, b) => raffleRankScoreOf(b, rankKey) - raffleRankScoreOf(a, rankKey));
+}
+
+function formatRaffleEndShort(dateStr) {
+  if (!dateStr) return '';
+  const time = new Date(dateStr).getTime();
+  if (Number.isNaN(time)) return '';
+  const diffMs = time - Date.now();
+  if (diffMs <= 0) return 'Terminado';
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return 'Termina hoy';
+  if (days === 1) return 'Termina mañana';
+  return `Termina en ${days} días`;
+}
+
+// Metadata visual de cada tier — solo emoji y label corto, ya que las
+// reglas completas viven en el backend y llegan en raffle.tier_label.
+const RAFFLE_TIER_EMOJI = { light: '🎫', volt: '⚡', community: '🤝' };
+
 function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRankChange }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -327,6 +414,59 @@ function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRan
               </button>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Raffle sort dropdown ─────────────────────────────────────────────────
+// Mismo patrón que EventSortDropdown pero de una sola sección (los sorteos
+// no tienen ubicación, así que no hay grupo "Cercanía") y con la paleta
+// ámbar en vez de accent-primary. Reutilizar el propio EventSortDropdown
+// sería llenarlo de props condicionales solo para pintar amber vs blue,
+// prefiero un componente hermano corto que mantener el condicionamiento
+// dentro del genérico.
+function RaffleSortDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const currentLabel = RAFFLE_RANK_OPTIONS.find(opt => opt.key === value)?.label || 'Ordenar';
+
+  return (
+    <div className="relative flex-shrink-0" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 text-xs bg-surface-card border border-surface-border rounded-lg pl-2.5 pr-2 py-1.5 text-surface-muted hover:border-amber-500/50 transition-colors cursor-pointer"
+      >
+        <span className="truncate max-w-[130px]">{currentLabel}</span>
+        <span className={`text-[9px] leading-none transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[210px] py-1.5 overflow-hidden animate-fade-in">
+          {RAFFLE_RANK_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => { onChange(opt.key); setOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
+                value === opt.key
+                  ? 'text-amber-300 bg-amber-500/10'
+                  : 'text-surface-text hover:bg-surface-hover'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -1338,6 +1478,73 @@ function RankingModal({ events, loading, onClose, onOpen }) {
   );
 }
 
+// ── Raffle discovery card ─────────────────────────────────────────────────
+// Versión lean de RaffleCard (definida en CommunityDetailPage) pensada
+// para la vista de descubrimiento: sin controles de creador (renovar /
+// finalizar publicidad / sortear / share), sin publicidad enviada, sin
+// bloque de ganador (porque solo listamos sorteos aún no realizados). Al
+// hacer click se navega a la comunidad del sorteo con hash al raffle
+// para que la RaffleCard "gorda" haga scroll a él.
+// Todo el color de acento va en ámbar en esta vista (ver la envolvente
+// <div data-raffles-theme> más abajo — aquí simplemente usamos utilidades
+// de Tailwind con la paleta amber, sin tocar las CSS vars globales).
+function RaffleDiscoveryCard({ raffle, onOpen, currentUserId }) {
+  const tierEmoji = RAFFLE_TIER_EMOJI[raffle.tier] || '🎁';
+  const cats = getRaffleCategories(raffle);
+  const isCreator = currentUserId && raffle.is_creator;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(raffle)}
+      className="w-full text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden hover:border-amber-500/50 transition-colors"
+    >
+      {raffle.image_url && (
+        <div className="aspect-[16/9] bg-surface-bg">
+          <img src={raffle.image_url} alt={raffle.title} className="w-full h-full object-cover" />
+        </div>
+      )}
+      <div className="p-4 space-y-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-lg flex-shrink-0">🎁</span>
+            <h3 className="font-display font-bold text-surface-text text-sm truncate">{raffle.title}</h3>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+            {tierEmoji} {raffle.tier_label}
+          </span>
+          {raffle.community?.name && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border">
+              👥 {raffle.community.name}
+            </span>
+          )}
+          {cats.map(cat => (
+            <span
+              key={cat}
+              className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border"
+            >
+              {getEventEmoji(cat)} {cat}
+            </span>
+          ))}
+        </div>
+
+        {raffle.description && (
+          <p className="text-xs text-surface-muted leading-relaxed line-clamp-2">{raffle.description}</p>
+        )}
+
+        <div className="flex items-center gap-3 text-[11px] font-mono text-surface-muted">
+          <span className="text-amber-300">{formatRaffleEndShort(raffle.ends_at)}</span>
+          <span>·</span>
+          <span>👥 {raffle.participant_count ?? 0} participantes</span>
+          {isCreator && <><span>·</span><span className="text-amber-400/80">Tuyo</span></>}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CommunityPage() {
   const navigate = useNavigate();
@@ -1375,6 +1582,20 @@ export default function CommunityPage() {
   const [eventProximitySort, setEventProximitySort] = useState(null); // null | 'cercania' | 'cercania_intereses'
   const [eventRankSort, setEventRankSort] = useState('app'); // null | 'app' | 'planificaciones' | 'likes'
 
+  // ── Actividades: sub-vista Eventos ↔ Sorteos ────────────────────────────
+  // La pestaña principal se llama "Actividades" (antes "Eventos") y al
+  // abrirla siempre arranca en 'events' — no se persiste entre sesiones a
+  // propósito, para no despistar si un día se entra buscando eventos y se
+  // sigue viendo el último toggle en sorteos. Se resetea también al
+  // cambiar de tab principal (ver useEffect más abajo).
+  const [activityView, setActivityView] = useState('events'); // 'events' | 'raffles'
+  const [raffles, setRaffles] = useState([]);
+  const [rafflesLoading, setRafflesLoading] = useState(false);
+  const [raffleSearch, setRaffleSearch] = useState('');
+  const [raffleCategoryFilter, setRaffleCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
+  const [raffleDateFilter, setRaffleDateFilter] = useState('all'); // 'week' | 'month' | 'all'
+  const [raffleRankSort, setRaffleRankSort] = useState('app'); // 'app' | 'participantes' | 'intereses'
+
   const handleEventProximityChange = useCallback((key) => {
     setEventProximitySort(current => current === key ? null : key);
     setEventRankSort(null);
@@ -1402,6 +1623,21 @@ export default function CommunityPage() {
       setCommunities(data.communities || []);
     } catch (e) {
       showToast('Error cargando comunidades', 'error');
+    }
+  }, [showToast]);
+
+  // Carga perezosa: solo se llama al endpoint global de sorteos la primera
+  // vez que se abre la sub-vista de sorteos dentro de Actividades. Así, el
+  // caso normal (usuario que solo mira eventos) no paga la consulta extra.
+  const fetchRaffles = useCallback(async () => {
+    setRafflesLoading(true);
+    try {
+      const data = await api.get('/community/raffles');
+      setRaffles(data.raffles || []);
+    } catch (e) {
+      showToast('Error cargando sorteos', 'error');
+    } finally {
+      setRafflesLoading(false);
     }
   }, [showToast]);
 
@@ -1435,6 +1671,24 @@ export default function CommunityPage() {
   useEffect(() => {
     clearEventBadge();
   }, [clearEventBadge]);
+
+  // Carga perezosa de sorteos: la primera vez que se abre la sub-vista
+  // 'raffles' dentro de Actividades, se llama al endpoint global. Si el
+  // usuario nunca alterna al toggle de sorteos, no se paga la consulta.
+  const rafflesFetchedRef = useRef(false);
+  useEffect(() => {
+    if (tab === 'events' && activityView === 'raffles' && !rafflesFetchedRef.current) {
+      rafflesFetchedRef.current = true;
+      fetchRaffles();
+    }
+  }, [tab, activityView, fetchRaffles]);
+
+  // Al salir de la pestaña "Actividades" se vuelve a arrancar en 'events'
+  // la próxima vez que se entre — el toggle no se persiste a propósito
+  // (ver comentario en el useState de activityView).
+  useEffect(() => {
+    if (tab !== 'events') setActivityView('events');
+  }, [tab]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   async function handleCreateCommunity(formData) {
@@ -1534,8 +1788,35 @@ export default function CommunityPage() {
   const eventCountLabel = isEventFiltered
     ? `${filteredSortedEvents.length}/${upcomingEventsTotal} eventos`
     : `${upcomingEventsTotal} eventos`;
+
+  // ── Raffle search + filter ────────────────────────────────────────────────
+  // Igual patrón que eventos, pero sin ubicación ni precio: los sorteos no
+  // tienen coordenadas ni precio para el asistente (el price_cents del tier
+  // es lo que paga el creador por la publicidad, no el participante).
+  const normalizedRaffleSearch = normalizeText(raffleSearch);
+  const filteredSortedRaffles = sortRafflesBy(raffles, {
+    rankKey: raffleRankSort,
+    userInterests: profile?.interests,
+  }).filter(raffle => {
+    const matchesSearch = !normalizedRaffleSearch || normalizeText([
+      raffle.title,
+      raffle.description,
+      ...getRaffleCategories(raffle),
+      raffle.community?.name,
+    ].filter(Boolean).join(' ')).includes(normalizedRaffleSearch);
+    return matchesSearch
+      && matchesRaffleCategory(raffle, raffleCategoryFilter)
+      && matchesRaffleDateFilter(raffle, raffleDateFilter);
+  });
+  const isRaffleFiltered = normalizedRaffleSearch || raffleCategoryFilter !== ALL_EVENT_CATEGORIES || raffleDateFilter !== 'all';
+  const isRaffleFilterActive = raffleCategoryFilter !== ALL_EVENT_CATEGORIES || raffleDateFilter !== 'all';
+  const raffleCountLabel = isRaffleFiltered
+    ? `${filteredSortedRaffles.length}/${raffles.length} sorteos`
+    : `${raffles.length} sorteos`;
+
+  const activityCountLabel = activityView === 'raffles' ? raffleCountLabel : eventCountLabel;
   const headerSubtitle = tab === 'events'
-    ? eventCountLabel
+    ? activityCountLabel
     : tab === 'planning'
       ? `${planningEvents.length} planificados`
       : null;
@@ -1604,7 +1885,7 @@ export default function CommunityPage() {
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
-              🌐 Eventos
+              🌐 Actividades
             </button>
             <button
               onClick={() => { setTab('planning'); clearAllEventUpdateBadges(); }}
@@ -1651,6 +1932,37 @@ export default function CommunityPage() {
           </div>
         ) : tab === 'events' ? (
           <div id="tutorial-events-section" className="rounded-2xl transition-all duration-300">
+            {/* Sub-toggle Eventos ↔ Sorteos.
+                Mismo patrón visual que el toggle principal (Actividades /
+                Plan / Comunidades) pero en modo pill. La sub-vista siempre
+                arranca en 'events' (ver comentario del useState); el color
+                cambia a ámbar cuando está activo 'raffles' para reforzar
+                que estamos en una vista distinta. */}
+            <div className="flex bg-surface-card border border-surface-border rounded-xl p-1 gap-1 mb-4">
+              <button
+                onClick={() => setActivityView('events')}
+                className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
+                  activityView === 'events'
+                    ? 'bg-accent-primary text-white shadow-sm'
+                    : 'text-surface-muted hover:text-surface-text'
+                }`}
+              >
+                📅 Eventos
+              </button>
+              <button
+                onClick={() => setActivityView('raffles')}
+                className={`flex-1 py-2 rounded-lg text-xs font-display font-semibold transition-all ${
+                  activityView === 'raffles'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'text-surface-muted hover:text-surface-text'
+                }`}
+              >
+                🎁 Sorteos
+              </button>
+            </div>
+
+            {activityView === 'events' ? (
+              <>
             {/* Events title + filter/sort selectors */}
             <div className="relative mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
@@ -1834,6 +2146,148 @@ export default function CommunityPage() {
                   />
                 ))}
               </div>
+            )}
+              </>
+            ) : (
+              /* ── Sub-vista Sorteos ─────────────────────────────────
+                 Mismo esqueleto que la vista de Eventos (título +
+                 filtros + buscador + lista), con las diferencias
+                 pactadas: sin filtro de ubicación (sorteos no tienen
+                 coordenadas) y ordenación por nº de participantes en
+                 vez de planificaciones. Color de acento en ámbar en
+                 vez del azul global de la app, usando utilidades
+                 Tailwind de la paleta amber directamente (sin tocar
+                 CSS vars globales — así no contamina el tema de otras
+                 vistas ni requiere una segunda ronda de accent-*).
+                 Ver comentario del useState de activityView para el
+                 criterio de reset del toggle. */
+              <>
+                <div className="relative mb-4 flex items-center justify-between gap-3">
+                  <h2 className="font-display font-bold text-surface-text text-lg">Sorteos</h2>
+                  <div className="flex items-center gap-2">
+                    <FilterDropdown label="Filtrar" active={isRaffleFilterActive}>
+                      <FilterDropdownSection title="Tiempo">
+                        <div className="flex flex-col gap-2">
+                          {[
+                            { key: 'week',  label: '🗓️ Termina esta semana' },
+                            { key: 'month', label: '📆 Termina este mes' },
+                            { key: 'all',   label: '♾️ Todo el tiempo' },
+                          ].map(({ key, label }) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setRaffleDateFilter(key)}
+                              className={`w-full text-left py-2 px-3 rounded-xl text-xs font-display font-semibold border transition-all ${
+                                raffleDateFilter === key
+                                  ? 'border-amber-500/60 bg-amber-500/20 text-amber-300'
+                                  : 'border-surface-border text-surface-muted hover:border-amber-500/30'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </FilterDropdownSection>
+
+                      <FilterDropdownSection title="Categoría">
+                        <div className="flex flex-wrap gap-2">
+                          {EVENT_CATEGORY_FILTERS.map(cat => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setRaffleCategoryFilter(cat)}
+                              className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                                raffleCategoryFilter === cat
+                                  ? 'border-amber-500/60 bg-amber-500/20 text-amber-300'
+                                  : 'border-surface-border text-surface-muted hover:border-amber-500/30'
+                              }`}
+                            >
+                              {cat === ALL_EVENT_CATEGORIES ? '🌐' : getEventEmoji(cat)} {cat}
+                            </button>
+                          ))}
+                        </div>
+                      </FilterDropdownSection>
+                    </FilterDropdown>
+                    <RaffleSortDropdown
+                      value={raffleRankSort}
+                      onChange={setRaffleRankSort}
+                    />
+                  </div>
+                </div>
+
+                {/* Aviso de intereses: mismo patrón que en Eventos —
+                    si el usuario elige el sort "Intereses" pero no tiene
+                    intereses configurados, se le lleva al perfil. */}
+                {raffleRankSort === 'intereses' && !(profile?.interests?.length > 0) && (
+                  <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
+                    <span>✨ Añade tus intereses en el perfil para usar este filtro.</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/profile')}
+                      className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:text-amber-200 transition-colors"
+                    >
+                      Ir al perfil
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-3 mb-4">
+                  <input
+                    type="search"
+                    value={raffleSearch}
+                    onChange={e => setRaffleSearch(e.target.value)}
+                    placeholder="Buscar sorteos..."
+                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
+                  />
+                </div>
+
+                {rafflesLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <div className="text-3xl animate-pulse">🎁</div>
+                    <p className="text-surface-muted font-mono text-sm">Cargando sorteos...</p>
+                  </div>
+                ) : raffles.length === 0 ? (
+                  <div className="text-center py-16">
+                    <div className="text-5xl mb-4">🎁</div>
+                    <p className="font-display font-bold text-surface-text mb-1">Sin sorteos en marcha</p>
+                    <p className="text-sm text-surface-muted">Los sorteos se crean desde una comunidad. Únete a alguna para ver los suyos y crear los tuyos.</p>
+                  </div>
+                ) : filteredSortedRaffles.length === 0 ? (
+                  <div className="text-center py-14">
+                    <div className="text-4xl mb-3">🎁</div>
+                    <p className="font-display font-bold text-surface-text mb-1">Sin resultados</p>
+                    <p className="text-sm text-surface-muted mb-5">Prueba con otra búsqueda o categoría.</p>
+                    <button
+                      onClick={() => {
+                        setRaffleSearch('');
+                        setRaffleCategoryFilter(ALL_EVENT_CATEGORIES);
+                        setRaffleDateFilter('all');
+                        setRaffleRankSort('app');
+                      }}
+                      className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-amber-500/40 font-display font-semibold text-sm transition-all"
+                    >
+                      Limpiar filtros
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredSortedRaffles.map(raffle => (
+                      <RaffleDiscoveryCard
+                        key={raffle.id}
+                        raffle={raffle}
+                        currentUserId={profile?.id}
+                        onOpen={(r) => {
+                          // Deep-link a la comunidad del sorteo con hash
+                          // apuntando a la RaffleCard "gorda" (el id
+                          // raffle-<id> ya existe en CommunityDetailPage).
+                          const communityId = r.community?.id || r.community_id;
+                          navigate(`/community/${communityId}#raffle-${r.id}`);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         ) : tab === 'planning' ? (

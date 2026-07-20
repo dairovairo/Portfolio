@@ -4079,6 +4079,88 @@ router.delete('/communities/:id/posts/:postId/comments/:commentId', requireAuth,
   }
 });
 
+// ── GET /api/community/raffles — descubrimiento global de sorteos ──────────
+// Lista todos los sorteos ACTIVOS (aún sin realizarse y con ends_at futuro)
+// de todas las comunidades para la vista "Actividades → Sorteos" del menú
+// principal (CommunityPage). participant_count = nº de miembros elegibles
+// según el tier del sorteo, mismo criterio que la lista por-comunidad de
+// justo debajo. Se usa el cliente de servicio para saltar la RLS de
+// community_raffles y poder mostrar sorteos de comunidades a las que el
+// usuario aún no pertenece, mismo criterio que ya usa GET /communities
+// para marcar `has_active_raffle`.
+router.get('/raffles', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('community_raffles')
+      .select(`
+        id, community_id, creator_id, title, description, image_url,
+        ends_at, drawn_at, created_at, tier, categories, banner_views_contracted,
+        banner_interested_only, promo_ended_at,
+        winner:winner_id(id, username, avatar_url),
+        community:community_id(id, name, cover_image_url, categories)
+      `)
+      .is('drawn_at', null)
+      .gt('ends_at', nowIso)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const raffles = data || [];
+
+    // Los elegibles se cachean por (community_id, tier): la misma comunidad
+    // puede tener varios sorteos activos del mismo tier y no queremos
+    // repetir la consulta a community_members / users / colaboraciones.
+    const eligibleCache = new Map();
+    async function eligibleFor(communityId, tier) {
+      const key = `${communityId}:${tier}`;
+      if (!eligibleCache.has(key)) {
+        eligibleCache.set(key, await getEligibleRaffleMembers(communityId, tier));
+      }
+      return eligibleCache.get(key);
+    }
+
+    const bannerRaffleIds = raffles
+      .filter(r => ['light', 'volt', 'community'].includes(normalizeRaffleTier(r.tier)))
+      .map(r => r.id);
+    const bannerSentCounts = await getBannerSentCounts(bannerRaffleIds);
+
+    const serialized = [];
+    for (const r of raffles) {
+      const tier = normalizeRaffleTier(r.tier);
+      const eligibleIds = await eligibleFor(r.community_id, tier);
+      const base = serializeRaffle(r, {
+        participantCount: eligibleIds.length,
+        currentUserId: userId,
+        isEligible: eligibleIds.includes(userId),
+        bannerViewsSent: bannerSentCounts[r.id] || 0,
+      });
+      serialized.push({
+        ...base,
+        // Datos mínimos de la comunidad para pintar la tarjeta de
+        // descubrimiento sin necesidad de segundas llamadas. También se
+        // usan las categorías de la comunidad como fallback para el
+        // matching de intereses cuando el sorteo no las trae (mismo
+        // criterio que usa el backend en getInterestedUserIdSet).
+        community: r.community
+          ? {
+              id: r.community.id,
+              name: r.community.name,
+              cover_image_url: r.community.cover_image_url,
+              categories: Array.isArray(r.community.categories) ? r.community.categories : [],
+            }
+          : null,
+      });
+    }
+
+    res.json({ raffles: serialized });
+  } catch (err) {
+    console.error('[community] GET /raffles', err);
+    res.status(500).json({ error: `Failed to fetch raffles: ${err.message || err}` });
+  }
+});
+
 // ── GET /api/community/communities/:id/raffles — listar sorteos ────────────
 router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
   const userId = req.user.id;
