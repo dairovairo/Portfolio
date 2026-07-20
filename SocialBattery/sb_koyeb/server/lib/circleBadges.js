@@ -37,7 +37,7 @@ const CIRCLE_BADGES = [
     id: 'last_one_standing',
     name: 'Last One Standing',
     emoji: '🧍',
-    description: 'Quien mas pools termina solo, sin que nadie mas se una.',
+    description: 'Quien mas quedadas termina solo, sin que nadie mas se una.',
     category: 'circle',
   },
   {
@@ -54,14 +54,14 @@ const CIRCLE_BADGES = [
     id: 'instigator',
     name: 'Connector',
     emoji: '🔥',
-    description: 'Quien mas pools crea dentro del circulo.',
+    description: 'Quien mas quedadas crea dentro del circulo.',
     category: 'circle',
   },
   {
     id: 'last_minute_joiner',
     name: 'Last Minute Joiner',
     emoji: '⏱️',
-    description: 'Quien mas veces entra ultimo a un pool antes de que se cierre.',
+    description: 'Quien mas veces entra ultimo a una quedada antes de que se cierre.',
     category: 'circle',
   },
   {
@@ -564,7 +564,7 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     statsList,
     'soloFinishedPools',
     1,
-    stats => `${stats.soloFinishedPools} pools terminados solo`
+    stats => `${stats.soloFinishedPools} quedadas terminadas solo`
   );
   pushAverageCandidates(
     candidates,
@@ -580,7 +580,7 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     statsList,
     'createdPools',
     1,
-    stats => `${stats.createdPools} pools creados`
+    stats => `${stats.createdPools} quedadas creadas`
   );
   pushHighCandidates(
     candidates,

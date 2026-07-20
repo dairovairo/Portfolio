@@ -21,8 +21,17 @@
 --                        veces llega el último (según check-ins de Sniffer)
 --      'ghost'        : "Ghost"         — se apunta y menos se presenta
 
+-- 3) Corrección de vocabulario: las descripciones de la fase 9 usaban
+--    "pool"/"pools" en vez de "quedada"/"quedadas" (la app entera usa
+--    "quedada"). last_minute_joiner ya se corrige de forma completa más
+--    abajo porque no cambia de nombre; instigator/last_one_standing solo
+--    necesitan este UPDATE de texto (su nombre ya se toca arriba o se
+--    queda igual).
+
 UPDATE public.badges SET name = 'Couch Potato', emoji = '🥔' WHERE id = 'lone_wolf';
-UPDATE public.badges SET name = 'Connector' WHERE id = 'instigator';
+UPDATE public.badges SET name = 'Connector', description = 'Quien mas quedadas crea dentro del circulo.' WHERE id = 'instigator';
+UPDATE public.badges SET description = 'Quien mas quedadas termina solo, sin que nadie mas se una.' WHERE id = 'last_one_standing';
+UPDATE public.badges SET description = 'Quien mas veces entra ultimo a una quedada antes de que se cierre.' WHERE id = 'last_minute_joiner';
 
 INSERT INTO public.badges (id, name, emoji, description, category) VALUES
   ('few_friends',   'Lone Wolf',      '🐺', 'Quien menos amigos tiene en la app.', 'circle'),

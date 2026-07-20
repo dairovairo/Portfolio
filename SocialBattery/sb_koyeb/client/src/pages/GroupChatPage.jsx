@@ -1609,7 +1609,7 @@ export default function GroupChatPage() {
           {group && (
             <button
               onClick={() => navigate(`/pools?createPool=1&groupId=${group.id}`)}
-              className="flex-shrink-0 px-3 h-9 rounded-xl text-xs font-display font-semibold text-accent-glow bg-accent-primary/10 border border-accent-primary/20 hover:bg-accent-primary/20 transition-all flex items-center gap-1.5"
+              className="flex-shrink-0 px-3 h-9 rounded-xl text-xs font-display font-semibold text-white bg-accent-primary hover:bg-accent-primary/80 transition-all flex items-center gap-1.5"
               title="Crear una quedada con este grupo"
             >
               <span>🗓️</span> Quedada

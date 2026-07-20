@@ -1528,7 +1528,10 @@ export const MASCOT_FEET = [
     desc: 'Un par de brazos sueltos para tu mascota. El accesorio definitivo.',
     emoji: '💪',
     src: '/outfit-feet-arms.png',
-    price: 1000,
+    // Precio temporal a 100 mientras se prueba — subir a 1000 cuando se
+    // confirme que es el ítem definitivo (pedido original: el más caro
+    // de toda la tienda).
+    price: 100,
     isBase: false,
     shownInAccessoriesTab: true,
   },
