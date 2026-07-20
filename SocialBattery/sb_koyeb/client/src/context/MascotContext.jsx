@@ -1534,6 +1534,8 @@ export const MASCOT_FEET = [
     price: 100,
     isBase: false,
     shownInAccessoriesTab: true,
+    // Bajado un 2% respecto a la posición original del PNG.
+    offsetY: '2%',
   },
 ];
 
