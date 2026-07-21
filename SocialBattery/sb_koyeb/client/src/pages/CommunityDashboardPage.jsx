@@ -405,9 +405,18 @@ function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
         </>
       )}
 
-      <div className="border-t border-surface-border/60 pt-3 flex items-center gap-4 text-[11px] font-mono text-surface-muted">
+      <div className="border-t border-surface-border/60 pt-3 flex items-center flex-wrap gap-x-4 gap-y-1 text-[11px] font-mono text-surface-muted">
         <span>👥 {fmt(event.attendees)} apuntados</span>
         <span>❤️ {fmt(event.likes)} likes</span>
+        {/* Fase 121 — clicks al enlace externo del evento. Solo se
+            enseña si el evento tiene URL (si no, no hay nada que
+            medir). Cero clicks se pinta igualmente para dejar claro
+            que se está trackeando. */}
+        {event.url && (
+          <span title="Clicks al enlace externo del organizador">
+            🔗 {fmt(event.url_clicks)} clicks
+          </span>
+        )}
       </div>
 
       <PromotionActions
@@ -721,6 +730,73 @@ export default function CommunityDashboardPage() {
             posteriores no vuelven a contar.
           </p>
         </section>
+
+        {/* Fase 121 — clicks a URLs externas ("la web/redes que cuelga
+            el organizador"). Es un contador DISTINTO al del bloque de
+            arriba: allí se mide CTR de personas únicas del ANUNCIO
+            interno (push del evento, avioneta del sorteo); aquí se
+            mide cuánta gente ha tapeado el 🔗 externo. Aquí SÍ cuentan
+            los reboteos (el mismo usuario abriendo tres veces suma
+            tres) porque lo que interesa medir es la tracción bruta del
+            enlace del organizador, no el CTR de la campaña. Se enseña
+            aparte para no confundirlo.
+            NOTA (fase 122): los sorteos no tienen URL — solo se
+            agregan comunidad + eventos. */}
+        {s.total_url_clicks != null && (
+          <section className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
+            <h2 className="font-display font-bold text-surface-text text-sm flex items-center gap-2">
+              🔗 Clicks a enlaces externos
+              <span className="text-[10px] font-mono text-surface-muted font-normal">acumulado</span>
+            </h2>
+            <div className="grid grid-cols-2 gap-2">
+              <StatTile
+                label="Tu comunidad"
+                value={fmt(s.community_url_clicks)}
+                accent="text-accent-glow"
+                hint={data.community.url ? 'a tu web' : 'sin enlace'}
+              />
+              <StatTile
+                label="Eventos"
+                value={fmt(s.event_url_clicks)}
+                accent="text-accent-glow"
+                hint="a sus webs"
+              />
+            </div>
+            <p className="text-[10px] text-surface-muted leading-relaxed">
+              Cada tap suma uno — no se deduplica por persona: aquí lo que se mide es la tracción bruta del enlace,
+              no el CTR de una campaña.
+            </p>
+          </section>
+        )}
+
+        {/* Fase 121 — tope de actividades vivas por comunidad. Se
+            enseña con un badge X/4 en ámbar cuando queda hueco y en
+            rojo cuando ya está lleno (los POST de creación tirarán
+            400). Solo el creador ve el dashboard, así que este aviso
+            es el sitio natural para verlo. */}
+        {s.active_activity_limit != null && (
+          <section className={`border rounded-2xl p-4 flex items-center gap-3 ${
+            s.active_activity_count >= s.active_activity_limit
+              ? 'bg-red-500/5 border-red-500/25'
+              : 'bg-surface-card border-surface-border'
+          }`}>
+            <span className="text-2xl">
+              {s.active_activity_count >= s.active_activity_limit ? '🚫' : '📌'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-bold text-surface-text text-sm">
+                Actividades activas <span className="font-mono text-surface-muted">
+                  ({fmt(s.active_activity_count)}/{fmt(s.active_activity_limit)})
+                </span>
+              </p>
+              <p className="text-[11px] text-surface-muted mt-0.5 leading-relaxed">
+                {s.active_activity_count >= s.active_activity_limit
+                  ? 'Has llegado al tope. Espera a que alguna acabe o finalízala para poder crear otra.'
+                  : `Puedes tener hasta ${s.active_activity_limit} actividades sin acabar a la vez (eventos + sorteos juntos).`}
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* ── Pestañas ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-2">

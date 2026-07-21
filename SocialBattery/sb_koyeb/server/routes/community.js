@@ -93,6 +93,52 @@ function fallbackUsername(user) {
 
 const MAX_CATEGORIES = 3;
 
+// Fase 121: como mucho 4 "actividades" (eventos + sorteos) vivas a la vez
+// por comunidad. Una actividad está viva si NO está acabada — mismo
+// criterio que ya usa el dashboard (server-side y cliente-side). Se
+// aplica en POST /events y POST /communities/:id/raffles vía
+// assertActiveActivityCapNotReached() usando la RPC
+// community_active_activity_count (ver migración phase 121).
+const ACTIVE_ACTIVITY_LIMIT_PER_COMMUNITY = 4;
+
+// Cuenta actividades vivas de la comunidad (eventos + sorteos) y lanza
+// un error 400-friendly si ya se llegó al tope. Se llama justo después
+// de la comprobación de admin en los POST de creación (nunca en edits ni
+// renovaciones — solo la creación gasta un hueco del cap).
+//
+// El resultado (n, limit) también se devuelve para poder pintarlo en la
+// respuesta del dashboard sin repetir la consulta.
+async function getActiveActivityCount(communityId) {
+  const { data, error } = await supabase.rpc('community_active_activity_count', {
+    p_community_id: communityId,
+  });
+  if (error) {
+    // Si falta la migración phase 121 la RPC devuelve PGRST202 —
+    // exactamente igual que las de la fase 111 (ver adStatsError).
+    const code = error?.code;
+    const message = error?.message || '';
+    if (code === 'PGRST202' || /could not find the function|does not exist/i.test(message)) {
+      throw new Error(
+        'Falta la función community_active_activity_count en la base de datos: ejecuta supabase_schema_phase121_activity_cap_and_url_clicks.sql en el SQL Editor de Supabase.'
+      );
+    }
+    throw error;
+  }
+  // La RPC devuelve un integer plano. Supabase lo entrega como number o
+  // como string en función de la versión — normalizamos.
+  const n = Number(data ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function activityCapError(count) {
+  return {
+    error: `Ya tienes ${count}/${ACTIVE_ACTIVITY_LIMIT_PER_COMMUNITY} actividades activas en esta comunidad (eventos + sorteos). Espera a que alguna acabe o finalízala antes de crear otra.`,
+    code: 'activity_cap_reached',
+    active_activity_count: count,
+    active_activity_limit: ACTIVE_ACTIVITY_LIMIT_PER_COMMUNITY,
+  };
+}
+
 // El cliente manda `categories` como un string JSON dentro del FormData
 // (p.ej. '["Música","Arte"]'), ya que FormData solo admite valores string.
 // Devuelve un array de strings ya recortados y sin vacíos/duplicados.
@@ -667,6 +713,16 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
     if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
     if (!isAdmin) {
       return res.status(403).json({ error: 'Solo el administrador puede publicar eventos en esta comunidad' });
+    }
+
+    // Fase 121: tope de actividades vivas por comunidad. Se aplica solo
+    // en creación (renovaciones y edits no cuentan). Va aquí — después
+    // de resolver la comunidad y confirmar que somos admin — para no
+    // filtrar información a un ajeno con un 400 sobre una comunidad que
+    // no puede ni ver.
+    const activeCount = await getActiveActivityCount(communityId);
+    if (activeCount >= ACTIVE_ACTIVITY_LIMIT_PER_COMMUNITY) {
+      return res.status(400).json(activityCapError(activeCount));
     }
 
     // Política de bloqueo por audiencia insuficiente (debe reflejar
@@ -3318,13 +3374,24 @@ router.delete('/communities/:id/messages/:messageId/vote', requireAuth, async (r
 // SORTEOS DE COMUNIDAD
 
 const raffleImageUpload = createImageUpload({ maxSizeMb: 5 });
-function uploadRaffleImage(req, res, next) {
-  raffleImageUpload.single('image')(req, res, err => {
+// Fase 122 — el POST de sorteo ahora puede subir además hasta N fotos
+// de premios (nombre de campo `prize_image`). El cliente ordena las
+// imágenes con un `image_index` dentro del JSON `prizes` para casarlas
+// con el premio correcto — ver POST /communities/:id/raffles. El límite
+// blando de 20 imágenes por request es un cinturón contra abuso, no una
+// restricción de negocio (el frontend cap N=10 premios).
+function uploadRaffleAssets(req, res, next) {
+  raffleImageUpload.fields([
+    { name: 'image', maxCount: 1 },        // portada del sorteo
+    { name: 'prize_image', maxCount: 20 }, // imagen(es) de premios
+  ])(req, res, err => {
     if (!err) return next();
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return res.status(status).json({ error: err.message || 'No se pudo subir la foto' });
   });
 }
+// Alias intencional: no hay otro llamador de `uploadRaffleImage`, así
+// que dejamos solo `uploadRaffleAssets` con nombre honesto.
 
 // Tipos de sorteo disponibles. "price_cents" es solo informativo por
 // ahora (no hay pasarela de cobro conectada todavía, igual que en las
@@ -3711,10 +3778,64 @@ async function getRaffleLikeAggregates(raffleIds, currentUserId = null) {
   return { likeCountByRaffle, likedRaffleIds };
 }
 
-function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, bannerViewsSent, likeCount, likedByMe } = {}) {
+// Fase 122 — carga los premios de un lote de sorteos, con join a users
+// para obtener los datos del ganador de cada premio. Devuelve un Map de
+// raffleId → array de premios (ya con winner: {id,username,avatar_url}
+// | null, en el shape que espera serializeRaffle). Los sorteos anteriores
+// a la fase 122 no tienen filas aquí y salen como [] — el serializer
+// entonces cae al winner legacy de community_raffles.winner_id.
+async function fetchRafflePrizes(raffleIds) {
+  const map = new Map();
+  if (!raffleIds || !raffleIds.length) return map;
+  const { data, error } = await supabase
+    .from('community_raffle_prizes')
+    .select('id, raffle_id, position, title, image_url, value_cents, winner:winner_id(id, username, avatar_url)')
+    .in('raffle_id', raffleIds)
+    .order('position', { ascending: true });
+  if (error) throw error;
+  for (const p of data || []) {
+    if (!map.has(p.raffle_id)) map.set(p.raffle_id, []);
+    // El caller pasa cada elemento a serializeRaffle tal cual; no hace
+    // falta romper el shape aquí.
+    map.get(p.raffle_id).push({
+      id: p.id,
+      position: p.position,
+      title: p.title,
+      image_url: p.image_url || null,
+      value_cents: p.value_cents,
+      winner: p.winner || null,
+    });
+  }
+  return map;
+}
+
+function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, bannerViewsSent, likeCount, likedByMe, prizes } = {}) {
   const tier = normalizeRaffleTier(raffle.tier);
   const tierMeta = RAFFLE_TIERS[tier];
   const hasBanner = tier === 'light' || tier === 'volt' || tier === 'community';
+
+  // Fase 122 — array de premios. `prizes` viene ya con formato uniforme
+  // desde el caller (position, title, image_url, value_cents, winner: {id,
+  // username, avatar_url} | null). Se ordena por position siempre — un
+  // caller descuidado que pase el array sin ordenar no debe romper la
+  // UI. Si el caller no pasa prizes (rutas legacy que aún no se han
+  // actualizado a la fase 122), se cae a [] y el frontend interpreta
+  // "sorteo anterior a la fase de premios" y usa el winner legacy.
+  const prizeArray = Array.isArray(prizes)
+    ? [...prizes].sort((a, b) => (a.position || 0) - (b.position || 0))
+    : [];
+
+  // Winner "principal" para retrocompat con lo que ya existía en el
+  // frontend (Boolean(raffle.winner) para saber si se sorteó, muestra
+  // del ganador en CommunityPage/CommunityDetailPage/circleBadges).
+  //   · Si hay premios (fase 122): el ganador del primer premio con
+  //     winner asignado, o null si aún no se sorteó / no hubo elegibles.
+  //   · Si no hay premios (sorteos anteriores): raffle.winner legacy
+  //     como venía del JOIN winner:winner_id(...).
+  const legacyWinner = raffle.winner || null;
+  const firstPrizeWinner = prizeArray.find(p => p.winner)?.winner || null;
+  const effectiveWinner = prizeArray.length > 0 ? firstPrizeWinner : legacyWinner;
+
   return {
     id: raffle.id,
     community_id: raffle.community_id,
@@ -3725,7 +3846,16 @@ function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, 
     ends_at: raffle.ends_at,
     created_at: raffle.created_at,
     drawn_at: raffle.drawn_at,
-    winner: raffle.winner || null,
+    // Fase 122 — nuevos campos:
+    //   · prizes: array completo (posición, título, foto, valoración,
+    //     ganador). Siempre presente aunque esté vacío (raffle legacy).
+    //   · is_drawn: bandera explícita — el frontend puede depender de
+    //     esto en vez de `!!winner`, útil cuando el sorteo se ejecuta
+    //     con menos elegibles que premios (drawn_at seteado pero
+    //     algunos premios sin winner).
+    prizes: prizeArray,
+    is_drawn: !!raffle.drawn_at,
+    winner: effectiveWinner,
     participant_count: participantCount ?? null,
     tier,
     tier_label: tierMeta.label,
@@ -4198,6 +4328,10 @@ router.get('/raffles/ranking', requireAuth, async (req, res) => {
       raffles.map(r => r.id),
       userId,
     );
+    // Fase 122 — premios (con winners joinados) de todos los sorteos de
+    // este listado en una sola query. fetchRafflePrizes devuelve un Map
+    // por raffle_id; los sorteos sin premios (pre-fase-122) salen [].
+    const prizesByRaffle = await fetchRafflePrizes(raffles.map(r => r.id));
 
     const serialized = [];
     for (const r of raffles) {
@@ -4210,6 +4344,7 @@ router.get('/raffles/ranking', requireAuth, async (req, res) => {
         bannerViewsSent: bannerSentCounts[r.id] || 0,
         likeCount: likeCountByRaffle[r.id] || 0,
         likedByMe: likedRaffleIds.has(r.id),
+        prizes: prizesByRaffle.get(r.id) || [],
       });
       serialized.push({
         ...base,
@@ -4281,6 +4416,10 @@ router.get('/raffles', requireAuth, async (req, res) => {
       raffles.map(r => r.id),
       userId,
     );
+    // Fase 122 — premios (con winners joinados) de todos los sorteos de
+    // este listado en una sola query. fetchRafflePrizes devuelve un Map
+    // por raffle_id; los sorteos sin premios (pre-fase-122) salen [].
+    const prizesByRaffle = await fetchRafflePrizes(raffles.map(r => r.id));
 
     const serialized = [];
     for (const r of raffles) {
@@ -4293,6 +4432,7 @@ router.get('/raffles', requireAuth, async (req, res) => {
         bannerViewsSent: bannerSentCounts[r.id] || 0,
         likeCount: likeCountByRaffle[r.id] || 0,
         likedByMe: likedRaffleIds.has(r.id),
+        prizes: prizesByRaffle.get(r.id) || [],
       });
       serialized.push({
         ...base,
@@ -4356,6 +4496,9 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
       raffles.map(r => r.id),
       userId,
     );
+    // Fase 122 — premios (con winners joinados) de todos los sorteos de
+    // la comunidad. Un solo query en vez de N.
+    const prizesByRaffle = await fetchRafflePrizes(raffles.map(r => r.id));
 
     res.json({
       raffles: raffles.map(r => {
@@ -4368,6 +4511,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
           bannerViewsSent: bannerSentCounts[r.id] || 0,
           likeCount: likeCountByRaffle[r.id] || 0,
           likedByMe: likedRaffleIds.has(r.id),
+          prizes: prizesByRaffle.get(r.id) || [],
         });
       }),
     });
@@ -4379,7 +4523,7 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
 
 // ── POST /api/community/communities/:id/raffles — crear sorteo ─────────────
 // Solo el CREADOR de la comunidad (no vale con ser admin/moderador promovido).
-router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (req, res) => {
+router.post('/communities/:id/raffles', requireAuth, uploadRaffleAssets, async (req, res) => {
   const userId = req.user.id;
   const communityId = req.params.id;
   const { title, description, ends_at, tier, banner_views_contracted, banner_interested_only } = req.body;
@@ -4401,6 +4545,64 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   }
   if (categories.length > MAX_CATEGORIES) {
     return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
+  }
+
+  // Fase 122 — premios del sorteo. Al menos uno es obligatorio (todo
+  // sorteo tiene que tener algo que dar). El cliente manda:
+  //
+  //   · req.body.prizes: JSON string, array de
+  //       {title, value_cents, has_image, image_index}.
+  //     `image_index` es el índice dentro de req.files.prize_image
+  //     (array) — permite mezclar premios con y sin foto en el mismo
+  //     request sin arrastrar la incomodidad de "el i-ésimo premio se
+  //     corresponde con el i-ésimo fichero".
+  //   · req.files.prize_image: array de ficheros subidos (multer con
+  //     .fields, ver uploadRaffleAssets arriba).
+  //
+  // Validaciones:
+  //   · 1..PRIZE_MAX_PER_RAFFLE. El techo protege contra abuso y limita
+  //     el tiempo del sorteo (elegir N ganadores sin reemplazo es O(N)).
+  //   · Cada premio necesita título (1..120 chars, mismo rango que el
+  //     título del sorteo). value_cents es opcional, entero no negativo.
+  //   · image_index (si viene) tiene que apuntar a un fichero existente.
+  const PRIZE_MAX_PER_RAFFLE = 10;
+  let parsedPrizes;
+  try {
+    parsedPrizes = JSON.parse(req.body.prizes || '[]');
+  } catch {
+    return res.status(400).json({ error: 'Los premios llegaron en formato inválido' });
+  }
+  if (!Array.isArray(parsedPrizes) || parsedPrizes.length < 1) {
+    return res.status(400).json({ error: 'Añade al menos un premio al sorteo' });
+  }
+  if (parsedPrizes.length > PRIZE_MAX_PER_RAFFLE) {
+    return res.status(400).json({ error: `Puedes añadir hasta ${PRIZE_MAX_PER_RAFFLE} premios por sorteo` });
+  }
+  const prizeImageFiles = (req.files && req.files.prize_image) || [];
+  const cleanPrizes = [];
+  for (let i = 0; i < parsedPrizes.length; i++) {
+    const raw = parsedPrizes[i] || {};
+    const pTitle = String(raw.title || '').trim();
+    if (!pTitle || pTitle.length > 120) {
+      return res.status(400).json({ error: `Premio ${i + 1}: el nombre es obligatorio (máx. 120 caracteres)` });
+    }
+    let pValueCents = null;
+    if (raw.value_cents != null && raw.value_cents !== '' && raw.value_cents !== false) {
+      const parsedValue = Number.parseInt(raw.value_cents, 10);
+      if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+        return res.status(400).json({ error: `Premio ${i + 1}: la valoración económica no es válida` });
+      }
+      pValueCents = parsedValue;
+    }
+    let pImageFile = null;
+    if (raw.has_image) {
+      const idx = Number.parseInt(raw.image_index, 10);
+      if (!Number.isFinite(idx) || idx < 0 || idx >= prizeImageFiles.length) {
+        return res.status(400).json({ error: `Premio ${i + 1}: falta la foto adjunta` });
+      }
+      pImageFile = prizeImageFiles[idx];
+    }
+    cleanPrizes.push({ title: pTitle, value_cents: pValueCents, imageFile: pImageFile });
   }
 
   const endsAtDate = new Date(ends_at);
@@ -4442,6 +4644,15 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
     if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
     if (community.creator_id !== userId) {
       return res.status(403).json({ error: 'Solo el creador de la comunidad puede crear un sorteo' });
+    }
+
+    // Fase 121: tope de actividades vivas por comunidad. Se aplica solo
+    // en creación (renovaciones no cuentan). Va aquí — después de
+    // confirmar que somos el creador — para no filtrar información con
+    // un 400 sobre una comunidad que no es nuestra.
+    const activeCount = await getActiveActivityCount(communityId);
+    if (activeCount >= ACTIVE_ACTIVITY_LIMIT_PER_COMMUNITY) {
+      return res.status(400).json(activityCapError(activeCount));
     }
 
     // Pool real de la audiencia Light (usuarios notificables, excluyendo al
@@ -4489,10 +4700,14 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
       }
     }
 
+    // Fase 122 — con multer.fields() la portada llega como
+    // req.files.image[0] en vez de req.file. Se mantiene el mismo path
+    // de almacenamiento y opciones.
+    const coverFile = req.files && Array.isArray(req.files.image) ? req.files.image[0] : null;
     let imageUrl = null;
-    if (req.file) {
+    if (coverFile) {
       imageUrl = await storeImage({
-        file: req.file,
+        file: coverFile,
         objectName: `raffle-images/${communityId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         fallbackMaxLength: 6000000,
       });
@@ -4516,6 +4731,52 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
       .single();
 
     if (error) throw error;
+
+    // Fase 122 — subir imágenes de premios (secuencial para no saturar
+    // Supabase Storage con N uploads simultáneos y para preservar el
+    // orden por si hay que retrasar el rate-limit) y luego insertar las
+    // N filas de community_raffle_prizes en un solo batch. La position
+    // 1-based la asigna el server aquí — el cliente NO manda position:
+    // el orden de `cleanPrizes` es la fuente de verdad y así no hay
+    // forma de que dos premios lleguen con la misma position (y de
+    // esquivar el UNIQUE del schema).
+    //
+    // Si algo falla a mitad, la fila del raffle queda creada sin premios
+    // — no ideal, pero preferible a duplicar el raffle si el retry sube
+    // el POST entero. La regla "todo raffle tiene ≥1 premio" se
+    // garantiza en creación (validado arriba); esto solo se saltaría si
+    // falla el upload de una foto, y en ese caso el organizador va a
+    // volver a intentar, no arreglar filas huérfanas.
+    const prizeRows = [];
+    for (let i = 0; i < cleanPrizes.length; i++) {
+      const p = cleanPrizes[i];
+      let prizeImageUrl = null;
+      if (p.imageFile) {
+        prizeImageUrl = await storeImage({
+          file: p.imageFile,
+          objectName: `raffle-prizes/${data.id}/${i}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          fallbackMaxLength: 6000000,
+        });
+      }
+      prizeRows.push({
+        raffle_id: data.id,
+        position: i + 1,
+        title: p.title,
+        image_url: prizeImageUrl,
+        value_cents: p.value_cents,
+      });
+    }
+    const { data: insertedPrizes, error: prizesErr } = await supabase
+      .from('community_raffle_prizes')
+      .insert(prizeRows)
+      .select('id, position, title, image_url, value_cents, winner_id');
+    if (prizesErr) throw prizesErr;
+    // Los premios recién creados aún no tienen ganador — se le pasan al
+    // serializer con winner:null para que la respuesta ya lleve el array
+    // completo sin un round-trip extra.
+    const prizesForResponse = (insertedPrizes || [])
+      .sort((a, b) => a.position - b.position)
+      .map(p => ({ ...p, winner: null }));
 
     // Fase 111 — foto de "quién estaba interesado" en el instante de crear
     // el sorteo, para etiquetar cada target (ver assignRaffleBannerTargets
@@ -4559,6 +4820,7 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
         bannerViewsSent: 0,
         likeCount: 0,
         likedByMe: false,
+        prizes: prizesForResponse,
       }),
     });
   } catch (err) {
@@ -4936,6 +5198,45 @@ router.post('/raffles/:raffleId/banner-click', requireAuth, async (req, res) => 
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// Fase 121 — Tracking de clicks al enlace externo (URL "que cuelga el
+// organizador"). Tres endpoints simétricos, uno por tabla: comunidad,
+// evento y sorteo. A diferencia de banner-click / ad-click más arriba
+// (que son CTR de personas únicas del anuncio interno), aquí se hace un
+// conteo INGENUO: cada tap suma uno, aunque sea el mismo usuario tres
+// veces. Se está midiendo la tracción bruta del enlace, no el CTR.
+//
+// Se responde 204 sin cuerpo — es fire-and-forget desde el cliente: la
+// navegación al enlace externo NO espera a que este endpoint termine
+// (ver client/src/lib/urlClickTracker.js con sendBeacon), y devolver
+// JSON solo generaría un pico de bytes tirado. Errores se loggean pero
+// no se le devuelven al usuario: perder un click en analytics no debe
+// romper la experiencia de abrir el enlace.
+router.post('/communities/:id/url-click', requireAuth, async (req, res) => {
+  const communityId = req.params.id;
+  try {
+    const { error } = await supabase.rpc('increment_community_url_clicks', { p_id: communityId });
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) {
+    console.error('[community] POST /communities/:id/url-click', err);
+    res.status(204).end();
+  }
+});
+
+router.post('/events/:id/url-click', requireAuth, async (req, res) => {
+  const eventId = req.params.id;
+  try {
+    const { error } = await supabase.rpc('increment_event_url_clicks', { p_id: eventId });
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) {
+    console.error('[community] POST /events/:id/url-click', err);
+    res.status(204).end();
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════
 // Fase 112 — Fin y renovación de la publicidad de un sorteo
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -5221,7 +5522,7 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
   try {
     const { data: community, error: communityErr } = await supabase
       .from('communities')
-      .select('id, name, creator_id, categories')
+      .select('id, name, creator_id, categories, url, url_click_count')
       .eq('id', communityId)
       .maybeSingle();
     if (communityErr) throw communityErr;
@@ -5233,7 +5534,7 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
     const [eventsRes, rafflesRes] = await Promise.all([
       supabase
         .from('community_events')
-        .select('id, title, event_date, ends_at, created_at, categories, promotion_plan, notification_count, notification_sent_count, audience_interested_only, audience_radius_km')
+        .select('id, title, event_date, ends_at, created_at, categories, promotion_plan, notification_count, notification_sent_count, audience_interested_only, audience_radius_km, url, url_click_count')
         .eq('community_id', communityId)
         .order('event_date', { ascending: false }),
       supabase
@@ -5348,6 +5649,11 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         last_click_at: s?.last_click_at || null,
         attendees: attendeesByEvent.get(e.id) || 0,
         likes: likesByEvent.get(e.id) || 0,
+        // Fase 121 — enlace externo del evento y clicks acumulados a él.
+        // Se separa del CTR interno del anuncio (clicks_total arriba); es
+        // un contador ingenuo (cada tap suma) no personas únicas.
+        url: e.url || null,
+        url_clicks: Number(e.url_click_count || 0),
         // El cobro se hace sobre lo REALMENTE enviado hasta el inicio del
         // evento, y solo si se pasa el mínimo (ver FREE_THRESHOLD y el
         // bloqueo de renovación más arriba).
@@ -5445,8 +5751,25 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
     const raffleShown  = sum(raffleRows, r => r.shown);
     const raffleClicks = sum(raffleRows, r => r.clicks.total);
 
+    // Fase 121 — conteo de actividades activas (para pintar el "X/4" en
+    // la UI y avisar cuando se llegue al tope) y agregado de clicks a
+    // URLs externas (organizador). No es la misma consulta que arriba
+    // aunque el criterio esté parametrizado en JS: la fuente de verdad
+    // del cap está en la RPC community_active_activity_count, y así lo
+    // que enseña el dashboard es EXACTAMENTE lo que el server evaluaría
+    // al recibir un POST /events o /raffles nuevos — no pueden desviarse.
+    const activeActivityCount = await getActiveActivityCount(communityId);
+
+    const eventUrlClicks = sum(eventRows,  r => r.url_clicks);
+
     res.json({
-      community: { id: community.id, name: community.name, categories: community.categories || [] },
+      community: {
+        id: community.id,
+        name: community.name,
+        categories: community.categories || [],
+        url: community.url || null,
+        url_clicks: Number(community.url_click_count || 0),
+      },
       summary: {
         events_total: eventRows.length,
         events_promoted: eventRows.filter(r => r.promoted).length,
@@ -5462,6 +5785,14 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         total_clicks: eventClicks + raffleClicks,
         total_ctr: rate(eventClicks + raffleClicks, eventSends + raffleShown),
         free_threshold: FREE_THRESHOLD,
+        // Fase 121 — tope de actividades vivas (para el badge X/4) y
+        // clicks acumulados a URLs externas. Los sorteos no tienen URL
+        // (fase 122 lo revirtió): solo se agregan comunidad + eventos.
+        active_activity_count: activeActivityCount,
+        active_activity_limit: ACTIVE_ACTIVITY_LIMIT_PER_COMMUNITY,
+        community_url_clicks: Number(community.url_click_count || 0),
+        event_url_clicks: eventUrlClicks,
+        total_url_clicks: Number(community.url_click_count || 0) + eventUrlClicks,
       },
       events: eventRows,
       raffles: raffleRows,
@@ -5502,25 +5833,84 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
       return res.status(400).json({ error: 'No hay participantes para sortear' });
     }
 
-    const winnerId = eligibleIds[Math.floor(Math.random() * eligibleIds.length)];
+    // Fase 122 — sorteo de N ganadores (uno por premio). Los sorteos
+    // antiguos (previos a la fase 122) no tienen filas en
+    // community_raffle_prizes; ahí caemos al flujo legacy de "1 ganador,
+    // guardar en community_raffles.winner_id" para no romperlos.
+    const { data: prizeRows, error: prizesFetchErr } = await supabase
+      .from('community_raffle_prizes')
+      .select('id, position')
+      .eq('raffle_id', raffleId)
+      .order('position', { ascending: true });
+    if (prizesFetchErr) throw prizesFetchErr;
 
-    const { data: updated, error: updateErr } = await supabase
+    const nowIso = new Date().toISOString();
+
+    if (!prizeRows || prizeRows.length === 0) {
+      // ── Camino legacy (raffle sin premios en la tabla nueva) ──
+      const winnerId = eligibleIds[Math.floor(Math.random() * eligibleIds.length)];
+      const { error: updateErr } = await supabase
+        .from('community_raffles')
+        .update({ winner_id: winnerId, drawn_at: nowIso })
+        .eq('id', raffleId);
+      if (updateErr) throw updateErr;
+    } else {
+      // ── Camino de premios (fase 122) ──
+      // Fisher-Yates parcial: baraja los primeros K = min(nº premios,
+      // nº elegibles) elementos y toma esos K como ganadores en orden.
+      // El primer extraído se lleva el premio position=1, el segundo
+      // el 2, etc. Si sobran premios respecto a elegibles, quedan sin
+      // winner (permitido por schema: winner_id NULL). No se re-sortea
+      // ni se rota: drawn_at queda seteado y este endpoint no se puede
+      // volver a llamar.
+      const shuffled = eligibleIds.slice();
+      const draws = Math.min(prizeRows.length, shuffled.length);
+      for (let i = 0; i < draws; i++) {
+        const j = i + Math.floor(Math.random() * (shuffled.length - i));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      // Actualiza cada premio con su ganador. Se hace en secuencia (no
+      // en batch upsert) porque el WHERE de un upsert cambia el schema
+      // "una fila por id" y la tabla usa gen_random_uuid — tirar de
+      // .update por id es fiable y son pocas rows (PRIZE_MAX_PER_RAFFLE=10).
+      // Si alguno falla, drawn_at NO se toca y el endpoint puede
+      // reintentarse (los premios ya asignados quedarían adjudicados,
+      // pero la ruta ya rechaza reintentos vía "drawn_at" — así que en
+      // la práctica el organizador vería un error 500 y tendría que
+      // arreglar en BD; caso raro).
+      for (let i = 0; i < draws; i++) {
+        const { error: prizeUpdateErr } = await supabase
+          .from('community_raffle_prizes')
+          .update({ winner_id: shuffled[i] })
+          .eq('id', prizeRows[i].id);
+        if (prizeUpdateErr) throw prizeUpdateErr;
+      }
+      const { error: raffleUpdateErr } = await supabase
+        .from('community_raffles')
+        .update({ drawn_at: nowIso })
+        .eq('id', raffleId);
+      if (raffleUpdateErr) throw raffleUpdateErr;
+    }
+
+    // Refresh completo para la respuesta — incluye el winner legacy (si
+    // fue el camino de sorteo antiguo) o los premios recién asignados.
+    const { data: updated, error: refreshErr } = await supabase
       .from('community_raffles')
-      .update({ winner_id: winnerId, drawn_at: new Date().toISOString() })
-      .eq('id', raffleId)
       .select(`
         id, community_id, creator_id, title, description, image_url,
-        ends_at, drawn_at, created_at, tier,
+        ends_at, drawn_at, created_at, tier, categories,
+        banner_views_contracted, banner_interested_only, promo_ended_at,
         winner:winner_id(id, username, avatar_url)
       `)
+      .eq('id', raffleId)
       .single();
-
-    if (updateErr) throw updateErr;
+    if (refreshErr) throw refreshErr;
 
     const bannerSentCounts = await getBannerSentCounts(
       ['light', 'volt', 'community'].includes(raffleTier) ? [raffleId] : []
     );
     const { likeCountByRaffle, likedRaffleIds } = await getRaffleLikeAggregates([raffleId], userId);
+    const prizesByRaffle = await fetchRafflePrizes([raffleId]);
 
     res.json({
       raffle: serializeRaffle(updated, {
@@ -5530,6 +5920,7 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
         bannerViewsSent: bannerSentCounts[raffleId] || 0,
         likeCount: likeCountByRaffle[raffleId] || 0,
         likedByMe: likedRaffleIds.has(raffleId),
+        prizes: prizesByRaffle.get(raffleId) || [],
       }),
     });
   } catch (err) {

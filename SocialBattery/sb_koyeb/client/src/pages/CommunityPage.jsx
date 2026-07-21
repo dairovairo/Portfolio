@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { useUserLocation } from '../context/UserLocationContext';
 import { api } from '../lib/api';
+import { trackUrlClick } from '../lib/urlClickTracker';
 import TutorialOverlay from '../components/TutorialOverlay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
@@ -715,7 +716,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             href={ensureAbsoluteUrl(event.url)}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); trackUrlClick('event', event.id); }}
             className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-accent-primary/20 bg-accent-primary/10 text-accent-glow/80 hover:text-accent-glow"
           >
             🔗 Ver más
@@ -884,7 +885,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
             href={ensureAbsoluteUrl(community.url)}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); trackUrlClick('community', community.id); }}
             className="text-xs text-accent-glow/80 font-mono mt-0.5 hover:text-accent-glow flex items-center gap-1 w-fit"
           >
             🔗 Ver más

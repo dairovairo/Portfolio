@@ -231,11 +231,29 @@ export default function RaffleAdAudiencePage() {
       formData.append('title', draft.title);
       if (draft.description?.trim()) formData.append('description', draft.description.trim());
       formData.append('ends_at', draft.ends_at);
-      formData.append('tier', draft.tier || 'light');
+      formData.append('tier', 'light');
       if (draft.categories?.length) formData.append('categories', JSON.stringify(draft.categories));
       formData.append('banner_views_contracted', bannerViews);
       formData.append('banner_interested_only', filterInterested ? 'true' : 'false');
       if (draft.image_file) formData.append('image', draft.image_file);
+      // Fase 122 — premios. Mismo patrón que handleCreateRaffle en
+      // CommunityDetailPage: JSON con metadatos + un `prize_image`
+      // appendeado por cada premio con foto, casados por image_index.
+      if (draft.prizes && draft.prizes.length) {
+        let fileIdx = 0;
+        const meta = draft.prizes.map(p => {
+          const entry = { title: p.title, value_cents: p.value_cents };
+          if (p.image_file) {
+            formData.append('prize_image', p.image_file);
+            entry.has_image = true;
+            entry.image_index = fileIdx++;
+          } else {
+            entry.has_image = false;
+          }
+          return entry;
+        });
+        formData.append('prizes', JSON.stringify(meta));
+      }
       await api.postForm(`/community/communities/${communityId}/raffles`, formData);
       showToast('¡Sorteo creado! 🎁', 'success');
       navigate(`/community/${communityId}`, { replace: true });

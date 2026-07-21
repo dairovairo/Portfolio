@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
+import { formatEurFromCents } from '../lib/adPricing';
 import { shareOrDownloadBlob } from '../lib/instagramStory';
 import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
 
@@ -1056,7 +1057,67 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
           <span>{raffle.participant_count ?? 0} participantes</span>
         </div>
 
-        {isDrawn ? (
+        {/* Fase 122 — listado de premios. Si el sorteo tiene premios en
+            la tabla nueva (todo sorteo creado a partir de fase 122), se
+            enseñan siempre: antes de sortear como catálogo ("esto es lo
+            que se rifa"), después de sortear con el ganador junto a
+            cada premio. Un premio sin ganador tras el sorteo significa
+            que no había elegibles suficientes — se pinta como "Sin
+            adjudicar" para dejarlo claro sin ocultarlo.
+            Sorteos legacy (prizes ausente/vacío) siguen viendo el
+            bloque del ganador único de siempre, más abajo. */}
+        {Array.isArray(raffle.prizes) && raffle.prizes.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-mono text-surface-muted uppercase tracking-wide">
+              {raffle.prizes.length > 1 ? `${raffle.prizes.length} premios` : 'Premio'}
+            </p>
+            <div className="space-y-1.5">
+              {raffle.prizes.map(prize => (
+                <div
+                  key={prize.id}
+                  className="flex items-center gap-2 bg-surface-bg border border-surface-border rounded-lg p-2"
+                >
+                  <div className="w-10 h-10 rounded-md bg-surface-card border border-surface-border overflow-hidden flex-shrink-0 flex items-center justify-center text-lg">
+                    {prize.image_url
+                      ? <img src={prize.image_url} alt="" className="w-full h-full object-cover" />
+                      : <span>🎁</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-[12px] font-display font-semibold text-surface-text truncate">
+                        {raffle.prizes.length > 1 && (
+                          <span className="text-surface-muted font-mono mr-1">#{prize.position}</span>
+                        )}
+                        {prize.title}
+                      </p>
+                      {prize.value_cents != null && (
+                        <p className="text-[10px] font-mono text-amber-300/80 whitespace-nowrap">
+                          {formatEurFromCents(prize.value_cents)}
+                        </p>
+                      )}
+                    </div>
+                    {isDrawn && (
+                      prize.winner ? (
+                        <p className="text-[10px] font-mono text-amber-300 mt-0.5 truncate">
+                          🏆 {prize.winner.username}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] font-mono text-surface-muted mt-0.5 italic">
+                          Sin adjudicar
+                        </p>
+                      )
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Bloque legacy — solo se enseña en sorteos anteriores a la
+            fase 122 (sin array de premios). Los nuevos ya llevan la
+            lista de arriba, con ganadores integrados. */}
+        {isDrawn && (!raffle.prizes || raffle.prizes.length === 0) ? (
           <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 mt-1">
             <RaffleAvatar user={raffle.winner} />
             <div className="min-w-0">
@@ -1064,13 +1125,17 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
               <p className="text-sm font-display font-bold text-surface-text truncate">{raffle.winner?.username}</p>
             </div>
           </div>
-        ) : isCreator && hasEnded ? (
+        ) : isCreator && hasEnded && !isDrawn ? (
           <button
             onClick={runDraw}
             disabled={drawing}
             className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-surface-bg font-display font-bold text-xs transition-all disabled:opacity-50"
           >
-            {drawing ? 'Sorteando...' : '🎉 Sortear ganador'}
+            {drawing
+              ? 'Sorteando...'
+              : (raffle.prizes && raffle.prizes.length > 1
+                  ? `🎉 Sortear ${raffle.prizes.length} ganadores`
+                  : '🎉 Sortear ganador')}
           </button>
         ) : !hasEnded ? (
           <p className="text-[11px] text-surface-muted italic">
@@ -1103,8 +1168,82 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
   const [showTierDetails, setShowTierDetails] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
+  // Fase 122 — premios del sorteo. Como mínimo uno; el backend valida
+  // 1..PRIZE_MAX_PER_RAFFLE (=10). Cada item mantiene:
+  //   · title           — obligatorio, no vacío
+  //   · valueEuros      — string editable en euros (con coma o punto),
+  //                       se convierte a céntimos al enviar
+  //   · imageFile       — File nativo o null
+  //   · imagePreview    — data URL para el thumbnail o ''
+  //   · showPhotoMenu   — abre el sheet de cámara/galería solo para
+  //                       este premio (cada uno tiene el suyo)
+  //   · imageInputRef / imageCameraRef — refs al <input type="file">
+  //     ocultos que dispara PhotoSourceMenu; se crean al vuelo para no
+  //     compartir el DOM con la portada del sorteo.
+  // Un solo blanco al arrancar — el organizador siempre tiene que
+  // rellenar mínimo uno.
+  const PRIZE_MAX = 10;
+  const emptyPrize = () => ({
+    title: '',
+    valueEuros: '',
+    imageFile: null,
+    imagePreview: '',
+    showPhotoMenu: false,
+  });
+  const [prizes, setPrizes] = useState([emptyPrize()]);
+  // Refs indexadas por posición. Se re-crean si añades/quitas premios,
+  // así que se guardan en un solo objeto y se accede con la key numérica.
+  const prizeInputRefs = useRef({});
+  const prizeCameraRefs = useRef({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  function setPrizeField(idx, field, value) {
+    setPrizes(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
+  }
+
+  async function handlePrizeImageChange(idx, e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError(`Premio ${idx + 1}: la foto no puede superar 5MB`);
+      e.target.value = '';
+      return;
+    }
+    const preview = await readFileAsDataUrl(file);
+    setPrizes(prev => prev.map((p, i) => i === idx ? { ...p, imageFile: file, imagePreview: preview } : p));
+    setError('');
+  }
+
+  function clearPrizeImage(idx) {
+    setPrizes(prev => prev.map((p, i) => i === idx ? { ...p, imageFile: null, imagePreview: '' } : p));
+    if (prizeInputRefs.current[idx]) prizeInputRefs.current[idx].value = '';
+    if (prizeCameraRefs.current[idx]) prizeCameraRefs.current[idx].value = '';
+  }
+
+  function addPrize() {
+    setPrizes(prev => prev.length >= PRIZE_MAX ? prev : [...prev, emptyPrize()]);
+  }
+
+  function removePrize(idx) {
+    setPrizes(prev => {
+      if (prev.length <= 1) return prev;
+      // Limpia refs del premio que se va para no dejar handlers colgados.
+      delete prizeInputRefs.current[idx];
+      delete prizeCameraRefs.current[idx];
+      return prev.filter((_, i) => i !== idx);
+    });
+  }
+
+  // Convierte el string euros→céntimos. "12", "12.50", "12,50" → 1250.
+  // Vacío / no parseable → null (valor opcional, no obligatorio).
+  function eurosToCents(str) {
+    const s = String(str ?? '').trim().replace(',', '.');
+    if (!s) return null;
+    const v = Number.parseFloat(s);
+    if (!Number.isFinite(v) || v < 0) return null;
+    return Math.round(v * 100);
+  }
 
   async function handleImageChange(e) {
     const file = e.target.files?.[0];
@@ -1157,6 +1296,31 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
       .map(cat => (cat === OTHER_CATEGORY ? customCategory.trim() : cat))
       .filter(Boolean);
 
+    // Fase 122 — validación de premios. Título obligatorio; el valor
+    // (€) es opcional y se acepta vacío. Se corta pronto para no
+    // llegar al servidor con datos que sabemos que rebotan.
+    for (let i = 0; i < prizes.length; i++) {
+      if (!prizes[i].title.trim()) {
+        setError(`Premio ${i + 1}: pon un nombre al premio`);
+        return;
+      }
+      if (prizes[i].valueEuros && eurosToCents(prizes[i].valueEuros) == null) {
+        setError(`Premio ${i + 1}: la valoración económica no es válida (usa números, ej. 25 o 25,50)`);
+        return;
+      }
+    }
+
+    // El draft carga los premios EN ORDEN de la UI. La `position` la
+    // asigna el server según ese orden (nunca la manda el cliente) —
+    // ver POST /communities/:id/raffles en routes/community.js. Así el
+    // organizador ordena moviendo elementos en la lista, no editando
+    // números.
+    const resolvedPrizes = prizes.map(p => ({
+      title: p.title.trim(),
+      value_cents: eurosToCents(p.valueEuros),
+      image_file: p.imageFile || null,
+    }));
+
     const draft = {
       title: title.trim(),
       description: description.trim(),
@@ -1165,6 +1329,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
       tier,
       image_file: imageFile,
       image_preview: imagePreview,
+      prizes: resolvedPrizes,
     };
 
     // Los sorteos Light llevan publicidad de pago: antes de crearlo, se
@@ -1275,6 +1440,120 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
               />
             )}
           </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-mono text-surface-muted">
+                Premios * <span className="text-slate-600">({prizes.length}/{PRIZE_MAX})</span>
+              </label>
+              <button
+                type="button"
+                onClick={addPrize}
+                disabled={prizes.length >= PRIZE_MAX}
+                className="text-[11px] font-mono text-accent-glow hover:text-accent-primary transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
+              >
+                + añadir premio
+              </button>
+            </div>
+            <p className="text-[11px] text-surface-muted italic mb-2 leading-relaxed">
+              Habrá tantos ganadores como premios. El orden manda: el 1º extraído se lleva el premio 1, el 2º el premio 2, etc. Muévelos como quieras que se repartan.
+            </p>
+            <div className="space-y-2">
+              {prizes.map((p, idx) => (
+                <div
+                  key={idx}
+                  className="bg-surface-bg border border-surface-border rounded-xl p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-mono text-surface-muted">
+                      Premio {idx + 1}
+                    </span>
+                    {prizes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removePrize(idx)}
+                        className="text-[11px] font-mono text-red-300 hover:text-red-200"
+                      >
+                        Quitar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={p.title}
+                    onChange={e => setPrizeField(idx, 'title', e.target.value)}
+                    placeholder="Nombre del premio"
+                    maxLength={120}
+                    className="w-full bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono text-surface-muted whitespace-nowrap">
+                      Valor
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={p.valueEuros}
+                      onChange={e => setPrizeField(idx, 'valueEuros', e.target.value)}
+                      placeholder="opcional (€)"
+                      maxLength={12}
+                      className="flex-1 bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
+                    />
+                    <span className="text-[11px] font-mono text-surface-muted">€</span>
+                  </div>
+                  {/* Foto opcional. Cada premio tiene su propio menú de
+                      cámara/galería — el sheet global de la portada
+                      (showPhotoMenu) es aparte. */}
+                  {p.imagePreview ? (
+                    <div className="overflow-hidden rounded-lg border border-surface-border bg-surface-card">
+                      <div className="aspect-[16/9]">
+                        <img src={p.imagePreview} alt="" className="h-full w-full object-cover" />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+                        <span className="truncate text-[11px] text-surface-muted">{p.imageFile?.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => clearPrizeImage(idx)}
+                          className="text-[11px] font-mono text-red-300 hover:text-red-200"
+                        >
+                          Quitar foto
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPrizeField(idx, 'showPhotoMenu', true)}
+                      className="w-full rounded-lg border border-dashed border-accent-primary/30 bg-accent-primary/5 px-3 py-2 text-[12px] font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
+                    >
+                      📷 Foto del premio (opcional)
+                    </button>
+                  )}
+                  <input
+                    ref={el => { prizeInputRefs.current[idx] = el; }}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => handlePrizeImageChange(idx, e)}
+                  />
+                  <input
+                    ref={el => { prizeCameraRefs.current[idx] = el; }}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={e => handlePrizeImageChange(idx, e)}
+                  />
+                  <PhotoSourceMenu
+                    open={p.showPhotoMenu}
+                    onClose={() => setPrizeField(idx, 'showPhotoMenu', false)}
+                    onCamera={() => prizeCameraRefs.current[idx]?.click()}
+                    onGallery={() => prizeInputRefs.current[idx]?.click()}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
               Foto <span className="text-slate-600">(opcional)</span>
@@ -2329,6 +2608,28 @@ export default function CommunityDetailPage() {
     if (form.categories?.length) formData.append('categories', JSON.stringify(form.categories));
     if (form.banner_views_contracted != null) formData.append('banner_views_contracted', form.banner_views_contracted);
     if (form.image_file) formData.append('image', form.image_file);
+    // Fase 122 — premios. El JSON del meta va en `prizes` y cada foto
+    // (opcional) se appendea como `prize_image`. Se lleva un contador
+    // `fileIdx` para poder decirle al server con qué fichero se
+    // corresponde cada premio dentro del array recibido, sin arrastrar
+    // el "el i-ésimo premio es el i-ésimo fichero" (que se rompe en
+    // cuanto un premio no lleva foto). Ver la validación de prizes en
+    // server/routes/community.js.
+    if (form.prizes && form.prizes.length) {
+      let fileIdx = 0;
+      const meta = form.prizes.map(p => {
+        const entry = { title: p.title, value_cents: p.value_cents };
+        if (p.image_file) {
+          formData.append('prize_image', p.image_file);
+          entry.has_image = true;
+          entry.image_index = fileIdx++;
+        } else {
+          entry.has_image = false;
+        }
+        return entry;
+      });
+      formData.append('prizes', JSON.stringify(meta));
+    }
     await api.postForm(`/community/communities/${communityId}/raffles`, formData);
     showToast('¡Sorteo creado! 🎁', 'success');
     await loadRaffles();

@@ -5,6 +5,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { api } from '../lib/api';
+import { trackUrlClick } from '../lib/urlClickTracker';
 import ReminderBellButton, { DEFAULT_EVENT_REMINDER_MINUTES } from '../components/ReminderBellButton';
 import LocationMapView from '../components/LocationMapView';
 import { generateEventStoryBlob, shareOrDownloadBlob } from '../lib/instagramStory';
@@ -1108,6 +1109,7 @@ export default function EventDetailPage() {
                 href={ensureAbsoluteUrl(event.url)}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => trackUrlClick('event', event.id)}
                 className="text-accent-glow hover:underline break-all"
               >
                 {event.url}
