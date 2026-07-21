@@ -262,40 +262,40 @@ const EVENT_RANK_OPTIONS = [
 ];
 
 // ── Sorteos: sort options ────────────────────────────────────────────────
-// Mismo patrón que EVENT_RANK_OPTIONS pero adaptado a lo que sabemos de un
-// sorteo (community_raffles no guarda likes, ver phase79/116). "Selección"
-// es la puntuación ponderada por defecto — sin likes disponibles, la
-// implementación actual cae en el propio participant_count (ver
-// raffleRankScoreOf). Si en el futuro se añaden likes a los sorteos, aquí
-// habrá que cambiar la mezcla, no en más sitios.
+// Réplica del patrón de EVENT_RANK_OPTIONS. Con la fase 119 los sorteos ya
+// tienen sistema de likes (community_raffle_likes), así que "Selección" es
+// la puntuación ponderada (participantes * 1.5 + likes), idéntica fórmula
+// que promotionScore() para eventos.
 // "Intereses" NO es un sort en sí, es un filtro por matching de categorías
-// del sorteo con los intereses del usuario, exactamente igual que
-// 'cercania_intereses' pero sin la parte de cercanía (porque en sorteos no
-// tiene sentido — la ubicación del sorteo no existe). Se ordena entonces
-// por participant_count desc dentro de los que hacen match.
+// del sorteo con los intereses del usuario, con desempate por participant_
+// count desc dentro de los que hacen match. En eventos la análoga es
+// 'cercania_intereses'; aquí no hay parte de cercanía (los sorteos no
+// tienen ubicación) y por eso vive solo en este dropdown.
 const RAFFLE_RANK_OPTIONS = [
-  { key: 'app',          label: '✨ Selección' },
+  { key: 'app',           label: '✨ Selección' },
   { key: 'participantes', label: '👥 Participantes' },
-  { key: 'intereses',    label: '✨ Intereses' },
+  { key: 'likes',         label: '♥ Likes' },
+  { key: 'intereses',     label: '✨ Intereses' },
 ];
 
 function raffleRankScoreOf(raffle, rankKey) {
   const participants = raffle.participant_count || 0;
-  // Cuando/si se añadan likes a los sorteos, "app" se convertirá en
-  // participants * 1.5 + likes (igual que promotionScore para eventos).
-  return participants;
+  const likes = raffle.like_count || 0;
+  if (rankKey === 'likes') return likes;
+  if (rankKey === 'participantes') return participants;
+  if (rankKey === 'intereses') return participants + likes; // desempate dentro del filtro
+  // 'app' → suma simple, mismo peso a likes y participantes. Coincide con
+  // la fórmula 'combined' del RaffleRankingModal para no despistar al
+  // usuario ("Selección" en la lista = "Likes + Participantes" en el
+  // ranking).
+  return participants + likes;
 }
 
-// Filtro por categorías: mismo criterio que matchesUserInterests, pero
-// mirando primero las categorías propias del sorteo (fase 116) y con
-// fallback a las de la comunidad si el sorteo no las trajera. En eventos
-// getEntityCategories ya hace ese fallback vía category → categories, pero
-// aquí las categorías de la comunidad viven en raffle.community.categories.
+// Filtro por categorías del sorteo. Fase 120 hizo obligatorias las
+// categorías propias del sorteo, así que ya no hay fallback a las de la
+// comunidad — un sorteo siempre trae al menos una categoría propia.
 function getRaffleCategories(raffle) {
-  const own = getEntityCategories(raffle);
-  if (own.length > 0) return own;
-  const commCats = Array.isArray(raffle.community?.categories) ? raffle.community.categories : [];
-  return commCats.filter(Boolean);
+  return getEntityCategories(raffle);
 }
 
 function matchesRaffleInterests(raffle, userInterests = []) {
@@ -1478,6 +1478,177 @@ function RankingModal({ events, loading, onClose, onOpen }) {
   );
 }
 
+// ── Raffle Ranking Modal ─────────────────────────────────────────────────
+// Réplica de RankingModal pero para sorteos: mismas 4 métricas
+// (combined/likes/participantes + intereses no encaja aquí, así que se
+// deja fuera del ranking igual que "intereses" tampoco está en el de
+// eventos), dos vistas (activos / histórico incluyendo ya sorteados),
+// y tema ámbar en vez del azul global.
+const RAFFLE_RANK_METRICS = [
+  { key: 'combined',     label: '🔥 Likes + Participantes' },
+  { key: 'likes',        label: '♥ Likes' },
+  { key: 'participantes', label: '👥 Participantes' },
+];
+
+function raffleRankScore(raffle, metric) {
+  const likes = raffle.like_count || 0;
+  const participants = raffle.participant_count || 0;
+  if (metric === 'likes') return likes;
+  if (metric === 'participantes') return participants;
+  return likes + participants;
+}
+
+function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
+  const [metric, setMetric] = useState('combined');
+  const [view,   setView]   = useState('current');
+
+  const nowMs = Date.now();
+
+  // Activos = todavía no sorteados y ends_at futuro. Histórico = todo lo
+  // que trae el endpoint (limitado a 300, ya ordenado por created_at desc).
+  const currentSorted = [...raffles]
+    .filter(r => {
+      if (r.drawn_at) return false;
+      const endMs = new Date(r.ends_at).getTime();
+      return Number.isFinite(endMs) && endMs >= nowMs;
+    })
+    .sort((a, b) => raffleRankScore(b, metric) - raffleRankScore(a, metric))
+    .slice(0, 20);
+
+  const allTimeSorted = [...raffles]
+    .sort((a, b) => raffleRankScore(b, metric) - raffleRankScore(a, metric))
+    .slice(0, 100);
+
+  const list       = view === 'current' ? currentSorted : allTimeSorted;
+  const emptyLabel = view === 'current' ? 'Sin sorteos activos aún.' : 'Sin sorteos aún.';
+
+  function ScoreChip({ raffle }) {
+    const likes = raffle.like_count || 0;
+    const participants = raffle.participant_count || 0;
+    if (metric === 'likes')
+      return <span className="font-mono text-xs font-semibold text-amber-300">♥ {likes}</span>;
+    if (metric === 'participantes')
+      return <span className="font-mono text-xs font-semibold text-amber-300">👥 {participants}</span>;
+    return (
+      <span className="font-mono text-xs flex items-center gap-0.5">
+        <span className="text-amber-300">♥{likes}</span>
+        <span className="text-slate-600 mx-0.5">+</span>
+        <span className="text-amber-400">👥{participants}</span>
+      </span>
+    );
+  }
+
+  function RankRow({ raffle, rank }) {
+    const medal  = medalEmoji(rank);
+    const pStyle = podiumStyle(rank);
+    const isDrawn = Boolean(raffle.winner);
+    const hasEnded = new Date(raffle.ends_at).getTime() <= nowMs;
+
+    return (
+      <button
+        onClick={() => onOpen(raffle)}
+        style={pStyle ? { background: pStyle.bg, borderColor: pStyle.border } : {}}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left group transition-all ${
+          pStyle ? 'border hover:brightness-125' : 'hover:bg-surface-bg border border-transparent'
+        }`}
+      >
+        <div className="w-8 flex-shrink-0 flex items-center justify-center">
+          {medal
+            ? <span className="text-xl leading-none">{medal}</span>
+            : <span className="text-xs font-mono font-bold" style={{ color: pStyle?.numberColor ?? '#64748b' }}>
+                #{rank + 1}
+              </span>
+          }
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-surface-text truncate group-hover:text-amber-300 transition-colors">
+            🎁 {raffle.title}
+          </p>
+          <p className="text-xs text-slate-500 font-mono truncate">
+            {raffle.community?.name ? `👥 ${raffle.community.name}` : ''}
+            {isDrawn ? ' · Sorteado' : hasEnded ? ' · Terminado' : ''}
+          </p>
+        </div>
+        <ScoreChip raffle={raffle} />
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col overflow-hidden">
+
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">🏆</span>
+            <div>
+              <h2 className="font-display font-bold text-surface-text text-lg leading-tight">Rankings de sorteos</h2>
+              <p className="text-xs text-surface-muted font-mono">{RANK_VIEWS.find(v => v.key === view)?.sub?.replace('eventos', 'sorteos')}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-bg border border-surface-border text-slate-400 hover:text-surface-text transition-colors text-sm"
+          >✕</button>
+        </div>
+
+        <div className="flex gap-1.5 px-5 pb-2 flex-shrink-0">
+          {RANK_VIEWS.map(v => (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
+              className={`flex-1 py-2 rounded-xl text-sm font-display font-semibold transition-all ${
+                view === v.key
+                  ? 'bg-surface-text text-surface-card'
+                  : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-amber-500/40 hover:text-surface-text'
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-1.5 px-5 pb-3 flex-shrink-0">
+          {RAFFLE_RANK_METRICS.map(m => (
+            <button
+              key={m.key}
+              onClick={() => setMetric(m.key)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                metric === m.key
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-amber-500/40'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-3 pb-4">
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3 animate-pulse">🏆</div>
+              <p className="text-sm text-surface-muted font-mono">Cargando ranking...</p>
+            </div>
+          ) : list.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3">🏆</div>
+              <p className="text-sm text-surface-muted font-mono">{emptyLabel}</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {list.map((raffle, i) => (
+                <RankRow key={raffle.id} raffle={raffle} rank={i} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Raffle discovery card ─────────────────────────────────────────────────
 // Versión lean de RaffleCard (definida en CommunityDetailPage) pensada
 // para la vista de descubrimiento: sin controles de creador (renovar /
@@ -1488,15 +1659,28 @@ function RankingModal({ events, loading, onClose, onOpen }) {
 // Todo el color de acento va en ámbar en esta vista (ver la envolvente
 // <div data-raffles-theme> más abajo — aquí simplemente usamos utilidades
 // de Tailwind con la paleta amber, sin tocar las CSS vars globales).
-function RaffleDiscoveryCard({ raffle, onOpen, currentUserId }) {
+function RaffleDiscoveryCard({ raffle, onOpen, onLike, currentUserId }) {
   const tierEmoji = RAFFLE_TIER_EMOJI[raffle.tier] || '🎁';
   const cats = getRaffleCategories(raffle);
   const isCreator = currentUserId && raffle.is_creator;
+  const [liking, setLiking] = useState(false);
+  const liked = !!raffle.liked_by_current_user;
+  const likeCount = raffle.like_count || 0;
+
+  async function handleLikeClick(e) {
+    e.stopPropagation();
+    if (liking || !onLike) return;
+    setLiking(true);
+    try { await onLike(raffle.id); } finally { setLiking(false); }
+  }
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen(raffle)}
-      className="w-full text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden hover:border-amber-500/50 transition-colors"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(raffle); }}
+      className="w-full text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden hover:border-amber-500/50 transition-colors cursor-pointer"
     >
       {raffle.image_url && (
         <div className="aspect-[16/9] bg-surface-bg">
@@ -1509,6 +1693,26 @@ function RaffleDiscoveryCard({ raffle, onOpen, currentUserId }) {
             <span className="text-lg flex-shrink-0">🎁</span>
             <h3 className="font-display font-bold text-surface-text text-sm truncate">{raffle.title}</h3>
           </div>
+          {/* Botón de like — mismo patrón que EventCard: se detiene la
+              propagación para que el click no navegue a la comunidad. Los
+              creadores no ven el botón (no se pueden auto-dar-like en el
+              backend de eventos tampoco; para paridad se oculta aquí). */}
+          {onLike && !isCreator && (
+            <button
+              type="button"
+              onClick={handleLikeClick}
+              disabled={liking}
+              aria-pressed={liked}
+              title={liked ? 'Quitar like' : 'Dar like'}
+              className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-display font-semibold transition-colors disabled:opacity-50 ${
+                liked
+                  ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
+                  : 'border-surface-border text-surface-muted hover:border-amber-500/30'
+              }`}
+            >
+              {liked ? '♥' : '♡'} {likeCount}
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -1541,7 +1745,7 @@ function RaffleDiscoveryCard({ raffle, onOpen, currentUserId }) {
           {isCreator && <><span>·</span><span className="text-amber-400/80">Tuyo</span></>}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1594,7 +1798,10 @@ export default function CommunityPage() {
   const [raffleSearch, setRaffleSearch] = useState('');
   const [raffleCategoryFilter, setRaffleCategoryFilter] = useState(ALL_EVENT_CATEGORIES);
   const [raffleDateFilter, setRaffleDateFilter] = useState('all'); // 'week' | 'month' | 'all'
-  const [raffleRankSort, setRaffleRankSort] = useState('app'); // 'app' | 'participantes' | 'intereses'
+  const [raffleRankSort, setRaffleRankSort] = useState('app'); // 'app' | 'participantes' | 'likes' | 'intereses'
+  const [showRaffleRanking, setShowRaffleRanking] = useState(false);
+  const [rankingRaffles, setRankingRaffles] = useState([]);
+  const [rankingRafflesLoading, setRankingRafflesLoading] = useState(false);
 
   const handleEventProximityChange = useCallback((key) => {
     setEventProximitySort(current => current === key ? null : key);
@@ -1653,6 +1860,20 @@ export default function CommunityPage() {
       showToast('Error cargando el ranking', 'error');
     } finally {
       setRankingLoading(false);
+    }
+  }, [showToast]);
+
+  // Idéntico al fetch de ranking de eventos, pero para sorteos: /raffles/
+  // ranking devuelve hasta 300 filas incluyendo ya sorteados y terminados.
+  const fetchRankingRaffles = useCallback(async () => {
+    setRankingRafflesLoading(true);
+    try {
+      const data = await api.get('/community/raffles/ranking');
+      setRankingRaffles(data.raffles || []);
+    } catch (e) {
+      showToast('Error cargando el ranking de sorteos', 'error');
+    } finally {
+      setRankingRafflesLoading(false);
     }
   }, [showToast]);
 
@@ -1726,6 +1947,30 @@ export default function CommunityPage() {
       await fetchEvents();
     } catch (e) {
       showToast(e.message || 'Error al cambiar el like', 'error');
+    }
+  }
+
+  // Fase 119 — like toggle en sorteos, mismo shape que handleLikeEvent.
+  // Optimista: aplica el cambio en el estado local antes de refrescar,
+  // para que el ♥ no parpadee mientras vuelve el fetch de /raffles. Si el
+  // POST falla, se revierte con el propio refetch (no hay setter local
+  // separado — reset viene del fetch, mismo criterio que eventos).
+  async function handleLikeRaffle(raffleId) {
+    setRaffles(prev => prev.map(r => {
+      if (r.id !== raffleId) return r;
+      const wasLiked = !!r.liked_by_current_user;
+      return {
+        ...r,
+        liked_by_current_user: !wasLiked,
+        like_count: Math.max(0, (r.like_count || 0) + (wasLiked ? -1 : 1)),
+      };
+    }));
+    try {
+      await api.post(`/community/raffles/${raffleId}/like`, {});
+    } catch (e) {
+      showToast(e.message || 'Error al cambiar el like', 'error');
+      // Refetch para volver al estado real
+      fetchRaffles();
     }
   }
 
@@ -2165,6 +2410,13 @@ export default function CommunityPage() {
                 <div className="relative mb-4 flex items-center justify-between gap-3">
                   <h2 className="font-display font-bold text-surface-text text-lg">Sorteos</h2>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setShowRaffleRanking(true); fetchRankingRaffles(); }}
+                      title="Rankings de sorteos"
+                      className="text-lg leading-none px-2 py-1.5 rounded-lg border border-surface-border bg-surface-card hover:border-amber-500/50 hover:bg-surface-bg transition-colors"
+                    >
+                      🏆
+                    </button>
                     <FilterDropdown label="Filtrar" active={isRaffleFilterActive}>
                       <FilterDropdownSection title="Tiempo">
                         <div className="flex flex-col gap-2">
@@ -2276,6 +2528,7 @@ export default function CommunityPage() {
                         key={raffle.id}
                         raffle={raffle}
                         currentUserId={profile?.id}
+                        onLike={handleLikeRaffle}
                         onOpen={(r) => {
                           // Deep-link a la comunidad del sorteo con hash
                           // apuntando a la RaffleCard "gorda" (el id
@@ -2527,6 +2780,18 @@ export default function CommunityPage() {
           loading={rankingLoading}
           onClose={() => setShowRanking(false)}
           onOpen={(id) => { setShowRanking(false); navigate(`/community/event/${id}`); }}
+        />
+      )}
+      {showRaffleRanking && (
+        <RaffleRankingModal
+          raffles={rankingRaffles}
+          loading={rankingRafflesLoading}
+          onClose={() => setShowRaffleRanking(false)}
+          onOpen={(raffle) => {
+            setShowRaffleRanking(false);
+            const communityId = raffle.community?.id || raffle.community_id;
+            navigate(`/community/${communityId}#raffle-${raffle.id}`);
+          }}
         />
       )}
       {showCreateCommunity && (

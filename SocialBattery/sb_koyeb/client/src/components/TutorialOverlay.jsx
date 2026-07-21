@@ -77,8 +77,8 @@ const STEPS = [
   },
   {
     mascot:     '/mascot-high.png',
-    title:      'Eventos',
-    body:       '\u00a1En el men\u00fa comunidad puedes ver los eventos disponibles y a\u00f1adirlos a tu planificaci\u00f3n! \ud83c\udf10\ud83d\udcc5',
+    title:      'Actividades',
+    body:       'En "Actividades" puedes cambiar entre eventos y sorteos con el toggle de arriba y apuntarte a los que te gusten. \ud83d\udcc5\ud83c\udf81',
     cta:        'Siguiente',
     page:       '/community',
     highlight:  'tutorial-events-section',

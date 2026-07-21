@@ -843,12 +843,21 @@ const RAFFLE_TIER_SELECTED_STYLES = {
   light: 'border-amber-400/60 bg-amber-400/10',
 };
 
-function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo }) {
+function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, onLike }) {
   const [drawing, setDrawing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [endingPromo, setEndingPromo] = useState(false);
+  const [liking, setLiking] = useState(false);
   const hasEnded = new Date(raffle.ends_at) <= new Date();
   const isDrawn = Boolean(raffle.winner);
+  const liked = !!raffle.liked_by_current_user;
+  const likeCount = raffle.like_count || 0;
+
+  async function handleLikeClick() {
+    if (liking || !onLike || isCreator) return;
+    setLiking(true);
+    try { await onLike(raffle.id); } finally { setLiking(false); }
+  }
 
   // Fase 112 — condiciones para pintar los botones de gestión de
   // publicidad. Coinciden con las del servidor (POST /raffles/:raffleId/
@@ -916,14 +925,31 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo })
             <span className="text-lg flex-shrink-0">🎁</span>
             <h3 className="font-display font-bold text-surface-text text-sm truncate">{raffle.title}</h3>
           </div>
-          <button
-            onClick={runShare}
-            disabled={sharing}
-            title="Compartir sorteo"
-            className="flex-shrink-0 w-8 h-8 rounded-lg border border-surface-border flex items-center justify-center text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-colors disabled:opacity-50"
-          >
-            {sharing ? '⏳' : '📤'}
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {!isCreator && onLike && (
+              <button
+                onClick={handleLikeClick}
+                disabled={liking}
+                aria-pressed={liked}
+                title={liked ? 'Quitar like' : 'Dar like'}
+                className={`flex items-center gap-1 px-2 h-8 rounded-lg border text-[11px] font-display font-semibold transition-colors disabled:opacity-50 ${
+                  liked
+                    ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
+                    : 'border-surface-border text-surface-muted hover:border-amber-500/30'
+                }`}
+              >
+                {liked ? '♥' : '♡'} {likeCount}
+              </button>
+            )}
+            <button
+              onClick={runShare}
+              disabled={sharing}
+              title="Compartir sorteo"
+              className="flex-shrink-0 w-8 h-8 rounded-lg border border-surface-border flex items-center justify-center text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-colors disabled:opacity-50"
+            >
+              {sharing ? '⏳' : '📤'}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -1101,6 +1127,12 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
     if (!title.trim()) { setError('El título es obligatorio'); return; }
     if (!endsAt) { setError('La fecha de fin es obligatoria'); return; }
     if (new Date(endsAt) <= new Date()) { setError('La fecha de fin debe ser en el futuro'); return; }
+    // Fase 120: categorías obligatorias. El backend también lo rechaza,
+    // pero validamos aquí para no gastar la subida de imagen.
+    if (categories.length < 1) {
+      setError('Elige al menos una categoría para el sorteo');
+      return;
+    }
     if (categories.includes(OTHER_CATEGORY) && !customCategory.trim()) {
       setError('Escribe la categoría personalizada');
       return;
@@ -1192,7 +1224,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Categorías <span className="text-slate-600">({categories.length}/{MAX_CATEGORIES}, opcional)</span>
+              Categorías * <span className="text-slate-600">({categories.length}/{MAX_CATEGORIES})</span>
             </label>
             <div className="flex flex-wrap gap-2">
               {RAFFLE_CATEGORIES.map(cat => {
@@ -2353,6 +2385,27 @@ export default function CommunityDetailPage() {
     }
   }
 
+  // Fase 119 — like toggle en sorteos. Optimista sobre `raffles` local
+  // (mismo patrón que CommunityPage.handleLikeRaffle) para que el ♥ no
+  // parpadee. Si el POST falla se recarga la lista y se revierte solo.
+  async function handleLikeRaffle(raffleId) {
+    setRaffles(prev => prev.map(r => {
+      if (r.id !== raffleId) return r;
+      const wasLiked = !!r.liked_by_current_user;
+      return {
+        ...r,
+        liked_by_current_user: !wasLiked,
+        like_count: Math.max(0, (r.like_count || 0) + (wasLiked ? -1 : 1)),
+      };
+    }));
+    try {
+      await api.post(`/community/raffles/${raffleId}/like`, {});
+    } catch (e) {
+      showToast(e.message || 'Error al cambiar el like', 'error');
+      loadRaffles();
+    }
+  }
+
   async function handleShareRaffle(raffle) {
     try {
       if (raffle.image_url) {
@@ -2718,6 +2771,7 @@ export default function CommunityDetailPage() {
                   onShare={handleShareRaffle}
                   onRenew={handleRenewRafflePromo}
                   onEndPromo={handleEndRafflePromo}
+                  onLike={handleLikeRaffle}
                 />
               ))}
             </div>

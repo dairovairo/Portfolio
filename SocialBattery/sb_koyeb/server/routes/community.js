@@ -3689,7 +3689,29 @@ async function getBannerSentCounts(raffleIds) {
   return counts;
 }
 
-function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, bannerViewsSent } = {}) {
+// Fase 119: agregación de likes por sorteo. Devuelve { likeCountByRaffle,
+// likedRaffleIds } donde likedRaffleIds es el conjunto de ids que el
+// usuario actual ha marcado con like — mismo patrón que
+// community_event_likes/enrichEvents.
+async function getRaffleLikeAggregates(raffleIds, currentUserId = null) {
+  const likeCountByRaffle = {};
+  const likedRaffleIds = new Set();
+  if (!raffleIds.length) return { likeCountByRaffle, likedRaffleIds };
+  const { data, error } = await supabase
+    .from('community_raffle_likes')
+    .select('raffle_id, user_id')
+    .in('raffle_id', raffleIds);
+  if (error) throw error;
+  for (const row of data || []) {
+    likeCountByRaffle[row.raffle_id] = (likeCountByRaffle[row.raffle_id] || 0) + 1;
+    if (currentUserId && row.user_id === currentUserId) {
+      likedRaffleIds.add(row.raffle_id);
+    }
+  }
+  return { likeCountByRaffle, likedRaffleIds };
+}
+
+function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, bannerViewsSent, likeCount, likedByMe } = {}) {
   const tier = normalizeRaffleTier(raffle.tier);
   const tierMeta = RAFFLE_TIERS[tier];
   const hasBanner = tier === 'light' || tier === 'volt' || tier === 'community';
@@ -3711,6 +3733,12 @@ function serializeRaffle(raffle, { participantCount, currentUserId, isEligible, 
     price_cents: tierMeta.price_cents,
     banner_views_contracted: raffle.banner_views_contracted ?? null,
     banner_views_sent: hasBanner ? (bannerViewsSent ?? 0) : null,
+    // Fase 119 — likes en sorteos, mismo shape que en eventos
+    // (like_count + liked_by_current_user). Cuando el caller no los pasa
+    // (rutas antiguas que no se hayan actualizado) se cae a 0/false para
+    // no romper el frontend.
+    like_count: likeCount ?? 0,
+    liked_by_current_user: !!likedByMe,
     // Fase 112 — necesarios para pintar los botones de renovar/finalizar
     // publicidad del sorteo en CommunityDetailPage (solo los ve el creador).
     // banner_interested_only se prellena en el toggle de la página de
@@ -4079,6 +4107,130 @@ router.delete('/communities/:id/posts/:postId/comments/:commentId', requireAuth,
   }
 });
 
+// ── POST /api/community/raffles/:id/like — toggle like en sorteo ─────────
+// Réplica exacta de POST /events/:id/like. La tabla community_raffle_likes
+// tiene PK compuesta (raffle_id, user_id), así que el "estado" del like es
+// "existe la fila o no"; togglear es DELETE si existía, INSERT si no.
+router.post('/raffles/:id/like', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensurePublicProfile(req.user);
+
+    const { data: raffle, error: raffleError } = await supabase
+      .from('community_raffles')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (raffleError) throw raffleError;
+    if (!raffle) return res.status(404).json({ error: 'Sorteo no encontrado' });
+
+    const { data: existing, error: existingError } = await supabase
+      .from('community_raffle_likes')
+      .select('raffle_id')
+      .eq('raffle_id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existingError) throw existingError;
+
+    if (existing) {
+      const { error } = await supabase
+        .from('community_raffle_likes')
+        .delete()
+        .eq('raffle_id', id)
+        .eq('user_id', userId);
+      if (error) throw error;
+      return res.json({ liked: false });
+    }
+
+    const { error } = await supabase
+      .from('community_raffle_likes')
+      .insert({ raffle_id: id, user_id: userId });
+    if (error) throw error;
+    res.json({ liked: true });
+  } catch (err) {
+    console.error('[community] POST /raffles/:id/like error:', err);
+    res.status(500).json({ error: communityErrorMessage(err, 'Error al cambiar el like') });
+  }
+});
+
+// ── GET /api/community/raffles/ranking — histórico global de sorteos ──────
+// Mismo contrato que GET /events/ranking pero para sorteos: se incluyen
+// sorteos ya finalizados o ya sorteados (los "actuales" también aparecen),
+// se limita a 300 filas priorizando los más recientes. Se usa en el modal
+// de rankings de la sub-vista Sorteos.
+router.get('/raffles/ranking', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { data, error } = await supabase
+      .from('community_raffles')
+      .select(`
+        id, community_id, creator_id, title, description, image_url,
+        ends_at, drawn_at, created_at, tier, categories, banner_views_contracted,
+        banner_interested_only, promo_ended_at,
+        winner:winner_id(id, username, avatar_url),
+        community:community_id(id, name, cover_image_url, categories)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(300);
+
+    if (error) throw error;
+    const raffles = data || [];
+
+    // Cachea elegibles por (community_id, tier) — mismo patrón que /raffles.
+    const eligibleCache = new Map();
+    async function eligibleFor(communityId, tier) {
+      const key = `${communityId}:${tier}`;
+      if (!eligibleCache.has(key)) {
+        eligibleCache.set(key, await getEligibleRaffleMembers(communityId, tier));
+      }
+      return eligibleCache.get(key);
+    }
+
+    const bannerRaffleIds = raffles
+      .filter(r => ['light', 'volt', 'community'].includes(normalizeRaffleTier(r.tier)))
+      .map(r => r.id);
+    const bannerSentCounts = await getBannerSentCounts(bannerRaffleIds);
+    const { likeCountByRaffle, likedRaffleIds } = await getRaffleLikeAggregates(
+      raffles.map(r => r.id),
+      userId,
+    );
+
+    const serialized = [];
+    for (const r of raffles) {
+      const tier = normalizeRaffleTier(r.tier);
+      const eligibleIds = await eligibleFor(r.community_id, tier);
+      const base = serializeRaffle(r, {
+        participantCount: eligibleIds.length,
+        currentUserId: userId,
+        isEligible: eligibleIds.includes(userId),
+        bannerViewsSent: bannerSentCounts[r.id] || 0,
+        likeCount: likeCountByRaffle[r.id] || 0,
+        likedByMe: likedRaffleIds.has(r.id),
+      });
+      serialized.push({
+        ...base,
+        community: r.community
+          ? {
+              id: r.community.id,
+              name: r.community.name,
+              cover_image_url: r.community.cover_image_url,
+              categories: Array.isArray(r.community.categories) ? r.community.categories : [],
+            }
+          : null,
+      });
+    }
+
+    res.json({ raffles: serialized });
+  } catch (err) {
+    console.error('[community] GET /raffles/ranking', err);
+    res.status(500).json({ error: `Failed to fetch raffle ranking: ${err.message || err}` });
+  }
+});
+
 // ── GET /api/community/raffles — descubrimiento global de sorteos ──────────
 // Lista todos los sorteos ACTIVOS (aún sin realizarse y con ends_at futuro)
 // de todas las comunidades para la vista "Actividades → Sorteos" del menú
@@ -4125,6 +4277,10 @@ router.get('/raffles', requireAuth, async (req, res) => {
       .filter(r => ['light', 'volt', 'community'].includes(normalizeRaffleTier(r.tier)))
       .map(r => r.id);
     const bannerSentCounts = await getBannerSentCounts(bannerRaffleIds);
+    const { likeCountByRaffle, likedRaffleIds } = await getRaffleLikeAggregates(
+      raffles.map(r => r.id),
+      userId,
+    );
 
     const serialized = [];
     for (const r of raffles) {
@@ -4135,6 +4291,8 @@ router.get('/raffles', requireAuth, async (req, res) => {
         currentUserId: userId,
         isEligible: eligibleIds.includes(userId),
         bannerViewsSent: bannerSentCounts[r.id] || 0,
+        likeCount: likeCountByRaffle[r.id] || 0,
+        likedByMe: likedRaffleIds.has(r.id),
       });
       serialized.push({
         ...base,
@@ -4194,6 +4352,10 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
       .filter(r => ['light', 'volt', 'community'].includes(normalizeRaffleTier(r.tier)))
       .map(r => r.id);
     const bannerSentCounts = await getBannerSentCounts(bannerRaffleIds);
+    const { likeCountByRaffle, likedRaffleIds } = await getRaffleLikeAggregates(
+      raffles.map(r => r.id),
+      userId,
+    );
 
     res.json({
       raffles: raffles.map(r => {
@@ -4204,6 +4366,8 @@ router.get('/communities/:id/raffles', requireAuth, async (req, res) => {
           currentUserId: userId,
           isEligible: eligibleIds.includes(userId),
           bannerViewsSent: bannerSentCounts[r.id] || 0,
+          likeCount: likeCountByRaffle[r.id] || 0,
+          likedByMe: likedRaffleIds.has(r.id),
         });
       }),
     });
@@ -4228,6 +4392,13 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
   const raffleTier = normalizeRaffleTier(tier);
 
   const categories = parseCategories(req.body.categories);
+  // Fase 120: las categorías del sorteo son obligatorias (paridad con
+  // eventos y para eliminar el fallback a las categorías de la comunidad
+  // en el matching de intereses). El schema también lo impone con un
+  // CHECK, pero validamos aquí antes para dar un mensaje de error útil.
+  if (categories.length < 1) {
+    return res.status(400).json({ error: 'Elige al menos una categoría para el sorteo' });
+  }
   if (categories.length > MAX_CATEGORIES) {
     return res.status(400).json({ error: `Puedes elegir hasta ${MAX_CATEGORIES} categorías` });
   }
@@ -4386,6 +4557,8 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleImage, async (r
         currentUserId: userId,
         isEligible: eligibleIds.includes(userId),
         bannerViewsSent: 0,
+        likeCount: 0,
+        likedByMe: false,
       }),
     });
   } catch (err) {
@@ -5347,6 +5520,7 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
     const bannerSentCounts = await getBannerSentCounts(
       ['light', 'volt', 'community'].includes(raffleTier) ? [raffleId] : []
     );
+    const { likeCountByRaffle, likedRaffleIds } = await getRaffleLikeAggregates([raffleId], userId);
 
     res.json({
       raffle: serializeRaffle(updated, {
@@ -5354,6 +5528,8 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
         currentUserId: userId,
         isEligible: eligibleIds.includes(userId),
         bannerViewsSent: bannerSentCounts[raffleId] || 0,
+        likeCount: likeCountByRaffle[raffleId] || 0,
+        likedByMe: likedRaffleIds.has(raffleId),
       }),
     });
   } catch (err) {

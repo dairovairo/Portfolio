@@ -238,7 +238,7 @@ export default function OnboardingPage() {
               <div className="text-5xl mb-3">✨</div>
               <h2 className="font-display text-2xl font-bold text-surface-text">¿Qué te gusta?</h2>
               <p className="text-surface-muted text-sm mt-1">
-                Elige tus categorías favoritas — mínimo una
+                Elige tus categorías favoritas — mínimo 3 categorías
               </p>
             </div>
 
@@ -276,9 +276,14 @@ export default function OnboardingPage() {
                 {interests.length} seleccionado{interests.length !== 1 ? 's' : ''}
               </p>
             )}
+            {interests.length > 0 && interests.length < 3 && (
+              <p className="text-center text-xs text-red-400/70 mt-3">
+                * Selecciona al menos 3 categorías para continuar ({interests.length}/3)
+              </p>
+            )}
             {interests.length === 0 && (
               <p className="text-center text-xs text-red-400/70 mt-3">
-                * Selecciona al menos uno para continuar
+                * Selecciona al menos 3 categorías para continuar
               </p>
             )}
           </div>
