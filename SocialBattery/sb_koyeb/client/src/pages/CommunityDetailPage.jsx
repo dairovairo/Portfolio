@@ -843,6 +843,18 @@ const RAFFLE_TIER_SELECTED_STYLES = {
   light: 'border-amber-400/60 bg-amber-400/10',
 };
 
+// Borde de la RaffleCard según el tier — mismo criterio de color que
+// RAFFLE_TIER_SELECTED_STYLES (volt=azul, community=rojo, light=ámbar)
+// pero solo el borde, sin el tinte de fondo (el panel ya usa
+// bg-surface-card, igual que EventCard usa activeRing solo para el
+// borde). Así se distingue de un vistazo el tipo de sorteo, igual que
+// EventCard distingue el plan de promoción (ultra/premium) con su ring.
+const RAFFLE_TIER_BORDER_STYLES = {
+  volt: 'border-blue-400/50',
+  community: 'border-red-400/50',
+  light: 'border-amber-400/50',
+};
+
 function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, onLike }) {
   const [drawing, setDrawing] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -913,7 +925,10 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
   }
 
   return (
-    <div id={`raffle-${raffle.id}`} className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden transition-shadow">
+    <div
+      id={`raffle-${raffle.id}`}
+      className={`bg-surface-card border ${RAFFLE_TIER_BORDER_STYLES[raffle.tier] || 'border-surface-border'} rounded-2xl overflow-hidden transition-shadow`}
+    >
       {raffle.image_url && (
         <div className="aspect-[16/9] bg-surface-bg">
           <img src={raffle.image_url} alt={raffle.title} className="w-full h-full object-cover" />

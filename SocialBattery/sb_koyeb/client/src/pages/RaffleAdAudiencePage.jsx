@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
+import { RAFFLE_AD_PRICING, computeRaffleAdPriceCents, formatEurFromCents } from '../lib/adPricing';
 
 // ── Configuración de publicidad de un sorteo Light ──────────────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -37,7 +38,10 @@ const CHARGE_MIN = 500;
 const LIGHT_META = {
   emoji: '🎫',
   label: 'Sorteo Light',
-  price: '20 €',
+  // Precio dinámico — se calcula abajo con computeRaffleAdPriceCents en
+  // función de las visualizaciones contratadas. Ya no hay tarifa
+  // estática aquí (antes: '20 €' fijo, que era el precio del mínimo
+  // contratable y engañaba al escalar el slider). Ver lib/adPricing.js.
   ring: 'border-amber-400 bg-amber-500/10',
   pill: 'text-amber-300 bg-amber-500/10 border border-amber-500/20',
   check: 'text-amber-300',
@@ -164,6 +168,20 @@ export default function RaffleAdAudiencePage() {
   // y no se bloquea, para no frenar la adopción temprana de la app.
   const blockedByFilterShortfall = filterInterested && audienceReady && audienceCap < VIEWS_MIN;
 
+  // ── Precio dinámico ────────────────────────────────────────────────────
+  // `maxPriceCents`: importe si TODAS las visualizaciones contratadas se
+  //   entregan (techo). Se muestra siempre.
+  // `estPriceCents`: importe realista teniendo en cuenta que solo se
+  //   cobran los banners realmente ENSEÑADOS — si la audiencia efectiva
+  //   (con o sin filtro) es menor que lo contratado, esto es lo que se
+  //   facturaría en la práctica. Solo se enseña cuando aporta info
+  //   distinta (contractedExceedsAudience), para no ensuciar la UI.
+  const maxPriceCents = computeRaffleAdPriceCents('light', bannerViews);
+  const effectiveUnits = audienceReady && audienceCap != null
+    ? Math.min(bannerViews, audienceCap)
+    : bannerViews;
+  const estPriceCents = computeRaffleAdPriceCents('light', effectiveUnits);
+
   async function handleToggleInterested() {
     const next = !filterInterested;
     if (!next) {
@@ -272,7 +290,10 @@ export default function RaffleAdAudiencePage() {
           </p>
         </div>
 
-        {/* Detalles del plan Light */}
+        {/* Detalles del plan Light. La píldora superior derecha enseña
+            la tarifa POR UNIDAD (céntimos/visualización); el importe
+            total contratado (dinámico según el slider) va abajo, junto
+            al slider de visualizaciones. */}
         <div className={`bg-surface-card border rounded-2xl p-5 space-y-3 transition-colors ${LIGHT_META.ring}`}>
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-2 text-base font-display font-bold text-surface-text">
@@ -280,7 +301,7 @@ export default function RaffleAdAudiencePage() {
               {LIGHT_META.label}
             </span>
             <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${LIGHT_META.pill}`}>
-              {LIGHT_META.price}
+              {formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents)} / {RAFFLE_AD_PRICING.light.unitLabel}
             </span>
           </div>
           <ul className="space-y-1.5 text-[12px] font-mono text-surface-muted leading-relaxed">
@@ -416,6 +437,31 @@ export default function RaffleAdAudiencePage() {
               ⚠️ Solo hay {Number(audienceCap).toLocaleString('es-ES')} {audienceLabel}: se mostrarán como mucho {Number(audienceCap).toLocaleString('es-ES')} banners, y no se cobrará por el resto.
             </p>
           )}
+
+          {/* Desglose de precio dinámico. Sustituye a la píldora estática
+              '20 €' que había antes en el detalle del plan. Se
+              recalcula en directo con el slider; si la audiencia
+              efectiva queda por debajo, mostramos el importe estimado
+              real (solo se cobra lo entregado). */}
+          <div className="border-t border-surface-border/60 pt-2 mt-1 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-mono text-surface-muted">💶 Importe contratado</span>
+              <span className={`text-sm font-display font-bold ${LIGHT_META.audienceText}`}>
+                {formatEurFromCents(maxPriceCents)}
+              </span>
+            </div>
+            {contractedExceedsAudience && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-surface-muted">Estimado a facturar</span>
+                <span className="text-xs font-mono font-semibold text-surface-text">
+                  {formatEurFromCents(estPriceCents)}
+                </span>
+              </div>
+            )}
+            <p className="text-[10px] font-mono text-surface-muted leading-relaxed">
+              {formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents)} por visualización entregada.
+            </p>
+          </div>
 
           <p className="text-[10px] font-mono text-surface-muted">
             ℹ️ Si no se alcanzan {CHARGE_MIN} banners enseñados no se cobrará nada.

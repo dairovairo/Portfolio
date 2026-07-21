@@ -347,6 +347,12 @@ function formatRaffleEndShort(dateStr) {
 // Metadata visual de cada tier — solo emoji y label corto, ya que las
 // reglas completas viven en el backend y llegan en raffle.tier_label.
 const RAFFLE_TIER_EMOJI = { light: '🎫', volt: '⚡', community: '🤝' };
+// Mismo mapa de color que RAFFLE_TIER_BORDER_STYLES en CommunityDetailPage
+// (volt=azul, community=rojo, light=ámbar) — se repite aquí en vez de
+// importarlo porque CommunityDetailPage no exporta nada, mismo criterio
+// que ya se sigue con RAFFLE_TIER_OPTIONS/raffleTierMeta en ese archivo
+// (comentario "Debe coincidir con RAFFLE_TIERS en server/routes/community.js").
+const RAFFLE_TIER_BORDER_STYLES = { volt: 'border-blue-400/50', community: 'border-red-400/50', light: 'border-amber-400/50' };
 
 function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRankChange }) {
   const [open, setOpen] = useState(false);
@@ -1661,6 +1667,7 @@ function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
 // de Tailwind con la paleta amber, sin tocar las CSS vars globales).
 function RaffleDiscoveryCard({ raffle, onOpen, onLike, currentUserId }) {
   const tierEmoji = RAFFLE_TIER_EMOJI[raffle.tier] || '🎁';
+  const tierBorder = RAFFLE_TIER_BORDER_STYLES[raffle.tier] || 'border-surface-border';
   const cats = getRaffleCategories(raffle);
   const isCreator = currentUserId && raffle.is_creator;
   const [liking, setLiking] = useState(false);
@@ -1680,7 +1687,7 @@ function RaffleDiscoveryCard({ raffle, onOpen, onLike, currentUserId }) {
       tabIndex={0}
       onClick={() => onOpen(raffle)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(raffle); }}
-      className="w-full text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden hover:border-amber-500/50 transition-colors cursor-pointer"
+      className={`w-full text-left bg-surface-card border ${tierBorder} rounded-2xl overflow-hidden hover:border-amber-500/50 transition-colors cursor-pointer`}
     >
       {raffle.image_url && (
         <div className="aspect-[16/9] bg-surface-bg">

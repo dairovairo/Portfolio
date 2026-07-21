@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import AudienceCircleMap from '../components/AudienceCircleMap';
+import { EVENT_AD_PRICING, computeEventAdPriceCents, formatEurFromCents } from '../lib/adPricing';
 
 // ── Configuración de publicidad de un evento Premium / Ultra ──────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -34,7 +35,10 @@ const PLAN_META = {
   premium: {
     emoji: '⚡',
     label: 'Premium',
-    price: '10 €',
+    // Precio dinámico — se calcula abajo con computeEventAdPriceCents en
+    // función de las notificaciones contratadas. Ya no hay tarifa
+    // estática aquí (antes: '10 €' fijo, que era el precio del mínimo
+    // contratable y engañaba al escalar el slider). Ver lib/adPricing.js.
     accent: 'purple',
     ring: 'border-purple-400 bg-purple-500/10',
     pill: 'text-purple-300 bg-purple-500/10 border border-purple-500/20',
@@ -51,7 +55,7 @@ const PLAN_META = {
   ultra: {
     emoji: '🚀',
     label: 'Ultra',
-    price: '20 €',
+    // Precio dinámico — ver comentario en `premium` arriba.
     accent: 'blue',
     ring: 'border-accent-primary bg-accent-primary/10',
     pill: 'text-accent-glow bg-accent-primary/10 border border-accent-primary/20',
@@ -338,6 +342,19 @@ export default function EventAdConfigPage() {
 
   const meta = PLAN_META[plan] || PLAN_META.premium;
 
+  // ── Precio dinámico ────────────────────────────────────────────────────
+  // `maxPriceCents`: el techo si TODAS las notificaciones contratadas se
+  //   entregan. Es lo que se enseña en grande — el "importe contratado".
+  // `estPriceCents`: el importe realista teniendo en cuenta el techo de
+  //   audiencia (min(contratado, audiencia efectiva) — se cobra por lo
+  //   entregado, no por lo contratado). Solo se calcula en creación y
+  //   cuando la audiencia excede lo contratado, para no confundir.
+  const maxPriceCents = computeEventAdPriceCents(plan, notificationCount);
+  const effectiveUnits = !isRenew && audienceReady && audienceCap != null
+    ? Math.min(notificationCount, audienceCap)
+    : notificationCount;
+  const estPriceCents = computeEventAdPriceCents(plan, effectiveUnits);
+
   // En creación se vuelve al perfil de la comunidad; en renovación, al
   // detalle del propio evento (donde estaba el botón "Renovar publicidad"
   // que arrancó el flujo, ver EventDetailPage.jsx). Ese es también el
@@ -460,7 +477,11 @@ export default function EventAdConfigPage() {
           </div>
         </div>
 
-        {/* Detalles del plan seleccionado */}
+        {/* Detalles del plan seleccionado. La píldora superior derecha
+            enseña la tarifa POR UNIDAD (céntimos/notificación); el
+            importe total contratado (dinámico según el slider) va en el
+            bloque de notificaciones, junto al slider, para que se vea
+            actualizarse en directo al arrastrar. */}
         <div className={`bg-surface-card border rounded-2xl p-5 space-y-3 transition-colors ${meta.ring}`}>
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-2 text-base font-display font-bold text-surface-text">
@@ -468,7 +489,7 @@ export default function EventAdConfigPage() {
               {meta.label} Promotion
             </span>
             <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${meta.pill}`}>
-              {meta.price}
+              {formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents)} / {EVENT_AD_PRICING[plan].unitLabel}
             </span>
           </div>
           <ul className="space-y-1.5 text-[12px] font-mono text-surface-muted leading-relaxed">
@@ -723,6 +744,33 @@ export default function EventAdConfigPage() {
               }: se enviarán como mucho {Number(audienceCap).toLocaleString('es-ES')} notificaciones, y no se cobrará por el resto.
             </p>
           )}
+
+          {/* Desglose de precio dinámico. Sustituye a la píldora estática
+              '10 €'/'20 €' que había antes en el detalle del plan. El
+              importe máximo se recalcula en directo al mover el slider;
+              si la audiencia efectiva queda por debajo, mostramos
+              también el importe estimado real (solo se cobra lo
+              entregado). En renovación no hay techo de audiencia que
+              recalcular aquí, así que sale solo el máximo. */}
+          <div className="border-t border-surface-border/60 pt-2 mt-1 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-mono text-surface-muted">💶 Importe contratado</span>
+              <span className={`text-sm font-display font-bold ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
+                {formatEurFromCents(maxPriceCents)}
+              </span>
+            </div>
+            {contractedExceedsAudience && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-surface-muted">Estimado a facturar</span>
+                <span className="text-xs font-mono font-semibold text-surface-text">
+                  {formatEurFromCents(estPriceCents)}
+                </span>
+              </div>
+            )}
+            <p className="text-[10px] font-mono text-surface-muted leading-relaxed">
+              {formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents)} por notificación entregada.
+            </p>
+          </div>
 
           <p className="text-[10px] font-mono text-surface-muted">
             ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
