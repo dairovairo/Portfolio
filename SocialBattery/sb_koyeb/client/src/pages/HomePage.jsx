@@ -652,7 +652,17 @@ export default function HomePage() {
       {/* Panel fino de evento notificado hoy — un único evento por día */}
       {todayEvent && (
         <button
-          onClick={() => navigate(`/community/event/${todayEvent.id}`)}
+          onClick={() => {
+            // Fase 123 — ping fire-and-forget al backend para contar el
+            // click en el banner del menú principal (exclusivo Ultra —
+            // el endpoint solo llega hasta aquí cuando el evento es
+            // Ultra, ver GET /notifications/today-event). Usamos
+            // fetch keepalive vía api.post; el navigate se llama
+            // inmediatamente después sin await, así el usuario no
+            // percibe latencia.
+            api.post(`/community/events/${todayEvent.id}/ultra-banner-click`, {}).catch(() => {});
+            navigate(`/community/event/${todayEvent.id}`);
+          }}
           className="w-full border-b border-surface-border bg-accent-primary/8 hover:bg-accent-primary/12 transition-colors text-left"
         >
           <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-between gap-3">

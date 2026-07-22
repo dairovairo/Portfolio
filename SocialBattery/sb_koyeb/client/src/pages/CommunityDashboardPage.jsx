@@ -383,6 +383,45 @@ function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
             <StatTile label="CTR" value={pct(event.ctr)} accent="text-accent-glow" />
           </div>
 
+          {/* Fase 123 — métricas del banner del menú principal
+              (exclusivo Ultra). Se enseña APARTE del bloque de arriba
+              porque son cosas distintas: arriba se mide el CTR de la
+              notificación push (personas únicas que tapearon el push);
+              aquí las impresiones y clicks del banner que aparece en
+              HomePage a quien tiene claim del día. El banner es la
+              prestación que justifica el sobrecoste de Ultra sobre
+              Premium, así que merece su propia fila para que se vea el
+              retorno. En Premium/Basic no aparece — el banner ni se
+              muestra ni suma nada. */}
+          {event.promotion_plan === 'ultra' && (
+            <div className="bg-fuchsia-500/5 border border-fuchsia-500/20 rounded-xl p-3 space-y-2">
+              <p className="text-[10px] font-mono text-fuchsia-300/80 uppercase tracking-wide">
+                🎨 Banner del menú principal
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <StatTile
+                  label="Impresiones"
+                  value={fmt(event.ultra_banner_views)}
+                  hint="veces mostrado"
+                />
+                <StatTile
+                  label="Clicks"
+                  value={fmt(event.ultra_banner_clicks)}
+                  accent="text-accent-glow"
+                />
+                <StatTile
+                  label="CTR banner"
+                  value={pct(event.ultra_banner_ctr)}
+                  accent="text-accent-glow"
+                />
+              </div>
+              <p className="text-[10px] text-surface-muted leading-relaxed">
+                Contadores brutos: cada carga del menú principal por parte de un usuario notificado suma una impresión;
+                cada tap al banner suma un click. No se deduplica por persona.
+              </p>
+            </div>
+          )}
+
           <div className="flex items-center flex-wrap gap-1.5">
             {event.audience_radius_km != null && (
               <Pill className="bg-surface-bg text-surface-muted border-surface-border">📍 {event.audience_radius_km} km</Pill>

@@ -2008,6 +2008,16 @@ router.get('/notifications/today-event', requireAuth, async (req, res) => {
     // Fase 109: banner del menú principal exclusivo de Ultra.
     if (event.promotion_plan !== 'ultra') return res.json({ event: null });
 
+    // Fase 123 — cuenta la impresión del banner. Se hace fire-and-forget
+    // (sin await) para no bloquear la respuesta del endpoint por un
+    // fallo del contador: analytics no debe retrasar la carga del menú
+    // principal. Si la RPC falla, se loguea y ya está — el banner se
+    // enseña igual.
+    supabase.rpc('increment_event_ultra_banner_views', { p_id: event.id })
+      .then(({ error: rpcErr }) => {
+        if (rpcErr) console.warn('[community] ultra banner view increment failed:', rpcErr.message);
+      });
+
     res.json({
       event: {
         id: event.id,
@@ -5235,6 +5245,24 @@ router.post('/events/:id/url-click', requireAuth, async (req, res) => {
   }
 });
 
+// Fase 123 — click en el banner del menú principal (exclusivo Ultra).
+// Se dispara desde HomePage.jsx cuando el usuario tapea el panel del
+// evento notificado hoy. Contador ingenuo, no personas únicas — mismo
+// criterio que url-click (fase 121): aquí se mide la tracción bruta
+// del banner Ultra frente a los clicks de personas únicas de la
+// notificación push que ya se cuentan en event_promo_notifications.
+router.post('/events/:id/ultra-banner-click', requireAuth, async (req, res) => {
+  const eventId = req.params.id;
+  try {
+    const { error } = await supabase.rpc('increment_event_ultra_banner_clicks', { p_id: eventId });
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) {
+    console.error('[community] POST /events/:id/ultra-banner-click', err);
+    res.status(204).end();
+  }
+});
+
 
 // ══════════════════════════════════════════════════════════════════════════
 // Fase 112 — Fin y renovación de la publicidad de un sorteo
@@ -5534,7 +5562,7 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
     const [eventsRes, rafflesRes] = await Promise.all([
       supabase
         .from('community_events')
-        .select('id, title, event_date, ends_at, created_at, categories, promotion_plan, notification_count, notification_sent_count, audience_interested_only, audience_radius_km, url, url_click_count')
+        .select('id, title, event_date, ends_at, created_at, categories, promotion_plan, notification_count, notification_sent_count, audience_interested_only, audience_radius_km, url, url_click_count, ultra_banner_views, ultra_banner_clicks')
         .eq('community_id', communityId)
         .order('event_date', { ascending: false }),
       supabase
@@ -5654,6 +5682,13 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         // un contador ingenuo (cada tap suma) no personas únicas.
         url: e.url || null,
         url_clicks: Number(e.url_click_count || 0),
+        // Fase 123 — banner del menú principal (exclusivo Ultra). Views
+        // y clicks son contadores ingenuos (misma filosofía que
+        // url_clicks arriba). El frontend solo los pinta si el plan es
+        // Ultra — en Premium/Basic quedan en 0 y no aportan nada.
+        ultra_banner_views:  Number(e.ultra_banner_views  || 0),
+        ultra_banner_clicks: Number(e.ultra_banner_clicks || 0),
+        ultra_banner_ctr:    rate(Number(e.ultra_banner_clicks || 0), Number(e.ultra_banner_views || 0)),
         // El cobro se hace sobre lo REALMENTE enviado hasta el inicio del
         // evento, y solo si se pasa el mínimo (ver FREE_THRESHOLD y el
         // bloqueo de renovación más arriba).
