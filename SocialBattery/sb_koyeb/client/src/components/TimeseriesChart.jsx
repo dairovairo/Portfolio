@@ -32,7 +32,7 @@ const METRIC_CATALOG = {
   event: [
     { key: 'sends',         label: '📤 Envíos push' },
     { key: 'clicks',        label: '👆 Clicks push' },
-    { key: 'banner_views',  label: '🎨 Impresiones banner',
+    { key: 'banner_views',  label: '🎨 Alcance banner',
       show: (ev) => ev?.promotion_plan === 'ultra' },
     { key: 'banner_clicks', label: '🎨 Clicks banner',
       show: (ev) => ev?.promotion_plan === 'ultra' },

@@ -3,17 +3,29 @@ const supabase = require('./supabase');
 const CIRCLE_BADGES = [
   {
     // El id se mantiene igual que siempre ('lone_wolf') aunque el nombre
-    // visible cambie a "Couch Potato" — mismo criterio de sobra (quien
-    // menos se apunta a quedadas), solo cambia cómo se llama. Igual que
-    // se hizo con "tapado" → "Average Joe/Jane" en la fase 62: el id no
-    // se toca para no romper las filas ya existentes en user_badges.
+    // visible cambie a "Couch Potato" — mismo espíritu de sobra (quien
+    // menos aprovecha las quedadas a las que podría unirse), solo cambia
+    // cómo se llama. Igual que se hizo con "tapado" → "Average Joe/Jane"
+    // en la fase 62: el id no se toca para no romper las filas ya
+    // existentes en user_badges.
     // Emoji: 🥔 (patata) en vez de 🛋️ (sofá+lámpara) — el sofá renderiza
     // muy a color/vistoso comparado con el resto de iconos del catálogo,
     // más apagados; la patata mantiene el juego de palabras y es más sobria.
+    //
+    // Criterio (cambiado en esta fase): antes era el recuento crudo de
+    // quedadas ajenas unidas (quien se apuntaba a menos, ganaba). Ahora
+    // es un RATIO: quedadas a las que se ha unido / quedadas a las que
+    // ha sido invitado. "Invitado" = misma visibilidad que usa el feed
+    // de quedadas (GET /pools, ver routes/pools.js): la quedada es
+    // pública y la creó alguien del ámbito, o pertenece a un grupo del
+    // que el usuario es miembro, o tiene invitación explícita
+    // (pool_invitees). Así no penaliza a quien simplemente ve pocas
+    // quedadas (bajo joinedPools crudo) sino a quien, viendo muchas
+    // oportunidades, se apunta a pocas.
     id: 'lone_wolf',
     name: 'Couch Potato',
     emoji: '🥔',
-    description: 'Quien menos se apunta a quedadas dentro del circulo.',
+    description: 'Quien menos aprovecha las quedadas a las que le invitan.',
     category: 'circle',
   },
   {
@@ -41,6 +53,10 @@ const CIRCLE_BADGES = [
     category: 'circle',
   },
   {
+    // Ventana horaria 22:00-05:59 (antes 22:00-01:59) y solo se mira
+    // el historial de los últimos 30 días (antes 90) — cambiado en esta
+    // fase para que la insignia refleje el hábito reciente, no un
+    // acumulado de hace tres meses.
     id: 'night_owl',
     name: 'Night Owl',
     emoji: '🦉',
@@ -66,17 +82,31 @@ const CIRCLE_BADGES = [
     // FE0F que tenía antes lo forzaba a un estopwatch a color, desentonando
     // con el resto del catálogo de insignias.
     emoji: '⏱',
-    description: 'Quien mas veces entra ultimo a una quedada antes de que se cierre.',
+    // Criterio (cambiado en esta fase): antes era el recuento crudo de
+    // veces siendo el último en apuntarse. Ahora es un RATIO sobre las
+    // quedadas finalizadas en las que ha participado como invitado (no
+    // como organizador, igual que el propio recuento nunca contaba al
+    // creador): veces que fue el último / quedadas finalizadas en las
+    // que ha estado apuntado. Evita que gane solo por estar en muchas
+    // quedadas — ahora hace falta que sea un patrón, no solo volumen.
+    description: 'Quien mas veces entra ultimo a una quedada, de las que ha estado apuntado.',
     category: 'circle',
   },
   {
+    // Criterio (cambiado en esta fase): mismo tipo de ratio que
+    // Last Minute Joiner pero mirando quién se apunta PRIMERO: veces
+    // que fue el primero / quedadas finalizadas en las que ha estado
+    // apuntado (como invitado, no como organizador).
     id: 'early_joiner',
     name: 'Early Joiner',
     emoji: '🥇',
-    description: 'Quien mas veces es el primero en apuntarse a una quedada.',
+    description: 'Quien mas veces es el primero en apuntarse, de las que ha estado apuntado.',
     category: 'circle',
   },
   {
+    // Ventana horaria 06:00-11:59 (antes 06:00-09:59) y 30 días de
+    // historial (antes 90), mismo motivo y misma fuente de datos
+    // (battery_history) que Night Owl — comparten la única consulta.
     id: 'early_bird',
     name: 'Early Bird',
     emoji: '🌅',
@@ -86,12 +116,18 @@ const CIRCLE_BADGES = [
   {
     // A diferencia de "last_minute_joiner" (que mira el orden de
     // apuntarse online), esta mira la llegada física a la quedada según
-    // los check-ins del modo Sniffer ("Estoy dentro") — de quienes
-    // efectivamente llegan, quien mas veces es el ultimo.
+    // los check-ins del modo Sniffer ("Estoy dentro").
+    //
+    // Criterio (cambiado en esta fase): antes era el recuento crudo de
+    // veces llegando el último (de los que llegan). Ahora es un RATIO:
+    // veces que llega el último / veces que ha estado presente (total
+    // de check-ins confirmados). A diferencia de Last Minute/Early
+    // Joiner, aquí SÍ puede competir el creador — llegar tarde a tu
+    // propia quedada también cuenta, igual que antes.
     id: 'late_legend',
     name: 'Late Legend',
     emoji: '🐢',
-    description: 'Quien mas veces llega el ultimo a las quedadas (de los que llegan).',
+    description: 'Quien mas veces llega el ultimo, de las veces que ha estado presente.',
     category: 'circle',
   },
   {
@@ -176,6 +212,19 @@ function createStats(memberIds) {
     lateArrivals: 0,
     noShows: 0,
     joinedFinishedPools: 0,
+    // Fase de ratios — nuevos denominadores:
+    //   · invitedPools — quedadas ajenas a las que ha sido invitado
+    //     (visibilidad pública/grupo/invitación explícita), usado por
+    //     el ratio de Couch Potato.
+    //   · joinedFinishedAsGuest — quedadas YA FINALIZADAS a las que se
+    //     apuntó como invitado (no como organizador), denominador de
+    //     Last Minute Joiner y Early Joiner.
+    //   · checkinsCount — veces que ha confirmado llegada física
+    //     (check-in de Sniffer) en quedadas finalizadas, denominador
+    //     de Late Legend.
+    invitedPools: 0,
+    joinedFinishedAsGuest: 0,
+    checkinsCount: 0,
     friendCount: 0,
     nightTotal: 0,
     nightCount: 0,
@@ -232,27 +281,43 @@ function pushHighCandidates(candidates, badgeId, statsList, metric, minScore, re
   });
 }
 
-function pushAverageCandidates(candidates, badgeId, statsList, totalKey, countKey, reasonFactory) {
+// `higherIsBetter` permite reutilizar el mismo patrón de ratio tanto
+// para "cuanto más alto, gana" (night_owl, early_bird, ghost, late_legend,
+// last_minute_joiner, early_joiner) como para "cuanto más bajo, gana"
+// (lone_wolf/Couch Potato: menos ratio unidas/invitado = más couch potato).
+// El desempate SIEMPRE favorece a quien tiene más volumen de datos
+// (countKey más alto) antes de cualquier otro criterio — con esto una
+// persona con 1/1 (100%) no le gana automáticamente a alguien con 9/10
+// (90%) si el ratio exacto empata tras redondeo, y sobre todo evita que
+// "strength" (usado para desempatar en chooseAssignments) favorezca
+// datos anecdóticos.
+function pushAverageCandidates(candidates, badgeId, statsList, totalKey, countKey, reasonFactory, { higherIsBetter = true } = {}) {
   const ranked = statsList
     .map(stats => ({
       ...stats,
       average: average(stats[totalKey], stats[countKey]),
     }))
     .filter(stats => stats.average !== null)
-    .sort((a, b) => b.average - a.average || b[countKey] - a[countKey] || a.userId.localeCompare(b.userId));
+    .sort((a, b) =>
+      (higherIsBetter ? b.average - a.average : a.average - b.average) ||
+      b[countKey] - a[countKey] ||
+      a.userId.localeCompare(b.userId)
+    );
 
   ranked.forEach((stats, index) => {
     const next = ranked.find((candidate, nextIndex) =>
       nextIndex > index && candidate.average !== stats.average
     );
-    const gap = next ? stats.average - next.average : stats.average;
+    const gap = next ? Math.abs(stats.average - next.average) : Math.abs(stats.average);
     candidates.push({
       badgeId,
       userId: stats.userId,
       score: stats.average,
-      sortScore: stats.average,
+      sortScore: higherIsBetter ? stats.average : -stats.average,
       strength: Math.max(0, gap) + (stats[countKey] * 0.01),
-      rank: ranked.filter(candidate => candidate.average > stats.average).length + 1,
+      rank: higherIsBetter
+        ? ranked.filter(candidate => candidate.average > stats.average).length + 1
+        : ranked.filter(candidate => candidate.average < stats.average).length + 1,
       reason: reasonFactory(stats),
     });
   });
@@ -371,7 +436,9 @@ async function computeBadgesForMembers(memberIds, options = {}) {
 
   let poolsQuery = supabase
     .from('hangout_pools')
-    .select('id, creator_id, scheduled_at, status, created_at')
+    // is_public y group_id se necesitan para calcular invitedPools (a
+    // quién se considera "invitado" a cada quedada, ver bloque más abajo).
+    .select('id, creator_id, scheduled_at, status, created_at, is_public, group_id')
     .in('creator_id', memberIds)
     .neq('status', 'cancelled');
 
@@ -421,21 +488,29 @@ async function computeBadgesForMembers(memberIds, options = {}) {
       creatorStats.soloFinishedPools += 1;
     }
 
-    const lateCandidates = poolParticipants
-      .filter(participant => participant.user_id !== pool.creator_id)
-      .sort((a, b) => new Date(b.joined_at) - new Date(a.joined_at));
+    // Participantes (excluyendo al creador) de esta quedada YA
+    // FINALIZADA. Se reutiliza para lastMinuteJoins/earlyJoins (según
+    // orden de joined_at) y como denominador de sus ratios:
+    // joinedFinishedAsGuest = cuántas quedadas finalizadas ha "vivido"
+    // como invitado, no como organizador (mismo criterio de exclusión
+    // que ya tenían ambas insignias: el creador no compite por
+    // "último/primero en apuntarse" porque su plaza es automática).
+    const guestParticipants = poolParticipants.filter(participant => participant.user_id !== pool.creator_id);
+    guestParticipants.forEach(participant => {
+      const stats = statsByUser[participant.user_id];
+      if (stats) stats.joinedFinishedAsGuest += 1;
+    });
+
+    const lateCandidates = [...guestParticipants].sort((a, b) => new Date(b.joined_at) - new Date(a.joined_at));
     const lastJoiner = lateCandidates[0];
     if (lastJoiner && statsByUser[lastJoiner.user_id]) {
       statsByUser[lastJoiner.user_id].lastMinuteJoins += 1;
     }
 
     // Simétrico a lastMinuteJoiner pero mirando quién se apuntó ANTES
-    // (menor joined_at), también excluyendo al creador — igual que el
-    // creador no compite por "último en apuntarse", tampoco compite por
-    // "primero en apuntarse" (su plaza es automática al crear la quedada).
-    const earlyCandidates = poolParticipants
-      .filter(participant => participant.user_id !== pool.creator_id)
-      .sort((a, b) => new Date(a.joined_at) - new Date(b.joined_at));
+    // (menor joined_at) — mismo conjunto guestParticipants, solo cambia
+    // el orden de ordenación.
+    const earlyCandidates = [...guestParticipants].sort((a, b) => new Date(a.joined_at) - new Date(b.joined_at));
     const firstJoiner = earlyCandidates[0];
     if (firstJoiner && statsByUser[firstJoiner.user_id]) {
       statsByUser[firstJoiner.user_id].earlyJoins += 1;
@@ -490,6 +565,15 @@ async function computeBadgesForMembers(memberIds, options = {}) {
       if (stats) stats.noShows += 1;
     });
 
+    // checkinsCount: veces que ha confirmado llegada física — denominador
+    // del ratio de Late Legend ("de las veces que has estado presente,
+    // cuántas llegaste el último"). Incluye al creador si también hizo
+    // check-in, igual que lateArrivals más abajo puede premiarlo a él.
+    poolCheckins.forEach(checkin => {
+      const stats = statsByUser[checkin.user_id];
+      if (stats) stats.checkinsCount += 1;
+    });
+
     // Late Legend: de los que SÍ llegaron, quién confirmó más tarde.
     const lastArrival = [...poolCheckins].sort(
       (a, b) => new Date(b.checked_in_at) - new Date(a.checked_in_at)
@@ -497,6 +581,69 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     if (lastArrival && statsByUser[lastArrival.user_id]) {
       statsByUser[lastArrival.user_id].lateArrivals += 1;
     }
+  });
+
+  // ── "Invitado" a una quedada ajena — denominador de Couch Potato ────────
+  // Mismo criterio de visibilidad que usa el feed de quedadas
+  // (GET /pools, filtro 'active', ver routes/pools.js): estás invitado
+  // a una quedada ajena si es pública (visible dentro del ámbito), si
+  // perteneces al grupo al que está vinculada, o si tienes invitación
+  // explícita (pool_invitees) — esta última cubre también las
+  // solicitudes de invitación aceptadas (pool_join_requests), que al
+  // aprobarse insertan la fila en pool_invitees igualmente.
+  //
+  // El propio creador nunca cuenta como "invitado" a su propia quedada
+  // (no te invitas a ti mismo) — coherente con que joinedPools tampoco
+  // cuenta las quedadas propias.
+  const { data: inviteeRows, error: inviteesError } = poolIds.length
+    ? await supabase.from('pool_invitees').select('pool_id, user_id').in('pool_id', poolIds)
+    : { data: [], error: null };
+  if (inviteesError) throw inviteesError;
+  const inviteesByPool = new Map();
+  (inviteeRows || []).forEach(row => {
+    if (!inviteesByPool.has(row.pool_id)) inviteesByPool.set(row.pool_id, new Set());
+    inviteesByPool.get(row.pool_id).add(row.user_id);
+  });
+
+  // Membresía de grupo para los grupos referenciados por las quedadas
+  // en juego. Cuando el cómputo ya está acotado a un groupId (fase
+  // computeGroupBadges), todas las quedadas comparten ese mismo grupo y
+  // memberIds YA ES la membresía — pero se resuelve igual de forma
+  // genérica para que funcione también en el círculo completo o en el
+  // ámbito de una quedada concreta, donde las quedadas de por medio
+  // pueden pertenecer a distintos grupos.
+  const distinctGroupIds = [...new Set((pools || []).map(pool => pool.group_id).filter(Boolean))];
+  const groupMembersByGroup = new Map();
+  if (distinctGroupIds.length) {
+    const { data: groupMemberRows, error: groupMembersError } = await supabase
+      .from('friend_group_members')
+      .select('group_id, user_id')
+      .in('group_id', distinctGroupIds)
+      .in('user_id', memberIds);
+    if (groupMembersError) throw groupMembersError;
+    (groupMemberRows || []).forEach(row => {
+      if (!groupMembersByGroup.has(row.group_id)) groupMembersByGroup.set(row.group_id, new Set());
+      groupMembersByGroup.get(row.group_id).add(row.user_id);
+    });
+  }
+
+  (pools || []).forEach(pool => {
+    let audience;
+    if (pool.is_public) {
+      // Pública: visible a todo el mundo del ámbito (dentro del círculo
+      // o grupo ya estamos asumiendo que son amigos/compañeros de grupo).
+      audience = new Set(memberIds);
+    } else {
+      audience = new Set([...(inviteesByPool.get(pool.id) || [])].filter(id => statsByUser[id]));
+      if (pool.group_id && groupMembersByGroup.has(pool.group_id)) {
+        groupMembersByGroup.get(pool.group_id).forEach(uid => audience.add(uid));
+      }
+    }
+    audience.delete(pool.creator_id);
+    audience.forEach(uid => {
+      const stats = statsByUser[uid];
+      if (stats) stats.invitedPools += 1;
+    });
   });
 
   // Amigos totales en la app (no solo dentro de este grupo/quedada) —
@@ -513,8 +660,11 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     if (statsByUser[row.addressee_id]) statsByUser[row.addressee_id].friendCount += 1;
   });
 
+  // Ventana de 30 días (antes 90) — refleja el hábito reciente, no un
+  // acumulado de tres meses. Comparten esta única consulta Night Owl y
+  // Early Bird.
   const since = new Date();
-  since.setDate(since.getDate() - 90);
+  since.setDate(since.getDate() - 30);
 
   const { data: history, error: historyError } = await supabase
     .from('battery_history')
@@ -527,11 +677,13 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     const stats = statsByUser[entry.user_id];
     if (!stats) return;
 
-    if (entry.hour >= 22 || entry.hour < 2) {
+    // Night Owl: 22:00-05:59 (antes 22:00-01:59).
+    if (entry.hour >= 22 || entry.hour < 6) {
       stats.nightTotal += entry.level;
       stats.nightCount += 1;
     }
-    if (entry.hour >= 6 && entry.hour < 10) {
+    // Early Bird: 06:00-11:59 (antes 06:00-09:59).
+    if (entry.hour >= 6 && entry.hour < 12) {
       stats.morningTotal += entry.level;
       stats.morningCount += 1;
     }
@@ -540,13 +692,17 @@ async function computeBadgesForMembers(memberIds, options = {}) {
   const statsList = Object.values(statsByUser);
   const candidates = [];
 
-  pushLowCandidates(
+  // Couch Potato: ratio joinedPools/invitedPools, cuanto MÁS BAJO gana
+  // (aprovecha menos las invitaciones que recibe). El desempate por
+  // volumen ya lo aplica pushAverageCandidates (countKey=invitedPools).
+  pushAverageCandidates(
     candidates,
     'lone_wolf', // Couch Potato — mismo id de siempre, ver comentario en CIRCLE_BADGES
     statsList,
     'joinedPools',
-    stats => `${stats.joinedPools} quedadas ajenas unidas`,
-    'createdPools'
+    'invitedPools',
+    stats => `${stats.joinedPools}/${stats.invitedPools} invitaciones aprovechadas`,
+    { higherIsBetter: false }
   );
   pushLowCandidates(
     candidates,
@@ -587,21 +743,25 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     1,
     stats => `${stats.createdPools} quedadas creadas`
   );
-  pushHighCandidates(
+  // Last Minute Joiner: ratio lastMinuteJoins/joinedFinishedAsGuest,
+  // cuanto MÁS ALTO gana (patrón recurrente, no solo volumen).
+  pushAverageCandidates(
     candidates,
     'last_minute_joiner',
     statsList,
     'lastMinuteJoins',
-    1,
-    stats => `${stats.lastMinuteJoins} ultimas entradas`
+    'joinedFinishedAsGuest',
+    stats => `${stats.lastMinuteJoins}/${stats.joinedFinishedAsGuest} veces el ultimo en apuntarse`
   );
-  pushHighCandidates(
+  // Early Joiner: mismo patrón que arriba, mirando "primero" en vez de
+  // "último".
+  pushAverageCandidates(
     candidates,
     'early_joiner',
     statsList,
     'earlyJoins',
-    1,
-    stats => `${stats.earlyJoins} primeras entradas`
+    'joinedFinishedAsGuest',
+    stats => `${stats.earlyJoins}/${stats.joinedFinishedAsGuest} veces el primero en apuntarse`
   );
   pushAverageCandidates(
     candidates,
@@ -611,13 +771,15 @@ async function computeBadgesForMembers(memberIds, options = {}) {
     'morningCount',
     stats => `${scoreText(stats.average, '%')} de media por la manana (${stats.morningCount} registros)`
   );
-  pushHighCandidates(
+  // Late Legend: ratio lateArrivals/checkinsCount — de las veces que ha
+  // estado presente (check-in confirmado), cuántas llegó el último.
+  pushAverageCandidates(
     candidates,
     'late_legend',
     statsList,
     'lateArrivals',
-    1,
-    stats => `${stats.lateArrivals} llegadas tarde`
+    'checkinsCount',
+    stats => `${stats.lateArrivals}/${stats.checkinsCount} veces el ultimo en llegar`
   );
   pushAverageCandidates(
     candidates,

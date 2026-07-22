@@ -448,9 +448,9 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <StatTile
-                  label="Impresiones"
+                  label="Alcance"
                   value={fmt(event.ultra_banner_views)}
-                  hint="veces mostrado"
+                  hint="usuarios distintos"
                 />
                 <StatTile
                   label="Clicks"
@@ -464,8 +464,9 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
                 />
               </div>
               <p className="text-[10px] text-surface-muted leading-relaxed">
-                Contadores brutos: cada carga del menú principal por parte de un usuario notificado suma una impresión;
-                cada tap al banner suma un click. No se deduplica por persona.
+                El alcance cuenta cada usuario notificado una sola vez, aunque recargue el menú principal varias
+                veces. Los clicks sí son brutos (no se deduplican) — por eso el CTR puede superar el 100% si alguien
+                tapea el banner más de una vez.
               </p>
             </div>
           )}

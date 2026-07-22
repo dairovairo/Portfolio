@@ -2008,22 +2008,52 @@ router.get('/notifications/today-event', requireAuth, async (req, res) => {
     // Fase 109: banner del menú principal exclusivo de Ultra.
     if (event.promotion_plan !== 'ultra') return res.json({ event: null });
 
-    // Fase 123 — cuenta la impresión del banner. Se hace fire-and-forget
-    // (sin await) para no bloquear la respuesta del endpoint por un
-    // fallo del contador: analytics no debe retrasar la carga del menú
-    // principal. Si la RPC falla, se loguea y ya está — el banner se
-    // enseña igual.
-    // Fase 126 — además, se inserta una fila timestampeada en
-    // promo_metric_events para poder graficar la evolución en el tiempo.
-    supabase.rpc('increment_event_ultra_banner_views', { p_id: event.id })
-      .then(({ error: rpcErr }) => {
+    // Fase 123/127 — cuenta la impresión del banner, pero SOLO la
+    // primera vez que ESTE usuario ve ESTE banner: antes se incrementaba
+    // en cada carga del menú principal (un usuario que recargaba 10
+    // veces sumaba 10 "impresiones" del mismo banner). Ahora
+    // ultra_banner_views mide alcance (usuarios distintos), no cargas
+    // de página.
+    //
+    // El upsert con ignoreDuplicates sobre la PRIMARY KEY (event_id,
+    // user_id) de event_ultra_banner_impressions es la comprobación
+    // atómica de "¿ya se había contado a este usuario?" — evita el
+    // race de leer-luego-escribir si el usuario abre el menú dos veces
+    // casi a la vez (dos pestañas, refresco rápido). select() en el
+    // upsert es necesario porque ignoreDuplicates hace que las filas
+    // en conflicto NO se devuelvan: solo si vino una fila de vuelta es
+    // que era la primera vez y toca incrementar + loguear (fase 126).
+    //
+    // Todo el bloque es fire-and-forget (no se espera desde el handler
+    // principal) para no retrasar la carga del menú principal por un
+    // fallo de analytics — pero dentro del bloque SÍ se encadenan los
+    // awaits en orden, porque el incremento depende del resultado del
+    // upsert.
+    (async () => {
+      try {
+        const { data: firstView, error: upsertErr } = await supabase
+          .from('event_ultra_banner_impressions')
+          .upsert(
+            { event_id: event.id, user_id: req.user.id },
+            { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+          )
+          .select('event_id');
+        if (upsertErr) {
+          console.warn('[community] ultra banner impression upsert failed:', upsertErr.message);
+          return;
+        }
+        if (!firstView || firstView.length === 0) return; // ya se había contado a este usuario
+
+        const { error: rpcErr } = await supabase.rpc('increment_event_ultra_banner_views', { p_id: event.id });
         if (rpcErr) console.warn('[community] ultra banner view increment failed:', rpcErr.message);
-      });
-    supabase.from('promo_metric_events')
-      .insert({ kind: 'ultra_banner_view', target_id: event.id, user_id: req.user.id })
-      .then(({ error: logErr }) => {
+
+        const { error: logErr } = await supabase.from('promo_metric_events')
+          .insert({ kind: 'ultra_banner_view', target_id: event.id, user_id: req.user.id });
         if (logErr) console.warn('[community] ultra_banner_view log insert failed:', logErr.message);
-      });
+      } catch (e) {
+        console.warn('[community] ultra banner impression tracking error:', e.message);
+      }
+    })();
 
     res.json({
       event: {
