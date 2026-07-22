@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
-import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 
 // ── Acciones sobre una promoción (fase 112) ────────────────────────────────
@@ -37,36 +36,36 @@ import { api } from '../lib/api';
 //     evento/comunidad EN EL MOMENTO del envío (se congela por fila, no se
 //     recalcula: los intereses cambian con el tiempo).
 
-const TIER_STYLE = {
+export const TIER_STYLE = {
   light:     { emoji: '🎫', text: 'text-amber-300', bar: 'bg-amber-400', pill: 'bg-amber-500/10 text-amber-300 border-amber-500/25' },
   volt:      { emoji: '⚡', text: 'text-blue-300',  bar: 'bg-blue-400',  pill: 'bg-blue-500/10 text-blue-300 border-blue-500/25' },
   community: { emoji: '🏠', text: 'text-red-300',   bar: 'bg-red-400',   pill: 'bg-red-500/10 text-red-300 border-red-500/25' },
 };
 
-const PLAN_STYLE = {
+export const PLAN_STYLE = {
   ultra:   { emoji: '🚀', label: 'Ultra',   pill: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/25' },
   premium: { emoji: '⚡', label: 'Premium', pill: 'bg-accent-primary/10 text-accent-glow border-accent-primary/25' },
   basic:   { emoji: '·',  label: 'Basic',   pill: 'bg-surface-bg text-surface-muted border-surface-border' },
 };
 
-function fmt(n) {
+export function fmt(n) {
   return Number(n || 0).toLocaleString('es-ES');
 }
 
 // null = "todavía no hay base sobre la que calcular" (0 impresiones), que no
 // es lo mismo que 0 % ("hubo impresiones y no picó nadie"). Se pintan
 // distinto a propósito: un guión no es un mal resultado, un 0 % sí.
-function pct(value) {
+export function pct(value) {
   if (value == null) return '—';
   return `${Number(value).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`;
 }
 
-function fmtDate(iso) {
+export function fmtDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function Pill({ className = '', children }) {
+export function Pill({ className = '', children }) {
   return (
     <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border whitespace-nowrap ${className}`}>
       {children}
@@ -80,7 +79,7 @@ function Pill({ className = '', children }) {
 // o pulsando cualquiera de los dos botones — mientras se envía el POST se
 // deshabilita "Sí, finalizar" y se pone un spinner, para que un doble tap
 // no dispare dos peticiones.
-function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }) {
+export function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }) {
   if (!open) return null;
   const label = kind === 'event' ? 'la publicidad de este evento' : 'la publicidad de este sorteo';
   return (
@@ -137,7 +136,7 @@ function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }) {
 // escondía la opción justo cuando el usuario más la necesitaba ver
 // (aunque fuese deshabilitada, con el motivo). Ahora en ese caso los
 // botones se enseñan igual, deshabilitados y con el motivo explicado.
-function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, hasContract }) {
+export function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, hasContract }) {
   if (!hasContract) return null;
 
   const canRenew = row.can_renew;
@@ -201,7 +200,7 @@ function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, hasContrac
   );
 }
 
-function StatTile({ label, value, hint, accent = 'text-surface-text' }) {
+export function StatTile({ label, value, hint, accent = 'text-surface-text' }) {
   return (
     <div className="bg-surface-bg border border-surface-border rounded-xl px-3 py-2.5 min-w-0">
       <p className="text-[10px] font-mono text-surface-muted truncate">{label}</p>
@@ -215,7 +214,7 @@ function StatTile({ label, value, hint, accent = 'text-surface-text' }) {
 // visualmente pero el número de al lado sí puede pasarse (p.ej. si el aforo
 // real quedó por encima de lo contratado), así que no se miente: la barra es
 // solo el dibujo, la cifra manda.
-function ProgressBar({ value, barClass = 'bg-accent-primary' }) {
+export function ProgressBar({ value, barClass = 'bg-accent-primary' }) {
   const width = Math.max(0, Math.min(100, Number(value || 0)));
   return (
     <div className="h-1.5 rounded-full bg-surface-bg border border-surface-border overflow-hidden">
@@ -245,7 +244,7 @@ function ProgressBar({ value, barClass = 'bg-accent-primary' }) {
 // La conclusión automática de abajo (el "lift") solo se saca sin filtro: con
 // filtro, el segmento de no interesados es un residuo de miembros de la
 // comunidad, no una muestra con la que comparar nada.
-function InterestBreakdown({ data, filtered, unit, filteredNote }) {
+export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
   const { interested, not_interested: notInterested, unknown } = data.interest;
   const classified = interested + notInterested;
 
@@ -340,7 +339,55 @@ function InterestBreakdown({ data, filtered, unit, filteredNote }) {
   );
 }
 
-function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
+// Fase 124 — panel compacto para el LISTADO del dashboard. Se pinta en
+// vez del <EventCard> gigante para no sobrecargar la pantalla cuando
+// hay varios eventos (con el cap de 4 activos + histórico, la lista se
+// llena rápido). Muestra lo mínimo para saber qué te está pasando con
+// cada campaña — plan, fecha, clicks y CTR agregado — y un chevron
+// que empuja al usuario a abrir el detalle. El detalle completo
+// (StatTiles, InterestBreakdown, banner Ultra, PromotionActions…) vive
+// en CommunityDashboardEventPage.jsx y se enseña ahí de una vez.
+//
+// El agregado de "Clicks" suma los internos (notificación push /
+// personas únicas) + los del banner Ultra + los del enlace externo,
+// para dar una única cifra de "gente que interactuó con este anuncio"
+// en la fila del listado. Los desgloses viven en el detalle.
+export function EventCardCompact({ event, onOpen }) {
+  const plan = PLAN_STYLE[event.promotion_plan] || PLAN_STYLE.basic;
+  const bannerClicks = Number(event.ultra_banner_clicks || 0);
+  const urlClicks = Number(event.url_clicks || 0);
+  const totalClicks = (event.clicks?.total || 0) + bannerClicks + urlClicks;
+
+  return (
+    <button
+      onClick={() => onOpen(event.id)}
+      className="w-full text-left bg-surface-card border border-surface-border rounded-2xl p-3.5 flex items-center gap-3 hover:border-accent-primary/40 hover:bg-surface-card/80 transition-all"
+    >
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="font-display font-bold text-surface-text text-sm truncate">{event.title}</p>
+          <Pill className={plan.pill}>{plan.emoji} {plan.label}</Pill>
+        </div>
+        <p className="text-[10px] font-mono text-surface-muted">
+          {fmtDate(event.event_date)}{event.started ? ' · ya empezó' : ' · próximo'}
+        </p>
+        <div className="flex items-center gap-3 text-[11px] font-mono">
+          <span className="text-surface-muted">
+            👆 <span className="text-accent-glow">{fmt(totalClicks)}</span> clicks
+          </span>
+          {event.promoted && (
+            <span className="text-surface-muted">
+              📈 CTR <span className="text-accent-glow">{pct(event.ctr)}</span>
+            </span>
+          )}
+        </div>
+      </div>
+      <span className="text-surface-muted text-xl leading-none flex-shrink-0" aria-hidden="true">›</span>
+    </button>
+  );
+}
+
+export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
   const plan = PLAN_STYLE[event.promotion_plan] || PLAN_STYLE.basic;
 
   return (
@@ -470,7 +517,49 @@ function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
   );
 }
 
-function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
+// Fase 124 — panel compacto para el LISTADO del dashboard, mismo
+// patrón que EventCardCompact. El detalle vive en
+// CommunityDashboardRafflePage. Enseña lo justo para saber qué te está
+// pasando con cada sorteo (tier, estado del sorteo, clicks del banner,
+// CTR si aplica) y un chevron que empuja a abrir el detalle.
+export function RaffleCardCompact({ raffle, onOpen }) {
+  const style = TIER_STYLE[raffle.tier] || TIER_STYLE.light;
+  const clicks = raffle.clicks?.total || 0;
+  // Estado que se muestra en la sublínea. Mismo criterio que el
+  // RaffleCard grande (drawn_at → "sorteado", ends_at pasado sin
+  // sortear → "terminó", si no "termina el ..."). Los tres estados
+  // ya llegan calculados desde el server (r.drawn_at / r.ended), lo
+  // que hacemos aquí es solo formatear.
+  const statusLabel = raffle.drawn_at
+    ? `Sorteado el ${fmtDate(raffle.drawn_at)}`
+    : raffle.ended ? `Terminó el ${fmtDate(raffle.ends_at)}` : `Termina el ${fmtDate(raffle.ends_at)}`;
+
+  return (
+    <button
+      onClick={() => onOpen(raffle.id)}
+      className="w-full text-left bg-surface-card border border-surface-border rounded-2xl p-3.5 flex items-center gap-3 hover:border-accent-primary/40 hover:bg-surface-card/80 transition-all"
+    >
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="font-display font-bold text-surface-text text-sm truncate">{raffle.title}</p>
+          <Pill className={style.pill}>{style.emoji} {raffle.tier_label}</Pill>
+        </div>
+        <p className="text-[10px] font-mono text-surface-muted">{statusLabel}</p>
+        <div className="flex items-center gap-3 text-[11px] font-mono">
+          <span className="text-surface-muted">
+            👆 <span className="text-accent-glow">{fmt(clicks)}</span> clicks
+          </span>
+          <span className="text-surface-muted">
+            📈 CTR <span className="text-accent-glow">{pct(raffle.ctr)}</span>
+          </span>
+        </div>
+      </div>
+      <span className="text-surface-muted text-xl leading-none flex-shrink-0" aria-hidden="true">›</span>
+    </button>
+  );
+}
+
+export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
   const style = TIER_STYLE[raffle.tier] || TIER_STYLE.light;
 
   return (
@@ -559,19 +648,11 @@ function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
 export default function CommunityDashboardPage() {
   const { communityId } = useParams();
   const navigate = useNavigate();
-  const { showToast } = useToast();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('events');
-
-  // Estado del modal de finalización. Un único slot — nunca se puede tener
-  // dos confirmaciones abiertas a la vez, así que basta con "qué fila y de
-  // qué tipo". `endingBusy` bloquea el botón de confirmar mientras vuela el
-  // POST, para que un doble tap no dispare dos peticiones.
-  const [ending, setEnding] = useState(null); // { kind, row } | null
-  const [endingBusy, setEndingBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -590,74 +671,13 @@ export default function CommunityDashboardPage() {
     load();
   }, [load]);
 
-  // ── Handlers de acciones de promoción ─────────────────────────────────────
-  // Renovar navega a la página de configuración correspondiente con el
-  // estado necesario para arrancar en modo renovación (renewEvent/renewRaffle
-  // en el state). Es lo que interpretan EventAdConfigPage y
-  // RaffleAdAudiencePage: si detectan estos objetos, prellenan el formulario
-  // con los valores actuales y al confirmar llaman al endpoint renew-promotion
-  // en vez de al de creación. Sin ese state las páginas siguen siendo las de
-  // crear un evento/sorteo nuevo — no rompemos el flujo original.
-  const handleRenewEvent = useCallback((event) => {
-    navigate('/community/event-publicidad', {
-      state: {
-        renewEvent: {
-          id: event.id,
-          title: event.title,
-          promotion_plan: event.promotion_plan,
-          notification_count: event.contracted,
-          communityId,
-          communityName: data?.community?.name || '',
-        },
-      },
-    });
-  }, [navigate, communityId, data]);
-
-  const handleRenewRaffle = useCallback((raffle) => {
-    navigate(`/community/${communityId}/raffle-publicidad`, {
-      state: {
-        renewRaffle: {
-          id: raffle.id,
-          title: raffle.title,
-          tier: raffle.tier,
-          // Categorías propias del sorteo (fase 116): las usa
-          // RaffleAdAudiencePage para pedir el conteo de "interesados"
-          // contra las categorías del sorteo (con fallback a comunidad si
-          // el sorteo no tiene). El dashboard ya las expone en la fila.
-          categories: raffle.categories,
-          banner_views_contracted: raffle.contracted,
-          banner_interested_only: raffle.banner_interested_only,
-        },
-        communityName: data?.community?.name || '',
-      },
-    });
-  }, [navigate, communityId, data]);
-
-  // Finalizar sí es acción destructiva y no lleva parámetros: se dispara con
-  // confirmación en modal. Se refresca el dashboard al terminar para que el
-  // usuario vea el nuevo estado (promo_ended_at pintado, botones ajustados)
-  // sin tener que tirar del pull-to-refresh.
-  const askEnd = useCallback((kind, row) => {
-    setEnding({ kind, row });
-  }, []);
-
-  const confirmEnd = useCallback(async () => {
-    if (!ending) return;
-    const path = ending.kind === 'event'
-      ? `/community/events/${ending.row.id}/end-promotion`
-      : `/community/raffles/${ending.row.id}/end-promotion`;
-    setEndingBusy(true);
-    try {
-      await api.post(path, {});
-      showToast('Publicidad finalizada', 'success');
-      setEnding(null);
-      await load();
-    } catch (e) {
-      showToast(e.message || 'No se pudo finalizar', 'error');
-    } finally {
-      setEndingBusy(false);
-    }
-  }, [ending, load, showToast]);
+  // NOTA (fase 124): los handlers de renovar/finalizar campaña de eventos
+  // Y sorteos viven ahora en sus subpáginas correspondientes
+  // (CommunityDashboardEventPage y CommunityDashboardRafflePage). Esta
+  // página es solo el LISTADO — al tapear cualquier fila se navega al
+  // detalle y allí se ejecutan las acciones. Sin esto, el listado
+  // arrastraría la mitad del estado (ending, endingBusy, modales) para
+  // botones que ya no está pintando.
 
   // Se ordenan por clicks: lo primero que quieres ver al abrir esto es qué
   // campaña funcionó, no cuál publicaste antes. A igualdad de clicks manda
@@ -869,37 +889,22 @@ export default function CommunityDashboardPage() {
           <div className="space-y-3">
             {tab === 'events'
               ? events.map(e => (
-                  <EventCard
+                  <EventCardCompact
                     key={e.id}
                     event={e}
-                    freeThreshold={s.free_threshold}
-                    onOpen={id => navigate(`/community/event/${id}`)}
-                    onRenew={handleRenewEvent}
-                    onEnd={row => askEnd('event', row)}
+                    onOpen={id => navigate(`/community/${communityId}/dashboard/event/${id}`)}
                   />
                 ))
               : raffles.map(r => (
-                  <RaffleCard
+                  <RaffleCardCompact
                     key={r.id}
                     raffle={r}
-                    freeThreshold={s.free_threshold}
-                    onOpen={id => navigate(`/community/${communityId}#raffle-${id}`)}
-                    onRenew={handleRenewRaffle}
-                    onEnd={row => askEnd('raffle', row)}
+                    onOpen={id => navigate(`/community/${communityId}/dashboard/raffle/${id}`)}
                   />
                 ))}
           </div>
         )}
       </main>
-
-      <ConfirmEndModal
-        open={!!ending}
-        kind={ending?.kind}
-        title={ending?.row?.title || ''}
-        busy={endingBusy}
-        onCancel={() => !endingBusy && setEnding(null)}
-        onConfirm={confirmEnd}
-      />
 
       <BottomNav />
     </div>

@@ -26,6 +26,8 @@ import EventDetailPage from './pages/EventDetailPage';
 import EventLocatorPage from './pages/EventLocatorPage';
 import RaffleAdAudiencePage from './pages/RaffleAdAudiencePage';
 import CommunityDashboardPage from './pages/CommunityDashboardPage';
+import CommunityDashboardEventPage from './pages/CommunityDashboardEventPage';
+import CommunityDashboardRafflePage from './pages/CommunityDashboardRafflePage';
 import EventAdConfigPage from './pages/EventAdConfigPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
@@ -183,6 +185,8 @@ function AppRoutes() {
       <Route path="/community/:communityId"   element={<CommunityDetailPage />} />
       <Route path="/community/:communityId/raffle-publicidad" element={<RaffleAdAudiencePage />} />
       <Route path="/community/:communityId/dashboard" element={<CommunityDashboardPage />} />
+      <Route path="/community/:communityId/dashboard/event/:eventId" element={<CommunityDashboardEventPage />} />
+      <Route path="/community/:communityId/dashboard/raffle/:raffleId" element={<CommunityDashboardRafflePage />} />
       <Route path="*"                         element={<Navigate to="/" replace />} />
       </Routes>
     </>
