@@ -18,6 +18,7 @@ const discoverRoutes  = require('./routes/discover');
 const { expireStaleBatteries } = require('./lib/batteryExpiry');
 const { notifyPoolsStartingSoon, notifyEventsStartingSoon } = require('./jobs/reminders');
 const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
+const { runAutoDrawTick } = require('./jobs/autoDrawRaffles');
 const { getNotificationDayKey } = require('./lib/notificationDay');
 const { INSTANCE_ID } = require('./lib/instanceId');
 const supabase = require('./lib/supabase');
@@ -390,6 +391,19 @@ cron.schedule('* * * * *', () => {
 cron.schedule('*/5 * * * *', () => {
   runEventPromoPacingTick().catch(err => {
     console.error('[CRON] Event promo pacing failed:', err);
+  });
+});
+
+// Auto-sortear ganadores de sorteos vencidos (ends_at pasado, drawn_at
+// aún NULL). Corre cada minuto — es una consulta barata (índice sobre
+// ends_at + filtro por drawn_at IS NULL) y con premios modestos por
+// sorteo la ejecución de cada uno son unos pocos UPDATEs. Sin esto el
+// creador tenía que entrar y pulsar "Sortear" — ganadores no se
+// enteraban de que habían ganado hasta que se acordase. Ver
+// server/jobs/autoDrawRaffles.js.
+cron.schedule('* * * * *', () => {
+  runAutoDrawTick().catch(err => {
+    console.error('[CRON] Auto-draw raffles failed:', err);
   });
 });
 

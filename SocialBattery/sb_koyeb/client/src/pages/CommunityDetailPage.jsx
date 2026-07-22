@@ -1155,7 +1155,17 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
   const navigate = useNavigate();
   const minDate = new Date(Date.now() + 60 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
-  const defaultDate = `${minDate.getFullYear()}-${pad(minDate.getMonth() + 1)}-${pad(minDate.getDate())}T${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
+  const fmtDatetimeLocal = d =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const defaultDate = fmtDatetimeLocal(minDate);
+  // Sorteos Volt: tope duro de 14 días — debe coincidir con
+  // VOLT_MAX_DURATION_DAYS del server (POST /communities/:id/raffles).
+  // Volt no puede finalizarse ni renovarse manualmente (los tiers de
+  // ciclo de vida solo cubren light/community, ver RAFFLE_LIFECYCLE_TIERS
+  // en routes/community.js), así que ends_at es su único freno — sin
+  // este tope un Volt puede quedarse repartiendo banners meses.
+  const VOLT_MAX_DURATION_DAYS = 14;
+  const voltMaxDate = fmtDatetimeLocal(new Date(Date.now() + VOLT_MAX_DURATION_DAYS * 24 * 60 * 60 * 1000));
   const imageInputRef = useRef(null);
   const imageCameraRef = useRef(null);
   const [showPhotoMenu, setShowPhotoMenu] = useState(false);
@@ -1281,6 +1291,11 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
     if (!title.trim()) { setError('El título es obligatorio'); return; }
     if (!endsAt) { setError('La fecha de fin es obligatoria'); return; }
     if (new Date(endsAt) <= new Date()) { setError('La fecha de fin debe ser en el futuro'); return; }
+    // Volt: tope duro de 14 días — replica la validación del server.
+    if (tier === 'volt' && new Date(endsAt) > new Date(voltMaxDate)) {
+      setError(`Los sorteos Volt pueden durar como máximo ${VOLT_MAX_DURATION_DAYS} días.`);
+      return;
+    }
     // Fase 120: categorías obligatorias. El backend también lo rechaza,
     // pero validamos aquí para no gastar la subida de imagen.
     if (categories.length < 1) {
@@ -1399,8 +1414,14 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
               value={endsAt}
               onChange={e => setEndsAt(e.target.value)}
               min={defaultDate}
+              max={tier === 'volt' ? voltMaxDate : undefined}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
+            {tier === 'volt' && (
+              <p className="text-[10px] font-mono text-surface-muted mt-1">
+                Los sorteos Volt duran como máximo {VOLT_MAX_DURATION_DAYS} días.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
@@ -1625,7 +1646,16 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                   <button
                     key={opt.key}
                     type="button"
-                    onClick={() => setTier(opt.key)}
+                    onClick={() => {
+                      setTier(opt.key);
+                      // Cambiar a Volt con una fecha más allá del tope
+                      // dejaría el input en estado inválido silencioso
+                      // (el `max` no reajusta el value). Se clampea
+                      // aquí al máximo permitido.
+                      if (opt.key === 'volt' && endsAt && new Date(endsAt) > new Date(voltMaxDate)) {
+                        setEndsAt(voltMaxDate);
+                      }
+                    }}
                     className={`w-full text-left rounded-xl border px-3.5 py-3 transition-all ${
                       selected
                         ? selectedStyle

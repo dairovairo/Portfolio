@@ -11,6 +11,7 @@ const { getNotificationDayKey } = require('../lib/notificationDay');
 const { runEventPromoPacingTick, FREE_THRESHOLD } = require('../jobs/eventPromoPacing');
 const { addYears, addMonths } = require('../lib/dateRangeLimits');
 const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
+const { drawRaffleWinners } = require('../lib/raffleDraw');
 const { pickRaffleFromRatioGroups } = require('../lib/promoDistribution');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -4660,6 +4661,24 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleAssets, async (
     return res.status(400).json({ error: 'La fecha de fin debe ser en el futuro' });
   }
 
+  // Fase de sorteos Volt (tope 2 semanas): son gratis y reparten banner
+  // a TODA la app sin aforo contratado — para que el reparto no se
+  // eternice y no aparezcan sorteos Volt fantasma con ends_at a un año
+  // vista, se limita duro a 14 días desde ahora. En Light y Community
+  // no aplica porque tienen su propio mecanismo de fin (aforo agotado o
+  // finalización manual). Debe coincidir con VOLT_MAX_DURATION_DAYS del
+  // cliente en CreateRaffleModal (usa el mismo tope para el `max` del
+  // datetime-local).
+  const VOLT_MAX_DURATION_DAYS = 14;
+  if (raffleTier === 'volt') {
+    const maxAllowed = new Date(Date.now() + VOLT_MAX_DURATION_DAYS * 24 * 60 * 60 * 1000);
+    if (endsAtDate > maxAllowed) {
+      return res.status(400).json({
+        error: `Los sorteos Volt pueden durar como máximo ${VOLT_MAX_DURATION_DAYS} días.`,
+      });
+    }
+  }
+
   // Sorteo Light: visualizaciones de banner a contratar, entre BANNER_VIEWS_MIN
   // y BANNER_VIEWS_MAX (rango propio del sorteo, distinto del notification_count
   // de eventos Premium/Ultra — ver POST /community/events más arriba). El
@@ -6154,64 +6173,12 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
       return res.status(400).json({ error: 'No hay participantes para sortear' });
     }
 
-    // Fase 122 — sorteo de N ganadores (uno por premio). Los sorteos
-    // antiguos (previos a la fase 122) no tienen filas en
-    // community_raffle_prizes; ahí caemos al flujo legacy de "1 ganador,
-    // guardar en community_raffles.winner_id" para no romperlos.
-    const { data: prizeRows, error: prizesFetchErr } = await supabase
-      .from('community_raffle_prizes')
-      .select('id, position')
-      .eq('raffle_id', raffleId)
-      .order('position', { ascending: true });
-    if (prizesFetchErr) throw prizesFetchErr;
-
-    const nowIso = new Date().toISOString();
-
-    if (!prizeRows || prizeRows.length === 0) {
-      // ── Camino legacy (raffle sin premios en la tabla nueva) ──
-      const winnerId = eligibleIds[Math.floor(Math.random() * eligibleIds.length)];
-      const { error: updateErr } = await supabase
-        .from('community_raffles')
-        .update({ winner_id: winnerId, drawn_at: nowIso })
-        .eq('id', raffleId);
-      if (updateErr) throw updateErr;
-    } else {
-      // ── Camino de premios (fase 122) ──
-      // Fisher-Yates parcial: baraja los primeros K = min(nº premios,
-      // nº elegibles) elementos y toma esos K como ganadores en orden.
-      // El primer extraído se lleva el premio position=1, el segundo
-      // el 2, etc. Si sobran premios respecto a elegibles, quedan sin
-      // winner (permitido por schema: winner_id NULL). No se re-sortea
-      // ni se rota: drawn_at queda seteado y este endpoint no se puede
-      // volver a llamar.
-      const shuffled = eligibleIds.slice();
-      const draws = Math.min(prizeRows.length, shuffled.length);
-      for (let i = 0; i < draws; i++) {
-        const j = i + Math.floor(Math.random() * (shuffled.length - i));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      // Actualiza cada premio con su ganador. Se hace en secuencia (no
-      // en batch upsert) porque el WHERE de un upsert cambia el schema
-      // "una fila por id" y la tabla usa gen_random_uuid — tirar de
-      // .update por id es fiable y son pocas rows (PRIZE_MAX_PER_RAFFLE=10).
-      // Si alguno falla, drawn_at NO se toca y el endpoint puede
-      // reintentarse (los premios ya asignados quedarían adjudicados,
-      // pero la ruta ya rechaza reintentos vía "drawn_at" — así que en
-      // la práctica el organizador vería un error 500 y tendría que
-      // arreglar en BD; caso raro).
-      for (let i = 0; i < draws; i++) {
-        const { error: prizeUpdateErr } = await supabase
-          .from('community_raffle_prizes')
-          .update({ winner_id: shuffled[i] })
-          .eq('id', prizeRows[i].id);
-        if (prizeUpdateErr) throw prizeUpdateErr;
-      }
-      const { error: raffleUpdateErr } = await supabase
-        .from('community_raffles')
-        .update({ drawn_at: nowIso })
-        .eq('id', raffleId);
-      if (raffleUpdateErr) throw raffleUpdateErr;
-    }
+    // Delegado a lib/raffleDraw.js — misma lógica que usa el cron de
+    // auto-sorteo (jobs/autoDrawRaffles.js): premios con Fisher-Yates
+    // parcial cuando los hay, camino legacy de ganador único en la
+    // columna community_raffles.winner_id cuando el sorteo es
+    // pre-fase-122.
+    await drawRaffleWinners({ raffleId, eligibleIds });
 
     // Refresh completo para la respuesta — incluye el winner legacy (si
     // fue el camino de sorteo antiguo) o los premios recién asignados.
