@@ -469,6 +469,44 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
             </div>
           )}
 
+          {/* Fase 125 — clicks al enlace externo de ESTE evento. Antes
+              vivía como chip pequeño en la fila de engagement de abajo
+              y también agregado en la sección "URLs externas" del
+              listado principal; se movió aquí para que el organizador
+              vea qué evento le trae más gente a su web. Solo se pinta
+              si el evento tiene URL — si no, no hay nada que medir. Es
+              un contador ingenuo (cada tap suma), NO personas únicas —
+              misma filosofía que el chip del banner Ultra de arriba. */}
+          {event.url && (
+            <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-mono text-accent-glow/80 uppercase tracking-wide">
+                  🔗 Enlace externo del evento
+                </p>
+                <a
+                  href={event.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-mono text-surface-muted hover:text-accent-glow truncate max-w-[55%]"
+                  title={event.url}
+                >
+                  {event.url}
+                </a>
+              </div>
+              <div className="flex items-baseline gap-3">
+                <p className="font-display font-bold text-accent-glow text-2xl">
+                  {fmt(event.url_clicks)}
+                </p>
+                <p className="text-[11px] font-mono text-surface-muted">
+                  {event.url_clicks === 1 ? 'click al enlace' : 'clicks al enlace'}
+                </p>
+              </div>
+              <p className="text-[10px] text-surface-muted leading-relaxed">
+                Cada tap al 🔗 del evento suma uno — no se deduplica por persona.
+              </p>
+            </div>
+          )}
+
           <div className="flex items-center flex-wrap gap-1.5">
             {event.audience_radius_km != null && (
               <Pill className="bg-surface-bg text-surface-muted border-surface-border">📍 {event.audience_radius_km} km</Pill>
@@ -491,18 +529,9 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
         </>
       )}
 
-      <div className="border-t border-surface-border/60 pt-3 flex items-center flex-wrap gap-x-4 gap-y-1 text-[11px] font-mono text-surface-muted">
+      <div className="border-t border-surface-border/60 pt-3 flex items-center gap-4 text-[11px] font-mono text-surface-muted">
         <span>👥 {fmt(event.attendees)} apuntados</span>
         <span>❤️ {fmt(event.likes)} likes</span>
-        {/* Fase 121 — clicks al enlace externo del evento. Solo se
-            enseña si el evento tiene URL (si no, no hay nada que
-            medir). Cero clicks se pinta igualmente para dejar claro
-            que se está trackeando. */}
-        {event.url && (
-          <span title="Clicks al enlace externo del organizador">
-            🔗 {fmt(event.url_clicks)} clicks
-          </span>
-        )}
       </div>
 
       <PromotionActions
@@ -790,40 +819,38 @@ export default function CommunityDashboardPage() {
           </p>
         </section>
 
-        {/* Fase 121 — clicks a URLs externas ("la web/redes que cuelga
-            el organizador"). Es un contador DISTINTO al del bloque de
-            arriba: allí se mide CTR de personas únicas del ANUNCIO
-            interno (push del evento, avioneta del sorteo); aquí se
-            mide cuánta gente ha tapeado el 🔗 externo. Aquí SÍ cuentan
-            los reboteos (el mismo usuario abriendo tres veces suma
-            tres) porque lo que interesa medir es la tracción bruta del
-            enlace del organizador, no el CTR de la campaña. Se enseña
-            aparte para no confundirlo.
-            NOTA (fase 122): los sorteos no tienen URL — solo se
-            agregan comunidad + eventos. */}
-        {s.total_url_clicks != null && (
-          <section className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
+        {/* Fase 121 — clicks a URL externa de la comunidad. Es un
+            contador DISTINTO al bloque de arriba: allí se mide CTR de
+            personas únicas del ANUNCIO interno (push del evento,
+            avioneta del sorteo); aquí se mide cuánta gente ha tapeado
+            el 🔗 externo de tu comunidad. Los reboteos SÍ cuentan (el
+            mismo usuario abriendo tres veces suma tres) porque lo que
+            interesa medir es la tracción bruta del enlace, no el CTR
+            de una campaña.
+            NOTA (fase 125): antes había también un agregado de "clicks
+            a URLs de eventos" aquí — se movió al detalle de cada
+            evento (CommunityDashboardEventPage → EventCard) porque
+            saber el total ciego servía de poco; lo que ayuda al
+            organizador es ver cuál es el evento que le trae más gente
+            a su web. Ver mini-bloque "🔗 Enlace externo" en EventCard.
+            Los sorteos no tienen URL (fase 122). */}
+        {s.community_url_clicks != null && (
+          <section className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-2">
             <h2 className="font-display font-bold text-surface-text text-sm flex items-center gap-2">
-              🔗 Clicks a enlaces externos
+              🔗 Clicks al enlace de tu comunidad
               <span className="text-[10px] font-mono text-surface-muted font-normal">acumulado</span>
             </h2>
-            <div className="grid grid-cols-2 gap-2">
-              <StatTile
-                label="Tu comunidad"
-                value={fmt(s.community_url_clicks)}
-                accent="text-accent-glow"
-                hint={data.community.url ? 'a tu web' : 'sin enlace'}
-              />
-              <StatTile
-                label="Eventos"
-                value={fmt(s.event_url_clicks)}
-                accent="text-accent-glow"
-                hint="a sus webs"
-              />
+            <div className="flex items-baseline gap-3">
+              <p className="font-display font-bold text-accent-glow text-2xl">
+                {fmt(s.community_url_clicks)}
+              </p>
+              <p className="text-[11px] font-mono text-surface-muted">
+                {data.community.url ? 'a tu web' : 'aún no has puesto enlace'}
+              </p>
             </div>
             <p className="text-[10px] text-surface-muted leading-relaxed">
-              Cada tap suma uno — no se deduplica por persona: aquí lo que se mide es la tracción bruta del enlace,
-              no el CTR de una campaña.
+              Cada tap al 🔗 de la comunidad suma uno — no se deduplica por persona. Los clicks al enlace de cada
+              evento se ven en el detalle de ese evento.
             </p>
           </section>
         )}

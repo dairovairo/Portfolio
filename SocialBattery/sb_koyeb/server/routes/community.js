@@ -5795,8 +5795,6 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
     // al recibir un POST /events o /raffles nuevos — no pueden desviarse.
     const activeActivityCount = await getActiveActivityCount(communityId);
 
-    const eventUrlClicks = sum(eventRows,  r => r.url_clicks);
-
     res.json({
       community: {
         id: community.id,
@@ -5821,13 +5819,16 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
         total_ctr: rate(eventClicks + raffleClicks, eventSends + raffleShown),
         free_threshold: FREE_THRESHOLD,
         // Fase 121 — tope de actividades vivas (para el badge X/4) y
-        // clicks acumulados a URLs externas. Los sorteos no tienen URL
-        // (fase 122 lo revirtió): solo se agregan comunidad + eventos.
+        // clicks acumulados a URLs externas.
+        // Fase 125 — el agregado por evento (event_url_clicks) se
+        // eliminó del summary porque servía de poco: ver cuál evento
+        // trae más tráfico se hace en el detalle de cada uno (cada
+        // fila lleva su propio url_clicks). Aquí solo queda el
+        // acumulado de la URL de la comunidad, que sí es un dato
+        // agregado natural (la comunidad tiene UNA URL, no N).
         active_activity_count: activeActivityCount,
         active_activity_limit: ACTIVE_ACTIVITY_LIMIT_PER_COMMUNITY,
         community_url_clicks: Number(community.url_click_count || 0),
-        event_url_clicks: eventUrlClicks,
-        total_url_clicks: Number(community.url_click_count || 0) + eventUrlClicks,
       },
       events: eventRows,
       raffles: raffleRows,
