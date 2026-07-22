@@ -2013,9 +2013,16 @@ router.get('/notifications/today-event', requireAuth, async (req, res) => {
     // fallo del contador: analytics no debe retrasar la carga del menú
     // principal. Si la RPC falla, se loguea y ya está — el banner se
     // enseña igual.
+    // Fase 126 — además, se inserta una fila timestampeada en
+    // promo_metric_events para poder graficar la evolución en el tiempo.
     supabase.rpc('increment_event_ultra_banner_views', { p_id: event.id })
       .then(({ error: rpcErr }) => {
         if (rpcErr) console.warn('[community] ultra banner view increment failed:', rpcErr.message);
+      });
+    supabase.from('promo_metric_events')
+      .insert({ kind: 'ultra_banner_view', target_id: event.id, user_id: req.user.id })
+      .then(({ error: logErr }) => {
+        if (logErr) console.warn('[community] ultra_banner_view log insert failed:', logErr.message);
       });
 
     res.json({
@@ -5221,11 +5228,24 @@ router.post('/raffles/:raffleId/banner-click', requireAuth, async (req, res) => 
 // JSON solo generaría un pico de bytes tirado. Errores se loggean pero
 // no se le devuelven al usuario: perder un click en analytics no debe
 // romper la experiencia de abrir el enlace.
+//
+// Fase 126 — además de incrementar el contador (fast-path del
+// dashboard), se inserta una fila en promo_metric_events para poder
+// reconstruir la serie temporal. Los dos writes NO se hacen
+// transaccionales — si uno falla, el otro se mantiene: el dashboard
+// principal usa el contador y el gráfico usa el log, así una pequeña
+// divergencia entre ellos es aceptable (ver comentario del schema).
 router.post('/communities/:id/url-click', requireAuth, async (req, res) => {
   const communityId = req.params.id;
   try {
     const { error } = await supabase.rpc('increment_community_url_clicks', { p_id: communityId });
     if (error) throw error;
+    // Fase 126 — log timestampeado para gráficos temporales.
+    supabase.from('promo_metric_events')
+      .insert({ kind: 'community_url_click', target_id: communityId, user_id: req.user.id })
+      .then(({ error: logErr }) => {
+        if (logErr) console.warn('[community] community_url_click log insert failed:', logErr.message);
+      });
     res.status(204).end();
   } catch (err) {
     console.error('[community] POST /communities/:id/url-click', err);
@@ -5238,6 +5258,12 @@ router.post('/events/:id/url-click', requireAuth, async (req, res) => {
   try {
     const { error } = await supabase.rpc('increment_event_url_clicks', { p_id: eventId });
     if (error) throw error;
+    // Fase 126 — log timestampeado para gráficos temporales.
+    supabase.from('promo_metric_events')
+      .insert({ kind: 'event_url_click', target_id: eventId, user_id: req.user.id })
+      .then(({ error: logErr }) => {
+        if (logErr) console.warn('[community] event_url_click log insert failed:', logErr.message);
+      });
     res.status(204).end();
   } catch (err) {
     console.error('[community] POST /events/:id/url-click', err);
@@ -5256,6 +5282,12 @@ router.post('/events/:id/ultra-banner-click', requireAuth, async (req, res) => {
   try {
     const { error } = await supabase.rpc('increment_event_ultra_banner_clicks', { p_id: eventId });
     if (error) throw error;
+    // Fase 126 — log timestampeado para gráficos temporales.
+    supabase.from('promo_metric_events')
+      .insert({ kind: 'ultra_banner_click', target_id: eventId, user_id: req.user.id })
+      .then(({ error: logErr }) => {
+        if (logErr) console.warn('[community] ultra_banner_click log insert failed:', logErr.message);
+      });
     res.status(204).end();
   } catch (err) {
     console.error('[community] POST /events/:id/ultra-banner-click', err);
@@ -5836,6 +5868,229 @@ router.get('/communities/:id/dashboard', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[community] GET /communities/:id/dashboard', err);
     res.status(500).json({ error: err.message || 'Error al obtener el dashboard' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Fase 126 — series temporales de métricas de publicidad
+//
+// Devuelve buckets [{ts, value}] de una métrica concreta de un evento,
+// sorteo o comunidad, agrupados por un intervalo configurable. Se usa
+// desde el gráfico temporal en el detalle del evento/sorteo del
+// dashboard (CommunityDashboardEventPage / CommunityDashboardRafflePage).
+//
+// Query params:
+//   entity_type: 'event' | 'raffle' | 'community'
+//   entity_id:   UUID
+//   metric:      depende de entity_type — ver METRIC_SOURCES abajo
+//   interval:    '5m' | '15m' | '1h' | '6h' | '1d' | '1w'  (default '1h')
+//   from, to:    ISO 8601 opcionales. Defaults:
+//                 - from = created_at de la entidad
+//                 - to   = ahora
+//
+// Solo lo puede pedir el creador de la comunidad — igual que el
+// dashboard general (protege métricas que un participante no debería
+// ver como personas únicas por bucket).
+//
+// Devuelve: {
+//   entity_type, entity_id, metric, interval,
+//   from, to,               // ISO, resueltos
+//   bucket_seconds,         // tamaño del bucket en segundos (para el cliente)
+//   buckets: [{ts, value}]  // ts ISO al INICIO del bucket, value integer
+// }
+//
+// El servidor devuelve SOLO los buckets con datos > 0. El cliente
+// rellena los huecos con 0 (más ligero, y sirve para calcular fácilmente
+// el total del rango sumando `value`).
+const BUCKET_SECONDS = {
+  '5m':  5 * 60,
+  '15m': 15 * 60,
+  '1h':  60 * 60,
+  '6h':  6 * 60 * 60,
+  '1d':  24 * 60 * 60,
+  '1w':  7 * 24 * 60 * 60,
+};
+
+// Mapeo métrica → dónde viven los timestamps.
+//   table: tabla origen
+//   ts_col: columna del timestamp del EVENTO (no del insert)
+//   filter: función que construye .eq/.match adicionales sobre la query base
+//   ts_not_null: si hay que exigir que ts_col no sea NULL (para
+//                'clicked_at' / 'shown_at' que están vacíos si el evento
+//                aún no ha ocurrido).
+// Este objeto describe la superficie de métricas soportadas. Al añadir
+// una nueva, actualizar también el switch de allowed metrics abajo y el
+// CHECK del schema si es una del log.
+const METRIC_SOURCES = {
+  // Eventos ────────────────────────────────────────────────────────────
+  event: {
+    // Envíos de notificación push (community + promo). Fuente:
+    // event_promo_notifications ya lo tiene tal cual con sent_at.
+    sends: {
+      table: 'event_promo_notifications', ts_col: 'sent_at',
+      filter: (q, id) => q.eq('event_id', id),
+    },
+    // Clicks a la notificación push (personas únicas — clicked_at solo
+    // se marca la primera vez, ver fase 111).
+    clicks: {
+      table: 'event_promo_notifications', ts_col: 'clicked_at',
+      filter: (q, id) => q.eq('event_id', id), ts_not_null: true,
+    },
+    // Ultra banner (log timestampeado desde fase 126).
+    banner_views: {
+      table: 'promo_metric_events', ts_col: 'created_at',
+      filter: (q, id) => q.eq('kind', 'ultra_banner_view').eq('target_id', id),
+    },
+    banner_clicks: {
+      table: 'promo_metric_events', ts_col: 'created_at',
+      filter: (q, id) => q.eq('kind', 'ultra_banner_click').eq('target_id', id),
+    },
+    // URL externa del evento (log timestampeado desde fase 126).
+    url_clicks: {
+      table: 'promo_metric_events', ts_col: 'created_at',
+      filter: (q, id) => q.eq('kind', 'event_url_click').eq('target_id', id),
+    },
+  },
+  // Sorteos ────────────────────────────────────────────────────────────
+  raffle: {
+    // Asignaciones de banner (a cuántas personas se les asignó).
+    targets: {
+      table: 'raffle_banner_targets', ts_col: 'created_at',
+      filter: (q, id) => q.eq('raffle_id', id),
+    },
+    // Banners realmente mostrados.
+    shown: {
+      table: 'raffle_banner_targets', ts_col: 'shown_at',
+      filter: (q, id) => q.eq('raffle_id', id), ts_not_null: true,
+    },
+    // Clicks al banner del sorteo.
+    clicks: {
+      table: 'raffle_banner_targets', ts_col: 'clicked_at',
+      filter: (q, id) => q.eq('raffle_id', id), ts_not_null: true,
+    },
+  },
+  // Comunidad ──────────────────────────────────────────────────────────
+  community: {
+    url_clicks: {
+      table: 'promo_metric_events', ts_col: 'created_at',
+      filter: (q, id) => q.eq('kind', 'community_url_click').eq('target_id', id),
+    },
+  },
+};
+
+router.get('/communities/:id/dashboard/timeseries', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const communityId = req.params.id;
+  const {
+    entity_type,
+    entity_id,
+    metric,
+    interval = '1h',
+    from: fromRaw,
+    to: toRaw,
+  } = req.query;
+
+  try {
+    // Permisos: solo el creador de la comunidad puede pedir esto.
+    const { data: community, error: cErr } = await supabase
+      .from('communities')
+      .select('id, creator_id, created_at')
+      .eq('id', communityId)
+      .maybeSingle();
+    if (cErr) throw cErr;
+    if (!community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+    if (community.creator_id !== userId) {
+      return res.status(403).json({ error: 'Solo el creador puede consultar las series del dashboard' });
+    }
+
+    const sources = METRIC_SOURCES[entity_type];
+    if (!sources) return res.status(400).json({ error: `entity_type inválido: ${entity_type}` });
+    const source = sources[metric];
+    if (!source) return res.status(400).json({ error: `métrica no soportada para ${entity_type}: ${metric}` });
+    const bucketSeconds = BUCKET_SECONDS[interval];
+    if (!bucketSeconds) return res.status(400).json({ error: `intervalo inválido: ${interval}` });
+    if (!entity_id) return res.status(400).json({ error: 'entity_id obligatorio' });
+
+    // Resolver el rango [from, to]. `from` por defecto = created_at de
+    // la entidad (para eventos y sorteos) o de la comunidad (para
+    // métricas de comunidad). `to` por defecto = now.
+    let defaultFrom = community.created_at;
+    if (entity_type === 'event') {
+      const { data: ev } = await supabase
+        .from('community_events')
+        .select('id, community_id, created_at')
+        .eq('id', entity_id)
+        .maybeSingle();
+      if (!ev || ev.community_id !== communityId) {
+        return res.status(404).json({ error: 'Evento no encontrado en esta comunidad' });
+      }
+      defaultFrom = ev.created_at;
+    } else if (entity_type === 'raffle') {
+      const { data: rf } = await supabase
+        .from('community_raffles')
+        .select('id, community_id, created_at')
+        .eq('id', entity_id)
+        .maybeSingle();
+      if (!rf || rf.community_id !== communityId) {
+        return res.status(404).json({ error: 'Sorteo no encontrado en esta comunidad' });
+      }
+      defaultFrom = rf.created_at;
+    } else if (entity_type === 'community' && entity_id !== communityId) {
+      // Consistencia: si es una métrica de comunidad, entity_id tiene
+      // que coincidir con el communityId de la URL (para no permitir
+      // pedir métricas de OTRA comunidad autenticándote como creador
+      // de la tuya).
+      return res.status(400).json({ error: 'entity_id no coincide con la comunidad' });
+    }
+
+    const from = fromRaw ? new Date(fromRaw) : new Date(defaultFrom);
+    const to   = toRaw   ? new Date(toRaw)   : new Date();
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
+      return res.status(400).json({ error: 'Rango de fechas inválido' });
+    }
+
+    // Traigo TODAS las filas de la métrica en el rango. Bucketing lo
+    // hago en JS — es simple y evita depender de una función SQL que
+    // habría que crear con SECURITY DEFINER. Para los volúmenes de
+    // SocialBattery (miles, no millones, de eventos por promoción) es
+    // más que suficiente. Si en el futuro esto empieza a doler, se
+    // hace un date_trunc / floor(epoch/N) en Postgres directamente.
+    const base = supabase.from(source.table).select(source.ts_col);
+    const filtered = source.filter(base, entity_id)
+      .gte(source.ts_col, from.toISOString())
+      .lt (source.ts_col, to.toISOString());
+    const query = source.ts_not_null
+      ? filtered.not(source.ts_col, 'is', null)
+      : filtered;
+    const { data: rows, error: rowsErr } = await query;
+    if (rowsErr) throw rowsErr;
+
+    // Bucketing: alinea cada timestamp al inicio de su bucket usando
+    // aritmética entera sobre epoch en ms. El bucket base es UTC (no
+    // hay concepto de "día del usuario" aquí — el cliente pinta la
+    // fecha en su zona horaria).
+    const bucketMs = bucketSeconds * 1000;
+    const counts = new Map();
+    for (const row of rows || []) {
+      const t = new Date(row[source.ts_col]).getTime();
+      if (!Number.isFinite(t)) continue;
+      const bucketStart = Math.floor(t / bucketMs) * bucketMs;
+      counts.set(bucketStart, (counts.get(bucketStart) || 0) + 1);
+    }
+    const buckets = [...counts.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([ts, value]) => ({ ts: new Date(ts).toISOString(), value }));
+
+    res.json({
+      entity_type, entity_id, metric, interval,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      bucket_seconds: bucketSeconds,
+      buckets,
+    });
+  } catch (err) {
+    console.error('[community] GET /communities/:id/dashboard/timeseries', err);
+    res.status(500).json({ error: err.message || 'Error al obtener las series temporales' });
   }
 });
 

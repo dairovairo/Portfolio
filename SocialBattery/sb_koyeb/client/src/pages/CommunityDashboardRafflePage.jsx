@@ -4,6 +4,7 @@ import BottomNav from '../components/BottomNav';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { RaffleCard, ConfirmEndModal } from './CommunityDashboardPage';
+import TimeseriesChart from '../components/TimeseriesChart';
 
 // ── Subpágina del dashboard: detalle de UN sorteo ─────────────────────────
 // Fase 124 — hermana simétrica de CommunityDashboardEventPage. El
@@ -164,13 +165,21 @@ export default function CommunityDashboardRafflePage() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 pb-28 pt-4">
+      <main className="max-w-lg mx-auto px-4 pb-28 pt-4 space-y-4">
         <RaffleCard
           raffle={raffle}
           freeThreshold={data.summary.free_threshold}
           onOpen={id => navigate(`/community/${communityId}#raffle-${id}`)}
           onRenew={handleRenewRaffle}
           onEnd={row => askEnd('raffle', row)}
+        />
+        {/* Fase 126 — gráfico temporal de todas las métricas del sorteo:
+            targets asignados, banners mostrados y clicks al banner. */}
+        <TimeseriesChart
+          communityId={communityId}
+          entityType="raffle"
+          entityId={raffle.id}
+          entity={raffle}
         />
       </main>
 

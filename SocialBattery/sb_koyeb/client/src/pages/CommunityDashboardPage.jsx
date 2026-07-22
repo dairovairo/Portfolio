@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
+import TimeseriesChart from '../components/TimeseriesChart';
 import { api } from '../lib/api';
 
 // ── Acciones sobre una promoción (fase 112) ────────────────────────────────
@@ -853,6 +854,21 @@ export default function CommunityDashboardPage() {
               evento se ven en el detalle de ese evento.
             </p>
           </section>
+        )}
+
+        {/* Fase 126 — gráfico temporal para las métricas de la propia
+            comunidad (hoy: clicks al enlace). Se enseña solo si la
+            comunidad tiene URL puesta — si no, el gráfico estaría
+            siempre vacío. Se pinta aquí y no en el bloque de arriba
+            para no saturar el resumen — las series temporales viven en
+            su propia sección plegable visualmente. */}
+        {data.community.url && (
+          <TimeseriesChart
+            communityId={communityId}
+            entityType="community"
+            entityId={communityId}
+            entity={data.community}
+          />
         )}
 
         {/* Fase 121 — tope de actividades vivas por comunidad. Se

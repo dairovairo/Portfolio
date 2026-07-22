@@ -4,6 +4,7 @@ import BottomNav from '../components/BottomNav';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { EventCard, ConfirmEndModal } from './CommunityDashboardPage';
+import TimeseriesChart from '../components/TimeseriesChart';
 
 // ── Subpágina del dashboard: detalle de UN evento ─────────────────────────
 // Fase 124 — el listado del dashboard (CommunityDashboardPage) enseña
@@ -174,13 +175,23 @@ export default function CommunityDashboardEventPage() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 pb-28 pt-4">
+      <main className="max-w-lg mx-auto px-4 pb-28 pt-4 space-y-4">
         <EventCard
           event={event}
           freeThreshold={data.summary.free_threshold}
           onOpen={id => navigate(`/community/event/${id}`)}
           onRenew={handleRenewEvent}
           onEnd={row => askEnd('event', row)}
+        />
+        {/* Fase 126 — gráfico temporal de todas las métricas del evento.
+            El componente se encarga de: elegir métricas aplicables
+            según el plan (Premium/Ultra), permitir cambiar intervalo
+            (5m..1w) y alternar entre barras y línea. */}
+        <TimeseriesChart
+          communityId={communityId}
+          entityType="event"
+          entityId={event.id}
+          entity={event}
         />
       </main>
 
