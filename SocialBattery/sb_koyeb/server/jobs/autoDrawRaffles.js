@@ -1,5 +1,6 @@
 const supabase = require('../lib/supabase');
-const { drawRaffleWinners } = require('../lib/raffleDraw');
+const { drawRaffleWinners, notifyRaffleDrawn } = require('../lib/raffleDraw');
+const { notifyUsers } = require('../lib/webpush');
 
 // ─────────────────────────────────────────────────────────────────────────
 // Auto-sortear ganadores en cuanto un sorteo alcanza su ends_at
@@ -84,7 +85,7 @@ async function runAutoDrawTick() {
   // bloquee al siguiente.
   const { data: due, error } = await supabase
     .from('community_raffles')
-    .select('id, community_id, tier')
+    .select('id, community_id, creator_id, title, tier')
     .lte('ends_at', nowIso)
     .is('drawn_at', null)
     .limit(200);
@@ -103,6 +104,17 @@ async function runAutoDrawTick() {
       const eligibleIds = await getEligibleRaffleMembers(raffle.community_id, tier);
       await drawRaffleWinners({ raffleId: raffle.id, eligibleIds });
       drawn += 1;
+
+      // Push a los elegibles (excluido el creador). Fire-and-forget: si
+      // el push falla no debe interrumpir el batch del cron ni marcar
+      // el sorteo como "no sorteado" (ya está persistido en drawn_at).
+      // La propia función se traga sus errores, aquí solo blindamos
+      // contra excepciones síncronas raras.
+      notifyRaffleDrawn(supabase, notifyUsers, {
+        raffleId: raffle.id,
+        eligibleIds,
+        creatorId: raffle.creator_id,
+      }).catch(err => console.warn(`[CRON] autoDrawRaffles notif ${raffle.id} failed:`, err.message));
     } catch (err) {
       failed += 1;
       console.error(`[CRON] autoDrawRaffles: sorteo ${raffle.id} falló:`, err.message);

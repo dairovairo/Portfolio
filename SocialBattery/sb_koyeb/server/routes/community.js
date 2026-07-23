@@ -11,7 +11,7 @@ const { getNotificationDayKey } = require('../lib/notificationDay');
 const { runEventPromoPacingTick, FREE_THRESHOLD } = require('../jobs/eventPromoPacing');
 const { addYears, addMonths } = require('../lib/dateRangeLimits');
 const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
-const { drawRaffleWinners } = require('../lib/raffleDraw');
+const { drawRaffleWinners, notifyRaffleDrawn } = require('../lib/raffleDraw');
 const { pickRaffleFromRatioGroups } = require('../lib/promoDistribution');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -6019,10 +6019,68 @@ const METRIC_SOURCES = {
     },
   },
   // Comunidad ──────────────────────────────────────────────────────────
+  // Métricas agregadas de TODA la comunidad. A diferencia de las de
+  // event/raffle (que filtran por un entity_id concreto), aquí no hay
+  // "entidad" que filtrar directamente en la tabla origen. Cada source
+  // agregado declara un `resolveIds(supabase, communityId)` que hace un
+  // fetch previo de los ids de eventos o sorteos de la comunidad, y el
+  // filter recibe ESE array en vez del entity_id. El endpoint aplica
+  // .in(col, ids) sobre la tabla origen. Si no hay eventos/sorteos aún,
+  // el fetch devuelve [] y el endpoint corta antes con buckets vacíos
+  // (nada que graficar).
+  //
+  // Todas estas métricas viven en las tablas ya existentes con
+  // timestamps propios (event_promo_notifications, raffle_banner_targets)
+  // así que la reconstrucción histórica arranca desde la primera
+  // notificación / primer banner, sin depender de la fase 126.
   community: {
+    // 🔗 Clicks al enlace de la comunidad — ya existía.
     url_clicks: {
       table: 'promo_metric_events', ts_col: 'created_at',
       filter: (q, id) => q.eq('kind', 'community_url_click').eq('target_id', id),
+    },
+    // 📤 Envíos push agregados de TODOS los eventos de la comunidad.
+    event_sends: {
+      table: 'event_promo_notifications', ts_col: 'sent_at',
+      resolveIds: async (sup, communityId) => {
+        const { data, error } = await sup.from('community_events').select('id').eq('community_id', communityId);
+        if (error) throw error;
+        return (data || []).map(e => e.id);
+      },
+      filter: (q, ids) => q.in('event_id', ids),
+    },
+    // 👆 Clicks push agregados de todos los eventos.
+    event_clicks: {
+      table: 'event_promo_notifications', ts_col: 'clicked_at',
+      resolveIds: async (sup, communityId) => {
+        const { data, error } = await sup.from('community_events').select('id').eq('community_id', communityId);
+        if (error) throw error;
+        return (data || []).map(e => e.id);
+      },
+      filter: (q, ids) => q.in('event_id', ids),
+      ts_not_null: true,
+    },
+    // 📢 Banners de sorteo mostrados, agregado de todos los sorteos.
+    raffle_shown: {
+      table: 'raffle_banner_targets', ts_col: 'shown_at',
+      resolveIds: async (sup, communityId) => {
+        const { data, error } = await sup.from('community_raffles').select('id').eq('community_id', communityId);
+        if (error) throw error;
+        return (data || []).map(r => r.id);
+      },
+      filter: (q, ids) => q.in('raffle_id', ids),
+      ts_not_null: true,
+    },
+    // 👆 Clicks a banner de sorteo, agregado de todos los sorteos.
+    raffle_clicks: {
+      table: 'raffle_banner_targets', ts_col: 'clicked_at',
+      resolveIds: async (sup, communityId) => {
+        const { data, error } = await sup.from('community_raffles').select('id').eq('community_id', communityId);
+        if (error) throw error;
+        return (data || []).map(r => r.id);
+      },
+      filter: (q, ids) => q.in('raffle_id', ids),
+      ts_not_null: true,
     },
   },
 };
@@ -6092,6 +6150,26 @@ router.get('/communities/:id/dashboard/timeseries', requireAuth, async (req, res
       return res.status(400).json({ error: 'entity_id no coincide con la comunidad' });
     }
 
+    // Fase 128 — métricas agregadas de comunidad: se resuelven primero
+    // los ids de las entidades hijas (eventos/sorteos de la comunidad)
+    // y el filter opera con .in(col, ids). Si la comunidad aún no
+    // tiene eventos/sorteos, cortocircuitamos con buckets vacíos — no
+    // hay nada que graficar y evitamos un .in() con array vacío que en
+    // PostgREST devolvería error.
+    let filterArg = entity_id;
+    if (typeof source.resolveIds === 'function') {
+      filterArg = await source.resolveIds(supabase, communityId);
+      if (!Array.isArray(filterArg) || filterArg.length === 0) {
+        return res.json({
+          entity_type, entity_id, metric, interval,
+          from: (fromRaw ? new Date(fromRaw) : new Date(defaultFrom)).toISOString(),
+          to:   (toRaw   ? new Date(toRaw)   : new Date()).toISOString(),
+          bucket_seconds: bucketSeconds,
+          buckets: [],
+        });
+      }
+    }
+
     const from = fromRaw ? new Date(fromRaw) : new Date(defaultFrom);
     const to   = toRaw   ? new Date(toRaw)   : new Date();
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
@@ -6105,7 +6183,7 @@ router.get('/communities/:id/dashboard/timeseries', requireAuth, async (req, res
     // más que suficiente. Si en el futuro esto empieza a doler, se
     // hace un date_trunc / floor(epoch/N) en Postgres directamente.
     const base = supabase.from(source.table).select(source.ts_col);
-    const filtered = source.filter(base, entity_id)
+    const filtered = source.filter(base, filterArg)
       .gte(source.ts_col, from.toISOString())
       .lt (source.ts_col, to.toISOString());
     const query = source.ts_not_null
@@ -6150,7 +6228,7 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
   try {
     const { data: raffle, error: fetchErr } = await supabase
       .from('community_raffles')
-      .select('id, community_id, creator_id, ends_at, drawn_at, winner_id, tier')
+      .select('id, community_id, creator_id, title, ends_at, drawn_at, winner_id, tier')
       .eq('id', raffleId)
       .eq('community_id', communityId)
       .single();
@@ -6179,6 +6257,25 @@ router.post('/communities/:id/raffles/:raffleId/draw', requireAuth, async (req, 
     // columna community_raffles.winner_id cuando el sorteo es
     // pre-fase-122.
     await drawRaffleWinners({ raffleId, eligibleIds });
+
+    // Push fire-and-forget a todos los elegibles (excluyendo al creador
+    // — el propio origen de la acción no necesita avisarse). Va SIN
+    // await para no retrasar la respuesta al organizador; los fallos se
+    // loguean pero no revierten el sorteo, que ya está adjudicado.
+    notifyRaffleDrawn(supabase, notifyUsers, {
+      raffleId, eligibleIds, creatorId: userId,
+    });
+
+    // Push notification a ganadores + no-ganadores + creador. Fire-and-
+    // forget: si falla, el sorteo ya está persistido y los ganadores se
+    // enterarán al entrar al sorteo. Ver lib/raffleNotifications.js.
+    notifyRaffleDrawn({
+      raffleId,
+      communityId,
+      title: raffle.title,
+      creatorId: userId,
+      eligibleIds,
+    }).catch(err => console.warn('[community] notifyRaffleDrawn (manual) failed:', err.message));
 
     // Refresh completo para la respuesta — incluye el winner legacy (si
     // fue el camino de sorteo antiguo) o los premios recién asignados.

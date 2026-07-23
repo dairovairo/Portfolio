@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { ALL_INTERESTS } from './OnboardingPage';
 import MascotDisplay from '../components/MascotDisplay';
+import MascotPreviewOverlay from '../components/MascotPreviewOverlay';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
@@ -256,14 +257,7 @@ export default function UserProfilePage() {
                     accessories={[]}
                     activityLayers={[]}
                   />
-                  {user.mascot_preview_url && (
-                    <img
-                      src={user.mascot_preview_url}
-                      alt=""
-                      draggable={false}
-                      className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-                    />
-                  )}
+                  <MascotPreviewOverlay src={user.mascot_preview_url} />
                 </>
               )}
             </div>

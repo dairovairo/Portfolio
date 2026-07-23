@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useUserLocation } from '../context/UserLocationContext';
 import GlobeLocationView from '../components/GlobeLocationView';
 import MascotDisplay from '../components/MascotDisplay';
+import MascotPreviewOverlay from '../components/MascotPreviewOverlay';
 import { getBatteryColor } from '../lib/battery';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
@@ -65,14 +66,7 @@ function LocatorMiniMascot({ user, size = 34 }) {
         accessories={[]}
         activityLayers={[]}
       />
-      {user?.mascot_preview_url && (
-        <img
-          src={user.mascot_preview_url}
-          alt=""
-          draggable={false}
-          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-        />
-      )}
+      <MascotPreviewOverlay src={user.mascot_preview_url} />
     </div>
   );
 }

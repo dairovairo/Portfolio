@@ -2,6 +2,7 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { isOnline } from '../hooks/usePresence';
 import { useSettings } from '../context/SettingsContext';
 import MascotDisplay from './MascotDisplay';
+import MascotPreviewOverlay from './MascotPreviewOverlay';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
@@ -86,14 +87,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
             accessories={[]}
             activityLayers={[]}
           />
-          {friend.mascot_preview_url && (
-            <img
-              src={friend.mascot_preview_url}
-              alt=""
-              draggable={false}
-              className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-            />
-          )}
+          <MascotPreviewOverlay src={friend.mascot_preview_url} />
         </div>
         <span className="text-[9px] font-display font-semibold text-surface-muted mt-0.5 max-w-[56px] truncate">
           {friend.mascot_name || 'Volty'}

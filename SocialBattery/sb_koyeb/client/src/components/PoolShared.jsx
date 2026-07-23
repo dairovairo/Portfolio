@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getBatteryColor } from '../lib/battery';
 import MascotDisplay from './MascotDisplay';
+import MascotPreviewOverlay from './MascotPreviewOverlay';
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 export function getActivityEmoji(activity = '') {
@@ -202,14 +203,7 @@ export function MiniMascot({ user, size = 32 }) {
         accessories={[]}
         activityLayers={[]}
       />
-      {user?.mascot_preview_url && (
-        <img
-          src={user.mascot_preview_url}
-          alt=""
-          draggable={false}
-          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-        />
-      )}
+      <MascotPreviewOverlay src={user.mascot_preview_url} />
     </div>
   );
 }

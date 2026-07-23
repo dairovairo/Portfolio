@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import GlobeLocationView from '../components/GlobeLocationView';
 import MascotDisplay from '../components/MascotDisplay';
+import MascotPreviewOverlay from '../components/MascotPreviewOverlay';
 import { useUserLocation } from '../context/UserLocationContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
@@ -117,14 +118,7 @@ function MiniMascot({ user, size = 32 }) {
         accessories={[]}
         activityLayers={[]}
       />
-      {user?.mascot_preview_url && (
-        <img
-          src={user.mascot_preview_url}
-          alt=""
-          draggable={false}
-          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-        />
-      )}
+      <MascotPreviewOverlay src={user.mascot_preview_url} />
     </div>
   );
 }

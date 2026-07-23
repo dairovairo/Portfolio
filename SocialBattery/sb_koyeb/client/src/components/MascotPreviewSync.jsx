@@ -63,7 +63,13 @@ export default function MascotPreviewSync() {
         const formData = new FormData();
         // Sin capas equipadas (mascota base): se envía sin adjuntar
         // archivo, el servidor lo interpreta como "limpiar la preview".
-        if (overlayBlob) formData.append('mascot', overlayBlob, 'mascot.png');
+        // El nombre "mascot-v2.png" marca que el bake es del formato nuevo
+        // con padding (ver renderMascotOverlayBlob): el servidor lo guarda
+        // en un path ...-v2 y MascotPreviewOverlay lo detecta por la URL
+        // para aplicarle el des-acolchado al mostrarlo. Los clientes con JS
+        // cacheado antiguo siguen subiendo "mascot.png" (bake sin padding)
+        // al path antiguo, así que nunca se mezcla formato y path.
+        if (overlayBlob) formData.append('mascot', overlayBlob, 'mascot-v2.png');
 
         await api.postForm('/users/mascot-preview', formData);
       } catch (e) {

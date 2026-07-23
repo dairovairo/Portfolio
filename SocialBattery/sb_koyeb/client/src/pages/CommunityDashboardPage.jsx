@@ -857,20 +857,19 @@ export default function CommunityDashboardPage() {
           </section>
         )}
 
-        {/* Fase 126 — gráfico temporal para las métricas de la propia
-            comunidad (hoy: clicks al enlace). Se enseña solo si la
-            comunidad tiene URL puesta — si no, el gráfico estaría
-            siempre vacío. Se pinta aquí y no en el bloque de arriba
-            para no saturar el resumen — las series temporales viven en
-            su propia sección plegable visualmente. */}
-        {data.community.url && (
-          <TimeseriesChart
-            communityId={communityId}
-            entityType="community"
-            entityId={communityId}
-            entity={data.community}
-          />
-        )}
+        {/* Fase 126 — gráfico temporal para las métricas agregadas de la
+            comunidad. Fase 128 amplió el catálogo: además de los clicks
+            al enlace ya existentes, ahora se pueden graficar los
+            envíos/clicks push totales de eventos y los banners/clicks
+            totales de sorteos. Por eso el bloque ya no está condicionado
+            a que la comunidad tenga URL — con actividad publicitaria
+            (aunque no haya enlace propio) el gráfico ya aporta datos. */}
+        <TimeseriesChart
+          communityId={communityId}
+          entityType="community"
+          entityId={communityId}
+          entity={data.community}
+        />
 
         {/* Fase 121 — tope de actividades vivas por comunidad. Se
             enseña con un badge X/4 en ámbar cuando queda hueco y en

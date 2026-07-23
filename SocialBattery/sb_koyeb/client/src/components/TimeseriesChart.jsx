@@ -45,7 +45,19 @@ const METRIC_CATALOG = {
     { key: 'clicks',  label: '👆 Clicks banner' },
   ],
   community: [
-    { key: 'url_clicks', label: '🔗 Clicks al enlace' },
+    // Métricas AGREGADAS de toda la comunidad — resumen que antes solo
+    // vivía en cifras planas en la página principal del dashboard.
+    // Ahora también se pueden graficar en el tiempo, con el mismo
+    // componente que ya usan evento y sorteo. Ver METRIC_SOURCES en
+    // server/routes/community.js: cada una hace un fetch previo de los
+    // ids de eventos/sorteos de la comunidad y filtra los timestamps
+    // por ese conjunto — así se agrega toda la actividad publicitaria
+    // sin depender de contadores acumulados nuevos.
+    { key: 'event_sends',   label: '📅 Envíos push (eventos)' },
+    { key: 'event_clicks',  label: '📅 Clicks push (eventos)' },
+    { key: 'raffle_shown',  label: '🎁 Banners mostrados (sorteos)' },
+    { key: 'raffle_clicks', label: '🎁 Clicks banner (sorteos)' },
+    { key: 'url_clicks',    label: '🔗 Clicks al enlace' },
   ],
 };
 

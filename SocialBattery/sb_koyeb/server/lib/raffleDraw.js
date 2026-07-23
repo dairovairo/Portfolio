@@ -88,4 +88,55 @@ async function drawRaffleWinners({ raffleId, eligibleIds }) {
   return { prizesDrawn: draws, totalPrizes: prizeRows.length };
 }
 
-module.exports = { drawRaffleWinners };
+// ─────────────────────────────────────────────────────────────────────────
+// Notificación push de "sorteo terminado" (fase de auto-draw)
+// ─────────────────────────────────────────────────────────────────────────
+// Se manda a todos los usuarios que eran ELEGIBLES para participar
+// (mismo criterio que usa el propio sorteo), excluyendo al creador —
+// que ya sabe que se ha sorteado y quiere que su push no le llegue a sí
+// mismo. Se dispara tanto desde POST /raffles/:id/draw como desde el
+// cron autoDrawRaffles.js, para que la única forma de que alguien no la
+// reciba sea que sencillamente no tenga push activo en el navegador.
+// Deliberadamente NO se consulta ninguna tabla de mute (mute_new_events,
+// mute_new_recommendations, muted_conversations…): es una notificación
+// transaccional de "algo en lo que participabas ya tiene resultado",
+// y silenciarla dejaría a un ganador sin enterarse de su premio. No hay
+// toggle en ajustes para esto — decisión de producto.
+//
+// La lib de webpush (notifyUsers) llega inyectada por el caller para no
+// forzar acoplamiento desde este fichero, que era puro hasta ahora.
+// `tag` en el payload garantiza que si por algún race el mismo push
+// entra dos veces al navegador, solo se pinte una notificación.
+//
+// URL destino: se aprovecha el patrón `/community/:id#raffle-:id` que ya
+// usan las tarjetas compactas del dashboard (CommunityDashboardPage →
+// RaffleCardCompact → onOpen). Al aterrizar en la comunidad, el sorteo
+// aparece en la lista con sus ganadores adjudicados por premio (los
+// ganadores ven su nombre destacado como 🏆).
+async function notifyRaffleDrawn(supabase, notifyUsers, { raffleId, eligibleIds, creatorId }) {
+  if (!eligibleIds || !eligibleIds.length) return;
+  try {
+    const { data: raffle, error } = await supabase
+      .from('community_raffles')
+      .select('id, title, community_id, community:communities!community_raffles_community_id_fkey(name)')
+      .eq('id', raffleId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!raffle) return;
+    const commName = raffle.community?.name;
+    await notifyUsers(supabase, eligibleIds, creatorId, {
+      title: '🎁 Sorteo terminado',
+      body: commName
+        ? `Ya se han sorteado los premios de "${raffle.title}" en ${commName}.`
+        : `Ya se han sorteado los premios de "${raffle.title}".`,
+      url: `/community/${raffle.community_id}#raffle-${raffleId}`,
+      tag: `raffle-drawn-${raffleId}`,
+    });
+  } catch (err) {
+    // Un fallo del push NUNCA debe revertir el sorteo — los premios ya
+    // están adjudicados. Se loguea y se sigue.
+    console.warn('[raffleDraw] notifyRaffleDrawn failed:', err.message);
+  }
+}
+
+module.exports = { drawRaffleWinners, notifyRaffleDrawn };

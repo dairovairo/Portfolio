@@ -57,9 +57,16 @@ router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req,
   try {
     let url = null;
     if (req.file) {
+      // Los bakes nuevos "con padding" llegan con nombre mascot-v2.png (ver
+      // client MascotPreviewSync.jsx) y se guardan en un objeto ...-v2, de
+      // forma que la URL pública contiene "-v2" y el cliente
+      // (MascotPreviewOverlay.jsx) sabe que debe "des-acolchar" al
+      // mostrarla. Los clientes con JS antiguo cacheado siguen subiendo
+      // mascot.png sin padding al path antiguo — cada formato en su path.
+      const isV2 = /v2/i.test(req.file.originalname || '');
       url = await storeImage({
         file: req.file,
-        objectName: `mascot-previews/${req.user.id}`,
+        objectName: `mascot-previews/${req.user.id}${isV2 ? '-v2' : ''}`,
         fallbackMaxLength: 3000000,
       });
     }
