@@ -144,7 +144,15 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
   // actividad, sin la mascota de fondo), así que solo se descarta si no hay
   // objeto `mascot` en absoluto.
   if (!mascot) return;
-  const { glowColor } = options;
+  // clampRinonInside: SOLO para el PNG horneado del overlay (ver
+  // renderMascotOverlayBlob). La riñonera es la única capa cuyo contenido
+  // visible desborda el cuadrado de la mascota; cuando el canvas mide
+  // exactamente ese cuadrado, sin este flag el desborde se recortaría. Con
+  // el flag, el contenido de la riñonera (y solo el suyo) se desplaza lo
+  // mínimo imprescindible para quedar entero dentro, SIN cambiar su
+  // tamaño. En usos con lienzo grande (instagramStory.js) no se pasa y
+  // todo se dibuja con paridad exacta respecto a la vista CSS.
+  const { glowColor, clampRinonInside = false } = options;
 
   const srcs = [
     mascot.base,
@@ -290,11 +298,35 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
       const centerY = baseTop + baseHeight / 2;
       const rinonLeft = centerX - rinonWidth / 2 + (acc.rinonOffsetX ?? 0);
       const rinonTop = centerY - rinonHeight / 2;
-      drawContain(
-        ctx, img,
-        boxX + pctToPx(rinonLeft, boxSize), boxY + pctToPx(rinonTop, boxSize),
-        pctToPx(rinonWidth, boxSize), pctToPx(rinonHeight, boxSize)
-      );
+
+      if (clampRinonInside) {
+        // Réplica manual del "contain" para conocer el rectángulo real del
+        // contenido dibujado, y así poder desplazarlo (sin escalarlo) lo
+        // justo para que quede entero dentro del cuadrado (boxX..boxX+
+        // boxSize). Solo la riñonera pasa por aquí.
+        const bx = boxX + pctToPx(rinonLeft, boxSize);
+        const by = boxY + pctToPx(rinonTop, boxSize);
+        const bw = pctToPx(rinonWidth, boxSize);
+        const bh = pctToPx(rinonHeight, boxSize);
+        if (img.width && img.height && bw > 0 && bh > 0) {
+          const s = Math.min(bw / img.width, bh / img.height);
+          const dw = img.width * s;
+          const dh = img.height * s;
+          let dx = bx + (bw - dw) / 2;
+          let dy = by + (bh - dh) / 2;
+          // Clamp a los cuatro bordes (si el contenido fuera más grande
+          // que el cuadrado, se prioriza no perder el borde izq./sup.).
+          dx = Math.max(boxX, Math.min(dx, boxX + boxSize - dw));
+          dy = Math.max(boxY, Math.min(dy, boxY + boxSize - dh));
+          ctx.drawImage(img, dx, dy, dw, dh);
+        }
+      } else {
+        drawContain(
+          ctx, img,
+          boxX + pctToPx(rinonLeft, boxSize), boxY + pctToPx(rinonTop, boxSize),
+          pctToPx(rinonWidth, boxSize), pctToPx(rinonHeight, boxSize)
+        );
+      }
     } else if (acc.scale) {
       const pct = acc.scale * 100;
       const pos = (100 - pct) / 2;
@@ -346,29 +378,13 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
  * Devuelve `null` si no hay ninguna capa equipada (mascota base sin
  * personalizar): en ese caso no hace falta generar ni subir nada.
  *
- * PADDING (v2): algunas capas desbordan a propósito el cuadrado de la
- * mascota (la riñonera, p. ej., tiene una caja de 152% de ancho cuyo
- * contenido llega hasta ~106% a la derecha y ~111% por abajo). En la vista
- * CSS (MascotDisplay) eso se ve porque el contenedor no recorta, pero al
- * hornear sobre un canvas que medía EXACTAMENTE el cuadrado, todo lo que
- * sobresalía se recortaba — por eso la riñonera salía cortada/descolocada
- * en las tarjetas de amigos y demás sitios que usan el PNG horneado.
- *
- * Solución de raíz: el canvas ahora incluye un margen transparente de
- * MASCOT_OVERLAY_PAD (fracción del cuadrado) a CADA lado, y la mascota se
- * dibuja en el cuadrado interior. Nada se recorta, ni ahora ni con ítems
- * futuros que desborden. El componente compartido MascotPreviewOverlay
- * (components/MascotPreviewOverlay.jsx) "des-expande" el PNG al mostrarlo
- * para que el cuadrado interior coincida 1:1 con la mascota base.
+ * NOTA riñonera: es la única capa cuyo contenido visible desborda el
+ * cuadrado de la mascota (ver clampRinon en drawMascotOnCanvas). Como este
+ * canvas mide EXACTAMENTE el cuadrado, sin tratamiento especial se
+ * recortaba al hornear. Se pasa `clampRinonInside: true` para que SOLO esa
+ * capa se desplace lo justo para caber entera, a tamaño completo, dentro
+ * del PNG. El resto de capas se hornean exactamente igual que siempre.
  */
-
-// Fracción del cuadrado de la mascota que se añade como margen transparente
-// a cada lado del PNG horneado (0.2 = 20% por lado → el canvas mide 1.4×).
-// Debe cubrir el mayor desborde de cualquier capa (riñonera: ~8% derecha,
-// ~11% abajo). Si algún día un ítem desborda más de un 20%, subir esto
-// AQUÍ y nada más: el componente de display se adapta solo vía export.
-export const MASCOT_OVERLAY_PAD = 0.2;
-
 export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   const resolved = await resolveMascotLayers('mid', mascotApi);
 
@@ -381,18 +397,15 @@ export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   );
   if (!hasAnyLayer) return null;
 
-  const pad = Math.round(size * MASCOT_OVERLAY_PAD);
-  const canvasSize = size + pad * 2;
-
   const canvas = document.createElement('canvas');
-  canvas.width = canvasSize;
-  canvas.height = canvasSize;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext('2d');
 
-  // `base: null` a propósito — ver comentario de la función. La mascota se
-  // dibuja en el cuadrado interior (pad, pad, size): las capas que
-  // desbordan caen en el margen y quedan dentro del PNG.
-  await drawMascotOnCanvas(ctx, { ...resolved, base: null }, pad, pad, size);
+  // `base: null` a propósito — ver comentario de la función.
+  await drawMascotOnCanvas(ctx, { ...resolved, base: null }, 0, 0, size, {
+    clampRinonInside: true,
+  });
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
