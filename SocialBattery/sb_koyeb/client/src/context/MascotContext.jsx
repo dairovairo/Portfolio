@@ -1053,7 +1053,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 12.568, top: 44.22, width: 57.432, height: 54.492 },
+    rinonBox: { left: 16.132, top: 46.857, width: 60.304, height: 57.217 },
   },
   {
     id: 'acc_rinon_negra',
@@ -1069,7 +1069,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 12.568, top: 44.22, width: 57.432, height: 54.492 },
+    rinonBox: { left: 16.132, top: 46.857, width: 60.304, height: 57.217 },
   },
   {
     id: 'acc_rinon_roja',
@@ -1085,7 +1085,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.684, width: 55.223, height: 35.566 },
+    rinonBox: { left: 18.396, top: 66.795, width: 57.984, height: 37.344 },
   },
   {
     id: 'acc_rinon_rosa',
@@ -1101,7 +1101,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.75, width: 55.223, height: 35.435 },
+    rinonBox: { left: 18.396, top: 66.864, width: 57.984, height: 37.207 },
   },
   {
     id: 'acc_rinon_azul',
@@ -1117,7 +1117,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.684, width: 55.223, height: 35.566 },
+    rinonBox: { left: 18.396, top: 66.795, width: 57.984, height: 37.344 },
   },
   {
     id: 'acc_rinon_morada',
@@ -1133,7 +1133,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.75, width: 55.223, height: 35.435 },
+    rinonBox: { left: 18.396, top: 66.864, width: 57.984, height: 37.207 },
   },
   {
     id: 'acc_rinon_verde',
@@ -1149,7 +1149,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.684, width: 55.223, height: 35.632 },
+    rinonBox: { left: 18.396, top: 66.793, width: 57.984, height: 37.414 },
   },
   {
     id: 'acc_rinon_naranja',
@@ -1165,7 +1165,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 61.376, width: 55.223, height: 20.248 },
+    rinonBox: { left: 18.396, top: 64.87, width: 57.984, height: 21.26 },
   },
   {
     id: 'acc_rinon_amarilla',
@@ -1181,7 +1181,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.684, width: 55.223, height: 35.566 },
+    rinonBox: { left: 18.396, top: 66.795, width: 57.984, height: 37.344 },
   },
   {
     id: 'acc_rinon_marron',
@@ -1197,7 +1197,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.75, width: 55.223, height: 35.435 },
+    rinonBox: { left: 18.396, top: 66.864, width: 57.984, height: 37.207 },
   },
   {
     id: 'acc_rinon_gris',
@@ -1213,7 +1213,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 14.777, top: 63.75, width: 55.223, height: 35.435 },
+    rinonBox: { left: 18.396, top: 66.864, width: 57.984, height: 37.207 },
     // Ítem de partida fijo para personalizar cualquier color del carrusel
     // de Riñoneras (ver pickAccessoryTarget en ShopPage.jsx).
     isCustomizeBase: true,
@@ -2078,8 +2078,9 @@ export const OUTFIT_VISUAL_ADJUST = {
 // propia rinonBox — p. ej. personalizaciones antiguas guardadas en
 // localStorage antes de que existiera este campo. Compartida por
 // MascotDisplay.jsx (vista CSS) y lib/mascotRenderer.js (horneado).
-// Movida un 30% a la izquierda (left -30 en todas las rinonBox).
-export const RINON_DEFAULT_BOX = { left: 14.777, top: 63.684, width: 55.223, height: 35.566 };
+// Historial de ajustes: -30% left. Luego +5% right, +4% down, +5% tamaño
+// (crecido desde el centro, para no desplazarse de más al agrandar).
+export const RINON_DEFAULT_BOX = { left: 18.396, top: 66.795, width: 57.984, height: 37.344 };
 
 // ── Estado por defecto ────────────────────────────────────────────────────────
 const DEFAULT_UNLOCKED_ACTIVITIES  = new Set(MASCOT_ACTIVITIES.filter(a => a.isBase).map(a => a.id));
