@@ -66,7 +66,7 @@ function LocatorMiniMascot({ user, size = 34 }) {
         accessories={[]}
         activityLayers={[]}
       />
-      <MascotPreviewOverlay src={user.mascot_preview_url} />
+      <MascotPreviewOverlay src={user?.mascot_preview_url} />
     </div>
   );
 }

@@ -203,7 +203,7 @@ export function MiniMascot({ user, size = 32 }) {
         accessories={[]}
         activityLayers={[]}
       />
-      <MascotPreviewOverlay src={user.mascot_preview_url} />
+      <MascotPreviewOverlay src={user?.mascot_preview_url} />
     </div>
   );
 }

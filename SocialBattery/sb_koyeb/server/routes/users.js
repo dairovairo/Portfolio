@@ -57,18 +57,25 @@ router.post('/mascot-preview', requireAuth, uploadMascotPreviewFile, async (req,
   try {
     let url = null;
     if (req.file) {
-      // Los bakes nuevos "con padding" llegan con nombre mascot-v2.png (ver
-      // client MascotPreviewSync.jsx) y se guardan en un objeto ...-v2, de
-      // forma que la URL pública contiene "-v2" y el cliente
-      // (MascotPreviewOverlay.jsx) sabe que debe "des-acolchar" al
-      // mostrarla. Los clientes con JS antiguo cacheado siguen subiendo
-      // mascot.png sin padding al path antiguo — cada formato en su path.
-      const isV2 = /v2/i.test(req.file.originalname || '');
+      // Los clientes actuales hornean el PNG con margen transparente
+      // (formato v2, ver client/lib/mascotRenderer.js) y lo declaran con
+      // version=2: se guarda en una ruta distinta para que el cliente
+      // (MascotPreviewOverlay.jsx) distinga por URL cómo posicionarlo.
+      // Clientes antiguos (PWA sin actualizar) no envían version y siguen
+      // en la ruta clásica, mostrándose como siempre — nada se rompe.
+      const isV2 = req.body?.version === '2';
+      const objectName = isV2
+        ? `mascot-previews/v2/${req.user.id}`
+        : `mascot-previews/${req.user.id}`;
       url = await storeImage({
         file: req.file,
-        objectName: `mascot-previews/${req.user.id}${isV2 ? '-v2' : ''}`,
+        objectName,
         fallbackMaxLength: 3000000,
       });
+      // Si storeImage cayó al fallback base64 (data URL) no hay ruta que
+      // inspeccionar: se marca la versión con un fragmento (los navegadores
+      // lo ignoran al cargar la imagen).
+      if (isV2 && url && url.startsWith('data:')) url += '#mpv2';
     }
 
     const { error } = await supabase

@@ -270,12 +270,12 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
       );
     } else if (acc.isRinon) {
       // Ver comentario detallado en components/MascotDisplay.jsx:
-      // ajuste 4 (otro 2% a la derecha respecto al ajuste 3, sin cambio de
-      // tamaño): left=1.9275, top base=51.91625, width=152.145,
-      // height=59.1675. IMPORTANTE: estos números deben ser IDÉNTICOS a los
-      // de MascotDisplay.jsx (caja base compartida) — si divergen, la
-      // riñonera se ve desplazada en las previews horneadas (tarjetas de
-      // amigo, grupos, localizador…) respecto a la tienda/vista principal.
+      // ajuste 4 (otro 2% a la derecha respecto al ajuste 3):
+      // left=1.9275, top base=51.91625, width=152.145, height=59.1675.
+      // IMPORTANTE: estos valores deben ser EXACTAMENTE los mismos que en
+      // MascotDisplay.jsx (caja base de acc.isRinon) — si se ajusta la
+      // riñonera allí, hay que replicarlo aquí, o la versión horneada
+      // (tarjetas de amigos, etc.) quedará desplazada respecto a la CSS.
       // rinonScale/rinonOffsetX (por ítem) recentran y desplazan la caja
       // base para colores cuyo PNG tiene más margen interno — misma
       // fórmula que en MascotDisplay.jsx.
@@ -345,25 +345,29 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
  *
  * Devuelve `null` si no hay ninguna capa equipada (mascota base sin
  * personalizar): en ese caso no hace falta generar ni subir nada.
+ *
+ * PADDING (v2): algunas capas desbordan a propósito el cuadrado de la
+ * mascota (la riñonera, p. ej., tiene una caja de 152% de ancho cuyo
+ * contenido llega hasta ~106% a la derecha y ~111% por abajo). En la vista
+ * CSS (MascotDisplay) eso se ve porque el contenedor no recorta, pero al
+ * hornear sobre un canvas que medía EXACTAMENTE el cuadrado, todo lo que
+ * sobresalía se recortaba — por eso la riñonera salía cortada/descolocada
+ * en las tarjetas de amigos y demás sitios que usan el PNG horneado.
+ *
+ * Solución de raíz: el canvas ahora incluye un margen transparente de
+ * MASCOT_OVERLAY_PAD (fracción del cuadrado) a CADA lado, y la mascota se
+ * dibuja en el cuadrado interior. Nada se recorta, ni ahora ni con ítems
+ * futuros que desborden. El componente compartido MascotPreviewOverlay
+ * (components/MascotPreviewOverlay.jsx) "des-expande" el PNG al mostrarlo
+ * para que el cuadrado interior coincida 1:1 con la mascota base.
  */
-// Padding del overlay horneado ("v2"): algunas capas (p. ej. la riñonera,
-// cuya caja llega a ~105% por la derecha y ~111% por abajo) se salen del
-// cuadro de la mascota. En la ruta CSS (MascotDisplay) eso no importa —
-// simplemente sobresalen del contenedor — pero en el bake antiguo el canvas
-// medía exactamente boxSize y RECORTABA lo que sobresalía, con lo que la
-// riñonera se veía cortada/descolocada en las tarjetas de amigo, grupos,
-// localizador de eventos, etc. Solución: hornear sobre un lienzo con un 30%
-// de margen por cada lado y, al mostrarlo, "des-acolchar" con CSS (ver
-// components/MascotPreviewOverlay.jsx). Las previews antiguas (sin padding)
-// se distinguen por la URL: las nuevas se suben a ...-v2.png.
-export const MASCOT_OVERLAY_PAD = 0.3;
-export const MASCOT_OVERLAY_V2_MARKER = '-v2';
-// Umbral para distinguir formato por tamaño intrínseco del PNG (ver
-// components/MascotPreviewOverlay.jsx): los bakes legacy miden 256px de
-// lado; los v2, 256 + 2·round(256·0.3) = 410px. Cualquier valor intermedio
-// sirve de frontera. Si algún día cambia el tamaño base del bake, mantener
-// la invariante legacy < umbral <= v2.
-export const MASCOT_OVERLAY_PADDED_MIN_PX = 320;
+
+// Fracción del cuadrado de la mascota que se añade como margen transparente
+// a cada lado del PNG horneado (0.2 = 20% por lado → el canvas mide 1.4×).
+// Debe cubrir el mayor desborde de cualquier capa (riñonera: ~8% derecha,
+// ~11% abajo). Si algún día un ítem desborda más de un 20%, subir esto
+// AQUÍ y nada más: el componente de display se adapta solo vía export.
+export const MASCOT_OVERLAY_PAD = 0.2;
 
 export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   const resolved = await resolveMascotLayers('mid', mascotApi);
@@ -386,8 +390,8 @@ export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   const ctx = canvas.getContext('2d');
 
   // `base: null` a propósito — ver comentario de la función. La mascota se
-  // dibuja en el cuadro central (pad, pad, size): las capas que sobresalen
-  // caen dentro del margen y ya no se recortan.
+  // dibuja en el cuadrado interior (pad, pad, size): las capas que
+  // desbordan caen en el margen y quedan dentro del PNG.
   await drawMascotOnCanvas(ctx, { ...resolved, base: null }, pad, pad, size);
 
   return new Promise((resolve) => {

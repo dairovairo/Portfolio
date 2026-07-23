@@ -1,88 +1,71 @@
 /**
- * MascotPreviewOverlay — pinta el PNG "horneado" (users.mascot_preview_url)
- * encima de la mascota base en tarjetas de amigo, grupos, quedadas,
- * localizador de eventos, perfiles ajenos, etc.
+ * MascotPreviewOverlay — muestra el PNG "horneado" de la personalización de
+ * otro usuario (users.mascot_preview_url) superpuesto sobre su mascota base.
  *
- * Los bakes "v2" (ver lib/mascotRenderer.js → renderMascotOverlayBlob) se
- * generan sobre un lienzo con un margen (MASCOT_OVERLAY_PAD) por cada lado
- * para que las capas que sobresalen del cuadro de la mascota (p. ej. la
- * riñonera, cuya caja llega a ~105% por la derecha y ~111% por abajo) no se
- * recorten. Al mostrarlos hay que "des-acolchar": la imagen se agranda a
- * (1 + 2·pad)·100% y se desplaza -pad·100% en ambos ejes, de modo que el
- * cuadro central del PNG coincida exactamente con el cuadro de la mascota
- * base. Así el resultado es píxel a píxel el mismo que la ruta CSS de
- * MascotDisplay (tienda / vista principal).
+ * Es el ÚNICO sitio donde debe renderizarse ese overlay (tarjeta de amigo,
+ * miembros de grupo/quedada, localizador de eventos, sniffer, perfil ajeno,
+ * marcadores del mapa…). Antes cada vista repetía el mismo <img> inline.
  *
- * DETECCIÓN DE FORMATO — por tamaño intrínseco del PNG, NO por la URL.
- * Los bakes legacy miden exactamente 256px de lado; los v2 miden 410px
- * (256 + 2·77). Se decide con naturalWidth en onLoad, comparando contra
- * MASCOT_OVERLAY_PADDED_MIN_PX. Esto es a prueba de todo lo que rompía el
- * marcador "-v2" en la URL: backend antiguo que guarda en el path legacy,
- * fallback del servidor a data-URL base64 (sin path), CDNs, service worker
- * con bundle viejo subiendo un formato u otro… el tamaño viaja SIEMPRE con
- * la propia imagen. La URL con "-v2" (si llega) solo se usa como pista
- * inicial para minimizar el reposicionamiento al cargar.
+ * Por qué existe: los PNGs "v2" se hornean con un margen transparente de
+ * MASCOT_OVERLAY_PAD a cada lado (ver lib/mascotRenderer.js →
+ * renderMascotOverlayBlob) para que las capas que desbordan el cuadrado de
+ * la mascota (p. ej. la riñonera) no se recorten al hornear. Al mostrarlos,
+ * este componente expande el <img> exactamente lo mismo que se acolchó
+ * (left/top negativos + width/height > 100%), de forma que el cuadrado
+ * interior del PNG coincide 1:1 con la caja de la mascota base y el
+ * contenido desbordante se ve igual que en la vista CSS (MascotDisplay).
+ *
+ * Compatibilidad: los PNGs antiguos (sin margen) siguen existiendo hasta
+ * que cada usuario vuelva a sincronizar su preview. Se distinguen por la
+ * URL: los v2 se suben a `mascot-previews/v2/…` (o llevan el marcador
+ * `#mpv2` si el servidor cayó al fallback base64) — ver POST
+ * /api/users/mascot-preview. Los antiguos se muestran como siempre
+ * (inset:0), sin expandir.
  */
-import { useState } from 'react';
-import {
-  MASCOT_OVERLAY_PAD,
-  MASCOT_OVERLAY_PADDED_MIN_PX,
-  MASCOT_OVERLAY_V2_MARKER,
-} from '../lib/mascotRenderer';
+import { MASCOT_OVERLAY_PAD } from '../lib/mascotRenderer';
 
-function guessPaddedFromUrl(src) {
-  return typeof src === 'string' && src.includes(MASCOT_OVERLAY_V2_MARKER);
+// ¿El PNG fue horneado con margen (v2)?
+export function isPaddedMascotPreview(src) {
+  return typeof src === 'string' &&
+    (src.includes('mascot-previews/v2/') || src.includes('#mpv2'));
 }
 
-function styleFor(padded) {
-  if (padded) {
-    const padPct = MASCOT_OVERLAY_PAD * 100;
-    const sizePct = 100 + padPct * 2;
-    return {
-      left: `${-padPct}%`,
-      top: `${-padPct}%`,
-      width: `${sizePct}%`,
-      height: `${sizePct}%`,
-    };
+// Estilo de posicionamiento del <img> según versión del PNG.
+function overlayBoxStyle(src) {
+  if (!isPaddedMascotPreview(src)) {
+    return { position: 'absolute', inset: 0, width: '100%', height: '100%' };
   }
-  return { left: 0, top: 0, width: '100%', height: '100%' };
+  const padPct = MASCOT_OVERLAY_PAD * 100;
+  const sizePct = 100 + padPct * 2;
+  return {
+    position: 'absolute',
+    left: `-${padPct}%`,
+    top: `-${padPct}%`,
+    width: `${sizePct}%`,
+    height: `${sizePct}%`,
+  };
 }
 
 export default function MascotPreviewOverlay({ src }) {
-  // `padded` empieza con la pista de la URL y se corrige (si hace falta) en
-  // onLoad con el tamaño real; hasta que la imagen carga se mantiene
-  // invisible para que no haya un "salto" si la pista era errónea.
-  const [padded, setPadded] = useState(() => guessPaddedFromUrl(src));
-  const [loaded, setLoaded] = useState(false);
-
   if (!src) return null;
-
   return (
     <img
       src={src}
       alt=""
       draggable={false}
-      onLoad={(e) => {
-        setPadded(e.target.naturalWidth >= MASCOT_OVERLAY_PADDED_MIN_PX);
-        setLoaded(true);
-      }}
-      className="absolute object-contain select-none pointer-events-none"
-      style={{ ...styleFor(padded), visibility: loaded ? 'visible' : 'hidden' }}
+      className="object-contain select-none pointer-events-none"
+      style={overlayBoxStyle(src)}
     />
   );
 }
 
-// Versión para markup construido como string (los marcadores de Leaflet en
-// GlobeLocationView.jsx): misma detección por naturalWidth, hecha con un
-// handler onload inline porque ahí no hay React. Los números 320 / 30 son
-// MASCOT_OVERLAY_PADDED_MIN_PX y MASCOT_OVERLAY_PAD·100 — si cambian allí,
-// cambiar aquí.
-export function mascotOverlayHtml(src) {
+// Variante en string HTML para sitios que construyen el DOM a mano (los
+// divIcon de Leaflet en GlobeLocationView.jsx). Misma lógica que arriba.
+export function mascotPreviewOverlayHtml(src) {
   if (!src) return '';
-  const safeSrc = String(src).replace(/"/g, '&quot;');
-  return (
-    `<img src="${safeSrc}" ` +
-    `style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;pointer-events:none;visibility:hidden;" ` +
-    `onload="if(this.naturalWidth>=320){this.style.left='-30%';this.style.top='-30%';this.style.width='160%';this.style.height='160%';}this.style.visibility='visible';" />`
-  );
+  const s = overlayBoxStyle(src);
+  const box = s.inset !== undefined
+    ? 'position:absolute;inset:0;width:100%;height:100%;'
+    : `position:absolute;left:${s.left};top:${s.top};width:${s.width};height:${s.height};`;
+  return `<img src="${src}" style="${box}object-fit:contain;pointer-events:none;" />`;
 }
