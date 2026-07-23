@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { MASCOT_BASE } from '../context/MascotContext';
-import { mascotOverlayInlineStyle } from './MascotPreviewOverlay';
+import { mascotOverlayHtml } from './MascotPreviewOverlay';
 
 /**
  * GlobeLocationView — mapa de ubicación para EventLocatorPage y
@@ -59,11 +59,10 @@ function friendMarkerHtml(friend) {
   const initial = (friend.username || '?').charAt(0).toUpperCase();
   const ringColor = friend.isMe ? '#fbbf24' : '#60a5fa';
   const baseSrc = MASCOT_BASE[tierFromBatteryLevel(friend.battery_level)];
-  // mascotOverlayInlineStyle des-acolcha los bakes v2 (con padding) y deja
-  // los antiguos inset-0 — mismo criterio que MascotPreviewOverlay.jsx.
-  const overlay = friend.mascot_preview_url
-    ? `<img src="${friend.mascot_preview_url}" style="${mascotOverlayInlineStyle(friend.mascot_preview_url)}" />`
-    : '';
+  // mascotOverlayHtml des-acolcha los bakes v2 (con padding) detectando el
+  // formato por el tamaño intrínseco del PNG — mismo criterio que
+  // MascotPreviewOverlay.jsx; los antiguos se quedan inset-0.
+  const overlay = mascotOverlayHtml(friend.mascot_preview_url);
   const avatarInner = friend.avatar_url
     ? `<img src="${friend.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:9999px;display:block;" />`
     : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;background:#1e293b;border-radius:9999px;">${initial}</div>`;

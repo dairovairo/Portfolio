@@ -358,6 +358,12 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
 // se distinguen por la URL: las nuevas se suben a ...-v2.png.
 export const MASCOT_OVERLAY_PAD = 0.3;
 export const MASCOT_OVERLAY_V2_MARKER = '-v2';
+// Umbral para distinguir formato por tamaño intrínseco del PNG (ver
+// components/MascotPreviewOverlay.jsx): los bakes legacy miden 256px de
+// lado; los v2, 256 + 2·round(256·0.3) = 410px. Cualquier valor intermedio
+// sirve de frontera. Si algún día cambia el tamaño base del bake, mantener
+// la invariante legacy < umbral <= v2.
+export const MASCOT_OVERLAY_PADDED_MIN_PX = 320;
 
 export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   const resolved = await resolveMascotLayers('mid', mascotApi);
