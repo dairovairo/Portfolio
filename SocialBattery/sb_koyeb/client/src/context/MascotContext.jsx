@@ -1048,13 +1048,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Subida un 10% respecto al top base del grupo.
-    rinonOffsetY: -10,
-    // El PNG de esta riñonera deja más margen interno que el resto y se
-    // veía más pequeña en la tienda: +4% de tamaño (recentrado) y 2% más
-    // a la izquierda. Ajustada 1% más a la derecha (-2 → -1).
-    rinonScale: 1.04,
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 42.568, top: 44.22, width: 57.432, height: 54.492 },
   },
   {
     id: 'acc_rinon_negra',
@@ -1065,12 +1064,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Subida un 10% respecto al top base del grupo.
-    rinonOffsetY: -10,
-    // Mismo ajuste que la riñonera blanca: +4% de tamaño (recentrado) y
-    // 2% más a la izquierda. Ajustada 1% más a la derecha (-2 → -1).
-    rinonScale: 1.04,
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 42.568, top: 44.22, width: 57.432, height: 54.492 },
   },
   {
     id: 'acc_rinon_roja',
@@ -1081,8 +1080,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.684, width: 55.223, height: 35.566 },
   },
   {
     id: 'acc_rinon_rosa',
@@ -1093,8 +1096,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.75, width: 55.223, height: 35.435 },
   },
   {
     id: 'acc_rinon_azul',
@@ -1105,8 +1112,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.684, width: 55.223, height: 35.566 },
   },
   {
     id: 'acc_rinon_morada',
@@ -1117,8 +1128,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.75, width: 55.223, height: 35.435 },
   },
   {
     id: 'acc_rinon_verde',
@@ -1129,8 +1144,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.684, width: 55.223, height: 35.632 },
   },
   {
     id: 'acc_rinon_naranja',
@@ -1141,10 +1160,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Subida un 10% respecto al top base del grupo.
-    rinonOffsetY: -10,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 61.376, width: 55.223, height: 20.248 },
   },
   {
     id: 'acc_rinon_amarilla',
@@ -1155,8 +1176,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.684, width: 55.223, height: 35.566 },
   },
   {
     id: 'acc_rinon_marron',
@@ -1167,8 +1192,12 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.75, width: 55.223, height: 35.435 },
   },
   {
     id: 'acc_rinon_gris',
@@ -1179,11 +1208,15 @@ export const MASCOT_ACCESSORIES = [
     price: 65,
     isBase: false,
     isRinon: true,
+    // Caja de render (porcentajes del cuadrado de la mascota). El PNG está
+    // recortado exactamente al arte visible, así que esta caja ES el arte:
+    // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
+    // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
+    // rutas leen este mismo valor.
+    rinonBox: { left: 44.777, top: 63.75, width: 55.223, height: 35.435 },
     // Ítem de partida fijo para personalizar cualquier color del carrusel
     // de Riñoneras (ver pickAccessoryTarget en ShopPage.jsx).
     isCustomizeBase: true,
-    // Movida un 1% a la izquierda.
-    rinonOffsetX: -1,
   },
 ];
 
@@ -2040,6 +2073,13 @@ export const OUTFIT_VISUAL_ADJUST = {
   camisa:   { scale: 1.05 * 0.85 * 0.9, offsetX: 0.4 },
 };
 
+// Caja de render por defecto para riñoneras (la de las variantes estándar,
+// p. ej. la roja). Se usa como fallback si un ítem de riñonera no trae su
+// propia rinonBox — p. ej. personalizaciones antiguas guardadas en
+// localStorage antes de que existiera este campo. Compartida por
+// MascotDisplay.jsx (vista CSS) y lib/mascotRenderer.js (horneado).
+export const RINON_DEFAULT_BOX = { left: 44.777, top: 63.684, width: 55.223, height: 35.566 };
+
 // ── Estado por defecto ────────────────────────────────────────────────────────
 const DEFAULT_UNLOCKED_ACTIVITIES  = new Set(MASCOT_ACTIVITIES.filter(a => a.isBase).map(a => a.id));
 const DEFAULT_UNLOCKED_ACCESSORIES = new Set(MASCOT_ACCESSORIES.filter(a => a.isBase).map(a => a.id));
@@ -2524,13 +2564,9 @@ export function MascotProvider({ children }) {
       isTie: Boolean(baseItem.isTie),
       isBowTie: Boolean(baseItem.isBowTie),
       isRinon: Boolean(baseItem.isRinon),
-      // Ajustes finos por ítem de las riñoneras (ver caja base de
-      // acc.isRinon en MascotDisplay.jsx): sin copiarlos, una riñonera
-      // blanca/negra personalizada perdía su +4% de tamaño y −10% de
-      // altura y se descolocaba respecto a la versión de catálogo.
-      rinonScale: baseItem.rinonScale ?? null,
-      rinonOffsetY: baseItem.rinonOffsetY ?? null,
-      rinonOffsetX: baseItem.rinonOffsetX ?? null,
+      // Caja de render de las riñoneras — sin copiarla, una riñonera
+      // personalizada perdería su posicionamiento.
+      rinonBox: baseItem.rinonBox ?? null,
     };
     setAccessoryCustomizations(prev => {
       const next = { ...prev, [id]: entry };

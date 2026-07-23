@@ -100,7 +100,7 @@
  * posicionados según su tipo (el PNG ya trae la posición correcta integrada
  * para los que son a tamaño completo del lienzo).
  */
-import { useMascot, OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
+import { useMascot, OUTFIT_VISUAL_ADJUST, RINON_DEFAULT_BOX } from '../context/MascotContext';
 import { useColorizedSrc } from '../hooks/useColorizedSrc';
 
 function ColorizedImage({ src, zones, ...props }) {
@@ -434,42 +434,13 @@ export default function MascotDisplay({
           );
         }
 
-        // Riñonera — posicionada en la zona de la cadera/cintura.
-        // PNG 900×900 normalizado: la riñonera ocupa aprox. el 93% del ancho
-        // del lienzo y está centrada. Se escala y posiciona para quedar en
-        // la cadera de la mascota.
-        // Tamaño base original: width=126%, height=49%, left=-13%, top=62%.
-        // Ajuste 1: subida 5%, derecha 20%, +15% tamaño (recentrado desde el
-        // centro anterior 50,86.5 → nuevo centro 70,81.5). Resultado:
-        // left=-2.45, top=53.325, width=144.9, height=56.35.
-        // Ajuste 2: otros 3% a la derecha y +5% tamaño más (recentrado desde
-        // el centro del ajuste 1, 70,81.5 → tras mover 73,81.5). Resultado:
-        // left=-3.0725, top=51.91625, width=152.145, height=59.1675.
-        // Ajuste 3: otros 3% a la derecha (solo traslación, sin cambio de
-        // tamaño). left=-3.0725+3=-0.0725; top/width/height sin cambios.
-        // Ajuste 4: otro 2% a la derecha (solo traslación). left=-0.0725+2=1.9275.
-        // top base final=51.91625%; las variantes con rinonOffsetY suman ese
-        // valor al top.
+        // Riñonera — caja explícita por ítem (acc.rinonBox), como el halo
+        // en la capa de cabeza. Los PNGs están recortados exactamente al
+        // arte visible, así que la caja cabe entera en el cuadrado de la
+        // mascota y el render es idéntico en esta vista CSS y en el
+        // horneado a canvas (lib/mascotRenderer.js), sin casos especiales.
         if (acc.isRinon) {
-          // Caja base compartida por todas las riñoneras.
-          const baseLeft = 1.9275;
-          const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
-          const baseWidth = 152.145;
-          const baseHeight = 59.1675;
-
-          // Algunos colores (p. ej. blanca/negra) tienen más margen interno
-          // en el PNG y se ven más pequeños con la caja base: rinonScale
-          // agranda la caja recentrada sobre el mismo punto central, y
-          // rinonOffsetX aplica un desplazamiento horizontal adicional
-          // (en puntos porcentuales, negativo = izquierda).
-          const scale = acc.rinonScale ?? 1;
-          const width = baseWidth * scale;
-          const height = baseHeight * scale;
-          const centerX = baseLeft + baseWidth / 2;
-          const centerY = baseTop + baseHeight / 2;
-          const rinonLeft = centerX - width / 2 + (acc.rinonOffsetX ?? 0);
-          const rinonTop = centerY - height / 2;
-
+          const rb = acc.rinonBox ?? RINON_DEFAULT_BOX;
           return (
             <ColorizedImage
               key={acc.id}
@@ -479,10 +450,10 @@ export default function MascotDisplay({
               draggable={false}
               className="absolute select-none pointer-events-none"
               style={{
-                left: `${rinonLeft}%`,
-                width: `${width}%`,
-                top: `${rinonTop}%`,
-                height: `${height}%`,
+                left: `${rb.left}%`,
+                top: `${rb.top}%`,
+                width: `${rb.width}%`,
+                height: `${rb.height}%`,
                 objectFit: 'contain',
                 objectPosition: 'center',
               }}

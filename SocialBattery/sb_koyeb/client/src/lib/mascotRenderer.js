@@ -9,7 +9,7 @@
  * poder "hornear" la mascota dentro de una imagen PNG exportable.
  */
 import { applyColorZones } from './colorZones';
-import { OUTFIT_VISUAL_ADJUST } from '../context/MascotContext';
+import { OUTFIT_VISUAL_ADJUST, RINON_DEFAULT_BOX } from '../context/MascotContext';
 
 // ── Carga de imágenes con caché ────────────────────────────────────────────────
 const imageCache = new Map(); // src -> Promise<HTMLImageElement|null>
@@ -112,56 +112,6 @@ function pctToPx(value, boxSize) {
   return Number.isNaN(num) ? 0 : (num / 100) * boxSize;
 }
 
-// ── BBox de alfa (arte visible) con caché ─────────────────────────────────────
-// Devuelve los límites del arte opaco de una imagen como fracciones [0,1]
-// de su ancho/alto ({left, top, right, bottom}). Se usa para el clamp de la
-// riñonera en el overlay horneado (ver clampRinonInside): permite desplazar
-// solo lo que el ARTE desborda, ignorando el margen transparente del PNG.
-// Se mide sobre una miniatura de 64px (suficiente precisión, muy barato) y
-// se cachea por imagen.
-const alphaBBoxCache = new WeakMap(); // HTMLImageElement -> bbox
-const ALPHA_BBOX_FALLBACK = { left: 0, top: 0, right: 1, bottom: 1 };
-
-function getAlphaBBoxFractions(img) {
-  const cached = alphaBBoxCache.get(img);
-  if (cached) return cached;
-  let bbox = ALPHA_BBOX_FALLBACK;
-  try {
-    const N = 64;
-    const c = document.createElement('canvas');
-    c.width = N;
-    c.height = N;
-    const cctx = c.getContext('2d', { willReadFrequently: true });
-    cctx.drawImage(img, 0, 0, N, N);
-    const data = cctx.getImageData(0, 0, N, N).data;
-    let minX = N, minY = N, maxX = -1, maxY = -1;
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        if (data[(y * N + x) * 4 + 3] > 8) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-    if (maxX >= 0) {
-      bbox = {
-        left: minX / N,
-        top: minY / N,
-        right: (maxX + 1) / N,
-        bottom: (maxY + 1) / N,
-      };
-    }
-  } catch {
-    // Canvas "tainted" (imagen cross-origin sin CORS) u otro fallo:
-    // fallback al rectángulo completo — el clamp sigue funcionando, solo
-    // que de forma más conservadora.
-  }
-  alphaBBoxCache.set(img, bbox);
-  return bbox;
-}
-
 // Dibuja `img` dentro del rectángulo (x, y, w, h) preservando su proporción
 // (equivalente a CSS object-fit: contain), alineado según alignX/alignY
 // (equivalente a object-position).
@@ -194,15 +144,7 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
   // actividad, sin la mascota de fondo), así que solo se descarta si no hay
   // objeto `mascot` en absoluto.
   if (!mascot) return;
-  // clampRinonInside: SOLO para el PNG horneado del overlay (ver
-  // renderMascotOverlayBlob). La riñonera es la única capa cuyo contenido
-  // visible desborda el cuadrado de la mascota; cuando el canvas mide
-  // exactamente ese cuadrado, sin este flag el desborde se recortaría. Con
-  // el flag, el contenido de la riñonera (y solo el suyo) se desplaza lo
-  // mínimo imprescindible para quedar entero dentro, SIN cambiar su
-  // tamaño. En usos con lienzo grande (instagramStory.js) no se pasa y
-  // todo se dibuja con paridad exacta respecto a la vista CSS.
-  const { glowColor, clampRinonInside = false } = options;
+  const { glowColor } = options;
 
   const srcs = [
     mascot.base,
@@ -327,70 +269,16 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
         pctToPx(49.5, boxSize), pctToPx(19.8, boxSize)
       );
     } else if (acc.isRinon) {
-      // Ver comentario detallado en components/MascotDisplay.jsx:
-      // ajuste 4 (otro 2% a la derecha respecto al ajuste 3):
-      // left=1.9275, top base=51.91625, width=152.145, height=59.1675.
-      // IMPORTANTE: estos valores deben ser EXACTAMENTE los mismos que en
-      // MascotDisplay.jsx (caja base de acc.isRinon) — si se ajusta la
-      // riñonera allí, hay que replicarlo aquí, o la versión horneada
-      // (tarjetas de amigos, etc.) quedará desplazada respecto a la CSS.
-      // rinonScale/rinonOffsetX (por ítem) recentran y desplazan la caja
-      // base para colores cuyo PNG tiene más margen interno — misma
-      // fórmula que en MascotDisplay.jsx.
-      const baseLeft = 1.9275;
-      const baseTop = 51.91625 + (acc.rinonOffsetY ?? 0);
-      const baseWidth = 152.145;
-      const baseHeight = 59.1675;
-      const scale = acc.rinonScale ?? 1;
-      const rinonWidth = baseWidth * scale;
-      const rinonHeight = baseHeight * scale;
-      const centerX = baseLeft + baseWidth / 2;
-      const centerY = baseTop + baseHeight / 2;
-      const rinonLeft = centerX - rinonWidth / 2 + (acc.rinonOffsetX ?? 0);
-      const rinonTop = centerY - rinonHeight / 2;
-
-      if (clampRinonInside) {
-        // Réplica manual del "contain" para conocer el rectángulo real del
-        // contenido dibujado, y desplazarlo (sin escalarlo) lo MÍNIMO para
-        // que el ARTE VISIBLE quede entero dentro del cuadrado. Clave: se
-        // clampea usando los límites del arte opaco (bbox de alfa), no el
-        // rectángulo del PNG — el PNG de la riñonera tiene mucho margen
-        // transparente (el arte ocupa ~y 20–80%), así que verticalmente ya
-        // cabe sin mover nada y horizontalmente solo desborda ~5%. Con el
-        // rectángulo completo se desplazaba ~11% de más hacia arriba y la
-        // riñonera quedaba descolocada respecto a la vista CSS (tienda).
-        const bx = boxX + pctToPx(rinonLeft, boxSize);
-        const by = boxY + pctToPx(rinonTop, boxSize);
-        const bw = pctToPx(rinonWidth, boxSize);
-        const bh = pctToPx(rinonHeight, boxSize);
-        if (img.width && img.height && bw > 0 && bh > 0) {
-          const s = Math.min(bw / img.width, bh / img.height);
-          const dw = img.width * s;
-          const dh = img.height * s;
-          let dx = bx + (bw - dw) / 2;
-          let dy = by + (bh - dh) / 2;
-          const bb = getAlphaBBoxFractions(img); // {left,top,right,bottom} ∈ [0,1]
-          // Bordes del arte opaco en px de destino.
-          const artL = dx + bb.left * dw;
-          const artT = dy + bb.top * dh;
-          const artR = dx + bb.right * dw;
-          const artB = dy + bb.bottom * dh;
-          // Desplazamiento mínimo por eje (prioriza no perder izq./sup.).
-          let shiftX = 0;
-          if (artR > boxX + boxSize) shiftX = (boxX + boxSize) - artR;
-          if (artL + shiftX < boxX) shiftX = boxX - artL;
-          let shiftY = 0;
-          if (artB > boxY + boxSize) shiftY = (boxY + boxSize) - artB;
-          if (artT + shiftY < boxY) shiftY = boxY - artT;
-          ctx.drawImage(img, dx + shiftX, dy + shiftY, dw, dh);
-        }
-      } else {
-        drawContain(
-          ctx, img,
-          boxX + pctToPx(rinonLeft, boxSize), boxY + pctToPx(rinonTop, boxSize),
-          pctToPx(rinonWidth, boxSize), pctToPx(rinonHeight, boxSize)
-        );
-      }
+      // Riñonera — caja explícita por ítem (acc.rinonBox), la MISMA que usa
+      // MascotDisplay.jsx en la vista CSS. Los PNGs están recortados
+      // exactamente al arte visible, la caja cabe entera en el cuadrado y
+      // no hay desbordes que recortar: paridad total entre ambas rutas.
+      const rb = acc.rinonBox ?? RINON_DEFAULT_BOX;
+      drawContain(
+        ctx, img,
+        boxX + pctToPx(rb.left, boxSize), boxY + pctToPx(rb.top, boxSize),
+        pctToPx(rb.width, boxSize), pctToPx(rb.height, boxSize)
+      );
     } else if (acc.scale) {
       const pct = acc.scale * 100;
       const pos = (100 - pct) / 2;
@@ -442,12 +330,6 @@ export async function drawMascotOnCanvas(ctx, mascot, boxX, boxY, boxSize, optio
  * Devuelve `null` si no hay ninguna capa equipada (mascota base sin
  * personalizar): en ese caso no hace falta generar ni subir nada.
  *
- * NOTA riñonera: es la única capa cuyo contenido visible desborda el
- * cuadrado de la mascota (ver clampRinon en drawMascotOnCanvas). Como este
- * canvas mide EXACTAMENTE el cuadrado, sin tratamiento especial se
- * recortaba al hornear. Se pasa `clampRinonInside: true` para que SOLO esa
- * capa se desplace lo justo para caber entera, a tamaño completo, dentro
- * del PNG. El resto de capas se hornean exactamente igual que siempre.
  */
 export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   const resolved = await resolveMascotLayers('mid', mascotApi);
@@ -467,9 +349,7 @@ export async function renderMascotOverlayBlob(mascotApi, size = 256) {
   const ctx = canvas.getContext('2d');
 
   // `base: null` a propósito — ver comentario de la función.
-  await drawMascotOnCanvas(ctx, { ...resolved, base: null }, 0, 0, size, {
-    clampRinonInside: true,
-  });
+  await drawMascotOnCanvas(ctx, { ...resolved, base: null }, 0, 0, size);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
