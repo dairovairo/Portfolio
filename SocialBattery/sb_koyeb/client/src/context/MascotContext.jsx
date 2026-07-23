@@ -2524,6 +2524,13 @@ export function MascotProvider({ children }) {
       isTie: Boolean(baseItem.isTie),
       isBowTie: Boolean(baseItem.isBowTie),
       isRinon: Boolean(baseItem.isRinon),
+      // Ajustes finos por ítem de las riñoneras (ver caja base de
+      // acc.isRinon en MascotDisplay.jsx): sin copiarlos, una riñonera
+      // blanca/negra personalizada perdía su +4% de tamaño y −10% de
+      // altura y se descolocaba respecto a la versión de catálogo.
+      rinonScale: baseItem.rinonScale ?? null,
+      rinonOffsetY: baseItem.rinonOffsetY ?? null,
+      rinonOffsetX: baseItem.rinonOffsetX ?? null,
     };
     setAccessoryCustomizations(prev => {
       const next = { ...prev, [id]: entry };

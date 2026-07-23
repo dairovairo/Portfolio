@@ -64,12 +64,6 @@ export default function MascotPreviewSync() {
         // Sin capas equipadas (mascota base): se envía sin adjuntar
         // archivo, el servidor lo interpreta como "limpiar la preview".
         if (overlayBlob) formData.append('mascot', overlayBlob, 'mascot.png');
-        // Versión del formato del PNG: '2' = horneado con margen
-        // transparente (ver renderMascotOverlayBlob / MASCOT_OVERLAY_PAD).
-        // El servidor lo guarda en una ruta distinta (mascot-previews/v2/…)
-        // para que MascotPreviewOverlay sepa cómo mostrarlo sin romper los
-        // PNGs antiguos de clientes que aún no se han actualizado.
-        formData.append('version', '2');
 
         await api.postForm('/users/mascot-preview', formData);
       } catch (e) {
