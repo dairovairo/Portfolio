@@ -148,24 +148,33 @@ function AppRoutes() {
     );
   }
 
+  if (!hasProfile) {
+    // Va ANTES del gate de términos a propósito: para un usuario nuevo
+    // (incluido OAuth) todavía no existe fila en public.users — se crea
+    // aquí, en el onboarding. El gate de términos necesita una fila que
+    // actualizar (POST /auth/accept-terms), así que hasta que no exista,
+    // no tiene sentido mostrarlo.
+    return (
+      <Routes>
+        <Route path="/setup" element={<OnboardingPage />} />
+        <Route path="*" element={<Navigate to="/setup" replace />} />
+      </Routes>
+    );
+  }
+
   if (!hasAcceptedTerms) {
     // Bloqueo hasta que acepte ToS+privacidad+edad. Mantenemos accesibles
     // /terminos y /privacidad para que pueda leerlos desde el gate; el
-    // resto de rutas caen aquí.
+    // resto de rutas caen aquí. Para registro por email, el checkbox
+    // previo ya marca terms_accepted_at en el mismo POST /auth/profile
+    // del onboarding (ver OnboardingPage.jsx) — así que normalmente solo
+    // llega aquí el flujo OAuth (Google/Apple), que no tiene checkbox
+    // propio en AuthPage.
     return (
       <Routes>
         <Route path="/terminos" element={<TermsPage />} />
         <Route path="/privacidad" element={<PrivacyPolicyPage />} />
         <Route path="*" element={<TermsGate />} />
-      </Routes>
-    );
-  }
-
-  if (!hasProfile) {
-    return (
-      <Routes>
-        <Route path="/setup" element={<OnboardingPage />} />
-        <Route path="*" element={<Navigate to="/setup" replace />} />
       </Routes>
     );
   }

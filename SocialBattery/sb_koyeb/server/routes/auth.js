@@ -113,10 +113,18 @@ router.post('/accept-terms', requireAuth, async (req, res) => {
       .from('users')
       .select('terms_accepted_at')
       .eq('id', req.user.id)
-      .single();
+      .maybeSingle();
     if (readErr) throw readErr;
 
-    if (existing?.terms_accepted_at) {
+    if (!existing) {
+      // No debería pasar con el orden de gates actual (App.jsx exige
+      // hasProfile antes de mostrar TermsGate), pero si llega aquí sin
+      // fila, devolvemos un 404 explícito en vez de un 500 opaco — más
+      // fácil de depurar si algo cambia en el futuro.
+      return res.status(404).json({ error: 'Perfil no encontrado. Completa el registro primero.' });
+    }
+
+    if (existing.terms_accepted_at) {
       return res.json({ accepted_at: existing.terms_accepted_at });
     }
 
