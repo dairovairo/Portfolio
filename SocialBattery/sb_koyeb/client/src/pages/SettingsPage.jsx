@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import DeleteAccountModal from '../components/DeleteAccountModal';
 import HexColorPicker from '../components/HexColorPicker';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -391,6 +392,7 @@ export default function SettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
   function toggleSection(id) {
     setOpenSection(prev => prev === id ? null : id);
@@ -1188,10 +1190,23 @@ export default function SettingsPage() {
             >
               {loggingOut ? 'Cerrando...' : 'Cerrar sesión'}
             </button>
+            <button
+              onClick={() => setShowDeleteAccount(true)}
+              className="mt-2 w-full py-2.5 rounded-xl border border-red-500/40 text-sm font-display font-semibold text-red-400 hover:bg-red-500/15 transition-colors"
+            >
+              Eliminar mi cuenta
+            </button>
           </SubSection>
         </AccordionSection>
 
       </div>
+
+      {showDeleteAccount && (
+        <DeleteAccountModal
+          onClose={() => setShowDeleteAccount(false)}
+          onDeleted={signOut}
+        />
+      )}
     </div>
   );
 }

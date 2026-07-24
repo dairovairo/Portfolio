@@ -101,6 +101,13 @@ export default function AuthPage() {
           throw new Error('Debes aceptar los términos y confirmar que tienes al menos 16 años.');
         }
         await signUp(email, password);
+        // Guardamos la intención de aceptación para que POST /auth/profile
+        // (que se llama al terminar el onboarding, cuando ya sí hay
+        // sesión) marque terms_accepted_at en el mismo insert. Sin esto
+        // el usuario acabaría en TermsGate teniendo que pulsar otro
+        // checkbox tras el onboarding, aunque ya lo había aceptado
+        // segundos antes en el registro. Ver server/routes/auth.js.
+        try { localStorage.setItem('sb_pending_terms_accept', '1'); } catch (_e) {}
         setRegistered(true);
       } else if (mode === 'forgot') {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {

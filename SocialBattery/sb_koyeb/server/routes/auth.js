@@ -44,6 +44,12 @@ router.post('/profile', requireAuth, async (req, res) => {
       battery_updated_at: new Date().toISOString(),
       onboarding_done: true,
       interests: Array.isArray(interests) ? interests : [],
+      // Si el cliente indica que en este flujo se aceptaron los ToS
+      // (registro por email con checkbox previo, ver AuthPage.jsx), lo
+      // marcamos aquí para que el TermsGate no se dispare tras el
+      // onboarding. Para OAuth (Google/Apple) no llega este flag y el
+      // gate se muestra al terminar el onboarding.
+      ...(req.body.terms_accepted === true ? { terms_accepted_at: new Date().toISOString() } : {}),
     })
     .select()
     .single();
@@ -85,6 +91,47 @@ router.get('/me', requireAuth, async (req, res) => {
 
   const user = await expireUserBatteryIfNeeded(data);
   res.json({ user });
+});
+
+// POST /api/auth/accept-terms — marca los Términos+Privacidad+edad mínima
+// como aceptados por el usuario autenticado.
+//
+// Se llama:
+//   - Justo después de un signUp por email exitoso (el cliente ya validó
+//     el checkbox antes de crear la cuenta, esto solo persiste el gesto).
+//   - Cuando el usuario acepta la pantalla obligatoria "Antes de
+//     continuar" que se le muestra al primer login por OAuth (Google /
+//     Apple) o a cualquier usuario cuya fila tenga terms_accepted_at
+//     null. Ver client/src/components/TermsGate.jsx y
+//     supabase_schema_phase130_terms_accepted_at.sql.
+//
+// Idempotente: si ya está aceptado, no reescribe la fecha (evita perder
+// la fecha original de aceptación por un click accidental posterior).
+router.post('/accept-terms', requireAuth, async (req, res) => {
+  try {
+    const { data: existing, error: readErr } = await supabase
+      .from('users')
+      .select('terms_accepted_at')
+      .eq('id', req.user.id)
+      .single();
+    if (readErr) throw readErr;
+
+    if (existing?.terms_accepted_at) {
+      return res.json({ accepted_at: existing.terms_accepted_at });
+    }
+
+    const acceptedAt = new Date().toISOString();
+    const { error: updateErr } = await supabase
+      .from('users')
+      .update({ terms_accepted_at: acceptedAt })
+      .eq('id', req.user.id);
+    if (updateErr) throw updateErr;
+
+    res.json({ accepted_at: acceptedAt });
+  } catch (err) {
+    console.error('[auth] POST /accept-terms error:', err);
+    res.status(500).json({ error: 'No se pudo registrar la aceptación' });
+  }
 });
 
 module.exports = router;

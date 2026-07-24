@@ -42,9 +42,10 @@ import { TutorialProvider } from './context/TutorialContext';
 import { MascotProvider } from './context/MascotContext';
 import { UserLocationProvider, useUserLocation } from './context/UserLocationContext';
 import MascotPreviewSync from './components/MascotPreviewSync';
+import TermsGate from './components/TermsGate';
 
 function AppRoutes() {
-  const { isLoading, isAuthenticated, hasProfile, isPasswordRecovery } = useAuth();
+  const { isLoading, isAuthenticated, hasProfile, hasAcceptedTerms, isPasswordRecovery } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { requestLocationOnce } = useUserLocation();
@@ -143,6 +144,19 @@ function AppRoutes() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
+
+  if (!hasAcceptedTerms) {
+    // Bloqueo hasta que acepte ToS+privacidad+edad. Mantenemos accesibles
+    // /terminos y /privacidad para que pueda leerlos desde el gate; el
+    // resto de rutas caen aquí.
+    return (
+      <Routes>
+        <Route path="/terminos" element={<TermsPage />} />
+        <Route path="/privacidad" element={<PrivacyPolicyPage />} />
+        <Route path="*" element={<TermsGate />} />
       </Routes>
     );
   }

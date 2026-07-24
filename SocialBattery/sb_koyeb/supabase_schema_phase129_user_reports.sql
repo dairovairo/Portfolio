@@ -80,7 +80,7 @@ CREATE POLICY "Users read own reports" ON public.user_reports FOR SELECT
 -- actual lo garantiza el DEFAULT + el hecho de que el servidor es quien
 -- crea la fila con la service key — pero mantenemos la política estricta
 -- por defensa en profundidad).
-DROP POLICY IF EXISTS "Users create own reports" ON public.user_reports FOR INSERT;
+DROP POLICY IF EXISTS "Users create own reports" ON public.user_reports;
 CREATE POLICY "Users create own reports" ON public.user_reports FOR INSERT
   WITH CHECK (auth.uid() = reporter_id AND status = 'pending');
 

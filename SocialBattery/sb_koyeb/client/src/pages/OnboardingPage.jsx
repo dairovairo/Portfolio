@@ -113,16 +113,29 @@ export default function OnboardingPage() {
           } catch { /* avatar upload optional */ }
         }
 
+        // Si el usuario venía de registrarse por email marcando el
+        // checkbox de ToS (ver AuthPage.jsx), lo enviamos junto al perfil
+        // para que se marque en la misma inserción. Para OAuth (Google/
+        // Apple) no habrá flag y el TermsGate se encargará al terminar.
+        let acceptedInSignup = false;
+        try {
+          acceptedInSignup = localStorage.getItem('sb_pending_terms_accept') === '1';
+        } catch (_e) {}
+
         const profilePayload = {
           username: username.trim().toLowerCase(),
           bio: bio.trim() || null,
           avatar_url: avatarUrl || null,
           initial_battery: 50,
           interests: interests,
+          ...(acceptedInSignup ? { terms_accepted: true } : {}),
         };
 
         try {
           await completeOnboarding(profilePayload);
+          if (acceptedInSignup) {
+            try { localStorage.removeItem('sb_pending_terms_accept'); } catch (_e) {}
+          }
         } catch (submitError) {
           try {
             await refreshProfile();

@@ -283,6 +283,11 @@ export function AuthProvider({ children }) {
       isLoading: session === undefined,
       isAuthenticated: !!session,
       hasProfile: !!profile,
+      // Términos aceptados. Ver phase 130 y client/App.jsx: mientras esto
+      // sea false para un usuario autenticado, la app le muestra el gate
+      // TermsGate en vez de las rutas privadas. Se comprueba por !=null
+      // (la columna es TIMESTAMPTZ nullable).
+      hasAcceptedTerms: !!profile?.terms_accepted_at,
       isPasswordRecovery,
       signUp,
       signIn,
@@ -293,6 +298,12 @@ export function AuthProvider({ children }) {
       clearPasswordRecovery,
       refreshProfile,
       completeOnboarding,
+      // Marca ToS+privacidad+edad como aceptados en la BD y refresca
+      // el perfil local para que la app deje pasar el gate.
+      acceptTerms: async () => {
+        await api.post('/auth/accept-terms', {});
+        await refreshProfile();
+      },
     }}>
       {/* Heartbeat broadcaster — active when logged in with a profile */}
       {profile?.id && <PresenceBroadcaster userId={profile.id} />}
