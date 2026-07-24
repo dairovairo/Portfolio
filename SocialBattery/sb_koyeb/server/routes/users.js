@@ -4,6 +4,7 @@ const supabase = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { createImageUpload, storeImage } = require('../lib/imageUpload');
 const { applyBatteryExpiry, applyBatteryExpiryToUsers } = require('../lib/batteryExpiry');
+const { purgeUserStorage } = require('../lib/purgeUserStorage');
 
 const upload = createImageUpload({ maxSizeMb: 2 });
 const uploadMascotPreview = createImageUpload({ maxSizeMb: 2 });
@@ -369,6 +370,76 @@ router.post('/me/report-location', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[users] POST /me/report-location error:', err);
     res.status(500).json({ error: 'Error al registrar ubicación' });
+  }
+});
+
+// ── DELETE /api/users/me — eliminar cuenta permanentemente ────────────────────
+// Requisito de tiendas (Apple 5.1.1(v), Google Play): el usuario tiene que
+// poder borrar su cuenta desde dentro de la app, no solo por email.
+//
+// La eliminación es IRREVERSIBLE y consta de dos pasos:
+//
+// 1. Borrar la fila de public.users. Las ~40 tablas hijas que referencian
+//    users.id tienen ON DELETE CASCADE / SET NULL configurado en el
+//    esquema (friendships, messages, community_members, event_attendees,
+//    battery_history, mascot_purchases, etc.), así que aquí no hace falta
+//    ir tabla por tabla — la BD limpia todo en cascada.
+//
+// 2. Borrar el auth user con supabase.auth.admin.deleteUser(). Sin esto,
+//    la sombra en auth.users seguiría existiendo y el email quedaría
+//    "ocupado" para volver a registrarse. Requiere la SERVICE_KEY (que ya
+//    es la que usa este backend).
+//
+// Si el segundo paso falla después de que el primero haya ido bien,
+// devolvemos 500 pero avisando: los datos ya no existen, solo queda la
+// sombra de auth. Un job de limpieza podría barrerla más tarde.
+router.delete('/me', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const confirmation = req.body?.confirmation;
+
+  // Confirmación explícita en el body para evitar borrados por accidente
+  // (p.ej. un DELETE lanzado por un bug del cliente). El cliente exige al
+  // usuario que teclee "ELIMINAR" en un input antes de habilitar el botón.
+  if (confirmation !== 'ELIMINAR') {
+    return res.status(400).json({
+      error: 'Confirma la eliminación enviando { "confirmation": "ELIMINAR" }',
+    });
+  }
+
+  try {
+    // 0. Storage: barrer avatares, previews de mascota, portadas de
+    //    eventos/comunidades/quedadas y adjuntos de novedades de evento
+    //    prefijados por userId. No borramos imágenes compartidas en chats
+    //    (los otros participantes las siguen viendo). Ver comentario
+    //    detallado en lib/purgeUserStorage.js. Va PRIMERO para que si
+    //    falla el borrado en BD, no perdamos ficheros huérfanos sin
+    //    entrada en users a la que atarlos.
+    const storageSummary = await purgeUserStorage(userId);
+    console.log(`[users] DELETE /me: storage purge for ${userId}:`, storageSummary);
+
+    // 1. Datos de la app: borrar la fila principal. El resto cae por
+    //    cascadas del esquema.
+    const { error: userErr } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId);
+    if (userErr) throw userErr;
+
+    // 2. Auth: borrar la sombra del usuario.
+    const { error: authErr } = await supabase.auth.admin.deleteUser(userId);
+    if (authErr) {
+      // Datos ya borrados, pero la sombra sigue. No es catastrófico pero
+      // conviene loggearlo para revisarlo a mano.
+      console.error('[users] DELETE /me: user data deleted but auth shadow remains:', userId, authErr);
+      return res.status(500).json({
+        error: 'Cuenta parcialmente eliminada. Contacta con soporte para completar la eliminación.',
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[users] DELETE /me error:', err);
+    res.status(500).json({ error: 'Error al eliminar la cuenta' });
   }
 });
 

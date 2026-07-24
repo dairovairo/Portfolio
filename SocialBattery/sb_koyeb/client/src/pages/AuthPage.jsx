@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import LogoWordmark from '../components/LogoWordmark';
@@ -13,12 +13,26 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
+  // Consentimiento único para (a) declarar +16 años y (b) aceptar los
+  // ToS y Política de Privacidad. Requisito de tiendas + de la propia
+  // ley: el consentimiento debe ser explícito y positivo (no una casilla
+  // pre-marcada). Solo aplica al registro; iniciar sesión con una cuenta
+  // ya creada no vuelve a pedirlo. Google/Apple sign-in también lo exige
+  // porque en muchos casos crean la cuenta al vuelo.
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resendState, setResendState] = useState('idle'); // 'idle' | 'sending' | 'sent'
   const [resendCooldown, setResendCooldown] = useState(0);
 
   async function handleGoogleSignIn() {
     if (loading) return;
+    // En modo registro, exige el checkbox — Google/Apple crean cuenta al
+    // vuelo si no existía, y la ley/tiendas exigen consentimiento explícito
+    // antes de crearla.
+    if (mode === 'register' && !termsAccepted) {
+      setError('Debes aceptar los términos y confirmar que tienes al menos 16 años.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -35,6 +49,11 @@ export default function AuthPage() {
 
   async function handleAppleSignIn() {
     if (loading) return;
+    // Ver comentario en handleGoogleSignIn — mismo motivo.
+    if (mode === 'register' && !termsAccepted) {
+      setError('Debes aceptar los términos y confirmar que tienes al menos 16 años.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -78,6 +97,9 @@ export default function AuthPage() {
         await signIn(email, password);
         navigate('/');
       } else if (mode === 'register') {
+        if (!termsAccepted) {
+          throw new Error('Debes aceptar los términos y confirmar que tienes al menos 16 años.');
+        }
         await signUp(email, password);
         setRegistered(true);
       } else if (mode === 'forgot') {
@@ -292,6 +314,29 @@ export default function AuthPage() {
                   <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">
                     {error}
                   </div>
+                )}
+
+                {mode === 'register' && (
+                  <label className="flex items-start gap-2.5 text-xs text-surface-muted leading-relaxed cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-surface-border bg-surface-bg
+                        text-accent-primary focus:ring-accent-primary/40 focus:ring-offset-0 shrink-0"
+                    />
+                    <span>
+                      Confirmo que tengo al menos <strong className="text-surface-text">16 años</strong> y
+                      acepto los{' '}
+                      <Link to="/terminos" target="_blank" className="text-accent-glow underline underline-offset-2">
+                        Términos y Condiciones
+                      </Link>{' '}
+                      y la{' '}
+                      <Link to="/privacidad" target="_blank" className="text-accent-glow underline underline-offset-2">
+                        Política de Privacidad
+                      </Link>.
+                    </span>
+                  </label>
                 )}
 
                 <button

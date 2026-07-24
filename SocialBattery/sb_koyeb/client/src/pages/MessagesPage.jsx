@@ -7,6 +7,7 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import ReportModal from '../components/ReportModal';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ function PinnedBanner({ pinned, currentUserId, friendName, onUnpin, onJumpTo }) 
 }
 
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone }) {
+function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone, onReport }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -207,6 +208,19 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
               <div>
                 <div>Eliminar para todos</div>
                 <div className="text-xs text-red-400/60 font-normal">Queda rastro en la conversación</div>
+              </div>
+            </button>
+          )}
+
+          {!isMe && !msg.deleted_for_everyone && (
+            <button
+              onClick={onReport}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-red-500/10 text-red-400 text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">🚩</span>
+              <div>
+                <div>Denunciar mensaje</div>
+                <div className="text-xs text-red-400/60 font-normal">Lo revisará nuestro equipo</div>
               </div>
             </button>
           )}
@@ -676,6 +690,10 @@ export default function MessagesPage() {
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [blockActionLoading, setBlockActionLoading] = useState(false);
 
+  // Denuncia (usuario o mensaje). Cuando existe, se renderiza el modal.
+  // { targetType: 'user' | 'message', targetId, targetLabel } | null
+  const [reportTarget, setReportTarget] = useState(null);
+
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const headerMenuRef = useRef(null);
@@ -1136,6 +1154,26 @@ export default function MessagesPage() {
           onTogglePin={() => handleTogglePin(contextMenu)}
           onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
+          onReport={() => {
+            const preview = contextMenu.type === 'image'
+              ? '📷 Imagen'
+              : (contextMenu.content?.slice(0, 60) || 'este mensaje');
+            setReportTarget({
+              targetType: 'message',
+              targetId: contextMenu.id,
+              targetLabel: `Mensaje: "${preview}${contextMenu.content?.length > 60 ? '…' : ''}"`,
+            });
+            setContextMenu(null);
+          }}
+        />
+      )}
+
+      {reportTarget && (
+        <ReportModal
+          targetType={reportTarget.targetType}
+          targetId={reportTarget.targetId}
+          targetLabel={reportTarget.targetLabel}
+          onClose={() => setReportTarget(null)}
         />
       )}
 
@@ -1226,6 +1264,21 @@ export default function MessagesPage() {
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
                   >
                     <span>{blockedByMe ? '🔓' : '🚫'}</span> {blockedByMe ? 'Desbloquear' : 'Bloquear'}
+                  </button>
+                )}
+                {friend && (
+                  <button
+                    onClick={() => {
+                      setShowHeaderMenu(false);
+                      setReportTarget({
+                        targetType: 'user',
+                        targetId: friend.id,
+                        targetLabel: `@${friend.username}`,
+                      });
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
+                  >
+                    <span>🚩</span> Denunciar
                   </button>
                 )}
               </div>

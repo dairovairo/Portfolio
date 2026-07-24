@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import ReportModal from '../components/ReportModal';
 
 // ── Mark community chat as read in localStorage ──────────────────────────────
 function markCommunityRead(communityId) {
@@ -579,7 +580,7 @@ function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
 }
 
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
-function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone }) {
+function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone, onReport }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -666,6 +667,19 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
               <div>
                 <div>Eliminar para todos</div>
                 <div className="text-xs text-red-400/60 font-normal">Queda rastro en la conversación</div>
+              </div>
+            </button>
+          )}
+
+          {!isMe && !msg.deleted_for_everyone && (
+            <button
+              onClick={onReport}
+              className="w-full text-left px-4 py-3.5 rounded-2xl bg-surface-bg hover:bg-red-500/10 text-red-400 text-sm font-display font-semibold transition-colors flex items-center gap-3"
+            >
+              <span className="text-xl">🚩</span>
+              <div>
+                <div>Denunciar mensaje</div>
+                <div className="text-xs text-red-400/60 font-normal">Lo revisará nuestro equipo</div>
               </div>
             </button>
           )}
@@ -852,6 +866,8 @@ export default function CommunityChatPage() {
 
   const isPinnedMessage = (messageId) => pinnedMessage?.id === messageId;
   const [contextMenu, setContextMenu] = useState(null); // { msg }
+  // Modal de denuncia (mensaje ajeno de este chat).
+  const [reportTarget, setReportTarget] = useState(null);
 
   async function handleTogglePin(messageId, isPinned) {
     try {
@@ -1246,6 +1262,25 @@ export default function CommunityChatPage() {
           }}
           onDeleteForMe={() => deleteMessage(contextMenu, 'me')}
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
+          onReport={() => {
+            const preview = contextMenu.type === 'image'
+              ? '📷 Imagen'
+              : (contextMenu.content?.slice(0, 60) || 'este mensaje');
+            setReportTarget({
+              targetType: 'community_message',
+              targetId: contextMenu.id,
+              targetLabel: `Mensaje: "${preview}${contextMenu.content?.length > 60 ? '…' : ''}"`,
+            });
+            setContextMenu(null);
+          }}
+        />
+      )}
+      {reportTarget && (
+        <ReportModal
+          targetType={reportTarget.targetType}
+          targetId={reportTarget.targetId}
+          targetLabel={reportTarget.targetLabel}
+          onClose={() => setReportTarget(null)}
         />
       )}
 

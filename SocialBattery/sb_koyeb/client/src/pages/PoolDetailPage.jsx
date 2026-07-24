@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import GlobeLocationView from '../components/GlobeLocationView';
 import ReminderBellButton, { DEFAULT_POOL_REMINDER_MINUTES } from '../components/ReminderBellButton';
+import ReportModal from '../components/ReportModal';
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 import {
   getActivityEmoji,
@@ -64,6 +65,7 @@ export default function PoolDetailPage() {
   const { hasUnreadPoolChat } = usePoolChatNotifications();
 
   const [pool, setPool] = useState(null);
+  const [showReport, setShowReport] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [badgeData, setBadgeData] = useState({ assignments: [] });
   const [loading, setLoading] = useState(true);
@@ -415,8 +417,25 @@ export default function PoolDetailPage() {
                 {leaving ? 'Saliendo...' : 'Salir del plan'}
               </button>
             )}
+            {pool && !pool.is_creator && (
+              <button
+                onClick={() => setShowReport(true)}
+                className="w-full mt-2 py-2.5 rounded-2xl bg-transparent hover:bg-red-500/10 text-red-400/70 hover:text-red-400 text-xs font-display font-semibold border border-red-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                🚩 Denunciar plan
+              </button>
+            )}
           </div>
         </div>
+      )}
+
+      {showReport && pool && (
+        <ReportModal
+          targetType="pool"
+          targetId={pool.id}
+          targetLabel={pool.title || 'este plan'}
+          onClose={() => setShowReport(false)}
+        />
       )}
     </div>
   );

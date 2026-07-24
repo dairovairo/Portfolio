@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation, useSearchParams } from 'react-rout
 import BottomNav from '../components/BottomNav';
 import LocationPicker from '../components/LocationPicker';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import ReportModal from '../components/ReportModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
@@ -2513,6 +2514,7 @@ export default function CommunityDetailPage() {
   }, [communityId, isConversationMuted]);
   const toggleThreadMuted = useThreadMuteToggle(communityId, threadMuted, setThreadMuted, setConversationMuted);
   const [community, setCommunity] = useState(null);
+  const [showReport, setShowReport] = useState(false);
   const [currentEvents, setCurrentEvents] = useState([]);
   const [pastEvents, setPastEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3001,6 +3003,16 @@ export default function CommunityDetailPage() {
               </button>
             )}
 
+            {community.creator_id !== profile?.id && (
+              <button
+                onClick={() => setShowReport(true)}
+                title="Denunciar comunidad"
+                className="px-3 py-2 rounded-xl border border-red-500/30 text-red-300 bg-red-500/5 hover:bg-red-500/15 text-xs font-display font-semibold transition-all"
+              >
+                🚩
+              </button>
+            )}
+
             {community.creator_id === profile?.id && (
               <button
                 onClick={() => setShowEditCommunity(true)}
@@ -3199,6 +3211,15 @@ export default function CommunityDetailPage() {
           onClose={() => setShowCollabModal(false)}
           onConfirm={handleConfirmCollaborate}
           confirming={collaborating}
+        />
+      )}
+
+      {showReport && community && (
+        <ReportModal
+          targetType="community"
+          targetId={community.id}
+          targetLabel={community.name}
+          onClose={() => setShowReport(false)}
         />
       )}
 

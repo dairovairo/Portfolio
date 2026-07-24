@@ -6,6 +6,7 @@ import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { ALL_INTERESTS } from './OnboardingPage';
 import MascotDisplay from '../components/MascotDisplay';
 import MascotPreviewOverlay from '../components/MascotPreviewOverlay';
+import ReportModal from '../components/ReportModal';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
@@ -88,6 +89,8 @@ export default function UserProfilePage() {
   const [friendshipStatus, setFriendshipStatus] = useState(null); // null | 'pending' | 'accepted' | 'sent'
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  // Modal de denuncia del perfil (booleano — solo hay un target: este usuario).
+  const [showReport, setShowReport] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -361,7 +364,26 @@ export default function UserProfilePage() {
 
         {/* Public stats */}
         <StatsGrid stats={stats} />
+
+        {/* Report user — solo perfiles ajenos */}
+        {!isMe && (
+          <button
+            onClick={() => setShowReport(true)}
+            className="w-full mt-3 bg-surface-card border border-red-500/20 text-red-400 rounded-2xl py-2.5 text-sm font-display font-semibold hover:bg-red-500/10 transition-all flex items-center justify-center gap-2"
+          >
+            <span>🚩</span> Denunciar a este usuario
+          </button>
+        )}
       </main>
+
+      {showReport && (
+        <ReportModal
+          targetType="user"
+          targetId={user.id}
+          targetLabel={`@${user.username}`}
+          onClose={() => setShowReport(false)}
+        />
+      )}
     </div>
   );
 }

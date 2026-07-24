@@ -15,6 +15,7 @@ const poolsRoutes     = require('./routes/pools');
 const groupsRoutes    = require('./routes/groups');
 const communityRoutes = require('./routes/community');
 const discoverRoutes  = require('./routes/discover');
+const reportsRoutes   = require('./routes/reports');
 const { expireStaleBatteries } = require('./lib/batteryExpiry');
 const { notifyPoolsStartingSoon, notifyEventsStartingSoon } = require('./jobs/reminders');
 const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
@@ -137,11 +138,12 @@ app.use('/api/pools',     poolsRoutes);
 app.use('/api/groups',    groupsRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/discover',  discoverRoutes);
+app.use('/api/reports',   reportsRoutes);
 
 // ── Debug endpoints (solo en dev o con header secreto) ────────────────────────
 app.get('/api/debug/reminders', async (req, res) => {
   const secret = req.headers['x-debug-secret'];
-  if (secret !== (process.env.DEBUG_SECRET || 'sb-debug-2025')) {
+  if (!process.env.DEBUG_SECRET || secret !== process.env.DEBUG_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
@@ -163,7 +165,7 @@ app.get('/api/debug/reminders', async (req, res) => {
 // Requiere el mismo header x-debug-secret que /api/debug/reminders.
 app.get('/api/debug/notifications', async (req, res) => {
   const secret = req.headers['x-debug-secret'];
-  if (secret !== (process.env.DEBUG_SECRET || 'sb-debug-2025')) {
+  if (!process.env.DEBUG_SECRET || secret !== process.env.DEBUG_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -264,7 +266,7 @@ app.get('/api/debug/notifications', async (req, res) => {
 // el mismo día. Limpia sus propias filas de prueba al terminar.
 app.get('/api/debug/notifications/captest', async (req, res) => {
   const secret = req.headers['x-debug-secret'];
-  if (secret !== (process.env.DEBUG_SECRET || 'sb-debug-2025')) {
+  if (!process.env.DEBUG_SECRET || secret !== process.env.DEBUG_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

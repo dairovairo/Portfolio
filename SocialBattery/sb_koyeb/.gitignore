@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+client/.env
+client/.env.*
+!client/.env.example
+
+# Node
+node_modules/
+
+# Build output
+client/dist/
+client/build/
+
+# Misc
+.DS_Store
+*.log
+.vscode/
+.idea/

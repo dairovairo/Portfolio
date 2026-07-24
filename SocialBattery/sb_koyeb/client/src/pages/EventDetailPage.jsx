@@ -13,6 +13,7 @@ import { useMascot } from '../context/MascotContext';
 import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { getBatteryColor, getEffectiveBatteryLevel } from '../lib/battery';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import ReportModal from '../components/ReportModal';
 import { supabase } from '../lib/supabase';
 
 function getMascotTier(level) {
@@ -442,6 +443,7 @@ export default function EventDetailPage() {
   const [liking, setLiking] = useState(false);
   const [reminderSaving, setReminderSaving] = useState(false);
   const [sharingStory, setSharingStory] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [showEndPromoModal, setShowEndPromoModal] = useState(false);
 
   // Silenciar avisos/actualizaciones de este evento (asistente, no organizador)
@@ -992,7 +994,16 @@ export default function EventDetailPage() {
               <p className="text-base font-display font-bold text-surface-text">{updates.length}</p>
               <p className="text-[10px] font-mono text-surface-muted">actualizaciones</p>
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              {!isCreator && (
+                <button
+                  onClick={() => setShowReport(true)}
+                  title="Denunciar evento"
+                  className="flex items-center justify-center w-9 h-9 rounded-xl border border-red-500/30 text-red-300 bg-red-500/5 hover:bg-red-500/15 transition-all"
+                >
+                  🚩
+                </button>
+              )}
               <button
                 onClick={handleShareStory}
                 disabled={sharingStory}
@@ -1269,6 +1280,15 @@ export default function EventDetailPage() {
         <CreatePollModal
           onClose={() => setShowPollModal(false)}
           onCreate={handleCreatePoll}
+        />
+      )}
+
+      {showReport && (
+        <ReportModal
+          targetType="event"
+          targetId={event.id}
+          targetLabel={event.title}
+          onClose={() => setShowReport(false)}
         />
       )}
     </div>

@@ -31,6 +31,7 @@ import CommunityDashboardRafflePage from './pages/CommunityDashboardRafflePage';
 import EventAdConfigPage from './pages/EventAdConfigPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsPage from './pages/TermsPage';
 import LandingPage from './pages/LandingPage';
 import ShopPage from './pages/ShopPage';
 import CalendarPage from './pages/CalendarPage';
@@ -105,6 +106,7 @@ function AppRoutes() {
   const PUBLIC_ROUTES = {
     ...(isRootUnauthed ? { '/': LandingPage } : {}),
     '/privacidad': PrivacyPolicyPage,
+    '/terminos': TermsPage,
   };
   const PublicPage = PUBLIC_ROUTES[location.pathname];
   if (PublicPage) {

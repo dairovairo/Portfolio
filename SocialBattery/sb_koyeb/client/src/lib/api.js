@@ -144,5 +144,5 @@ export const api = {
   postForm: (path, formData) => apiFetch(path, { method: 'POST', body: formData }),
   patch: (path, body) => apiFetch(path, { method: 'PATCH', body }),
   patchForm: (path, formData) => apiFetch(path, { method: 'PATCH', body: formData }),
-  delete: (path) => apiFetch(path, { method: 'DELETE' }),
+  delete: (path, body) => apiFetch(path, { method: 'DELETE', body }),
 };
