@@ -20,6 +20,7 @@ import PoolChatPage from './pages/PoolChatPage';
 import PoolDetailPage from './pages/PoolDetailPage';
 import PoolSnifferPage from './pages/PoolSnifferPage';
 import SettingsPage from './pages/SettingsPage';
+import AdminReportsPage from './pages/AdminReportsPage';
 import CommunityPage from './pages/CommunityPage';
 import CommunityDetailPage from './pages/CommunityDetailPage';
 import EventDetailPage from './pages/EventDetailPage';
@@ -201,6 +202,7 @@ function AppRoutes() {
       <Route path="/pools/:poolId/sniffer"    element={<PoolSnifferPage />} />
       <Route path="/badges"                   element={<BadgesPage />} />
       <Route path="/settings"                 element={<SettingsPage />} />
+      <Route path="/admin/reports"            element={<AdminReportsPage />} />
       <Route path="/shop"                     element={<ShopPage />} />
       <Route path="/calendar"                 element={<CalendarPage />} />
       <Route path="/community"               element={<CommunityPage />} />

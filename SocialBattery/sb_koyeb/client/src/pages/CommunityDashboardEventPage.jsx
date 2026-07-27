@@ -62,7 +62,22 @@ export default function CommunityDashboardEventPage() {
   // renovación (misma forma exacta que el original). Se replica aquí en
   // vez de importar para que la subpágina sea autosuficiente y para no
   // arrastrar todo el estado del dashboard padre.
-  const handleRenewEvent = useCallback((ev) => {
+  //
+  // Basic (fase 132) no tiene alcance contratado — solo el aviso
+  // automático a la comunidad, que el servidor dispara igual al renovar.
+  // No hay nada que configurar, así que se renueva directo contra el
+  // endpoint. Ver el comentario gemelo en EventDetailPage.jsx.
+  const handleRenewEvent = useCallback(async (ev) => {
+    if (ev.promotion_plan !== 'premium' && ev.promotion_plan !== 'ultra') {
+      try {
+        await api.post(`/community/events/${ev.id}/renew-promotion`, { promotion_plan: 'basic' });
+        showToast('Promoción renovada — se ha vuelto a avisar a la comunidad', 'success');
+        await load();
+      } catch (e) {
+        showToast(e.message || 'Error al renovar', 'error');
+      }
+      return;
+    }
     navigate('/community/event-publicidad', {
       state: {
         renewEvent: {
@@ -75,7 +90,7 @@ export default function CommunityDashboardEventPage() {
         },
       },
     });
-  }, [navigate, communityId, data]);
+  }, [navigate, communityId, data, showToast, load]);
 
   const askEnd = useCallback((kind, row) => {
     setEnding({ kind, row });

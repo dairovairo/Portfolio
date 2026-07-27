@@ -1000,6 +1000,14 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
 // Nota: esta ruta se mantiene deliberadamente independiente del bloque de
 // notificación de POST /events (no se refactoriza a un helper compartido)
 // para no tocar ese flujo ya estabilizado.
+//
+// Fase 132: para planes 'basic' el cliente llama esta misma ruta con
+// { promotion_plan: 'basic' } y sin notification_count — no hay nada más
+// que configurar (basic no tiene alcance contratado), así que el botón
+// "Renovar" llama aquí directamente sin pasar por EventAdConfigPage. El
+// efecto es simplemente resetear el ciclo y re-disparar el aviso
+// automático a la comunidad (bloque de push más abajo, que se ejecuta
+// siempre, sin importar el plan).
 router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
@@ -5450,6 +5458,13 @@ router.post('/raffles/:raffleId/end-promotion', requireAuth, async (req, res) =>
 // No se puede cambiar de tier (afectaría al pool de participantes, que ya
 // están comprometidos con este sorteo) ni la fecha (ends_at es del sorteo,
 // no de la publicidad). Solo se retoca el reparto.
+//
+// Fase 132: para tier 'community' el cliente llama esta misma ruta con
+// body vacío — getCommunityMemberIdsForBanner no admite aforo ni filtro
+// de interesados (la audiencia siempre son TODOS los miembros), así que
+// no hay nada que configurar y el botón "Renovar" llama aquí directo sin
+// pasar por RaffleAdAudiencePage. El efecto es resetear el ciclo de
+// métricas y re-disparar el aviso a la comunidad.
 router.post('/raffles/:raffleId/renew-promotion', requireAuth, async (req, res) => {
   const { raffleId } = req.params;
   const userId = req.user.id;

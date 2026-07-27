@@ -53,7 +53,22 @@ export default function CommunityDashboardRafflePage() {
   // Duplicado mínimo del handler que vivía en CommunityDashboardPage.
   // Prellenaba el formulario de RaffleAdAudiencePage con los valores
   // del ciclo actual, para arrancar en modo renovación.
-  const handleRenewRaffle = useCallback((r) => {
+  //
+  // Community (fase 132) es un caso aparte: su audiencia siempre es
+  // "todos los miembros", no hay nada que configurar — se renueva directo
+  // contra el endpoint sin pasar por la pantalla de configuración. Ver el
+  // comentario gemelo en CommunityDetailPage.jsx (handleRenewRafflePromo).
+  const handleRenewRaffle = useCallback(async (r) => {
+    if (r.tier === 'community') {
+      try {
+        await api.post(`/community/raffles/${r.id}/renew-promotion`, {});
+        showToast('Publicidad renovada — se ha vuelto a avisar a la comunidad', 'success');
+        await load();
+      } catch (e) {
+        showToast(e.message || 'Error al renovar', 'error');
+      }
+      return;
+    }
     navigate(`/community/${communityId}/raffle-publicidad`, {
       state: {
         renewRaffle: {
@@ -67,7 +82,7 @@ export default function CommunityDashboardRafflePage() {
         communityName: data?.community?.name || '',
       },
     });
-  }, [navigate, communityId, data]);
+  }, [navigate, communityId, data, showToast, load]);
 
   const askEnd = useCallback((kind, row) => {
     setEnding({ kind, row });

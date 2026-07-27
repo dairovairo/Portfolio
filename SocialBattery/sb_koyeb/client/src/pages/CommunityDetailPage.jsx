@@ -2700,10 +2700,27 @@ export default function CommunityDetailPage() {
   // Fase 112 — desde la tarjeta del sorteo, el creador puede saltar a la
   // página de configuración de publicidad en modo renovación (ver
   // RaffleAdAudiencePage y su rama isRenew) o cerrar el ciclo actual de
-  // golpe. Renovar necesita elegir aforo/filtro, así que se navega; en
-  // cambio finalizar no tiene parámetros y se envía directamente. El
+  // golpe. Renovar necesita elegir aforo/filtro SOLO en Light; en cambio
+  // finalizar no tiene parámetros y se envía directamente. El
   // window.confirm ya vive en el propio botón del RaffleCard (runEndPromo).
-  function handleRenewRafflePromo(raffle) {
+  //
+  // Community es un caso aparte (fase 132): su audiencia SIEMPRE es "todos
+  // los miembros de la comunidad" — getCommunityMemberIdsForBanner no
+  // admite aforo ni filtro de interesados, así que no hay nada que
+  // configurar. Renovar aquí solo tiene sentido como "vuelve a avisar a
+  // la comunidad, con un ciclo de métricas limpio" — se llama directo al
+  // endpoint sin pasar por la pantalla de configuración.
+  async function handleRenewRafflePromo(raffle) {
+    if (raffle.tier === 'community') {
+      try {
+        await api.post(`/community/raffles/${raffle.id}/renew-promotion`, {});
+        showToast('Publicidad renovada — se ha vuelto a avisar a la comunidad', 'success');
+        await loadRaffles();
+      } catch (e) {
+        showToast(e.message || 'Error al renovar', 'error');
+      }
+      return;
+    }
     navigate(`/community/${communityId}/raffle-publicidad`, {
       state: {
         renewRaffle: {

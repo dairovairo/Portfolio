@@ -16,6 +16,7 @@ const groupsRoutes    = require('./routes/groups');
 const communityRoutes = require('./routes/community');
 const discoverRoutes  = require('./routes/discover');
 const reportsRoutes   = require('./routes/reports');
+const adminRoutes     = require('./routes/admin');
 const { expireStaleBatteries } = require('./lib/batteryExpiry');
 const { notifyPoolsStartingSoon, notifyEventsStartingSoon } = require('./jobs/reminders');
 const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
@@ -139,6 +140,7 @@ app.use('/api/groups',    groupsRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/discover',  discoverRoutes);
 app.use('/api/reports',   reportsRoutes);
+app.use('/api/admin',     adminRoutes);
 
 // ── Debug endpoints (solo en dev o con header secreto) ────────────────────────
 app.get('/api/debug/reminders', async (req, res) => {

@@ -444,6 +444,7 @@ export default function EventDetailPage() {
   const [reminderSaving, setReminderSaving] = useState(false);
   const [sharingStory, setSharingStory] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [renewingBasic, setRenewingBasic] = useState(false);
   const [showEndPromoModal, setShowEndPromoModal] = useState(false);
 
   // Silenciar avisos/actualizaciones de este evento (asistente, no organizador)
@@ -899,7 +900,7 @@ export default function EventDetailPage() {
             {isCreator && (isPaidPromotion || !isPast) && (
               <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                 {(() => {
-                  const renewDisabled = belowRenewThreshold || isPast;
+                  const renewDisabled = belowRenewThreshold || isPast || renewingBasic;
                   const renewTitle = isPast
                     ? 'El evento ya ha terminado — no se puede renovar la promoción'
                     : belowRenewThreshold
@@ -907,8 +908,31 @@ export default function EventDetailPage() {
                       : 'Renovar promoción del evento';
                   return (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (renewDisabled) return;
+                        // Fase 132 — Basic es un caso aparte: no tiene
+                        // alcance contratado (solo el aviso automático a
+                        // la comunidad, que ya se dispara igual desde el
+                        // servidor), así que no hay nada que configurar.
+                        // Se renueva directo contra el endpoint, sin
+                        // pasar por EventAdConfigPage. Premium/Ultra sí
+                        // tienen plan+cuota+filtros que reconfigurar, así
+                        // que siguen navegando a la pantalla completa.
+                        if (!isPaidPromotion) {
+                          setRenewingBasic(true);
+                          try {
+                            await api.post(`/community/events/${event.id}/renew-promotion`, {
+                              promotion_plan: 'basic',
+                            });
+                            showToast('Promoción renovada — se ha vuelto a avisar a la comunidad', 'success');
+                            await fetchEvent();
+                          } catch (e) {
+                            showToast(e.message || 'Error al renovar', 'error');
+                          } finally {
+                            setRenewingBasic(false);
+                          }
+                          return;
+                        }
                         // Fase 112 — el flujo unificado es: renovar SIEMPRE
                         // pasa por la página de configuración de publicidad
                         // (EventAdConfigPage), tanto desde aquí como desde el
