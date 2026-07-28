@@ -36,6 +36,15 @@ const USER_SCOPED_PATHS = (userId) => [
 // Lista recursivamente los objetos bajo `prefix` en `bucket`. La API de
 // Supabase Storage lista un nivel a la vez, así que hay que bajar por
 // subcarpetas manualmente.
+//
+// Caso especial (arreglado tras un bug real): algunos ficheros no viven
+// bajo una subcarpeta con el userId, sino que SON directamente el
+// fichero — p. ej. avatars y mascot-previews suben a `avatars/{userId}.ext`
+// y `mascot-previews/{userId}.ext` (ver imageUpload.js: objectName +
+// extensión). list('avatars/{userId}') no los ve porque no son
+// "descendientes" del path, son un hermano con nombre parecido. Los
+// buscamos aparte listando el directorio padre y matcheando el nombre
+// base con o sin extensión.
 async function listAllUnder(bucket, prefix) {
   const paths = [];
   const stack = [prefix];
@@ -61,6 +70,29 @@ async function listAllUnder(bucket, prefix) {
       }
     }
   }
+
+  // Además: mira si el propio `prefix` es un fichero (con o sin
+  // extensión) dentro de su directorio padre. Es como se suben avatars
+  // y mascot-previews.
+  const slashIdx = prefix.lastIndexOf('/');
+  if (slashIdx > 0) {
+    const parentDir = prefix.slice(0, slashIdx);
+    const baseName = prefix.slice(slashIdx + 1);
+    const { data, error } = await supabase.storage.from(bucket).list(parentDir, {
+      limit: 1000,
+      offset: 0,
+    });
+    if (!error) {
+      for (const item of data || []) {
+        if (item.id === null) continue; // solo ficheros
+        const nameNoExt = item.name.replace(/\.[^.]+$/, '');
+        if (item.name === baseName || nameNoExt === baseName) {
+          paths.push(`${parentDir}/${item.name}`);
+        }
+      }
+    }
+  }
+
   return paths;
 }
 

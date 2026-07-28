@@ -877,4 +877,17 @@ module.exports = {
   computeCircleBadges,
   computeGroupBadges,
   computePoolBadges,
+  // Piezas puras extraídas para test — no las use el código de producción
+  // directamente, siguen accesibles vía computeBadgesForMembers.
+  __internal: {
+    TAPADO_BADGE_ID,
+    MAX_IDENTITIES_PER_USER,
+    average,
+    scoreRank,
+    stableTieValue,
+    pushHighCandidates,
+    pushLowCandidates,
+    pushAverageCandidates,
+    chooseAssignments,
+  },
 };

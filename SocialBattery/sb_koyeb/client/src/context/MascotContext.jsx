@@ -2053,35 +2053,12 @@ export const MASCOT_BASE = {
   low:  '/mascot-low.png',
 };
 
-// ── Ajuste visual de la capa de OUTFIT por subcategoría ───────────────────────
-// `scale`    → tamaño de la capa outfit como múltiplo de la capa base (1 = 100%).
-//              El valor histórico (sin distinción de subcategoría) era 1.05.
-// `offsetX`  → desplazamiento horizontal extra en puntos porcentuales, ENCIMA
-//              del centrado automático. Positivo = se mueve a la derecha.
-// Usado por MascotDisplay tanto en la tienda como en la vista principal
-// (la mascota de la pantalla de batería usa el mismo getMascotLayers()).
-export const OUTFIT_VISUAL_ADJUST = {
-  // Camisetas: 20% más pequeñas que el histórico, otro 10% más, y ahora un
-  // 1.5% adicional (dentro del rango 1-2% pedido) para que no se vean tan
-  // largas por abajo (1.05 → 0.84 → 0.756 → 0.74466). El primer ajuste de
-  // offsetX (+0.3) se pasó de largo hacia la derecha, así que ahora se
-  // corrige con un empujoncito mucho más sutil hacia la izquierda.
-  camiseta: { scale: 1.05 * 0.8 * 0.9 * 0.985, offsetX: -0.04 },
-  // Camisas: 15% más pequeñas que el histórico, y luego otro 10% más
-  // (1.05 → 0.8925 → 0.80325). Offset a la derecha muy ligero, ajustado fino
-  // tras varias rondas de feedback para que quede bien centrada.
-  camisa:   { scale: 1.05 * 0.85 * 0.9, offsetX: 0.4 },
-};
-
-// Caja de render por defecto para riñoneras (la de las variantes estándar,
-// p. ej. la roja). Se usa como fallback si un ítem de riñonera no trae su
-// propia rinonBox — p. ej. personalizaciones antiguas guardadas en
-// localStorage antes de que existiera este campo. Compartida por
-// MascotDisplay.jsx (vista CSS) y lib/mascotRenderer.js (horneado).
-// Historial de ajustes: -30% left. Luego +5% right, +4% down, +5% tamaño
-// (crecido desde el centro, para no desplazarse de más al agrandar).
-// Luego +2% right, +2% down.
-export const RINON_DEFAULT_BOX = { left: 20.396, top: 68.795, width: 57.984, height: 37.344 };
+// Constantes visuales puras — extraídas a mascotVisualConstants.js para
+// poderse importar desde lib/mascotRenderer.js sin arrastrar todo el
+// contexto (necesario para poder testear el renderer en Node).
+// Se re-exportan aquí para no romper los imports actuales:
+// { OUTFIT_VISUAL_ADJUST, RINON_DEFAULT_BOX } from '../context/MascotContext'.
+export { OUTFIT_VISUAL_ADJUST, RINON_DEFAULT_BOX } from './mascotVisualConstants';
 
 // ── Estado por defecto ────────────────────────────────────────────────────────
 const DEFAULT_UNLOCKED_ACTIVITIES  = new Set(MASCOT_ACTIVITIES.filter(a => a.isBase).map(a => a.id));

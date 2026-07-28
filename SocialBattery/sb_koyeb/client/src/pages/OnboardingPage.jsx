@@ -5,6 +5,8 @@ import { useTutorial } from '../context/TutorialContext';
 import { api } from '../lib/api';
 import LogoWordmark from '../components/LogoWordmark';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import LanguageSelector from '../components/LanguageSelector';
+import { useTranslation } from '../i18n';
 import { CATEGORIES } from '../constants/categories';
 
 // ── Categorías compartidas con Comunidades y Eventos ─────────────────────────
@@ -40,6 +42,7 @@ function ProgressDots({ step }) {
 export default function OnboardingPage() {
   const { completeOnboarding, refreshProfile, signOut } = useAuth();
   const { startTutorial } = useTutorial();
+  const { t, lang } = useTranslation();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
@@ -57,7 +60,7 @@ export default function OnboardingPage() {
   function handleAvatarChange(e) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { setError('Imagen máximo 2MB'); return; }
+    if (file.size > 2 * 1024 * 1024) { setError(t('onboarding.errAvatarSize')); return; }
     setAvatarFile(file);
     const reader = new FileReader();
     reader.onload = ev => setAvatarPreview(ev.target.result);
@@ -73,9 +76,9 @@ export default function OnboardingPage() {
 
   function validateUsername() {
     const u = username.trim();
-    if (u.length < 3) return 'Mínimo 3 caracteres';
-    if (!/^[a-z0-9_]+$/i.test(u)) return 'Solo letras, números y _';
-    if (u.length > 16) return 'Máximo 16 caracteres';
+    if (u.length < 3) return t('onboarding.errUsernameShort');
+    if (!/^[a-z0-9_]+$/i.test(u)) return t('onboarding.errUsernameChars');
+    if (u.length > 16) return t('onboarding.errUsernameLong');
     return null;
   }
 
@@ -93,7 +96,7 @@ export default function OnboardingPage() {
 
     if (STEPS[step].id === 'interests') {
       if (interests.length < 3) {
-        setError('Elige al menos 3 intereses para continuar');
+        setError(t('onboarding.errInterestsMin'));
         return;
       }
     }
@@ -128,6 +131,10 @@ export default function OnboardingPage() {
           avatar_url: avatarUrl || null,
           initial_battery: 50,
           interests: interests,
+          // Idioma preferido (fase 132): mandamos el que el usuario tenga
+          // activo al terminar el onboarding — se eligió en el paso welcome
+          // (o autodetectado del navegador si no lo tocó).
+          preferred_language: lang,
           ...(acceptedInSignup ? { terms_accepted: true } : {}),
         };
 
@@ -171,18 +178,17 @@ export default function OnboardingPage() {
           <div className="text-center animate-scale-in">
             <img src="/logo-icon.png" alt="SocialBattery" className="h-16 w-auto mx-auto mb-6 animate-pulse-slow" />
             <h1 className="font-display text-3xl font-bold text-surface-text mb-3">
-              Bienvenido a<br />
+              {t('onboarding.welcomeTitle')}<br />
               <span className="text-accent-glow"><LogoWordmark /></span>
             </h1>
             <p className="text-surface-muted text-sm leading-relaxed mb-8 max-w-xs mx-auto">
-              Comparte tu nivel de energía social del día y queda con personas
-              que tienen la misma actitud que tú en este momento.
+              {t('onboarding.welcomeIntro')}
             </p>
             <div className="grid grid-cols-3 gap-3 mb-8 text-center">
               {[
-                { emoji: '⚡', label: 'Actualiza tu batería diaria' },
-                { emoji: '👥', label: 'Conéctate con amigos' },
-                { emoji: '📍', label: 'Organiza quedadas' },
+                { emoji: '⚡', label: t('onboarding.highlightBattery') },
+                { emoji: '👥', label: t('onboarding.highlightFriends') },
+                { emoji: '📍', label: t('onboarding.highlightPools') },
               ].map(({ emoji, label }) => (
                 <div key={label} className="bg-surface-card border border-surface-border rounded-2xl p-3">
                   <div className="text-2xl mb-1">{emoji}</div>
@@ -198,14 +204,14 @@ export default function OnboardingPage() {
           <div className="animate-slide-up">
             <div className="text-center mb-6">
               <div className="text-5xl mb-3">👤</div>
-              <h2 className="font-display text-2xl font-bold text-surface-text">¿Cómo te llaman?</h2>
-              <p className="text-surface-muted text-sm mt-1">Elige tu nombre de usuario único</p>
+              <h2 className="font-display text-2xl font-bold text-surface-text">{t('onboarding.usernameTitle')}</h2>
+              <p className="text-surface-muted text-sm mt-1">{t('onboarding.usernameSubtitle')}</p>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                  Nombre de usuario *
+                  {t('onboarding.usernameLabel')} *
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-surface-muted font-mono text-sm">@</span>
@@ -213,7 +219,7 @@ export default function OnboardingPage() {
                     type="text"
                     value={username}
                     onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, '_'))}
-                    placeholder="tu_nombre"
+                    placeholder={t('onboarding.usernamePlaceholder')}
                     maxLength={16}
                     autoFocus
                     className="w-full bg-surface-bg border border-surface-border rounded-xl pl-8 pr-4 py-3
@@ -221,17 +227,17 @@ export default function OnboardingPage() {
                       transition-colors font-mono"
                   />
                 </div>
-                <p className="text-surface-muted/60 text-xs mt-1">Letras, números y _ · Permanente</p>
+                <p className="text-surface-muted/60 text-xs mt-1">{t('onboarding.usernameHint')}</p>
               </div>
 
               <div>
                 <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                  Bio (opcional)
+                  {t('onboarding.bioLabel')}
                 </label>
                 <textarea
                   value={bio}
                   onChange={e => setBio(e.target.value)}
-                  placeholder="Cuéntanos algo sobre ti... 🙂"
+                  placeholder={t('onboarding.bioPlaceholder')}
                   maxLength={160}
                   rows={2}
                   className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3
@@ -249,9 +255,9 @@ export default function OnboardingPage() {
           <div className="animate-slide-up">
             <div className="text-center mb-6">
               <div className="text-5xl mb-3">✨</div>
-              <h2 className="font-display text-2xl font-bold text-surface-text">¿Qué te gusta?</h2>
+              <h2 className="font-display text-2xl font-bold text-surface-text">{t('onboarding.interestsTitle')}</h2>
               <p className="text-surface-muted text-sm mt-1">
-                Elige tus categorías favoritas — mínimo 3 categorías
+                {t('onboarding.interestsSubtitle')}
               </p>
             </div>
 
@@ -286,17 +292,17 @@ export default function OnboardingPage() {
 
             {interests.length > 0 && (
               <p className="text-center text-xs text-accent-glow mt-3 font-mono">
-                {interests.length} seleccionado{interests.length !== 1 ? 's' : ''}
+                {t(interests.length === 1 ? 'onboarding.interestsSelectedOne' : 'onboarding.interestsSelectedMany', { n: interests.length })}
               </p>
             )}
             {interests.length > 0 && interests.length < 3 && (
               <p className="text-center text-xs text-red-400/70 mt-3">
-                * Selecciona al menos 3 categorías para continuar ({interests.length}/3)
+                {t('onboarding.interestsMinRemaining', { n: interests.length })}
               </p>
             )}
             {interests.length === 0 && (
               <p className="text-center text-xs text-red-400/70 mt-3">
-                * Selecciona al menos 3 categorías para continuar
+                {t('onboarding.interestsMinEmpty')}
               </p>
             )}
           </div>
@@ -306,8 +312,8 @@ export default function OnboardingPage() {
         return (
           <div className="animate-slide-up text-center">
             <div className="text-5xl mb-3">📸</div>
-            <h2 className="font-display text-2xl font-bold text-surface-text mb-1">Pon una foto</h2>
-            <p className="text-surface-muted text-sm mb-6">Opcional — puedes añadirla después</p>
+            <h2 className="font-display text-2xl font-bold text-surface-text mb-1">{t('onboarding.avatarTitle')}</h2>
+            <p className="text-surface-muted text-sm mb-6">{t('onboarding.avatarSubtitle')}</p>
 
             <div className="flex flex-col items-center gap-4">
               {/* Avatar preview */}
@@ -352,7 +358,7 @@ export default function OnboardingPage() {
                   className="bg-accent-primary/15 text-accent-glow border border-accent-primary/30
                     rounded-xl px-4 py-2 text-sm font-display font-semibold hover:bg-accent-primary/25 transition-all"
                 >
-                  {avatarPreview ? 'Cambiar foto' : 'Subir foto'}
+                  {avatarPreview ? t('onboarding.avatarChange') : t('onboarding.avatarUpload')}
                 </button>
                 {avatarPreview && (
                   <button
@@ -360,32 +366,38 @@ export default function OnboardingPage() {
                     className="bg-surface-card border border-surface-border rounded-xl px-4 py-2
                       text-sm text-surface-muted hover:text-surface-text transition-all"
                   >
-                    Quitar
+                    {t('onboarding.avatarRemove')}
                   </button>
                 )}
               </div>
 
-              <p className="text-xs text-surface-muted/60">JPG, PNG · Máx. 2MB</p>
+              <p className="text-xs text-surface-muted/60">{t('onboarding.avatarHint')}</p>
             </div>
           </div>
         );
 
-      case 'done':
+      case 'done': {
+        // "¡Todo listo, {name}!" → partido en dos trozos alrededor de {name},
+        // para poder envolver el nombre en un <span> con color de acento sin
+        // renunciar a la traducción por interpolación normal. Se usa un
+        // placeholder que no puede colisionar con contenido del usuario.
+        const doneRaw = t('onboarding.doneTitle', { name: '\u0000NAME\u0000' });
+        const [donePre, donePost = ''] = doneRaw.split('\u0000NAME\u0000');
         return (
           <div className="text-center animate-scale-in">
             <div className="text-7xl mb-6">🎉</div>
             <h2 className="font-display text-3xl font-bold text-surface-text mb-2">
-              ¡Todo listo, <span className="text-accent-glow">{username}</span>!
+              {donePre}<span className="text-accent-glow">{username}</span>{donePost}
             </h2>
             <p className="text-surface-muted text-sm mb-8">
-              Tu perfil está creado. Ahora añade amigos y empieza a sincronizar energías.
+              {t('onboarding.doneSubtitle')}
             </p>
             <div className="grid grid-cols-2 gap-3 mb-8 text-left">
               {[
-                { emoji: '👥', title: 'Añade amigos', desc: 'Busca por username' },
-                { emoji: '⚡', title: 'Actualiza tu batería', desc: 'Cada día al entrar' },
-                { emoji: '📍', title: 'Crea un pool', desc: 'Propón una quedada' },
-                { emoji: '🏅', title: 'Gana insignias', desc: 'Por tus hábitos sociales' },
+                { emoji: '👥', title: t('onboarding.doneCardFriendsTitle'), desc: t('onboarding.doneCardFriendsDesc') },
+                { emoji: '⚡', title: t('onboarding.doneCardBatteryTitle'), desc: t('onboarding.doneCardBatteryDesc') },
+                { emoji: '📍', title: t('onboarding.doneCardPoolTitle'),    desc: t('onboarding.doneCardPoolDesc') },
+                { emoji: '🏅', title: t('onboarding.doneCardBadgesTitle'),  desc: t('onboarding.doneCardBadgesDesc') },
               ].map(({ emoji, title, desc }) => (
                 <div key={title} className="bg-surface-card border border-surface-border rounded-2xl p-3">
                   <div className="text-xl mb-1">{emoji}</div>
@@ -396,6 +408,7 @@ export default function OnboardingPage() {
             </div>
           </div>
         );
+      }
 
       default: return null;
     }
@@ -413,6 +426,15 @@ export default function OnboardingPage() {
       </div>
 
       <div className="relative max-w-sm w-full mt-8">
+        {/* Selector de idioma — visible desde el primer paso para que el
+            usuario pueda cambiarlo antes/durante el onboarding. Aquí todavía
+            no hay perfil (se crea en POST /auth/profile al terminar), así que
+            no persistimos contra el servidor: al finalizar, el payload manda
+            `preferred_language: lang` — ver goNext(). */}
+        <div className="flex justify-end mb-3">
+          <LanguageSelector variant="compact" />
+        </div>
+
         <ProgressDots step={step} />
 
         <div className="bg-surface-card border border-surface-border rounded-3xl p-6 min-h-[400px] flex flex-col">
@@ -433,7 +455,7 @@ export default function OnboardingPage() {
                 className="flex-1 border border-surface-border rounded-xl py-3 text-surface-muted
                   font-display font-semibold text-sm hover:text-surface-text hover:border-surface-muted transition-all"
               >
-                ← Atrás
+                ← {t('common.back')}
               </button>
             )}
             {isLastStep ? (
@@ -443,7 +465,7 @@ export default function OnboardingPage() {
                   font-display font-semibold py-3 rounded-xl transition-all duration-200
                   hover:shadow-lg hover:shadow-accent-primary/20"
               >
-                Ir al inicio 🚀
+                {t('onboarding.goHome')}
               </button>
             ) : (
               <button
@@ -453,7 +475,7 @@ export default function OnboardingPage() {
                   text-white font-display font-semibold py-3 rounded-xl transition-all duration-200
                   hover:shadow-lg hover:shadow-accent-primary/20"
               >
-                {loading ? 'Creando...' : isSubmitStep ? '¡Empezar! 🚀' : 'Continuar →'}
+                {loading ? t('onboarding.creating') : isSubmitStep ? t('onboarding.start') : t('common.continue') + ' →'}
               </button>
             )}
           </div>
@@ -466,7 +488,7 @@ export default function OnboardingPage() {
             onClick={async () => { await signOut(); navigate('/auth', { replace: true }); }}
             className="text-xs text-surface-muted/50 hover:text-surface-muted transition-colors underline underline-offset-4"
           >
-            ← Volver a inicio de sesión
+            {t('onboarding.backToSignIn')}
           </button>
         </div>
       </div>

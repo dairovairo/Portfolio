@@ -6,7 +6,7 @@ const { expireUserBatteryIfNeeded } = require('../lib/batteryExpiry');
 
 // POST /api/auth/profile — called after Supabase signup to create public profile
 router.post('/profile', requireAuth, async (req, res) => {
-  const { username, bio, avatar_url, initial_battery, interests } = req.body;
+  const { username, bio, avatar_url, initial_battery, interests, preferred_language } = req.body;
   const userId = req.user.id;
 
   if (!username || username.trim().length < 3) {
@@ -44,6 +44,13 @@ router.post('/profile', requireAuth, async (req, res) => {
       battery_updated_at: new Date().toISOString(),
       onboarding_done: true,
       interests: Array.isArray(interests) ? interests : [],
+      // Idioma preferido (fase 132). El onboarding manda el idioma que el
+      // usuario tenga activo al terminar (se elige en el paso welcome o se
+      // autodetecta del navegador). Whitelist estricta; si el valor es
+      // inválido o no llega, se apoya en el DEFAULT 'es' de la columna.
+      ...(preferred_language && ['es', 'en', 'fr'].includes(preferred_language)
+        ? { preferred_language }
+        : {}),
       // Si el cliente indica que en este flujo se aceptaron los ToS
       // (registro por email con checkbox previo, ver AuthPage.jsx), lo
       // marcamos aquí para que el TermsGate no se dispare tras el

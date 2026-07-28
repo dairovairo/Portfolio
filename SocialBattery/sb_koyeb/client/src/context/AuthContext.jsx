@@ -9,6 +9,7 @@ import {
 import { usePresenceBroadcast } from '../hooks/usePresence';
 import { useMessageNotifications } from '../hooks/useMessageNotifications';
 import { useSettings } from './SettingsContext';
+import { useTranslation } from '../i18n';
 
 const AuthContext = createContext(null);
 
@@ -22,6 +23,20 @@ function PrivacySettingsSyncer({ profile }) {
   const { syncPrivacyFromProfile } = useSettings();
   useEffect(() => {
     if (profile) syncPrivacyFromProfile(profile);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+  return null;
+}
+
+// Sincroniza el idioma preferido desde el perfil del servidor — mismo patrón
+// que PrivacySettingsSyncer: el usuario pudo haber elegido idioma en otro
+// dispositivo, o antes de instalar la PWA aquí, y queremos que ese ajuste
+// mande sobre el detectado del navegador. Se dispara sólo al cambiar el id
+// del perfil (login / cambio de cuenta), no en cada re-render.
+function LanguageSyncer({ profile }) {
+  const { hydrateFromProfile } = useTranslation();
+  useEffect(() => {
+    if (profile) hydrateFromProfile(profile);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
   return null;
@@ -309,6 +324,8 @@ export function AuthProvider({ children }) {
       {profile?.id && <PresenceBroadcaster userId={profile.id} />}
       {/* Sync privacy toggles from server profile on login / profile load */}
       {profile?.id && <PrivacySettingsSyncer profile={profile} />}
+      {/* Sync preferred language from server profile — mismo patrón */}
+      {profile?.id && <LanguageSyncer profile={profile} />}
       {/* Native notification listener — active when logged in with a profile */}
       {profile?.id && <MessageNotificationsBroadcaster profile={profile} />}
       {children}

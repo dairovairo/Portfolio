@@ -3,9 +3,12 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import LogoWordmark from '../components/LogoWordmark';
+import LanguageSelector from '../components/LanguageSelector';
+import { useTranslation } from '../i18n';
 
 export default function AuthPage() {
   const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
   const [email, setEmail] = useState('');
@@ -30,7 +33,7 @@ export default function AuthPage() {
     // vuelo si no existía, y la ley/tiendas exigen consentimiento explícito
     // antes de crearla.
     if (mode === 'register' && !termsAccepted) {
-      setError('Debes aceptar los términos y confirmar que tienes al menos 16 años.');
+      setError(t('auth.errAcceptTerms'));
       return;
     }
     setError('');
@@ -42,7 +45,7 @@ export default function AuthPage() {
       // no configurado, URL no permitida, etc.).
       await signInWithGoogle();
     } catch (err) {
-      setError(err.message || 'No se pudo iniciar sesión con Google');
+      setError(err.message || t('auth.errGoogle'));
       setLoading(false);
     }
   }
@@ -51,7 +54,7 @@ export default function AuthPage() {
     if (loading) return;
     // Ver comentario en handleGoogleSignIn — mismo motivo.
     if (mode === 'register' && !termsAccepted) {
-      setError('Debes aceptar los términos y confirmar que tienes al menos 16 años.');
+      setError(t('auth.errAcceptTerms'));
       return;
     }
     setError('');
@@ -63,7 +66,7 @@ export default function AuthPage() {
       // Services ID mal, etc.).
       await signInWithApple();
     } catch (err) {
-      setError(err.message || 'No se pudo iniciar sesión con Apple');
+      setError(err.message || t('auth.errApple'));
       setLoading(false);
     }
   }
@@ -83,7 +86,7 @@ export default function AuthPage() {
         });
       }, 1000);
     } catch (err) {
-      setError(err.message || 'No se pudo reenviar el correo');
+      setError(err.message || t('auth.errResend'));
       setResendState('idle');
     }
   }
@@ -98,7 +101,7 @@ export default function AuthPage() {
         navigate('/');
       } else if (mode === 'register') {
         if (!termsAccepted) {
-          throw new Error('Debes aceptar los términos y confirmar que tienes al menos 16 años.');
+          throw new Error(t('auth.errAcceptTerms'));
         }
         await signUp(email, password);
         // Guardamos la intención de aceptación para que POST /auth/profile
@@ -117,27 +120,31 @@ export default function AuthPage() {
         setResetSent(true);
       }
     } catch (err) {
-      setError(err.message || 'Algo salió mal');
+      setError(err.message || t('common.error'));
     } finally {
       setLoading(false);
     }
   }
 
   if (registered) {
+    // "Te hemos enviado un enlace de confirmación a {email}. …" — partimos
+    // el template alrededor de {email} para envolver el correo en <strong>
+    // sin renunciar a la traducción por interpolación. Mismo truco que en
+    // OnboardingPage.jsx paso "done".
+    const bodyRaw = t('auth.checkEmailBody', { email: '\u0000EMAIL\u0000' });
+    const [bodyPre, bodyPost = ''] = bodyRaw.split('\u0000EMAIL\u0000');
     return (
       <div className="min-h-screen bg-surface-bg flex items-center justify-center p-4">
         <div className="max-w-sm w-full text-center animate-fade-in">
           <div className="text-6xl mb-6">📬</div>
           <h2 className="font-display text-2xl font-bold text-surface-text mb-3">
-            Revisa tu email
+            {t('auth.checkEmailTitle')}
           </h2>
           <p className="text-surface-muted text-sm mb-4">
-            Te hemos enviado un enlace de confirmación a <strong className="text-surface-text">{email}</strong>.
-            Confírmalo y vuelve aquí para iniciar sesión.
+            {bodyPre}<strong className="text-surface-text">{email}</strong>{bodyPost}
           </p>
           <p className="text-surface-muted text-xs mb-6">
-            Si no lo ves en unos minutos, revisa la carpeta de <strong className="text-surface-text">Spam / No deseado</strong>
-            {' '}(en Outlook también la pestaña <strong className="text-surface-text">Otros</strong>) antes de reenviarlo.
+            {t('auth.checkEmailSpam')}
           </p>
           <button
             onClick={handleResendConfirmation}
@@ -145,12 +152,12 @@ export default function AuthPage() {
             className="text-accent-glow text-sm underline underline-offset-4 disabled:opacity-50 disabled:no-underline"
           >
             {resendState === 'sending'
-              ? 'Reenviando...'
+              ? t('auth.resending')
               : resendCooldown > 0
-                ? `Reenviar correo (${resendCooldown}s)`
+                ? t('auth.resendCooldown', { s: resendCooldown })
                 : resendState === 'sent'
-                  ? '✓ Reenviado — reenviar de nuevo'
-                  : 'Reenviar correo de confirmación'}
+                  ? t('auth.resendDone')
+                  : t('auth.resendConfirm')}
           </button>
           {error && (
             <p className="text-red-400 text-xs mt-3">{error}</p>
@@ -161,23 +168,23 @@ export default function AuthPage() {
   }
 
   if (resetSent) {
+    const rBodyRaw = t('auth.resetSentBody', { email: '\u0000EMAIL\u0000' });
+    const [rPre, rPost = ''] = rBodyRaw.split('\u0000EMAIL\u0000');
     return (
       <div className="min-h-screen bg-surface-bg flex items-center justify-center p-4">
         <div className="max-w-sm w-full text-center animate-fade-in">
           <div className="text-6xl mb-6">🔑</div>
           <h2 className="font-display text-2xl font-bold text-surface-text mb-3">
-            Revisa tu email
+            {t('auth.resetSentTitle')}
           </h2>
           <p className="text-surface-muted text-sm mb-6">
-            Hemos enviado un enlace para restablecer tu contraseña a{' '}
-            <strong className="text-surface-text">{email}</strong>.
-            Revisa también la carpeta de spam.
+            {rPre}<strong className="text-surface-text">{email}</strong>{rPost}
           </p>
           <button
             onClick={() => { setMode('login'); setResetSent(false); setEmail(''); }}
             className="text-accent-glow text-sm underline underline-offset-4"
           >
-            Volver al login
+            {t('auth.backToLogin')}
           </button>
         </div>
       </div>
@@ -193,6 +200,16 @@ export default function AuthPage() {
       </div>
 
       <div className="relative max-w-sm w-full animate-slide-up">
+        {/* Selector de idioma — esquina superior derecha, dentro del área
+            de contenido (no absolutamente posicionado sobre el fondo) para
+            que en móviles pequeños no coma tap-area del logo. Sólo cambia
+            el idioma en cliente: no hay sesión todavía, no hay servidor al
+            que sincronizar. La preferencia queda en localStorage y viaja
+            al onboarding, que la persiste en el perfil (POST /auth/profile). */}
+        <div className="flex justify-end mb-3">
+          <LanguageSelector variant="compact" />
+        </div>
+
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-4">
@@ -202,7 +219,7 @@ export default function AuthPage() {
             </h1>
           </div>
           <p className="text-surface-muted text-sm font-body">
-            Sé honesto con tu energía social
+            {t('auth.tagline')}
           </p>
         </div>
 
@@ -214,24 +231,24 @@ export default function AuthPage() {
             <>
               <div className="mb-6">
                 <h2 className="font-display text-lg font-bold text-surface-text mb-1">
-                  ¿Olvidaste tu contraseña?
+                  {t('auth.forgotPassword')}
                 </h2>
                 <p className="text-surface-muted text-xs font-body leading-relaxed">
-                  Introduce tu email y te enviaremos un enlace para restablecerla.
+                  {t('auth.forgotIntro')}
                 </p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                    Email
+                    {t('auth.email')}
                   </label>
                   <input
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     required
-                    placeholder="tu@email.com"
+                    placeholder={t('auth.emailPlaceholder')}
                     className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
                   />
                 </div>
@@ -247,7 +264,7 @@ export default function AuthPage() {
                   disabled={loading}
                   className="w-full bg-accent-primary hover:bg-accent-primary/80 disabled:opacity-50 text-surface-text font-display font-semibold py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-accent-primary/20"
                 >
-                  {loading ? '...' : 'Enviar enlace'}
+                  {loading ? t('auth.submitLoading') : t('auth.forgotCta')}
                 </button>
 
                 <button
@@ -255,7 +272,7 @@ export default function AuthPage() {
                   onClick={() => { setMode('login'); setError(''); }}
                   className="w-full text-surface-muted hover:text-surface-text text-sm transition-colors font-mono py-1"
                 >
-                  ← Volver al login
+                  {t('auth.backToLogin')}
                 </button>
               </form>
             </>
@@ -274,7 +291,7 @@ export default function AuthPage() {
                         : 'text-surface-muted hover:text-surface-text'
                     }`}
                   >
-                    {m === 'login' ? 'Entrar' : 'Registro'}
+                    {m === 'login' ? t('auth.tabLogin') : t('auth.tabRegister')}
                   </button>
                 ))}
               </div>
@@ -282,27 +299,27 @@ export default function AuthPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                    Email
+                    {t('auth.email')}
                   </label>
                   <input
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     required
-                    placeholder="tu@email.com"
+                    placeholder={t('auth.emailPlaceholder')}
                     className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                    Contraseña
+                    {t('auth.password')}
                   </label>
                   <input
                     type="password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
-                    placeholder="••••••••"
+                    placeholder={t('auth.passwordPlaceholder')}
                     minLength={6}
                     className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
                   />
@@ -312,7 +329,7 @@ export default function AuthPage() {
                       onClick={() => { setMode('forgot'); setError(''); }}
                       className="mt-1.5 text-xs text-surface-muted hover:text-accent-glow transition-colors font-mono"
                     >
-                      ¿Olvidaste tu contraseña?
+                      {t('auth.forgotPassword')}
                     </button>
                   )}
                 </div>
@@ -333,14 +350,13 @@ export default function AuthPage() {
                         text-accent-primary focus:ring-accent-primary/40 focus:ring-offset-0 shrink-0"
                     />
                     <span>
-                      Confirmo que tengo al menos <strong className="text-surface-text">16 años</strong> y
-                      acepto los{' '}
+                      {t('auth.termsConfirm')}{' '}
                       <Link to="/terminos" target="_blank" className="text-accent-glow underline underline-offset-2">
-                        Términos y Condiciones
+                        {t('auth.termsLinkText')}
                       </Link>{' '}
-                      y la{' '}
+                      {t('auth.andPrivacyText')}{' '}
                       <Link to="/privacidad" target="_blank" className="text-accent-glow underline underline-offset-2">
-                        Política de Privacidad
+                        {t('auth.privacyLinkText')}
                       </Link>.
                     </span>
                   </label>
@@ -351,14 +367,14 @@ export default function AuthPage() {
                   disabled={loading}
                   className="w-full bg-accent-primary hover:bg-accent-primary/80 disabled:opacity-50 text-surface-text font-display font-semibold py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-accent-primary/20"
                 >
-                  {loading ? '...' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
+                  {loading ? t('auth.submitLoading') : mode === 'login' ? t('auth.signInCta') : t('auth.signUpCta')}
                 </button>
               </form>
 
               {/* ── Separador "o" ── */}
               <div className="flex items-center gap-3 my-5">
                 <div className="flex-1 h-px bg-surface-border" />
-                <span className="text-xs font-mono text-surface-muted uppercase tracking-widest">o</span>
+                <span className="text-xs font-mono text-surface-muted uppercase tracking-widest">{t('auth.orSeparator')}</span>
                 <div className="flex-1 h-px bg-surface-border" />
               </div>
 
@@ -382,7 +398,7 @@ export default function AuthPage() {
                   <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"/>
                 </svg>
                 <span className="text-sm">
-                  {mode === 'login' ? 'Entrar con Google' : 'Registrarse con Google'}
+                  {mode === 'login' ? t('auth.signInWithGoogle') : t('auth.signUpWithGoogle')}
                 </span>
               </button>
 
@@ -405,7 +421,7 @@ export default function AuthPage() {
                   <path fill="currentColor" d="M13.245 9.583c-.02-2.09 1.707-3.106 1.786-3.153-.974-1.423-2.487-1.618-3.023-1.638-1.287-.13-2.512.759-3.164.759-.66 0-1.667-.741-2.741-.72-1.41.02-2.71.82-3.436 2.084-1.465 2.54-.375 6.297 1.052 8.361.699 1.011 1.53 2.145 2.62 2.105 1.052-.043 1.448-.681 2.719-.681s1.628.681 2.74.658c1.13-.02 1.847-1.03 2.541-2.048.804-1.176 1.135-2.313 1.155-2.372-.025-.011-2.222-.852-2.249-3.355zM11.157 3.435c.582-.706.973-1.686.867-2.657-.837.034-1.85.557-2.451 1.263-.54.624-1.011 1.62-.885 2.573.933.072 1.886-.474 2.469-1.18z"/>
                 </svg>
                 <span className="text-sm">
-                  {mode === 'login' ? 'Entrar con Apple' : 'Registrarse con Apple'}
+                  {mode === 'login' ? t('auth.signInWithApple') : t('auth.signUpWithApple')}
                 </span>
               </button>
             </>
@@ -413,11 +429,11 @@ export default function AuthPage() {
         </div>
 
         <p className="text-center text-surface-muted/60 text-xs mt-6 font-mono">
-          SocialBattery v1.0 · Hecho con ⚡
+          {t('auth.footerVersion')}
         </p>
         <p className="text-center text-xs mt-2">
           <a href="/privacidad" className="text-surface-muted/60 hover:text-surface-muted underline underline-offset-4 font-mono">
-            Política de privacidad
+            {t('auth.footerPrivacy')}
           </a>
         </p>
       </div>

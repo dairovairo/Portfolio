@@ -42,6 +42,7 @@ import { PoolInviteNotificationsProvider } from './context/PoolInviteNotificatio
 import { TutorialProvider } from './context/TutorialContext';
 import { MascotProvider } from './context/MascotContext';
 import { UserLocationProvider, useUserLocation } from './context/UserLocationContext';
+import { LanguageProvider } from './i18n';
 import MascotPreviewSync from './components/MascotPreviewSync';
 import TermsGate from './components/TermsGate';
 
@@ -223,6 +224,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
+      <LanguageProvider>
       <ThemeProvider>
         <SettingsProvider>
           <ToastProvider>
@@ -244,6 +246,7 @@ export default function App() {
           </ToastProvider>
         </SettingsProvider>
       </ThemeProvider>
+      </LanguageProvider>
     </BrowserRouter>
   );
 }

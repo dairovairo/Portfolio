@@ -8,8 +8,8 @@
  * fórmulas de escala/offset), pero usando <canvas> en vez de <img>/CSS, para
  * poder "hornear" la mascota dentro de una imagen PNG exportable.
  */
-import { applyColorZones } from './colorZones';
-import { OUTFIT_VISUAL_ADJUST, RINON_DEFAULT_BOX } from '../context/MascotContext';
+import { applyColorZones } from './colorZones.js';
+import { OUTFIT_VISUAL_ADJUST, RINON_DEFAULT_BOX } from '../context/mascotVisualConstants.js';
 
 // ── Carga de imágenes con caché ────────────────────────────────────────────────
 const imageCache = new Map(); // src -> Promise<HTMLImageElement|null>
@@ -106,7 +106,7 @@ export async function resolveMascotLayers(tier, mascotApi) {
 
 // Convierte un valor porcentual (número "37.25" o string "-35.2%") relativo
 // al tamaño del lienzo de la mascota (boxSize) a píxeles absolutos.
-function pctToPx(value, boxSize) {
+export function pctToPx(value, boxSize) {
   if (value === null || value === undefined || value === '') return 0;
   const num = typeof value === 'number' ? value : parseFloat(value);
   return Number.isNaN(num) ? 0 : (num / 100) * boxSize;
@@ -115,7 +115,7 @@ function pctToPx(value, boxSize) {
 // Dibuja `img` dentro del rectángulo (x, y, w, h) preservando su proporción
 // (equivalente a CSS object-fit: contain), alineado según alignX/alignY
 // (equivalente a object-position).
-function drawContain(ctx, img, x, y, w, h, alignX = 'center', alignY = 'center') {
+export function drawContain(ctx, img, x, y, w, h, alignX = 'center', alignY = 'center') {
   if (!img || !img.width || !img.height || w <= 0 || h <= 0) return;
   const scale = Math.min(w / img.width, h / img.height);
   const dw = img.width * scale;

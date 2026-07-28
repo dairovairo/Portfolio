@@ -10,14 +10,17 @@
 const supabase = require('../lib/supabase');
 const { notifyUsers } = require('../lib/webpush');
 const {
-  MIN_REMINDER_MINUTES,
-  MAX_REMINDER_MINUTES,
-  MAX_DEFAULT_REMINDER_MINUTES,
-  getDefaultReminderMinutes,
   formatReminderLead,
 } = require('../lib/reminderLeadTime');
+// Piezas puras del scheduling — extraídas para poderse testear sin BD.
+// Ver server/lib/reminderScheduling.js y server/test/reminderScheduling.test.js.
+const {
+  getSearchWindow,
+  getReminderOffsets,
+  isReminderDue,
+  groupDueRecipients,
+} = require('../lib/reminderScheduling');
 
-const REMINDER_WINDOW_MS = 60 * 1000;
 const notifiedPools = new Set();  // `${poolId}:${userId}:${minutes}`
 const notifiedEvents = new Set(); // `${eventId}:${userId}:${minutes}`
 
@@ -29,58 +32,6 @@ async function broadcastReminders(userIds, payload) {
         .send({ type: 'broadcast', event: 'reminder', payload })
     )
   );
-}
-
-function getSearchWindow(now = new Date()) {
-  const maxReminderMinutes = Math.max(MAX_REMINDER_MINUTES, MAX_DEFAULT_REMINDER_MINUTES);
-  return {
-    start: new Date(now.getTime() + (MIN_REMINDER_MINUTES * 60 * 1000) - (REMINDER_WINDOW_MS / 2)),
-    end: new Date(now.getTime() + (maxReminderMinutes * 60 * 1000) + (REMINDER_WINDOW_MS / 2)),
-  };
-}
-
-function normalizeReminderMinutes(value) {
-  const minutes = Number.parseInt(value, 10);
-  if (Number.isFinite(minutes) && minutes >= MIN_REMINDER_MINUTES && minutes <= MAX_REMINDER_MINUTES) {
-    return minutes;
-  }
-  return null;
-}
-
-function getReminderOffsets(row, startDate) {
-  const offsets = new Set(getDefaultReminderMinutes(startDate, row?.joined_at));
-  const customMinutes = normalizeReminderMinutes(row?.reminder_minutes_before);
-  if (customMinutes != null) offsets.add(customMinutes);
-  return offsets;
-}
-
-function isReminderDue(now, startDate, reminderMinutes) {
-  const startMs = new Date(startDate).getTime();
-  if (Number.isNaN(startMs)) return false;
-  const reminderMs = reminderMinutes * 60 * 1000;
-  const diff = startMs - now.getTime();
-  return Math.abs(diff - reminderMs) <= REMINDER_WINDOW_MS / 2;
-}
-
-function groupDueRecipients({ rows, idPrefix, notifiedSet, now, startDate }) {
-  const groups = new Map();
-
-  for (const row of rows || []) {
-    if (!row?.user_id) continue;
-
-    for (const reminderMinutes of getReminderOffsets(row, startDate)) {
-      if (!isReminderDue(now, startDate, reminderMinutes)) continue;
-
-      const key = `${idPrefix}:${row.user_id}:${reminderMinutes}`;
-      if (notifiedSet.has(key)) continue;
-      notifiedSet.add(key);
-
-      if (!groups.has(reminderMinutes)) groups.set(reminderMinutes, []);
-      groups.get(reminderMinutes).push(row.user_id);
-    }
-  }
-
-  return groups;
 }
 
 async function notifyPoolsStartingSoon() {

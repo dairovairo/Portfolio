@@ -4,8 +4,11 @@ import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useTranslation } from '../i18n';
+import { api } from '../lib/api';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import HexColorPicker from '../components/HexColorPicker';
+import LanguageSelector from '../components/LanguageSelector';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -385,6 +388,8 @@ export default function SettingsPage() {
     discoverable, setDiscoverable,
   } = useSettings();
 
+  const { t } = useTranslation();
+
   // Only one section open at a time
   const [openSection, setOpenSection] = useState(null);
   const [resetConfirm, setResetConfirm] = useState(false);
@@ -446,10 +451,10 @@ export default function SettingsPage() {
     setLoggingOut(true);
     try {
       await signOut();
-      showToast('Sesión cerrada', 'success');
+      showToast(t('common.sessionClosed'), 'success');
       navigate('/auth', { replace: true });
     } catch (e) {
-      showToast(e.message || 'No se pudo cerrar sesión', 'error');
+      showToast(e.message || t('settings.logoutFailed'), 'error');
       setLoggingOut(false);
     }
   }
@@ -465,7 +470,7 @@ export default function SettingsPage() {
           >
             ←
           </button>
-          <span className="font-display font-bold text-surface-text text-base">Ajustes</span>
+          <span className="font-display font-bold text-surface-text text-base">{t('settings.title')}</span>
         </div>
       </nav>
 
@@ -477,8 +482,8 @@ export default function SettingsPage() {
           open={openSection === 'personalizacion'}
           onToggle={toggleSection}
           icon="🎨"
-          title="Personalización"
-          subtitle="Tema, fondos y colores de mensajes"
+          title={t('settings.sectionPersonalizationTitle')}
+          subtitle={t('settings.sectionPersonalizationSubtitle')}
         >
           {/* Temas */}
           <SubSection title="Temas">
@@ -744,8 +749,8 @@ export default function SettingsPage() {
           open={openSection === 'privacidad'}
           onToggle={toggleSection}
           icon="🔒"
-          title="Privacidad"
-          subtitle="Visibilidad de tu perfil y actividad"
+          title={t('settings.sectionPrivacyTitle')}
+          subtitle={t('settings.sectionPrivacySubtitle')}
         >
           <SubSection title="Visibilidad">
             <div className="space-y-3">
@@ -870,8 +875,8 @@ export default function SettingsPage() {
           open={openSection === 'notificaciones'}
           onToggle={toggleSection}
           icon="🔔"
-          title="Notificaciones"
-          subtitle="Mensajes, eventos, quedadas y alertas"
+          title={t('settings.sectionNotificationsTitle')}
+          subtitle={t('settings.sectionNotificationsSubtitle')}
         >
           <SubSection title="General">
             <div className="space-y-4">
@@ -1137,8 +1142,8 @@ export default function SettingsPage() {
           open={openSection === 'cuenta'}
           onToggle={toggleSection}
           icon="👤"
-          title="Cuenta"
-          subtitle="Perfil, sesión y datos"
+          title={t('settings.sectionAccountTitle')}
+          subtitle={t('settings.sectionAccountSubtitle')}
         >
           <SubSection title="Seguridad">
             <div className="space-y-3">
@@ -1196,6 +1201,39 @@ export default function SettingsPage() {
             >
               Eliminar mi cuenta
             </button>
+          </SubSection>
+        </AccordionSection>
+
+        {/* ── IDIOMA ─────────────────────────────────────────────────────
+            Fase 132 — selector de idioma de la interfaz. El estado vive en
+            el LanguageContext (src/i18n) y se persiste en localStorage
+            inmediato + PATCH /users/me → users.preferred_language para que
+            el ajuste viaje entre dispositivos (mismo patrón que
+            show_interests, discoverable, etc.). Si el PATCH falla (offline
+            u otro motivo) el usuario ya ha visto el cambio en pantalla y
+            la próxima sincronización desde el servidor no le pisará porque
+            el hydrateFromProfile sólo escribe si el valor del servidor es
+            válido — merece la pena reintentar reabriendo el ajuste. */}
+        <AccordionSection
+          id="idioma"
+          open={openSection === 'idioma'}
+          onToggle={toggleSection}
+          icon="🌐"
+          title={t('settings.sectionLanguageTitle')}
+          subtitle={t('settings.sectionLanguageSubtitle')}
+        >
+          <SubSection title={t('languages.label')}>
+            <p className="text-xs text-surface-muted mb-3">{t('settings.languageBody')}</p>
+            <LanguageSelector
+              variant="panel"
+              onChange={(next) => {
+                // fire-and-forget contra el servidor. El estado ya se ha
+                // actualizado en cliente por LanguageSelector.setLang() antes
+                // de este onChange, así que el usuario ve el cambio sin
+                // esperar al PATCH.
+                api.patch('/users/me', { preferred_language: next }).catch(() => {});
+              }}
+            />
           </SubSection>
         </AccordionSection>
 

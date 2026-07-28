@@ -1,1 +1,5 @@
 comentarioserrorescampo-0d675197f102.json
+".env" 
+".env.*" 
+"!.env.example" 
+".env"  ".env.*"  "!.env.example" 
