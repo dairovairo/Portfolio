@@ -12,6 +12,7 @@ import {
   MiniMascot,
   IdentityBadge,
 } from '../components/PoolShared';
+import { useTranslation } from '../i18n';
 
 /**
  * PoolDetailPage — detalle de una quedada a pantalla completa.
@@ -27,32 +28,35 @@ const NOMINATIM = 'https://nominatim.openstreetmap.org';
 const geocodeCache = new Map();
 
 // Formatea una fecha completa (día de la semana + día + mes + año + hora)
-// para las filas "Fecha de inicio" / "Fecha de fin" del detalle. Mismo
-// nivel de legibilidad que el formatDateTime que usa EventDetailPage.
-function formatPoolFullDateTime(dateStr) {
+// para las filas "Fecha de inicio" / "Fecha de fin" del detalle. Recibe el
+// lang activo para localizar el weekday/mes (es-ES / en-US / fr-FR) — igual
+// patrón que en ProfilePage con toLocaleDateString.
+function formatPoolFullDateTime(dateStr, lang) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return '—';
-  const datePart = d.toLocaleDateString('es-ES', {
+  const localeTag = lang === 'es' ? 'es-ES' : lang === 'fr' ? 'fr-FR' : 'en-US';
+  const datePart = d.toLocaleDateString(localeTag, {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
-  const timePart = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const timePart = d.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
   // Capitalizamos la primera letra del día de la semana
   const nice = datePart.charAt(0).toUpperCase() + datePart.slice(1);
   return `${nice} · ${timePart}`;
 }
 
-async function geocodeLocation(query) {
-  if (geocodeCache.has(query)) return geocodeCache.get(query);
+async function geocodeLocation(query, lang) {
+  const cacheKey = `${lang}:${query}`;
+  if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey);
   try {
     const res = await fetch(
-      `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=es`,
-      { headers: { 'Accept-Language': 'es' } }
+      `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=${lang}`,
+      { headers: { 'Accept-Language': lang } }
     );
     const data = await res.json();
     const hit = data?.[0];
     const result = hit ? { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) } : null;
-    geocodeCache.set(query, result);
+    geocodeCache.set(cacheKey, result);
     return result;
   } catch {
     return null;
@@ -62,6 +66,7 @@ async function geocodeLocation(query) {
 export default function PoolDetailPage() {
   const { poolId } = useParams();
   const navigate = useNavigate();
+  const { t, lang } = useTranslation();
   const { hasUnreadPoolChat } = usePoolChatNotifications();
 
   const [pool, setPool] = useState(null);
@@ -97,10 +102,10 @@ export default function PoolDetailPage() {
         setParticipants(full.participants || []);
         setBadgeData({ assignments: badges.assignments || [] });
       })
-      .catch(() => { if (!cancelled) setLoadError('No se ha podido cargar esta quedada.'); })
+      .catch(() => { if (!cancelled) setLoadError(t('poolDetail.loadError')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [poolId]);
+  }, [poolId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mapa: usa las coordenadas guardadas al crear la quedada; si no las hay
   // (quedadas antiguas), geocodifica location_hint como respaldo — mismo
@@ -117,11 +122,11 @@ export default function PoolDetailPage() {
     if (!query) { setMapLoading(false); return; }
     let cancelled = false;
     setMapLoading(true);
-    geocodeLocation(query).then(result => {
+    geocodeLocation(query, lang).then(result => {
       if (!cancelled) { setCoords(result); setMapLoading(false); }
     });
     return () => { cancelled = true; };
-  }, [pool]);
+  }, [pool, lang]);
 
   const identitiesByUser = badgeData.assignments.reduce((acc, assignment) => {
     if (!acc[assignment.userId]) acc[assignment.userId] = [];
@@ -139,13 +144,13 @@ export default function PoolDetailPage() {
     setJoining(true);
     try {
       await api.post(`/pools/${poolId}/join`, {});
-      showToast('¡Te has unido! 🚀');
+      showToast(t('poolDetail.joinedToast'));
       setPool(p => ({ ...p, has_joined: true, status: p.status, participant_count: p.participant_count + 1 }));
       const { pool: full } = await api.get(`/pools/${poolId}`);
       setPool(full);
       setParticipants(full.participants || []);
     } catch (e) {
-      showToast(e.message || 'No se pudo unir', 'error');
+      showToast(e.message || t('poolDetail.joinError'), 'error');
     } finally {
       setJoining(false);
     }
@@ -155,13 +160,13 @@ export default function PoolDetailPage() {
     setLeaving(true);
     try {
       const { cancelled } = await api.delete(`/pools/${poolId}/leave`);
-      showToast(cancelled ? 'Plan cancelado' : 'Has salido del plan');
+      showToast(cancelled ? t('poolDetail.cancelledToast') : t('poolDetail.leftToast'));
       if (cancelled) { navigate('/pools'); return; }
       const { pool: full } = await api.get(`/pools/${poolId}`);
       setPool(full);
       setParticipants(full.participants || []);
     } catch (e) {
-      showToast(e.message || 'Error al salir', 'error');
+      showToast(e.message || t('poolDetail.leaveError'), 'error');
     } finally {
       setLeaving(false);
     }
@@ -174,9 +179,9 @@ export default function PoolDetailPage() {
       const data = await api.patch(`/pools/${poolId}/reminder`, { reminder_minutes_before: minutes });
       const nextMinutes = data.reminder_minutes_before || minutes;
       setPool(p => ({ ...p, current_user_reminder_minutes_before: nextMinutes }));
-      showToast('Aviso actualizado');
+      showToast(t('poolDetail.reminderUpdated'));
     } catch (e) {
-      showToast(e.message || 'Error al cambiar el aviso', 'error');
+      showToast(e.message || t('poolDetail.reminderError'), 'error');
     } finally {
       setReminderSaving(false);
     }
@@ -193,12 +198,12 @@ export default function PoolDetailPage() {
   if (loadError || !pool) {
     return (
       <div className="min-h-screen bg-surface-bg noise flex flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-sm text-surface-muted">{loadError || 'Esta quedada ya no existe.'}</p>
+        <p className="text-sm text-surface-muted">{loadError || t('poolDetail.gone')}</p>
         <button
           onClick={() => navigate('/pools')}
           className="text-sm font-display font-semibold text-accent-glow hover:underline"
         >
-          Volver a quedadas
+          {t('poolDetail.backToPools')}
         </button>
       </div>
     );
@@ -226,17 +231,17 @@ export default function PoolDetailPage() {
           <h1 className="font-display font-bold text-surface-text flex-1 truncate">{pool.activity}</h1>
           <button
             onClick={() => navigate(`/pools/${pool.id}/sniffer`)}
-            title="Ver la ubicación de la quedada en el mapa"
+            title={t('poolDetail.snifferTitle')}
             className="flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-pink-500/15 text-pink-400 border border-pink-500/25 hover:bg-pink-500/25 hover:border-pink-500/40 hover:text-pink-300 transition-colors"
           >
-            <span>🐽</span> Sniffer
+            <span>🐽</span> {t('poolDetail.snifferBtn')}
           </button>
           <button
             onClick={() => navigate(`/pools/${pool.id}/chat`)}
-            title="Abrir chat de la quedada"
+            title={t('poolDetail.chatTitle')}
             className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
           >
-            <span>💬</span> Chat
+            <span>💬</span> {t('poolDetail.chatBtn')}
             {hasUnreadChat && (
               <span className="absolute -top-1 -right-1 flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
@@ -270,24 +275,21 @@ export default function PoolDetailPage() {
           )}
         </div>
 
-        {/* Fecha y hora — se muestra dentro de la quedada al abrirla (mismo
-            patrón que en el detalle de evento: "Fecha de inicio" / "Fecha
-            de fin"). Antes solo aparecía en formato compacto en el
-            cabecero; aquí se enseña legible y por separado. */}
+        {/* Fecha y hora */}
         <div className="rounded-2xl border border-surface-border bg-surface-card overflow-hidden">
           <div className="flex items-start gap-3 px-4 py-3">
             <span className="text-lg flex-shrink-0 mt-0.5">📅</span>
             <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-mono uppercase tracking-wide text-surface-muted">Fecha de inicio</p>
-              <p className="text-sm text-surface-text font-display">{formatPoolFullDateTime(pool.scheduled_at)}</p>
+              <p className="text-[11px] font-mono uppercase tracking-wide text-surface-muted">{t('poolDetail.startDate')}</p>
+              <p className="text-sm text-surface-text font-display">{formatPoolFullDateTime(pool.scheduled_at, lang)}</p>
             </div>
           </div>
           {pool.ends_at && (
             <div className="flex items-start gap-3 px-4 py-3 border-t border-surface-border">
               <span className="text-lg flex-shrink-0 mt-0.5">🏁</span>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-mono uppercase tracking-wide text-surface-muted">Fecha de fin</p>
-                <p className="text-sm text-surface-text font-display">{formatPoolFullDateTime(pool.ends_at)}</p>
+                <p className="text-[11px] font-mono uppercase tracking-wide text-surface-muted">{t('poolDetail.endDate')}</p>
+                <p className="text-sm text-surface-text font-display">{formatPoolFullDateTime(pool.ends_at, lang)}</p>
               </div>
             </div>
           )}
@@ -304,7 +306,7 @@ export default function PoolDetailPage() {
           <div className="h-[120px] rounded-2xl bg-surface-card border border-surface-border flex flex-col items-center justify-center gap-1 px-4 text-center">
             <span className="text-lg">📍</span>
             <p className="text-xs text-surface-muted font-mono">{pool.location_hint}</p>
-            <p className="text-[11px] text-surface-muted/70">No se ha podido localizar esta dirección en el mapa.</p>
+            <p className="text-[11px] text-surface-muted/70">{t('poolDetail.mapMissing')}</p>
           </div>
         ) : null}
 
@@ -323,16 +325,16 @@ export default function PoolDetailPage() {
         {/* Apuntados */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-display font-bold text-surface-text">Apuntados</h3>
+            <h3 className="text-sm font-display font-bold text-surface-text">{t('poolDetail.joinedTitle')}</h3>
             <span className="text-xs font-mono text-surface-muted">
               {pool.max_people !== null && pool.max_people !== undefined
                 ? `${pool.participant_count}/${pool.max_people}`
-                : `${pool.participant_count} apuntados`}
+                : t('poolDetail.joinedCount', { n: pool.participant_count })}
             </span>
           </div>
 
           {participants.length === 0 ? (
-            <p className="text-surface-muted text-sm text-center py-4">Nadie apuntado aún</p>
+            <p className="text-surface-muted text-sm text-center py-4">{t('poolDetail.noneJoined')}</p>
           ) : (
             <div className="space-y-2">
               {participants.map((p, idx) => {
@@ -356,7 +358,7 @@ export default function PoolDetailPage() {
                         {p.username}
                         {isFirst && (
                           <span className="text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 px-1.5 py-0.5 rounded-full">
-                            Organiza
+                            {t('poolDetail.organizes')}
                           </span>
                         )}
                       </div>
@@ -382,12 +384,12 @@ export default function PoolDetailPage() {
                   <div className="w-10 h-10 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
                     <span className="text-slate-600 text-xs">?</span>
                   </div>
-                  <span className="text-xs text-slate-600 font-mono">Plaza libre</span>
+                  <span className="text-xs text-slate-600 font-mono">{t('poolDetail.freeSpot')}</span>
                 </div>
               ))}
               {pool.spots_left > 3 && (
                 <p className="text-xs text-slate-600 font-mono text-center">
-                  +{pool.spots_left - 3} plazas libres más
+                  {t('poolDetail.moreSpots', { n: pool.spots_left - 3 })}
                 </p>
               )}
             </div>
@@ -405,7 +407,7 @@ export default function PoolDetailPage() {
                 disabled={joining || pool.status === 'full'}
                 className="w-full py-3 rounded-2xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-bold transition-all disabled:opacity-50"
               >
-                {joining ? 'Uniéndose...' : '🚀 Unirse al plan'}
+                {joining ? t('poolDetail.joining') : t('poolDetail.joinCta')}
               </button>
             )}
             {canLeave && (
@@ -414,7 +416,7 @@ export default function PoolDetailPage() {
                 disabled={leaving}
                 className="w-full py-3 rounded-2xl bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-400 text-sm font-display font-bold border border-slate-600/30 hover:border-red-500/30 transition-all disabled:opacity-50"
               >
-                {leaving ? 'Saliendo...' : 'Salir del plan'}
+                {leaving ? t('poolDetail.leaving') : t('poolDetail.leaveCta')}
               </button>
             )}
             {pool && !pool.is_creator && (
@@ -422,7 +424,7 @@ export default function PoolDetailPage() {
                 onClick={() => setShowReport(true)}
                 className="w-full mt-2 py-2.5 rounded-2xl bg-transparent hover:bg-red-500/10 text-red-400/70 hover:text-red-400 text-xs font-display font-semibold border border-red-500/20 transition-all flex items-center justify-center gap-2"
               >
-                🚩 Denunciar plan
+                {t('poolDetail.reportPlan')}
               </button>
             )}
           </div>
@@ -433,7 +435,7 @@ export default function PoolDetailPage() {
         <ReportModal
           targetType="pool"
           targetId={pool.id}
-          targetLabel={pool.title || 'este plan'}
+          targetLabel={pool.title || t('poolDetail.thisPlan')}
           onClose={() => setShowReport(false)}
         />
       )}

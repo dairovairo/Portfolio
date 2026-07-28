@@ -7,6 +7,7 @@ import { ALL_INTERESTS } from './OnboardingPage';
 import MascotDisplay from '../components/MascotDisplay';
 import MascotPreviewOverlay from '../components/MascotPreviewOverlay';
 import ReportModal from '../components/ReportModal';
+import { useTranslation } from '../i18n';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
@@ -26,41 +27,43 @@ function BadgePill({ badge }) {
 }
 
 // ── Public Stats ──────────────────────────────────────────────────────────────
-function formatMemberSince(isoDate) {
-  if (!isoDate) return '—';
+// Recibe t() como parámetro para producir los plurales localizados (reutiliza
+// las claves profile.member*, ya definidas en los tres diccionarios).
+function formatMemberSince(isoDate, t) {
+  if (!isoDate) return t('profile.memberDash');
   const start = new Date(isoDate);
   const now = new Date();
   const diffMs = now - start;
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays < 1)  return 'Hoy';
-  if (diffDays < 30) return `${diffDays} día${diffDays !== 1 ? 's' : ''}`;
+  if (diffDays < 1)  return t('profile.memberToday');
+  if (diffDays < 30) return t(diffDays === 1 ? 'profile.memberDaysSingular' : 'profile.memberDaysPlural', { n: diffDays });
   const months = Math.floor(diffDays / 30);
-  if (months < 12)   return `${months} mes${months !== 1 ? 'es' : ''}`;
+  if (months < 12)   return t(months === 1 ? 'profile.memberMonthsSingular' : 'profile.memberMonthsPlural', { n: months });
   const years = Math.floor(months / 12);
   const remMonths = months % 12;
-  return remMonths > 0 ? `${years}a ${remMonths}m` : `${years} año${years !== 1 ? 's' : ''}`;
+  return remMonths > 0
+    ? t('profile.memberYearsMonths', { y: years, m: remMonths })
+    : t(years === 1 ? 'profile.memberYearsSingular' : 'profile.memberYearsPlural', { n: years });
 }
 
 function StatsGrid({ stats }) {
+  const { t } = useTranslation();
   if (!stats) return null;
   const items = [
-    { icon: '👥', label: 'Amigos',           value: stats.friends_count },
-    { icon: '📅', label: 'Planes creados',   value: stats.pools_created },
-    { icon: '🚀', label: 'Planes unidos',    value: stats.pools_joined },
-    { icon: '🔋', label: 'Updates batería',  value: stats.battery_updates },
-    { icon: '⏰', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
+    { icon: '👥', label: t('profile.statsFriends'),        value: stats.friends_count },
+    { icon: '📅', label: t('profile.statsPoolsCreated'),   value: stats.pools_created },
+    { icon: '🚀', label: t('profile.statsPoolsJoined'),    value: stats.pools_joined },
+    { icon: '🔋', label: t('profile.statsBatteryUpdates'), value: stats.battery_updates },
+    { icon: '⏰', label: t('profile.statsTimeInApp'),      value: formatMemberSince(stats.member_since, t) },
   ];
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
       <h3 className="font-display font-semibold text-white mb-3 text-sm">
-        📊 Estadísticas públicas
+        {t('profile.statsTitle')}
       </h3>
       <div className="grid grid-cols-2 gap-2">
         {items.map(({ icon, label, value }) => (
-          <div
-            key={label}
-            className="bg-surface-bg rounded-xl px-3 py-3 flex items-center gap-3"
-          >
+          <div key={label} className="bg-surface-bg rounded-xl px-3 py-3 flex items-center gap-3">
             <span className="text-xl flex-shrink-0">{icon}</span>
             <div className="min-w-0">
               <div className="font-display font-bold text-surface-text text-base leading-none">
@@ -72,7 +75,6 @@ function StatsGrid({ stats }) {
             </div>
           </div>
         ))}
-        {/* 5 items → last one spans full width for symmetry */}
       </div>
     </div>
   );
@@ -82,6 +84,7 @@ export default function UserProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile: myProfile } = useAuth();
+  const { t } = useTranslation();
 
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
@@ -123,7 +126,7 @@ export default function UserProfilePage() {
     try {
       await api.post('/friends/request', { addressee_id: id });
       setFriendshipStatus('sent');
-      showToast('Solicitud de amistad enviada 🤝');
+      showToast(t('userProfile.requestSentToast'));
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -132,12 +135,12 @@ export default function UserProfilePage() {
   }
 
   async function removeFriend() {
-    if (!confirm('¿Eliminar de tus amigos?')) return;
+    if (!confirm(t('userProfile.confirmRemove'))) return;
     setActionLoading(true);
     try {
       await api.delete(`/friends/${id}`);
       setFriendshipStatus(null);
-      showToast('Amigo eliminado');
+      showToast(t('userProfile.removedToast'));
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -148,7 +151,7 @@ export default function UserProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-surface-bg flex items-center justify-center">
-        <div className="text-slate-500 font-mono text-sm animate-pulse">Cargando perfil...</div>
+        <div className="text-slate-500 font-mono text-sm animate-pulse">{t('userProfile.loading')}</div>
       </div>
     );
   }
@@ -158,9 +161,9 @@ export default function UserProfilePage() {
       <div className="min-h-screen bg-surface-bg flex items-center justify-center p-4">
         <div className="text-center">
           <div className="text-5xl mb-4">🕵️</div>
-          <h2 className="font-display text-xl text-white mb-2">Usuario no encontrado</h2>
+          <h2 className="font-display text-xl text-white mb-2">{t('userProfile.notFoundTitle')}</h2>
           <button onClick={() => navigate(-1)} className="text-accent-glow text-sm underline underline-offset-4">
-            Volver
+            {t('userProfile.back')}
           </button>
         </div>
       </div>
@@ -270,11 +273,11 @@ export default function UserProfilePage() {
           <div className="mt-5 p-4 bg-surface-bg rounded-xl">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-slate-500 font-mono uppercase tracking-widest">
-                Batería social
+                {t('userProfile.batteryTitle')}
               </span>
               {user.battery_is_estimated && (
                 <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded font-mono">
-                  ⚡ Estimada
+                  {t('userProfile.batteryEstimated')}
                 </span>
               )}
             </div>
@@ -295,7 +298,7 @@ export default function UserProfilePage() {
               </span>
             </div>
             <div className="text-xs text-slate-600 mt-2 font-mono">
-              Última actualización: {formatRelativeTime(user.battery_updated_at)}
+              {t('userProfile.lastUpdate', { when: formatRelativeTime(user.battery_updated_at) })}
             </div>
           </div>
 
@@ -308,7 +311,7 @@ export default function UserProfilePage() {
                     onClick={() => navigate(`/messages/${user.id}`)}
                     className="flex-1 bg-accent-primary/20 text-accent-glow border border-accent-primary/30 rounded-xl py-2.5 text-sm font-display font-semibold hover:bg-accent-primary/30 transition-all"
                   >
-                    💬 Mensaje
+                    {t('userProfile.messageBtn')}
                   </button>
                   <button
                     onClick={removeFriend}
@@ -320,11 +323,11 @@ export default function UserProfilePage() {
                 </>
               ) : friendshipStatus === 'sent' ? (
                 <div className="flex-1 bg-surface-bg text-slate-500 border border-surface-border rounded-xl py-2.5 text-sm font-display font-semibold text-center">
-                  Solicitud enviada
+                  {t('userProfile.requestSent')}
                 </div>
               ) : friendshipStatus === 'pending' ? (
                 <div className="flex-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-xl py-2.5 text-sm font-display font-semibold text-center">
-                  Solicitud pendiente · Ve a Amigos
+                  {t('userProfile.requestPending')}
                 </div>
               ) : (
                 <button
@@ -332,7 +335,7 @@ export default function UserProfilePage() {
                   disabled={actionLoading}
                   className="flex-1 bg-accent-primary text-white rounded-xl py-2.5 text-sm font-display font-semibold hover:bg-accent-primary/80 transition-all"
                 >
-                  {actionLoading ? '...' : '+ Añadir amigo'}
+                  {actionLoading ? '...' : t('userProfile.addFriend')}
                 </button>
               )}
             </div>
@@ -343,7 +346,7 @@ export default function UserProfilePage() {
               onClick={() => navigate('/profile')}
               className="mt-4 w-full bg-surface-bg text-slate-400 border border-surface-border rounded-xl py-2.5 text-sm font-display font-semibold hover:text-white transition-all"
             >
-              Editar mi perfil →
+              {t('userProfile.editMyProfile')}
             </button>
           )}
         </div>
@@ -352,7 +355,7 @@ export default function UserProfilePage() {
         {earnedBadges.length > 0 && user.show_badges !== false && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
             <h3 className="font-display font-semibold text-white mb-3">
-              Insignias · {earnedBadges.length}
+              {t('userProfile.badgesTitle', { n: earnedBadges.length })}
             </h3>
             <div className="flex flex-wrap gap-2">
               {earnedBadges.map((badge, i) => (
@@ -371,7 +374,7 @@ export default function UserProfilePage() {
             onClick={() => setShowReport(true)}
             className="w-full mt-3 bg-surface-card border border-red-500/20 text-red-400 rounded-2xl py-2.5 text-sm font-display font-semibold hover:bg-red-500/10 transition-all flex items-center justify-center gap-2"
           >
-            <span>🚩</span> Denunciar a este usuario
+            <span>🚩</span> {t('userProfile.reportUser')}
           </button>
         )}
       </main>

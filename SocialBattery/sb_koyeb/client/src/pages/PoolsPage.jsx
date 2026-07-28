@@ -20,6 +20,7 @@ import {
   PARTICIPANT_MASCOTS_VISIBLE,
   MiniMascot,
 } from '../components/PoolShared';
+import { useTranslation } from '../i18n';
 
 function formatInputDateTime(dateStr) {
   const d = new Date(dateStr);
@@ -29,6 +30,7 @@ function formatInputDateTime(dateStr) {
 
 // ── Invitar / Solicitar invitación (quedadas privadas) ──────────────────────
 function PoolInviteModal({ pool, onClose, onToast }) {
+  const { t } = useTranslation();
   const isCreator = pool.is_creator;
 
   const [friends, setFriends] = useState([]);
@@ -52,7 +54,7 @@ function PoolInviteModal({ pool, onClose, onToast }) {
         setInvitedIds(requestsRes.invited_user_ids || []);
         setParticipantIds(requestsRes.participant_user_ids || []);
       })
-      .catch(() => onToast?.('No se pudieron cargar los datos', 'error'))
+      .catch(() => onToast?.(t('pools.loadFailToast'), 'error'))
       .finally(() => setLoading(false));
   }, [pool.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -70,10 +72,10 @@ function PoolInviteModal({ pool, onClose, onToast }) {
     setActingId(friendId);
     try {
       await api.post(`/pools/${pool.id}/invite`, { user_id: friendId });
-      onToast?.('Invitación enviada 🤝');
+      onToast?.(t('pools.inviteSentToast'));
       setInvitedIds(prev => [...prev, friendId]);
     } catch (e) {
-      onToast?.(e.message || 'No se pudo invitar', 'error');
+      onToast?.(e.message || t('pools.inviteFailToast'), 'error');
     } finally {
       setActingId(null);
     }
@@ -83,10 +85,10 @@ function PoolInviteModal({ pool, onClose, onToast }) {
     setActingId(friendId);
     try {
       await api.post(`/pools/${pool.id}/request-invite`, { user_id: friendId });
-      onToast?.('Solicitud enviada 🙋');
+      onToast?.(t('pools.reqSentToast'));
       loadData();
     } catch (e) {
-      onToast?.(e.message || 'No se pudo enviar la solicitud', 'error');
+      onToast?.(e.message || t('pools.reqFailToast'), 'error');
     } finally {
       setActingId(null);
     }
@@ -96,10 +98,10 @@ function PoolInviteModal({ pool, onClose, onToast }) {
     setDecidingId(requestId);
     try {
       await api.patch(`/pools/${pool.id}/join-requests/${requestId}`, { status });
-      onToast?.(status === 'accepted' ? 'Solicitud aceptada 🤝' : 'Solicitud rechazada');
+      onToast?.(status === 'accepted' ? t('pools.reqAcceptedToast') : t('pools.reqRejectedToast'));
       loadData();
     } catch (e) {
-      onToast?.(e.message || 'No se pudo actualizar la solicitud', 'error');
+      onToast?.(e.message || t('pools.reqUpdateFailToast'), 'error');
     } finally {
       setDecidingId(null);
     }
@@ -121,7 +123,7 @@ function PoolInviteModal({ pool, onClose, onToast }) {
         <div className="flex-shrink-0 px-5 py-3 border-b border-surface-border flex items-center gap-2">
           <span className="text-xl">{isCreator ? '➕' : '🙋'}</span>
           <h3 className="font-display font-bold text-surface-text flex-1">
-            {isCreator ? 'Invitar a la quedada' : 'Solicitar invitación'}
+            {isCreator ? t('pools.inviteModalTitle') : t('pools.requestModalTitle')}
           </h3>
         </div>
 
@@ -137,11 +139,11 @@ function PoolInviteModal({ pool, onClose, onToast }) {
               {isCreator && (
                 <div>
                   <h4 className="text-sm font-display font-bold text-surface-text mb-2">
-                    Solicitudes de invitación{pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}
+                    {t('pools.joinRequestsTitle')}{pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}
                   </h4>
                   {pendingRequests.length === 0 ? (
                     <p className="text-xs text-surface-muted bg-surface-bg border border-surface-border rounded-xl p-3 text-center">
-                      Sin solicitudes pendientes
+                      {t('pools.noJoinRequests')}
                     </p>
                   ) : (
                     <div className="space-y-2">
@@ -157,7 +159,7 @@ function PoolInviteModal({ pool, onClose, onToast }) {
                               {r.requested_user?.username}
                             </p>
                             <p className="text-xs text-surface-muted truncate">
-                              Propuesto por {r.requested_by_user?.username}
+                              {t('pools.proposedBy', { name: r.requested_by_user?.username })}
                             </p>
                           </div>
                           <button
@@ -183,18 +185,18 @@ function PoolInviteModal({ pool, onClose, onToast }) {
 
               <div>
                 <h4 className="text-sm font-display font-bold text-surface-text mb-2">
-                  {isCreator ? 'Añadir amigos' : 'Tus amigos'}
+                  {isCreator ? t('pools.addFriends') : t('pools.yourFriends')}
                 </h4>
                 <input
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar amigo..."
+                  placeholder={t('pools.searchFriend')}
                   className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors mb-2"
                 />
                 {friends.length === 0 ? (
                   <p className="text-xs text-surface-muted bg-surface-bg border border-surface-border rounded-xl p-3 text-center">
-                    No tienes amigos aún
+                    {t('pools.noFriendsYet')}
                   </p>
                 ) : (
                   <div className="space-y-1.5">
@@ -206,9 +208,9 @@ function PoolInviteModal({ pool, onClose, onToast }) {
                       const disabled = isParticipant || isInvited || isPendingByMe || actingId === f.id;
 
                       let statusLabel = null;
-                      if (isParticipant) statusLabel = 'Ya apuntado';
-                      else if (isInvited) statusLabel = 'Ya invitado';
-                      else if (isPendingByMe) statusLabel = 'Solicitud enviada';
+                      if (isParticipant) statusLabel = t('pools.alreadyJoined');
+                      else if (isInvited) statusLabel = t('pools.alreadyInvited');
+                      else if (isPendingByMe) statusLabel = t('pools.requestPending');
 
                       return (
                         <div key={f.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-surface-border bg-surface-bg">
@@ -231,15 +233,15 @@ function PoolInviteModal({ pool, onClose, onToast }) {
                               {actingId === f.id
                                 ? '...'
                                 : isCreator
-                                  ? 'Añadir'
-                                  : wasRejected ? 'Solicitar de nuevo' : 'Solicitar'}
+                                  ? t('pools.add')
+                                  : wasRejected ? t('pools.requestAgain') : t('pools.request')}
                             </button>
                           )}
                         </div>
                       );
                     })}
                     {filteredFriends.length === 0 && (
-                      <p className="text-xs text-surface-muted text-center py-2">Sin resultados</p>
+                      <p className="text-xs text-surface-muted text-center py-2">{t('pools.noSearchResults')}</p>
                     )}
                   </div>
                 )}
@@ -253,7 +255,7 @@ function PoolInviteModal({ pool, onClose, onToast }) {
             onClick={onClose}
             className="w-full py-2 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
           >
-            Cerrar
+            {t('pools.close')}
           </button>
         </div>
       </div>
@@ -263,16 +265,13 @@ function PoolInviteModal({ pool, onClose, onToast }) {
 
 // ── Pool Card ──────────────────────────────────────────────────────────────────
 function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, joining, leaving }) {
+  const { t } = useTranslation();
   const emoji = getActivityEmoji(pool.activity);
   const canJoin = pool.status === 'open' && !pool.has_joined;
   const isPast = new Date(pool.scheduled_at) <= new Date();
   const { hasUnreadPoolChat } = usePoolChatNotifications();
   const hasUnreadChat = hasUnreadPoolChat(pool.id);
   const [showInvite, setShowInvite] = useState(false);
-  // Botón "Invitar" / "Solicitar invitación" — solo en quedadas privadas,
-  // y solo para el creador o para miembros ya apuntados. Vive en el panel
-  // (la tarjeta del listado), no en la ventana de detalle que se abre al
-  // clicarla — así se puede invitar/solicitar sin tener que abrir la quedada.
   const isPrivate = pool.is_public === false;
   const showInviteButton = isPrivate && (pool.is_creator || pool.has_joined)
     && !isPast && pool.status !== 'cancelled' && pool.status !== 'closed';
@@ -304,21 +303,21 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
             <StatusBadge status={pool.status} />
             {pool.is_public ? (
               <span className="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded-full font-mono">
-                🌐 Amigos
+                {t('pools.badgeFriends')}
               </span>
             ) : (
               <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
-                🔒 Privado
+                {t('pools.badgePrivate')}
               </span>
             )}
             {pool.has_joined && !pool.is_creator && (
               <span className="text-xs bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-1.5 py-0.5 rounded-full font-mono">
-                ✓ Unido
+                {t('pools.badgeJoined')}
               </span>
             )}
             {pool.is_invited && (
               <span className="text-xs bg-pink-500/20 text-pink-400 border border-pink-500/30 px-1.5 py-0.5 rounded-full font-mono">
-                📩 Invitado
+                {t('pools.badgeInvited')}
               </span>
             )}
           </div>
@@ -357,7 +356,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
           <span>👤</span>
           <span>
             {pool.creator?.username}
-            {pool.is_creator ? ' (tú)' : ''}
+            {pool.is_creator ? t('pools.creatorYouSuffix') : ''}
           </span>
         </div>
       </div>
@@ -373,7 +372,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
         onClick={e => { e.stopPropagation(); onOpenDetail(pool); }}
       >
         {pool.participant_count === 0 ? (
-          <span className="text-xs text-surface-muted">Sin participantes aún</span>
+          <span className="text-xs text-surface-muted">{t('pools.noParticipants')}</span>
         ) : (
           <>
             {(pool.participants_preview || []).slice(0, PARTICIPANT_MASCOTS_VISIBLE).map(p => (
@@ -406,8 +405,8 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
               disabled={joining === pool.id || pool.status === 'full'}
               className="flex-1 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-semibold transition-all disabled:opacity-50"
             >
-              {joining === pool.id ? 'Uniéndose...' :
-               pool.status === 'full' ? 'Completo' : '🚀 Unirse'}
+              {joining === pool.id ? t('pools.joining') :
+               pool.status === 'full' ? t('pools.full') : t('pools.join')}
             </button>
           ) : pool.has_joined && !pool.is_creator ? (
             <button
@@ -415,7 +414,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
               disabled={leaving === pool.id}
               className="flex-1 py-2 rounded-xl bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-400 text-sm font-display font-semibold border border-slate-600/30 hover:border-red-500/30 transition-all disabled:opacity-50"
             >
-              {leaving === pool.id ? 'Saliendo...' : 'Salir del pool'}
+              {leaving === pool.id ? t('pools.leaving') : t('pools.leave')}
             </button>
           ) : null}
 
@@ -423,7 +422,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
             <button
               onClick={() => onCancel(pool.id)}
               className="py-2 px-3 rounded-xl bg-slate-700/50 hover:bg-red-500/20 text-surface-muted hover:text-red-400 text-sm border border-slate-600/30 hover:border-red-500/30 transition-all"
-              title="Cancelar pool"
+              title={t('pools.cancelPool')}
             >
               ✕
             </button>
@@ -440,7 +439,7 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
             onClick={() => setShowInvite(true)}
             className="w-full py-2 rounded-xl bg-accent-primary/15 hover:bg-accent-primary/25 text-accent-glow text-sm font-display font-semibold border border-accent-primary/25 transition-all"
           >
-            {pool.is_creator ? '➕ Invitar' : '🙋 Solicitar invitación'}
+            {pool.is_creator ? t('pools.invite') : t('pools.requestInvite')}
           </button>
         </div>
       )}
@@ -457,7 +456,8 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
 }
 
 // ── Friend / Group multi-picker ───────────────────────────────────────────────
-function FriendPicker({ selected, onChange, label = 'Amigos' }) {
+function FriendPicker({ selected, onChange, label }) {
+  const { t } = useTranslation();
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -480,7 +480,7 @@ function FriendPicker({ selected, onChange, label = 'Amigos' }) {
   if (loading) return <div className="h-10 bg-surface-bg rounded-xl animate-pulse" />;
   if (!friends.length) return (
     <p className="text-xs text-surface-muted bg-surface-bg border border-surface-border rounded-xl p-3 text-center">
-      No tienes amigos aún
+      {t('pools.noFriendsYet')}
     </p>
   );
 
@@ -490,7 +490,7 @@ function FriendPicker({ selected, onChange, label = 'Amigos' }) {
         type="text"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        placeholder="Buscar amigo..."
+        placeholder={t('pools.searchFriend')}
         className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors mb-2"
       />
       <div className="space-y-1.5 max-h-44 overflow-y-auto">
@@ -521,7 +521,7 @@ function FriendPicker({ selected, onChange, label = 'Amigos' }) {
           );
         })}
         {filtered.length === 0 && (
-          <p className="text-xs text-surface-muted text-center py-2">Sin resultados</p>
+          <p className="text-xs text-surface-muted text-center py-2">{t('pools.noSearchResults')}</p>
         )}
       </div>
     </div>
@@ -558,6 +558,7 @@ function buildPoolFormData(form) {
 // formulario arranca ya en modo "Privado" con ese grupo marcado, en vez de
 // los valores por defecto (público, sin grupo).
 function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
+  const { t } = useTranslation();
   const minDate = formatInputDateTime(new Date(Date.now() + 30 * 60 * 1000));
   // La fecha de inicio no puede ser más de un año después de la creación de la quedada.
   const maxStartDateObj = new Date();
@@ -609,7 +610,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) {
-      setError('La foto no puede superar 3MB');
+      setError(t('pools.photoTooLarge'));
       e.target.value = '';
       return;
     }
@@ -628,23 +629,23 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
   const hasPrivateTarget = !form.is_public && (form.group_id || form.invited_user_ids.length > 0);
 
   async function handleSubmit() {
-    if (!form.activity.trim()) { setError('La actividad es obligatoria'); return; }
-    if (!form.scheduled_at) { setError('La fecha es obligatoria'); return; }
-    if (!form.location_hint.trim()) { setError('La ubicacion es obligatoria'); return; }
+    if (!form.activity.trim()) { setError(t('pools.activityRequired')); return; }
+    if (!form.scheduled_at) { setError(t('pools.dateRequired')); return; }
+    if (!form.location_hint.trim()) { setError(t('pools.locationRequired')); return; }
     if (form.ends_at && new Date(form.ends_at) <= new Date(form.scheduled_at)) {
-      setError('La fecha fin debe ser posterior al inicio');
+      setError(t('pools.endAfterStart'));
       return;
     }
     if (new Date(form.scheduled_at) > new Date(maxStartDate)) {
-      setError('La fecha de inicio no puede ser más de un año después de la creación del plan');
+      setError(t('pools.tooFarInFuture'));
       return;
     }
     if (form.ends_at && new Date(form.ends_at) > new Date(maxEndDate)) {
-      setError('La fecha fin no puede ser más de un día después del inicio');
+      setError(t('pools.endTooFar'));
       return;
     }
     if (!form.is_public && !hasPrivateTarget) {
-      setError('Elige al menos un grupo o un amigo para el plan privado');
+      setError(t('pools.needTarget'));
       return;
     }
     setError('');
@@ -659,7 +660,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
       });
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear el plan');
+      setError(e.message || t('pools.createError'));
     } finally {
       setSaving(false);
     }
@@ -674,42 +675,42 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">{emoji}</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">Crear plan</h2>
-            <p className="text-xs text-surface-muted">Propón un plan, tus amigos se unirán</p>
+            <h2 className="font-display font-bold text-surface-text text-lg">{t('pools.createTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('pools.createSubtitle')}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           {/* Activity */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Actividad *</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('pools.activityLabel')}</label>
             <input type="text" value={form.activity} onChange={e => set('activity', e.target.value)}
-              placeholder="Ej: Café en el centro, Fútbol 5, Cine..." maxLength={100}
+              placeholder={t('pools.activityPh')} maxLength={100}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Descripción <span className="text-slate-600">(opcional)</span></label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('pools.descriptionLabel')} <span className="text-slate-600">{t('pools.descriptionOptional')}</span></label>
             <textarea value={form.description} onChange={e => set('description', e.target.value)}
-              placeholder="Más detalles sobre el plan..." maxLength={300} rows={2}
+              placeholder={t('pools.descriptionPh')} maxLength={300} rows={2}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none" />
           </div>
 
           {/* Date/time + max people */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Cuándo *</label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('pools.whenLabel')}</label>
               <input type="datetime-local" value={form.scheduled_at} min={minDate} max={maxStartDate} onChange={e => set('scheduled_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin <span className="text-slate-600">(opcional)</span></label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('pools.endLabel')} <span className="text-slate-600">{t('pools.descriptionOptional')}</span></label>
               <input type="datetime-local" value={form.ends_at} min={form.scheduled_at || minDate} max={maxEndDate} onChange={e => set('ends_at', e.target.value)}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors" />
             </div>
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Límite de personas</label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('pools.maxPeopleLabel')}</label>
               <label className="flex items-center gap-2 cursor-pointer select-none mb-2">
                 <input
                   type="checkbox"
@@ -717,7 +718,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
                   onChange={e => set('max_people', e.target.checked ? null : 4)}
                   className="w-4 h-4 rounded border-surface-border accent-accent-primary"
                 />
-                <span className="text-sm text-surface-muted">Sin límite</span>
+                <span className="text-sm text-surface-muted">{t('pools.noLimit')}</span>
               </label>
               {form.max_people !== null && (
                 <input
@@ -732,7 +733,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
             </div>
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-1.5">
-                Portada <span className="text-slate-600">(opcional)</span>
+                {t('pools.coverLabel')} <span className="text-slate-600">{t('pools.descriptionOptional')}</span>
               </label>
               {coverPreview ? (
                 <div className="relative w-full h-[77px] overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
@@ -752,7 +753,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
                   className="w-full h-[77px] rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 flex flex-col items-center justify-center gap-1 text-accent-glow hover:bg-accent-primary/10 transition-all"
                 >
                   <span className="text-lg">📷</span>
-                  <span className="text-[11px] font-display font-semibold leading-tight">Añadir foto</span>
+                  <span className="text-[11px] font-display font-semibold leading-tight">{t('pools.addPhoto')}</span>
                 </button>
               )}
               <input
@@ -781,7 +782,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
 
           {/* Location */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Ubicación *</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('pools.locationLabel')}</label>
             <LocationPicker
               value={form.location_hint}
               lat={form.lat}
@@ -789,25 +790,25 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
               onChange={(location, lat, lng) => {
                 setForm(f => ({ ...f, location_hint: location.slice(0, 150), lat, lng }));
               }}
-              typingWarning="Si la ubicación no es real, el modo Sniffer no funcionará. Se recomienda el uso del mapa para mayor precisión."
+              typingWarning={t('pools.locationWarning')}
             />
           </div>
 
           {/* Visibility */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-2">Visibilidad</label>
+            <label className="block text-xs font-mono text-surface-muted mb-2">{t('pools.visibilityLabel')}</label>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setVisibility(true)}
                 className={`p-3 rounded-xl border text-left transition-all ${form.is_public ? 'border-accent-primary bg-accent-primary/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'}`}>
                 <div className="text-lg mb-1">🌐</div>
-                <div className="text-sm font-display font-semibold text-surface-text">Público</div>
-                <div className="text-xs text-surface-muted mt-0.5">Todos tus amigos lo ven</div>
+                <div className="text-sm font-display font-semibold text-surface-text">{t('pools.visPublic')}</div>
+                <div className="text-xs text-surface-muted mt-0.5">{t('pools.visPublicHint')}</div>
               </button>
               <button type="button" onClick={() => setVisibility(false)}
                 className={`p-3 rounded-xl border text-left transition-all ${!form.is_public ? 'border-accent-primary/50 bg-accent-primary/10' : 'border-surface-border bg-surface-bg hover:border-surface-border/60'}`}>
                 <div className="text-lg mb-1">🔒</div>
-                <div className="text-sm font-display font-semibold text-surface-text">Privado</div>
-                <div className="text-xs text-surface-muted mt-0.5">Solo quien tú elijas</div>
+                <div className="text-sm font-display font-semibold text-surface-text">{t('pools.visPrivate')}</div>
+                <div className="text-xs text-surface-muted mt-0.5">{t('pools.visPrivateHint')}</div>
               </button>
             </div>
           </div>
@@ -816,13 +817,13 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
           {!form.is_public && (
             <div className="bg-surface-bg border border-accent-primary/20 rounded-2xl p-4 space-y-4">
               <p className="text-xs text-accent-glow font-mono">
-                🔒 Elige quién puede ver y unirse a este plan
+                {t('pools.privateHelper')}
               </p>
 
               {/* Groups */}
               {groups.length > 0 && (
                 <div>
-                  <label className="block text-xs font-mono text-surface-muted mb-2">Por grupo</label>
+                  <label className="block text-xs font-mono text-surface-muted mb-2">{t('pools.byGroup')}</label>
                   <div className="space-y-2">
                     {groups.map(g => (
                       <button key={g.id} type="button" onClick={() => toggleGroup(g.id)}
@@ -834,7 +835,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
                         <span className="text-lg">👥</span>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-display font-semibold text-surface-text truncate">{g.name}</div>
-                          <div className="text-xs text-surface-muted">{g.member_count} miembros</div>
+                          <div className="text-xs text-surface-muted">{t('pools.membersCount', { n: g.member_count })}</div>
                         </div>
                         {form.group_id === g.id && <span className="text-accent-glow">✓</span>}
                       </button>
@@ -847,7 +848,7 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
               {groups.length > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="flex-1 border-t border-surface-border" />
-                  <span className="text-xs text-slate-600 font-mono">y/o</span>
+                  <span className="text-xs text-slate-600 font-mono">{t('pools.andOr')}</span>
                   <div className="flex-1 border-t border-surface-border" />
                 </div>
               )}
@@ -855,9 +856,9 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
               {/* Individual friends */}
               <div>
                 <label className="block text-xs font-mono text-surface-muted mb-2">
-                  Amigos individuales
+                  {t('pools.individualFriends')}
                   {form.invited_user_ids.length > 0 && (
-                    <span className="ml-2 text-accent-glow">({form.invited_user_ids.length} seleccionados)</span>
+                    <span className="ml-2 text-accent-glow">{t('pools.selectedCount', { n: form.invited_user_ids.length })}</span>
                   )}
                 </label>
                 <FriendPicker
@@ -871,12 +872,12 @@ function CreatePoolModal({ onClose, onCreate, initialGroupId = null }) {
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
 
           {!error && (!form.activity.trim() || !form.location_hint.trim()) && (
-            <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
+            <p className="text-amber-400/80 text-xs font-mono text-center">{t('pools.fillFirst')}</p>
           )}
 
           <button onClick={handleSubmit} disabled={saving || !form.activity.trim() || !form.location_hint.trim()}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text font-display font-bold text-sm transition-all disabled:opacity-50">
-            {saving ? 'Creando...' : '🚀 Crear plan'}
+            {saving ? t('common.creating') : t('pools.createCta')}
           </button>
         </div>
       </div>
@@ -896,6 +897,7 @@ function isActive(p) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PoolsPage() {
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -1025,7 +1027,7 @@ export default function PoolsPage() {
 
   async function handleCreate(formValues) {
     await api.postForm('/pools', buildPoolFormData(formValues));
-    showToast('¡Plan creado! 🎉');
+    showToast(t('pools.createdToast'));
     setTab('myplans');
     fetchPools('myplans');
   }
@@ -1034,10 +1036,10 @@ export default function PoolsPage() {
     setJoining(poolId);
     try {
       await api.post(`/pools/${poolId}/join`, {});
-      showToast('¡Te has unido! 🚀');
+      showToast(t('pools.joinedToast'));
       fetchPools(tab);
     } catch (e) {
-      showToast(e.message || 'No se pudo unir', 'error');
+      showToast(e.message || t('pools.joinError'), 'error');
     } finally {
       setJoining(null);
     }
@@ -1047,23 +1049,23 @@ export default function PoolsPage() {
     setLeaving(poolId);
     try {
       const { cancelled } = await api.delete(`/pools/${poolId}/leave`);
-      showToast(cancelled ? 'Plan cancelado' : 'Has salido del plan');
+      showToast(cancelled ? t('pools.cancelledToast') : t('pools.leftToast'));
       fetchPools(tab);
     } catch (e) {
-      showToast(e.message || 'Error al salir', 'error');
+      showToast(e.message || t('pools.leaveError'), 'error');
     } finally {
       setLeaving(null);
     }
   }
 
   async function handleCancel(poolId) {
-    if (!confirm('¿Cancelar este plan? Los participantes serán notificados.')) return;
+    if (!confirm(t('pools.confirmCancel'))) return;
     try {
       await api.delete(`/pools/${poolId}`);
-      showToast('Plan cancelado');
+      showToast(t('pools.cancelledToast'));
       fetchPools(tab);
     } catch (e) {
-      showToast(e.message || 'Error al cancelar', 'error');
+      showToast(e.message || t('pools.cancelError'), 'error');
     }
   }
 
@@ -1096,12 +1098,12 @@ export default function PoolsPage() {
           <button onClick={() => navigate('/')} className="text-surface-muted hover:text-surface-text transition-colors p-1 text-lg">
             ←
           </button>
-          <h1 className="font-display font-bold text-surface-text flex-1">Pool de Quedadas</h1>
+          <h1 className="font-display font-bold text-surface-text flex-1">{t('pools.title')}</h1>
           <button
             onClick={() => setShowCreate(true)}
             className="bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-semibold px-4 py-1.5 rounded-xl transition-all"
           >
-            + Crear
+            {t('pools.createBtn')}
           </button>
         </div>
       </nav>
@@ -1110,8 +1112,8 @@ export default function PoolsPage() {
       <div className="max-w-lg mx-auto px-4 pt-4">
         <div className="flex gap-1 bg-surface-card border border-surface-border rounded-xl p-1 mb-5">
           {[
-            { key: 'active',  label: '🌐 Activos' },
-            { key: 'myplans', label: '✓ Mis planes' },
+            { key: 'active',  label: t('pools.tabActive') },
+            { key: 'myplans', label: t('pools.tabMyPlans') },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -1147,13 +1149,13 @@ export default function PoolsPage() {
           pools.length === 0 ? (
             <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
               <div className="text-5xl mb-4">🤝</div>
-              <p className="text-slate-300 font-display font-semibold mb-1">Sin planes activos</p>
-              <p className="text-slate-500 text-sm mb-5">Crea un plan o espera a que tus amigos propongan algo</p>
+              <p className="text-slate-300 font-display font-semibold mb-1">{t('pools.activeEmptyTitle')}</p>
+              <p className="text-slate-500 text-sm mb-5">{t('pools.activeEmptyHint')}</p>
               <button
                 onClick={() => setShowCreate(true)}
                 className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold"
               >
-                + Crear plan
+                {t('pools.createBtnFull')}
               </button>
             </div>
           ) : (
@@ -1164,7 +1166,7 @@ export default function PoolsPage() {
               {pastPools.length > 0 && (
                 <div className="mt-4">
                   <p className="text-xs font-mono text-slate-600 mb-2 px-1">
-                    Cancelados / cerrados ({pastPools.length})
+                    {t('pools.canceledClosed', { n: pastPools.length })}
                   </p>
                   <div className="space-y-2">
                     {pastPools.map(pool => (
@@ -1180,20 +1182,20 @@ export default function PoolsPage() {
           myplansEmpty ? (
             <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
               <div className="text-5xl mb-4">📅</div>
-              <p className="text-slate-300 font-display font-semibold mb-1">Sin planes activos</p>
-              <p className="text-slate-500 text-sm mb-5">Crea un plan o únete a los de tus amigos</p>
+              <p className="text-slate-300 font-display font-semibold mb-1">{t('pools.myEmptyTitle')}</p>
+              <p className="text-slate-500 text-sm mb-5">{t('pools.myEmptyHint')}</p>
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={() => setShowCreate(true)}
                   className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold"
                 >
-                  + Crear plan
+                  {t('pools.createBtnFull')}
                 </button>
                 <button
                   onClick={() => setTab('active')}
                   className="bg-surface-bg border border-surface-border px-5 py-2.5 rounded-xl text-sm font-display font-semibold text-slate-400"
                 >
-                  🔍 Ver activos
+                  {t('pools.seeActive')}
                 </button>
               </div>
             </div>
@@ -1202,14 +1204,14 @@ export default function PoolsPage() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-base">🗓️</span>
-                  <h2 className="text-sm font-display font-bold text-surface-text">Planes que has creado</h2>
+                  <h2 className="text-sm font-display font-bold text-surface-text">{t('pools.createdByYou')}</h2>
                   <span className="ml-auto text-xs font-mono text-slate-500">{myCreated.length}</span>
                 </div>
                 {myCreated.length === 0 ? (
                   <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
-                    <p className="text-slate-500 text-sm">No has creado ningún plan activo</p>
+                    <p className="text-slate-500 text-sm">{t('pools.noneCreated')}</p>
                     <button onClick={() => setShowCreate(true)} className="mt-3 text-xs text-accent-glow font-display font-semibold">
-                      + Crear plan
+                      {t('pools.createBtnFull')}
                     </button>
                   </div>
                 ) : (
@@ -1224,14 +1226,14 @@ export default function PoolsPage() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-base">🚀</span>
-                  <h2 className="text-sm font-display font-bold text-surface-text">Planes a los que te has unido</h2>
+                  <h2 className="text-sm font-display font-bold text-surface-text">{t('pools.joinedByYou')}</h2>
                   <span className="ml-auto text-xs font-mono text-slate-500">{myJoined.length}</span>
                 </div>
                 {myJoined.length === 0 ? (
                   <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
-                    <p className="text-slate-500 text-sm">Aún no te has unido a ningún plan</p>
+                    <p className="text-slate-500 text-sm">{t('pools.noneJoined')}</p>
                     <button onClick={() => setTab('active')} className="mt-3 text-xs text-accent-glow font-display font-semibold">
-                      🔍 Ver planes activos
+                      {t('pools.seeActivePlans')}
                     </button>
                   </div>
                 ) : (

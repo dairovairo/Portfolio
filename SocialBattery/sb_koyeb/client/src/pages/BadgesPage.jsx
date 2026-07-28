@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
+import { useTranslation } from '../i18n';
 
 function BadgeCard({ badge, assignments, currentUserId }) {
+  const { t } = useTranslation();
   const holders = assignments || [];
   const hasAny = holders.length > 0;
   const mine = holders.find(a => a.userId === currentUserId);
   const isMine = !!mine;
-  const statusLabel = hasAny ? 'Desbloqueada' : 'Bloqueada';
+  const statusLabel = hasAny ? t('badges.unlocked') : t('badges.locked');
 
   return (
     <div
@@ -58,17 +60,17 @@ function BadgeCard({ badge, assignments, currentUserId }) {
         <>
           <div className={`text-xs font-mono relative z-10 ${isMine ? 'text-accent-glow/80' : 'text-surface-muted'}`}>
             {isMine
-              ? 'Tu identidad'
+              ? t('badges.yourIdentity')
               : holders.length === 1
-              ? `${holders[0].user?.username || 'usuario'}`
-              : `${holders.length} colegas`}
+              ? `${holders[0].user?.username || t('badges.fallbackUser')}`
+              : t('badges.peersLabel', { n: holders.length })}
           </div>
           <div className="text-[11px] text-surface-muted/75 leading-tight relative z-10">
             {(mine || holders[0])?.reason}
           </div>
         </>
       ) : (
-        <div className="text-xs text-slate-600 font-mono relative z-10">Sin identidad</div>
+        <div className="text-xs text-slate-600 font-mono relative z-10">{t('badges.noIdentity')}</div>
       )}
     </div>
   );
@@ -98,6 +100,7 @@ function GroupSelector({ groups, selectedId, onSelect }) {
 export default function BadgesPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { t } = useTranslation();
 
   const [groups, setGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -169,7 +172,7 @@ export default function BadgesPage() {
             ←
           </button>
           <div className="flex-1">
-            <h1 className="font-display font-bold text-surface-text">Insignias del grupo</h1>
+            <h1 className="font-display font-bold text-surface-text">{t('badges.navTitle')}</h1>
           </div>
           {selectedGroupId && (
             <span className="text-xs font-mono text-accent-glow bg-accent-primary/15 border border-accent-primary/20 px-2.5 py-1 rounded-xl">
@@ -185,16 +188,15 @@ export default function BadgesPage() {
         {!loadingGroups && groups.length === 0 && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center">
             <div className="text-3xl mb-3">👥</div>
-            <div className="font-display font-semibold text-surface-text mb-1.5">Necesitas un grupo privado</div>
+            <div className="font-display font-semibold text-surface-text mb-1.5">{t('badges.needGroupTitle')}</div>
             <div className="text-sm text-surface-muted leading-relaxed">
-              Crea un grupo privado de amigos para que las insignias tengan sentido.
-              Cada grupo tiene sus propias identidades.
+              {t('badges.needGroupHint')}
             </div>
             <button
               onClick={() => navigate('/friends')}
               className="mt-4 bg-accent-primary/20 text-accent-glow border border-accent-primary/30 text-sm font-display font-semibold px-4 py-2 rounded-xl hover:bg-accent-primary/30 transition-all"
             >
-              Ir a amigos →
+              {t('badges.goFriends')}
             </button>
           </div>
         )}
@@ -226,7 +228,9 @@ export default function BadgesPage() {
                   {selectedGroup.name}
                 </div>
                 <div className="text-sm text-surface-muted">
-                  {members.length} miembros · {myAssignments.length || 'ninguna'} identidad para ti
+                  {myAssignments.length > 0
+                    ? t('badges.membersLine', { n: members.length, c: myAssignments.length })
+                    : t('badges.membersLineNone', { n: members.length })}
                 </div>
               </div>
             </div>
@@ -242,10 +246,7 @@ export default function BadgesPage() {
               />
             </div>
             <p className="text-xs text-surface-muted mt-3 leading-relaxed">
-              Cada identidad solo la puede tener una persona en el grupo.
-              Cada persona puede tener como maximo 1 a la vez. Si hay empate de puntuacion,
-              tiene prioridad quien no tenga ya una identidad activa; si sigue empatado,
-              se elige un titular estable al azar. Al ganarla queda en tu perfil para siempre.
+              {t('badges.fairnessNote')}
             </p>
           </div>
         )}
@@ -268,8 +269,8 @@ export default function BadgesPage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="font-display font-bold text-surface-text text-base">Identidades actuales</h3>
-                <p className="text-xs text-surface-muted">Dentro de {selectedGroup?.name}</p>
+                <h3 className="font-display font-bold text-surface-text text-base">{t('badges.currentTitle')}</h3>
+                <p className="text-xs text-surface-muted">{t('badges.withinGroup', { name: selectedGroup?.name || '' })}</p>
               </div>
               <span className="text-xs font-mono text-surface-muted bg-surface-card border border-surface-border px-2 py-1 rounded-lg">
                 {assignedCount}/{totalBadges}
@@ -293,9 +294,9 @@ export default function BadgesPage() {
         {selectedGroupId && !loadingBadges && badges.length > 0 && assignments.length === 0 && (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center">
             <div className="text-3xl mb-3">📊</div>
-            <div className="font-display font-semibold text-surface-text mb-1.5">Sin datos aún</div>
+            <div className="font-display font-semibold text-surface-text mb-1.5">{t('badges.noDataTitle')}</div>
             <div className="text-sm text-surface-muted leading-relaxed">
-              Cread pools y registrad batería para que se puedan calcular las identidades del grupo.
+              {t('badges.noDataHint')}
             </div>
           </div>
         )}

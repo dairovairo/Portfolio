@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { isOnline, useFriendsOnline } from '../hooks/usePresence';
 import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { generateInviteBlob, shareOrDownloadBlob } from '../lib/instagramStory';
+import { useTranslation } from '../i18n';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx, EventDetailPage.jsx, etc.)
@@ -49,15 +50,17 @@ function BatteryBadge({ level, isEstimated }) {
 }
 
 function OnlineLabel({ friend, showLastSeen }) {
+  const { t } = useTranslation();
   if (!showLastSeen) return null;
-  if (!friend.battery_updated_at) return <span className="text-xs text-slate-700 font-mono">Sin actualizar</span>;
-  return <span className="text-xs text-slate-500 font-mono">Última actualización: {formatRelativeTime(friend.battery_updated_at)}</span>;
+  if (!friend.battery_updated_at) return <span className="text-xs text-slate-700 font-mono">{t('friends.notUpdated')}</span>;
+  return <span className="text-xs text-slate-500 font-mono">{t('friends.lastUpdate', { when: formatRelativeTime(friend.battery_updated_at) })}</span>;
 }
 
 // ── Friend Row ──────────────────────────────────────────────────────────────
 
 function FriendRow({ friend, onMessage, onRemove, myBattery, online, showLastSeen }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const diff = Math.abs((friend.battery_level ?? 50) - myBattery);
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 group hover:bg-surface-hover transition-all">
@@ -68,15 +71,15 @@ function FriendRow({ friend, onMessage, onRemove, myBattery, online, showLastSee
         <button onClick={() => navigate(`/user/${friend.id}`)} className="text-left w-full">
           <div className="flex items-center gap-2">
             <span className="font-display font-semibold text-surface-text text-sm truncate">{friend.username}</span>
-            {diff <= 15 && <span className="text-xs bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-md font-mono flex-shrink-0">~tuyo</span>}
+            {diff <= 15 && <span className="text-xs bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-md font-mono flex-shrink-0">{t('friends.similarBattery')}</span>}
           </div>
           <OnlineLabel friend={friend} showLastSeen={showLastSeen} />
         </button>
       </div>
       <div className="flex items-center gap-1.5">
         <BatteryBadge level={friend.battery_level} isEstimated={friend.battery_is_estimated} />
-        <button onClick={() => onMessage(friend)} className="p-1.5 text-surface-muted hover:text-accent-glow transition-colors rounded-lg hover:bg-accent-primary/10" title="Enviar mensaje">💬</button>
-        <button onClick={() => onRemove(friend)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 opacity-0 group-hover:opacity-100" title="Eliminar amigo">✕</button>
+        <button onClick={() => onMessage(friend)} className="p-1.5 text-surface-muted hover:text-accent-glow transition-colors rounded-lg hover:bg-accent-primary/10" title={t('friends.sendMessage')}>💬</button>
+        <button onClick={() => onRemove(friend)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 opacity-0 group-hover:opacity-100" title={t('friends.removeFriend')}>✕</button>
       </div>
     </div>
   );
@@ -118,6 +121,7 @@ function UserRow({ user, action, onAction, loading, onSelect, isSelected }) {
 // ── Create Group Modal ──────────────────────────────────────────────────────
 
 function CreateGroupModal({ friends, onClose, onCreate }) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [saving, setSaving] = useState(false);
@@ -132,14 +136,14 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
   }
 
   async function handleCreate() {
-    if (!name.trim()) { setError('El nombre del grupo es obligatorio'); return; }
+    if (!name.trim()) { setError(t('friends.groupNameRequired')); return; }
     setError('');
     setSaving(true);
     try {
       await onCreate({ name: name.trim(), member_ids: [...selected] });
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear el grupo');
+      setError(e.message || t('friends.groupCreateError'));
     } finally {
       setSaving(false);
     }
@@ -153,18 +157,18 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
         <div className="flex items-center gap-3 mb-5">
           <span className="text-2xl">👥</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text">Crear grupo</h2>
-            <p className="text-xs text-surface-muted">Grupo privado para quedadas</p>
+            <h2 className="font-display font-bold text-surface-text">{t('friends.createGroupTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('friends.createGroupSubtitle')}</p>
           </div>
         </div>
 
         <div className="mb-4">
-          <label className="block text-xs font-mono text-surface-muted mb-1.5">Nombre del grupo *</label>
+          <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('friends.groupNameLabel')}</label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Ej: Los de siempre, Equipo fútbol..."
+            placeholder={t('friends.groupNamePlaceholder')}
             maxLength={60}
             autoFocus
             className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
@@ -173,10 +177,10 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
 
         <div className="mb-4 flex-1 overflow-y-auto">
           <label className="block text-xs font-mono text-surface-muted mb-2">
-            Añadir amigos {selected.size > 0 && <span className="text-accent-glow">({selected.size} seleccionados)</span>}
+            {t('friends.addFriendsLabel')} {selected.size > 0 && <span className="text-accent-glow">{t('friends.selectedCount', { n: selected.size })}</span>}
           </label>
           {friends.length === 0 ? (
-            <p className="text-surface-muted text-sm text-center py-4">Aún no tienes amigos para añadir</p>
+            <p className="text-surface-muted text-sm text-center py-4">{t('friends.noFriendsToAdd')}</p>
           ) : (
             <div className="space-y-2">
               {friends.map(f => (
@@ -195,10 +199,10 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
 
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button onClick={handleCreate} disabled={saving || !name.trim()} className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-semibold disabled:opacity-50 transition-all">
-            {saving ? 'Creando...' : '✓ Crear grupo'}
+            {saving ? t('common.creating') : t('friends.createGroupBtn')}
           </button>
         </div>
       </div>
@@ -209,6 +213,7 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
 // ── Group Row ───────────────────────────────────────────────────────────────
 
 function GroupRow({ group, onClick, onDelete }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover transition-all group">
       <button onClick={onClick} className="w-10 h-10 rounded-full bg-accent-primary/15 border-2 border-accent-primary/30 flex items-center justify-center text-lg flex-shrink-0">
@@ -217,13 +222,13 @@ function GroupRow({ group, onClick, onDelete }) {
       <button onClick={onClick} className="flex-1 min-w-0 text-left">
         <div className="font-display font-semibold text-surface-text text-sm truncate">{group.name}</div>
         <div className="text-xs text-surface-muted font-mono">
-          {group.member_count} miembros{group.is_owner ? ' · Tuyo' : ''}
+          {t('messages.groupMembersLine', { n: group.member_count })}{group.is_owner ? ' · ' + t('friends.ownedByYou') : ''}
         </div>
       </button>
       <div className="flex items-center gap-1.5">
-        <button onClick={onClick} className="p-1.5 text-surface-muted hover:text-accent-glow transition-colors rounded-lg hover:bg-accent-primary/10" title="Abrir chat">💬</button>
+        <button onClick={onClick} className="p-1.5 text-surface-muted hover:text-accent-glow transition-colors rounded-lg hover:bg-accent-primary/10" title={t('friends.openChat')}>💬</button>
         {group.is_owner && (
-          <button onClick={() => onDelete(group)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 opacity-0 group-hover:opacity-100" title="Eliminar grupo">✕</button>
+          <button onClick={() => onDelete(group)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 opacity-0 group-hover:opacity-100" title={t('friends.deleteGroup')}>✕</button>
         )}
       </div>
     </div>
@@ -236,6 +241,7 @@ export default function FriendsPage() {
   const { profile } = useAuth();
   const { showOnline, showLastSeen } = useSettings();
   const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const myBattery = profile?.battery_level ?? 50;
 
@@ -256,7 +262,6 @@ export default function FriendsPage() {
   const [sharingInvite, setSharingInvite] = useState(false);
 
   const onlineMap = useFriendsOnline(friends);
-  // If the user has disabled "Mostrar en línea", treat everyone as offline (mutual, WhatsApp-style)
   const effectiveOnlineMap = showOnline ? onlineMap : {};
 
   const showToast = (msg, type = 'success') => {
@@ -296,18 +301,8 @@ export default function FriendsPage() {
     const channel = supabase
       .channel(`friendships-${profile.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friendships', filter: `addressee_id=eq.${profile.id}` }, () => fetchRequests())
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'friendships',
-        filter: `requester_id=eq.${profile.id}`,
-      }, refreshFriendshipState)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'friendships',
-        filter: `addressee_id=eq.${profile.id}`,
-      }, refreshFriendshipState)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships', filter: `requester_id=eq.${profile.id}` }, refreshFriendshipState)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships', filter: `addressee_id=eq.${profile.id}` }, refreshFriendshipState)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [profile?.id, fetchFriends, fetchRequests]);
@@ -315,7 +310,7 @@ export default function FriendsPage() {
   // Debounced search
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) { setSearchResults([]); return; }
-    const t = setTimeout(async () => {
+    const tm = setTimeout(async () => {
       setLoadingSearch(true);
       try {
         const { users } = await api.get(`/users/search?q=${encodeURIComponent(searchQuery)}`);
@@ -323,7 +318,7 @@ export default function FriendsPage() {
       } catch (e) { console.error(e); }
       finally { setLoadingSearch(false); }
     }, 350);
-    return () => clearTimeout(t);
+    return () => clearTimeout(tm);
   }, [searchQuery]);
 
   async function sendRequest(user) {
@@ -331,7 +326,7 @@ export default function FriendsPage() {
     try {
       await api.post('/friends/request', { addressee_id: user.id });
       setSentRequests(s => new Set([...s, user.id]));
-      showToast(`Solicitud enviada a ${user.username} 🤝`);
+      showToast(t('home.requestSentToast', { name: user.username }));
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -356,16 +351,16 @@ export default function FriendsPage() {
       } catch (_) {
         mascot = null; // si falla, se genera la invitación sin la mascota
       }
-      const username = profile?.username || 'Alguien';
+      const username = profile?.username || t('common.unnamed');
       const blob = await generateInviteBlob({ username, mascot, hex: color.hex });
       const result = await shareOrDownloadBlob(blob, 'invitacion-sb.png', `${username} te ha invitado a SocialBattery`);
       if (result.method === 'download') {
-        showToast('Imagen descargada. ¡Compártela donde quieras! 📲', 'success');
+        showToast(t('home.inviteDownloaded'), 'success');
       } else if (result.method === 'share') {
-        showToast('¡Invitación lista para compartir! 🚀', 'success');
+        showToast(t('home.inviteReady'), 'success');
       }
     } catch (e) {
-      showToast('Error al generar la invitación', 'error');
+      showToast(t('home.inviteError'), 'error');
     } finally {
       setSharingInvite(false);
     }
@@ -376,8 +371,8 @@ export default function FriendsPage() {
     try {
       await api.patch(`/friends/request/${requestId}`, { status });
       setRequests(r => r.filter(req => req.id !== requestId));
-      if (status === 'accepted') { showToast(`¡Ahora eres amigo de ${requesterName}! 🎉`); fetchFriends(); }
-      else showToast('Solicitud rechazada');
+      if (status === 'accepted') { showToast(t('home.friendAcceptedToast', { name: requesterName })); fetchFriends(); }
+      else showToast(t('home.requestRejectedToast'));
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -386,27 +381,27 @@ export default function FriendsPage() {
   }
 
   async function removeFriend(friend) {
-    if (!confirm(`¿Eliminar a ${friend.username} de tus amigos?`)) return;
+    if (!confirm(t('friends.confirmRemoveFriend', { name: friend.username }))) return;
     try {
       await api.delete(`/friends/${friend.id}`);
       setFriends(f => f.filter(fr => fr.id !== friend.id));
-      showToast(`${friend.username} eliminado de amigos`);
+      showToast(t('friends.removedFriend', { name: friend.username }));
     } catch (e) { showToast(e.message, 'error'); }
   }
 
   async function createGroup({ name, member_ids }) {
     const { group } = await api.post('/groups', { name, member_ids });
-    showToast(`Grupo "${group.name}" creado 🎉`);
+    showToast(t('friends.groupCreatedToast', { name: group.name }));
     fetchGroups();
     setTab('groups');
   }
 
   async function deleteGroup(group) {
-    if (!confirm(`¿Eliminar el grupo "${group.name}"? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(t('friends.confirmDeleteGroup', { name: group.name }))) return;
     try {
       await api.delete(`/groups/${group.id}`);
       setGroups(g => g.filter(gr => gr.id !== group.id));
-      showToast('Grupo eliminado');
+      showToast(t('friends.groupDeleted'));
     } catch (e) { showToast(e.message, 'error'); }
   }
 
@@ -415,10 +410,10 @@ export default function FriendsPage() {
   const onlineFriendsCount = friends.filter(f => effectiveOnlineMap[f.id]).length;
 
   const tabs = [
-    { id: 'friends', label: `Amigos${friends.length ? ` (${friends.length})` : ''}` },
-    { id: 'groups', label: `Grupos${groups.length ? ` (${groups.length})` : ''}` },
-    { id: 'requests', label: `Solicitudes${pendingCount ? ` (${pendingCount})` : ''}` },
-    { id: 'search', label: '🔍 Buscar' },
+    { id: 'friends',  label: `${t('friends.tabFriends')}${friends.length ? ` (${friends.length})` : ''}` },
+    { id: 'groups',   label: `${t('friends.tabGroups')}${groups.length ? ` (${groups.length})` : ''}` },
+    { id: 'requests', label: `${t('friends.tabRequests')}${pendingCount ? ` (${pendingCount})` : ''}` },
+    { id: 'search',   label: t('friends.tabSearch') },
   ];
 
   return (
@@ -440,11 +435,11 @@ export default function FriendsPage() {
       <nav className="border-b border-surface-border sticky top-0 bg-surface-bg/80 backdrop-blur-xl z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate('/')} className="text-surface-muted hover:text-surface-text transition-colors p-1 text-lg">←</button>
-          <h1 className="font-display font-bold text-surface-text flex-1">Amigos</h1>
+          <h1 className="font-display font-bold text-surface-text flex-1">{t('friends.title')}</h1>
           <div className="flex items-center gap-2">
             {onlineFriendsCount > 0 && (
               <span className="text-xs text-green-400 font-mono flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" />{onlineFriendsCount} en línea
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" />{t('friends.onlineCount', { n: onlineFriendsCount })}
               </span>
             )}
             {pendingCount > 0 && (
@@ -453,15 +448,15 @@ export default function FriendsPage() {
           </div>
         </div>
         <div className="max-w-lg mx-auto px-4 pb-3 flex gap-1 overflow-x-auto">
-          {tabs.map(t => (
+          {tabs.map(tabItem => (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+              key={tabItem.id}
+              onClick={() => setTab(tabItem.id)}
               className={`flex-shrink-0 py-1.5 px-3 rounded-xl text-xs font-display font-semibold transition-all duration-200 ${
-                tab === t.id ? 'bg-accent-primary text-surface-text' : 'text-slate-400 hover:text-surface-text'
+                tab === tabItem.id ? 'bg-accent-primary text-surface-text' : 'text-slate-400 hover:text-surface-text'
               }`}
             >
-              {t.label}
+              {tabItem.label}
             </button>
           ))}
         </div>
@@ -477,10 +472,10 @@ export default function FriendsPage() {
             ) : friends.length === 0 ? (
               <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
                 <div className="text-5xl mb-3">👥</div>
-                <p className="text-slate-300 font-display font-semibold mb-1">Sin amigos aún</p>
-                <p className="text-slate-500 text-sm mb-5">Busca personas para conectar</p>
+                <p className="text-slate-300 font-display font-semibold mb-1">{t('friends.friendsEmptyTitle')}</p>
+                <p className="text-slate-500 text-sm mb-5">{t('friends.friendsEmptyHint')}</p>
                 <button onClick={() => setTab('search')} className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-4 py-2 rounded-xl text-sm font-display font-semibold">
-                  Buscar personas
+                  {t('friends.searchPeople')}
                 </button>
               </div>
             ) : (
@@ -503,8 +498,8 @@ export default function FriendsPage() {
             >
               <span className="text-2xl">➕</span>
               <div>
-                <div className="font-display font-semibold text-surface-text text-sm">Crear grupo</div>
-                <div className="text-xs text-accent-glow">Crea un grupo privado con tus amigos →</div>
+                <div className="font-display font-semibold text-surface-text text-sm">{t('friends.createGroupCta')}</div>
+                <div className="text-xs text-accent-glow">{t('friends.createGroupHint')}</div>
               </div>
             </button>
 
@@ -513,12 +508,12 @@ export default function FriendsPage() {
             ) : groups.length === 0 ? (
               <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
                 <div className="text-5xl mb-3">👥</div>
-                <p className="text-slate-300 font-display font-semibold mb-1">Sin grupos aún</p>
-                <p className="text-slate-500 text-sm">Crea un grupo para organizar quedadas privadas</p>
+                <p className="text-slate-300 font-display font-semibold mb-1">{t('friends.groupsEmptyTitle')}</p>
+                <p className="text-slate-500 text-sm">{t('friends.groupsEmptyHint')}</p>
               </div>
             ) : (
               <>
-                <p className="text-xs text-slate-600 font-mono px-1">{groups.length} grupo{groups.length !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-slate-600 font-mono px-1">{groups.length} {groups.length === 1 ? t('friends.groupSingular') : t('friends.groupPlural')}</p>
                 {groups.map(g => (
                   <GroupRow key={g.id} group={g} onClick={() => navigate(`/messages/group/${g.id}`)} onDelete={deleteGroup} />
                 ))}
@@ -535,11 +530,11 @@ export default function FriendsPage() {
             ) : requests.length === 0 ? (
               <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
                 <div className="text-5xl mb-3">📭</div>
-                <p className="text-slate-300 font-display font-semibold mb-1">Sin solicitudes pendientes</p>
+                <p className="text-slate-300 font-display font-semibold mb-1">{t('friends.requestsEmpty')}</p>
               </div>
             ) : (
               <>
-                <p className="text-xs text-slate-600 font-mono px-1">{requests.length} solicitud{requests.length !== 1 ? 'es' : ''} pendiente{requests.length !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-slate-600 font-mono px-1">{requests.length} {requests.length === 1 ? t('friends.pendingSingular') : t('friends.pendingPlural')}</p>
                 {requests.map(req => (
                   <div key={req.id} className="bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3">
                     <button onClick={() => navigate(`/user/${req.requester.id}`)} className="flex-shrink-0">
@@ -553,7 +548,7 @@ export default function FriendsPage() {
                     <div className="flex gap-1.5 flex-shrink-0">
                       <button onClick={() => respondRequest(req.id, 'accepted', req.requester.username)} disabled={actionLoading[req.id]}
                         className="bg-green-500/20 text-green-400 border border-green-500/30 text-xs font-display font-semibold px-3 py-1.5 rounded-lg hover:bg-green-500/30 transition-all disabled:opacity-50">
-                        ✓ Aceptar
+                        ✓ {t('common.accept')}
                       </button>
                       <button onClick={() => respondRequest(req.id, 'rejected', req.requester.username)} disabled={actionLoading[req.id]}
                         className="bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-display font-semibold px-2 py-1.5 rounded-lg hover:bg-red-500/20 transition-all disabled:opacity-50">
@@ -575,7 +570,7 @@ export default function FriendsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Buscar por username..."
+                placeholder={t('friends.searchPlaceholder')}
                 autoFocus
                 className="w-full bg-surface-card border border-surface-border rounded-2xl px-4 py-3 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors pr-10"
               />
@@ -584,7 +579,7 @@ export default function FriendsPage() {
 
             {searchQuery.length >= 2 && !loadingSearch && (
               searchResults.length === 0 ? (
-                <div className="text-center text-surface-muted text-sm py-8">No se encontraron usuarios con "{searchQuery}"</div>
+                <div className="text-center text-surface-muted text-sm py-8">{t('friends.searchNoUsers', { q: searchQuery })}</div>
               ) : (
                 <div className="space-y-2">
                   {searchResults.map(user => {
@@ -593,9 +588,9 @@ export default function FriendsPage() {
                     return (
                       <UserRow key={user.id} user={user} loading={actionLoading[user.id]}
                         action={
-                          isFriend ? { label: '✓ Amigos', style: 'bg-surface-bg text-surface-muted cursor-default border border-surface-border' }
-                          : sent ? { label: '✓ Enviado', style: 'bg-surface-bg text-surface-muted cursor-default border border-surface-border' }
-                          : { label: '+ Añadir', style: 'bg-accent-primary text-surface-text hover:bg-accent-primary/80 transition-all' }
+                          isFriend ? { label: t('home.already'), style: 'bg-surface-bg text-surface-muted cursor-default border border-surface-border' }
+                          : sent ? { label: t('home.requestSent'), style: 'bg-surface-bg text-surface-muted cursor-default border border-surface-border' }
+                          : { label: '+ ' + t('common.add'), style: 'bg-accent-primary text-surface-text hover:bg-accent-primary/80 transition-all' }
                         }
                         onAction={isFriend || sent ? () => {} : sendRequest}
                       />
@@ -608,7 +603,7 @@ export default function FriendsPage() {
             {searchQuery.length < 2 && (
               <div className="text-center text-surface-muted text-sm py-10">
                 <div className="text-3xl mb-3">🔍</div>
-                Escribe al menos 2 caracteres para buscar
+                {t('friends.searchMinChars')}
               </div>
             )}
 
@@ -622,9 +617,9 @@ export default function FriendsPage() {
                 <span className="text-2xl">{sharingInvite ? '⏳' : '📲'}</span>
                 <div>
                   <div className="font-display font-semibold text-surface-text text-sm">
-                    {sharingInvite ? 'Generando invitación...' : 'Invitar por redes sociales'}
+                    {sharingInvite ? t('home.inviteGenerating') : t('home.inviteBySocial')}
                   </div>
-                  <div className="text-xs text-accent-glow">WhatsApp, Instagram Direct y más →</div>
+                  <div className="text-xs text-accent-glow">{t('home.inviteHint')}</div>
                 </div>
               </button>
             </div>

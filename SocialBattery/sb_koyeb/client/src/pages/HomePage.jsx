@@ -20,6 +20,7 @@ import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { useMascot } from '../context/MascotContext';
 import MascotDisplay from '../components/MascotDisplay';
 import LogoWordmark from '../components/LogoWordmark';
+import { useTranslation } from '../i18n';
 import { claimDailyBatteryReward, DAILY_BATTERY_REWARD, CURRENCY_NAME_PLURAL } from '../lib/currency';
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ function BatteryBadge({ level, isEstimated }) {
 function SearchModal({ friends, onClose, onToast }) {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -88,16 +90,16 @@ function SearchModal({ friends, onClose, onToast }) {
       } catch (_) {
         mascot = null; // si falla, se genera la invitación sin la mascota
       }
-      const username = profile?.username || 'Alguien';
+      const username = profile?.username || t('common.unnamed');
       const blob = await generateInviteBlob({ username, mascot, hex: color.hex });
       const result = await shareOrDownloadBlob(blob, 'invitacion-sb.png', `${username} te ha invitado a SocialBattery`);
       if (result.method === 'download') {
-        onToast('Imagen descargada. ¡Compártela donde quieras! 📲', 'success');
+        onToast(t('home.inviteDownloaded'), 'success');
       } else if (result.method === 'share') {
-        onToast('¡Invitación lista para compartir! 🚀', 'success');
+        onToast(t('home.inviteReady'), 'success');
       }
     } catch (e) {
-      onToast('Error al generar la invitación', 'error');
+      onToast(t('home.inviteError'), 'error');
     } finally {
       setSharingInvite(false);
     }
@@ -121,7 +123,7 @@ function SearchModal({ friends, onClose, onToast }) {
     try {
       await api.post('/friends/request', { addressee_id: user.id });
       setSent(s => new Set([...s, user.id]));
-      onToast(`Solicitud enviada a ${user.username} 🤝`);
+      onToast(t('home.requestSentToast', { name: user.username }));
     } catch (e) { onToast(e.message, 'error'); }
     finally { setActionLoading(l => ({ ...l, [user.id]: false })); }
   }
@@ -133,7 +135,7 @@ function SearchModal({ friends, onClose, onToast }) {
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xl">🔍</span>
-          <h2 className="font-display font-bold text-surface-text flex-1">Buscar personas</h2>
+          <h2 className="font-display font-bold text-surface-text flex-1">{t('home.searchModalTitle')}</h2>
           <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
         </div>
         <input
@@ -141,18 +143,18 @@ function SearchModal({ friends, onClose, onToast }) {
           type="text"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Buscar por username..."
+          placeholder={t('home.searchPlaceholder')}
           className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors mb-3"
         />
         <div className="overflow-y-auto flex-1 space-y-2">
-          {loading && <div className="text-center text-surface-muted text-sm py-6 animate-pulse">Buscando...</div>}
+          {loading && <div className="text-center text-surface-muted text-sm py-6 animate-pulse">{t('home.searchLoading')}</div>}
           {!loading && query.length >= 2 && results.length === 0 && (
-            <div className="text-center text-surface-muted text-sm py-8">Sin resultados para "{query}"</div>
+            <div className="text-center text-surface-muted text-sm py-8">{t('home.searchNoResults', { q: query })}</div>
           )}
           {!loading && query.length < 2 && (
             <div className="text-center text-surface-muted text-sm py-8">
               <div className="text-3xl mb-2">👥</div>
-              Escribe al menos 2 caracteres
+              {t('home.searchMinChars')}
             </div>
           )}
           {results.map(user => {
@@ -171,16 +173,16 @@ function SearchModal({ friends, onClose, onToast }) {
                 </div>
                 <BatteryBadge level={user.battery_level} isEstimated={user.battery_is_estimated} />
                 {isFriend ? (
-                  <span className="text-xs text-surface-muted border border-surface-border px-2 py-1 rounded-lg">✓ Amigos</span>
+                  <span className="text-xs text-surface-muted border border-surface-border px-2 py-1 rounded-lg">{t('home.already')}</span>
                 ) : wasSent ? (
-                  <span className="text-xs text-surface-muted border border-surface-border px-2 py-1 rounded-lg">✓ Enviado</span>
+                  <span className="text-xs text-surface-muted border border-surface-border px-2 py-1 rounded-lg">{t('home.requestSent')}</span>
                 ) : (
                   <button
                     onClick={() => sendRequest(user)}
                     disabled={actionLoading[user.id]}
                     className="text-xs font-display font-semibold px-3 py-1.5 rounded-lg bg-accent-primary text-surface-text hover:bg-accent-primary/80 disabled:opacity-50 transition-all"
                   >
-                    {actionLoading[user.id] ? '...' : '+ Añadir'}
+                    {actionLoading[user.id] ? '...' : '+ ' + t('common.add')}
                   </button>
                 )}
               </div>
@@ -198,9 +200,9 @@ function SearchModal({ friends, onClose, onToast }) {
             <span className="text-2xl">{sharingInvite ? '⏳' : '📲'}</span>
             <div>
               <div className="font-display font-semibold text-surface-text text-sm">
-                {sharingInvite ? 'Generando invitación...' : 'Invitar por redes sociales'}
+                {sharingInvite ? t('home.inviteGenerating') : t('home.inviteBySocial')}
               </div>
-              <div className="text-xs text-accent-glow">WhatsApp, Instagram Direct y más →</div>
+              <div className="text-xs text-accent-glow">{t('home.inviteHint')}</div>
             </div>
           </button>
         </div>
@@ -212,6 +214,7 @@ function SearchModal({ friends, onClose, onToast }) {
 // ── Friend requests modal ─────────────────────────────────────────────────────
 function RequestsModal({ onClose, onToast, onAccepted }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { showOnline } = useSettings();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -229,8 +232,8 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
     try {
       await api.patch(`/friends/request/${requestId}`, { status });
       setRequests(r => r.filter(req => req.id !== requestId));
-      if (status === 'accepted') { onToast(`¡Ahora eres amigo de ${username}! 🎉`); onAccepted?.(); }
-      else onToast('Solicitud rechazada');
+      if (status === 'accepted') { onToast(t('home.friendAcceptedToast', { name: username })); onAccepted?.(); }
+      else onToast(t('home.requestRejectedToast'));
     } catch (e) { onToast(e.message, 'error'); }
     finally { setActionLoading(l => ({ ...l, [requestId]: false })); }
   }
@@ -242,7 +245,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4 sm:hidden" />
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xl">🤝</span>
-          <h2 className="font-display font-bold text-surface-text flex-1">Solicitudes de amistad</h2>
+          <h2 className="font-display font-bold text-surface-text flex-1">{t('home.friendReqTitle')}</h2>
           <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
         </div>
         <div className="overflow-y-auto flex-1 space-y-2">
@@ -252,7 +255,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
           {!loading && requests.length === 0 && (
             <div className="text-center py-10">
               <div className="text-4xl mb-3">📭</div>
-              <p className="text-surface-muted text-sm">Sin solicitudes pendientes</p>
+              <p className="text-surface-muted text-sm">{t('home.requestsEmpty')}</p>
             </div>
           )}
           {requests.map(req => (
@@ -270,7 +273,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
                   onClick={() => respond(req.id, 'accepted', req.requester.username)}
                   disabled={actionLoading[req.id]}
                   className="bg-green-500/20 text-green-400 border border-green-500/30 text-xs font-display font-semibold px-3 py-1.5 rounded-lg hover:bg-green-500/30 transition-all disabled:opacity-50"
-                >✓ Aceptar</button>
+                >✓ {t('common.accept')}</button>
                 <button
                   onClick={() => respond(req.id, 'rejected', req.requester.username)}
                   disabled={actionLoading[req.id]}
@@ -287,6 +290,7 @@ function RequestsModal({ onClose, onToast, onAccepted }) {
 
 // ── Create group modal ────────────────────────────────────────────────────────
 function CreateGroupModal({ friends, onClose, onCreate }) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [saving, setSaving] = useState(false);
@@ -297,14 +301,14 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
   }
 
   async function handleCreate() {
-    if (!name.trim()) { setError('El nombre del grupo es obligatorio'); return; }
+    if (!name.trim()) { setError(t('home.groupNameRequired')); return; }
     setError('');
     setSaving(true);
     try {
       await onCreate({ name: name.trim(), member_ids: [...selected] });
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear el grupo');
+      setError(e.message || t('home.groupCreateError'));
     } finally { setSaving(false); }
   }
 
@@ -316,25 +320,25 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xl">👥</span>
           <div className="flex-1">
-            <h2 className="font-display font-bold text-surface-text">Crear grupo</h2>
-            <p className="text-xs text-surface-muted">Grupo privado para quedadas</p>
+            <h2 className="font-display font-bold text-surface-text">{t('home.createGroupTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('home.createGroupSubtitle')}</p>
           </div>
           <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
         </div>
         <div className="mb-3">
-          <label className="block text-xs font-mono text-surface-muted mb-1.5">Nombre del grupo *</label>
+          <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('home.groupNameLabel')}</label>
           <input
             type="text" value={name} onChange={e => setName(e.target.value)}
-            placeholder="Ej: Los de siempre, Equipo fútbol..." maxLength={60} autoFocus
+            placeholder={t('home.groupNamePlaceholder')} maxLength={60} autoFocus
             className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
           />
         </div>
         <div className="mb-3 flex-1 overflow-y-auto">
           <label className="block text-xs font-mono text-surface-muted mb-2">
-            Añadir amigos {selected.size > 0 && <span className="text-accent-glow">({selected.size} seleccionados)</span>}
+            {t('home.addFriendsLabel')} {selected.size > 0 && <span className="text-accent-glow">{t('home.selectedCount', { n: selected.size })}</span>}
           </label>
           {friends.length === 0
-            ? <p className="text-surface-muted text-sm text-center py-4">Aún no tienes amigos para añadir</p>
+            ? <p className="text-surface-muted text-sm text-center py-4">{t('home.noFriendsToAdd')}</p>
             : (
               <div className="space-y-2">
                 {friends.map(f => {
@@ -360,10 +364,10 @@ function CreateGroupModal({ friends, onClose, onCreate }) {
         {error && <p className="text-red-400 text-xs font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl mb-3">{error}</p>}
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button onClick={handleCreate} disabled={saving || !name.trim()} className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-semibold disabled:opacity-50 transition-all">
-            {saving ? 'Creando...' : '✓ Crear grupo'}
+            {saving ? t('common.creating') : t('home.createGroupCta')}
           </button>
         </div>
       </div>
@@ -376,6 +380,7 @@ export default function HomePage() {
   const { profile, refreshProfile } = useAuth();
   const { addToast } = useToast();
   const { isLight } = useTheme();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
 
@@ -526,12 +531,12 @@ export default function HomePage() {
       });
       const result = await shareOrDownloadBlob(blob, 'mi-bateria-social.png', 'Mi batería social · SocialBattery');
       if (result.method === 'download') {
-        addToast('Imagen descargada. ¡Súbela a tu historia! 📸', 'success');
+        addToast(t('home.storyDownloaded'), 'success');
       } else if (result.method === 'share') {
-        addToast('¡Historia lista para compartir! 🚀', 'success');
+        addToast(t('home.storyReady'), 'success');
       }
     } catch (e) {
-      addToast('Error al generar la historia', 'error');
+      addToast(t('home.storyError'), 'error');
     } finally {
       setSharingStory(false);
     }
@@ -547,17 +552,23 @@ export default function HomePage() {
 
       if (earned?.length > 0) {
         setNewBadges(earned);
-        addToast(`¡Batería actualizada! +${earned.length} insignia${earned.length > 1 ? 's' : ''} 🏅`, 'success');
+        // Notificación con contador de insignias: se compone del toast base
+        // + el sufijo "+N insignia(s)"; se deja la parte de "insignia/s" en
+        // t() para plural correcto en cada idioma.
+        addToast(
+          t('home.batteryUpdatedToast') + ' +' + earned.length + ' ' + (earned.length === 1 ? t('common.badgeSingular') : t('common.badgePlural')) + ' 🏅',
+          'success'
+        );
       } else {
-        addToast('¡Batería actualizada!', 'success');
+        addToast(t('home.batteryUpdatedToast'), 'success');
       }
 
       const reward = claimDailyBatteryReward(profile?.id);
       if (reward.claimed) {
-        addToast(`⚡ +${DAILY_BATTERY_REWARD} ${CURRENCY_NAME_PLURAL} · recompensa diaria`, 'success');
+        addToast(`⚡ +${DAILY_BATTERY_REWARD} ${CURRENCY_NAME_PLURAL} · ${t('home.dailyReward')}`, 'success');
       }
     } catch (err) {
-      addToast('Error al actualizar', 'error');
+      addToast(t('home.batteryError'), 'error');
     } finally {
       setSaving(false);
     }
@@ -565,7 +576,7 @@ export default function HomePage() {
 
   async function createGroup({ name, member_ids }) {
     const { group } = await api.post('/groups', { name, member_ids });
-    addToast(`Grupo "${group.name}" creado 🎉`, 'success');
+    addToast(t('home.groupCreateOk', { name: group.name }), 'success');
     fetchGroups();
   }
 
@@ -617,21 +628,21 @@ export default function HomePage() {
             <button
               onClick={() => navigate('/calendar')}
               className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
-              title="Calendario"
+              title={t('home.calendarTitle')}
             >
               <span className="sb-symbol text-lg" aria-hidden="true">📅</span>
             </button>
             <button
               onClick={() => navigate('/shop')}
               className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
-              title="Tienda"
+              title={t('home.shopTitle')}
             >
               <span className="sb-symbol text-lg" aria-hidden="true">🛒</span>
             </button>
             <button
               onClick={() => navigate('/settings')}
               className="p-2 text-surface-text hover:text-accent-glow transition-colors text-base"
-              title="Ajustes"
+              title={t('home.settingsTitle')}
             >
               <span className="sb-symbol text-lg" aria-hidden="true">⚙︎</span>
             </button>
@@ -684,7 +695,7 @@ export default function HomePage() {
               </div>
             </div>
             <span className="text-[11px] font-display font-semibold text-accent-glow whitespace-nowrap flex-shrink-0">
-              ¡Nuevo evento cerca!
+              {t('home.newEventNearby')}
             </span>
           </div>
         </button>
@@ -697,7 +708,7 @@ export default function HomePage() {
           <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-2xl px-4 py-3 flex items-center gap-3 animate-slide-down">
             <span className="text-xl">⚡</span>
             <p className="text-yellow-300/80 text-xs flex-1">
-              No has actualizado tu batería hoy. ¡Cuéntales a tus amigos cómo estás!
+              {t('home.pendingUpdate')}
             </p>
           </div>
         )}
@@ -708,10 +719,10 @@ export default function HomePage() {
           {/* Header: label + level left · mascot right */}
           <div className="flex items-end justify-between mb-4">
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-white/70 uppercase tracking-widest">Tu batería social</span>
+              <span className="text-xs font-semibold text-white/70 uppercase tracking-widest">{t('home.yourBattery')}</span>
               {profile?.battery_is_estimated && (
                 <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg font-mono self-start">
-                  ⚡ Estimada
+                  {t('home.batteryEstimated')}
                 </span>
               )}
               <div className="flex items-end gap-1 mt-1">
@@ -743,7 +754,7 @@ export default function HomePage() {
 
           <div className="flex items-center justify-end -mt-3 mb-4">
             <span className="text-xs text-surface-muted/60">
-              Actualizado {formatRelativeTime(profile?.battery_updated_at)}
+              {t('home.updatedAgo', { when: formatRelativeTime(profile?.battery_updated_at) })}
             </span>
           </div>
 
@@ -756,24 +767,24 @@ export default function HomePage() {
                 : 'bg-accent-primary hover:bg-accent-primary/80 text-white hover:shadow-lg hover:shadow-accent-primary/20'
               } disabled:opacity-50`}
           >
-            {saving ? 'Guardando...' : saved ? '✓ ¡Actualizado!' : 'Actualizar batería'}
+            {saving ? t('common.saving') : saved ? t('home.batteryUpdated') : t('home.updateBattery')}
           </button>
 
           {/* Share story button */}
           <button
             onClick={shareBatteryStory}
             disabled={sharingStory}
-            title="Compartir mi batería"
+            title={t('home.shareBattery')}
             className="mt-2 w-full py-2.5 rounded-xl font-display font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 border border-pink-500/40 text-pink-300 bg-pink-500/5 disabled:opacity-50"
           >
             {sharingStory
-              ? <><span className="animate-spin text-base">⏳</span> Generando...</>
+              ? <><span className="animate-spin text-base">⏳</span> {t('common.generating')}</>
               : <>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                   </svg>
-                  Compartir
+                  {t('home.share')}
                 </>
             }
           </button>
@@ -786,7 +797,7 @@ export default function HomePage() {
         <div className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-display font-semibold text-surface-text">
-              Amigos{friends.length > 0 && (
+              {t('home.friendsTitle')}{friends.length > 0 && (
                 <span className="text-surface-muted font-normal"> · {friends.length}</span>
               )}
             </h3>
@@ -794,7 +805,7 @@ export default function HomePage() {
               {/* Friend requests badge */}
               <button
                 onClick={() => setShowRequests(true)}
-                title="Solicitudes de amistad"
+                title={t('home.friendReqTitle')}
                 className="relative w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30"
               >
                 🤝
@@ -807,7 +818,7 @@ export default function HomePage() {
               {/* Add friend */}
               <button
                 onClick={() => setShowSearch(true)}
-                title="Buscar amigos"
+                title={t('home.searchFriendsTitle')}
                 className="w-8 h-8 rounded-xl bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30 flex items-center justify-center text-base font-bold transition-all"
               >
                 +
@@ -822,12 +833,12 @@ export default function HomePage() {
           ) : friends.length === 0 ? (
             <div className="bg-surface-card border border-surface-border rounded-2xl p-8 text-center">
               <div className="text-4xl mb-3">👥</div>
-              <p className="text-surface-muted text-sm mb-4">Aún no tienes amigos en SocialBattery</p>
+              <p className="text-surface-muted text-sm mb-4">{t('home.noFriends')}</p>
               <button
                 onClick={() => setShowSearch(true)}
                 className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-4 py-2 rounded-xl text-sm font-display"
               >
-                Buscar amigos
+                {t('home.searchFriends')}
               </button>
             </div>
           ) : (
@@ -842,7 +853,7 @@ export default function HomePage() {
               ))}
               {friends.length > 8 && (
                 <p className="text-center text-xs text-surface-muted py-1 font-mono">
-                  y {friends.length - 8} más
+                  {t('home.moreFriends', { n: friends.length - 8 })}
                 </p>
               )}
             </div>
@@ -853,13 +864,13 @@ export default function HomePage() {
         <div className="animate-slide-up" style={{ animationDelay: '0.15s' }}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-display font-semibold text-surface-text">
-              Grupos{groups.length > 0 && (
+              {t('home.groupsTitle')}{groups.length > 0 && (
                 <span className="text-surface-muted font-normal"> · {groups.length}</span>
               )}
             </h3>
             <button
               onClick={() => setShowCreateGroup(true)}
-              title="Crear grupo"
+              title={t('home.createGroupTitle')}
               className="w-8 h-8 rounded-xl bg-accent-primary/20 border border-accent-primary/40 text-accent-glow hover:bg-accent-primary/30 flex items-center justify-center text-base font-bold transition-all"
             >
               +
@@ -868,12 +879,12 @@ export default function HomePage() {
           {groups.length === 0 ? (
             <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
               <div className="text-3xl mb-2">👥</div>
-              <p className="text-surface-muted text-sm mb-3">Sin grupos aún</p>
+              <p className="text-surface-muted text-sm mb-3">{t('home.groupsEmpty')}</p>
               <button
                 onClick={() => setShowCreateGroup(true)}
                 className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-4 py-2 rounded-xl text-sm font-display"
               >
-                Crear grupo
+                {t('home.createGroupTitle')}
               </button>
             </div>
           ) : (
@@ -887,14 +898,14 @@ export default function HomePage() {
                   <div className="w-10 h-10 rounded-full bg-accent-primary/15 border-2 border-accent-primary/30 flex items-center justify-center text-lg flex-shrink-0">👥</div>
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-semibold text-surface-text text-sm truncate">{group.name}</div>
-                    <div className="text-xs text-surface-muted font-mono">{group.member_count} miembros</div>
+                    <div className="text-xs text-surface-muted font-mono">{t('home.membersCount', { n: group.member_count })}</div>
                   </div>
                   <span className="text-surface-muted text-sm">💬</span>
                 </button>
               ))}
               {groups.length > 4 && (
                 <p className="text-center text-xs text-surface-muted py-1 font-mono">
-                  y {groups.length - 4} grupos más
+                  {t('home.moreGroups', { n: groups.length - 4 })}
                 </p>
               )}
             </div>

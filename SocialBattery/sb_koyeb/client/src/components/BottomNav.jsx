@@ -2,18 +2,22 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useCommunityNotifications } from '../context/CommunityNotificationsContext';
 import { usePoolChatNotifications } from '../context/PoolChatNotificationsContext';
 import { usePoolInviteNotifications } from '../context/PoolInviteNotificationsContext';
+import { useTranslation } from '../i18n';
 
+// Definimos los items sin `label` — el label lo resolvemos en render con t()
+// para que reaccione a cambios de idioma sin necesitar recomponer el array.
 const NAV_ITEMS = [
-  { path: '/',                icon: '🏠', label: 'Inicio' },
-  { path: '/pools',           icon: '📍', label: 'Quedadas' },
-  { path: '/community',       icon: '🌐', label: 'Comunidad' },
-  { path: '/messages/inbox',  icon: '💬', label: 'Mensajes' },
-  { path: '/profile',         icon: '👤', label: 'Perfil' },
+  { path: '/',                icon: '🏠', key: 'home' },
+  { path: '/pools',           icon: '📍', key: 'pools' },
+  { path: '/community',       icon: '🌐', key: 'community' },
+  { path: '/messages/inbox',  icon: '💬', key: 'messages' },
+  { path: '/profile',         icon: '👤', key: 'profile' },
 ];
 
 export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const { eventBadgeCount, planningUpdateCount, threadPostBadgeCount } = useCommunityNotifications();
   const { poolChatBadgeCount } = usePoolChatNotifications();
   const { poolInviteBadgeCount } = usePoolInviteNotifications();
@@ -50,7 +54,7 @@ export default function BottomNav({ pendingCount = 0, unreadCount = 0 }) {
                 {item.icon}
               </span>
               <span className={`text-[10px] font-mono transition-all ${active ? 'text-accent-glow' : 'text-slate-600'}`}>
-                {item.label}
+                {t('nav.' + item.key)}
               </span>
               {badge > 0 && (
                 <span className="absolute -top-0.5 right-1 bg-red-500 text-white text-[9px] font-bold

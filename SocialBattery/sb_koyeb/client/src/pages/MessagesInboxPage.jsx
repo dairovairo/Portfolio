@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
+import { useTranslation } from '../i18n';
 
 // ── localStorage helpers for group read tracking ─────────────────────────────
 function getGroupLastRead(groupId) {
@@ -25,6 +26,7 @@ function buildReadsMap(groups) {
 
 // ── Direct conversation row ───────────────────────────────────────────────────
 function ConversationRow({ conv, onClick, showOnline }) {
+  const { t } = useTranslation();
   const { partner, lastMessage, unread } = conv;
   const color = getBatteryColor(partner.battery_level ?? 50);
   const online = showOnline && isOnline(partner.last_seen_at);
@@ -33,11 +35,11 @@ function ConversationRow({ conv, onClick, showOnline }) {
   const isNew = !lastMessage;
   const isDeletedForEveryone = lastMessage?.deleted_for_everyone;
   const preview = isNew
-    ? '¡Ahora sois amigos! Di hola 👋'
+    ? t('messages.previewNewFriend')
     : isDeletedForEveryone
-      ? '🚫 Mensaje eliminado'
+      ? t('messages.previewDeleted')
       : isImage
-        ? '📷 Imagen'
+        ? t('messages.previewImage')
         : isHangout
           ? `🤝 ${lastMessage.content}`
           : lastMessage.content;
@@ -91,6 +93,7 @@ function FriendPickerRow({ user, isSelected, onToggle }) {
 }
 
 function CreateGroupModal({ onClose, onCreated }) {
+  const { t } = useTranslation();
   const [friends, setFriends] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(true);
   const [name, setName] = useState('');
@@ -110,7 +113,7 @@ function CreateGroupModal({ onClose, onCreated }) {
   }
 
   async function handleCreate() {
-    if (!name.trim()) { setError('El nombre del grupo es obligatorio'); return; }
+    if (!name.trim()) { setError(t('messages.groupNameRequired')); return; }
     setError('');
     setSaving(true);
     try {
@@ -118,7 +121,7 @@ function CreateGroupModal({ onClose, onCreated }) {
       onCreated(group);
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear el grupo');
+      setError(e.message || t('messages.groupCreateError'));
     } finally {
       setSaving(false);
     }
@@ -132,18 +135,18 @@ function CreateGroupModal({ onClose, onCreated }) {
         <div className="flex items-center gap-3 mb-5">
           <span className="text-2xl">👥</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text">Nuevo grupo</h2>
-            <p className="text-xs text-surface-muted">Grupo privado de mensajes</p>
+            <h2 className="font-display font-bold text-surface-text">{t('messages.newGroupTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('messages.newGroupSubtitle')}</p>
           </div>
         </div>
 
         <div className="mb-4">
-          <label className="block text-xs font-mono text-surface-muted mb-1.5">Nombre del grupo *</label>
+          <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('messages.groupNameLabel')}</label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Ej: Los de siempre, Equipo fútbol..."
+            placeholder={t('messages.groupNamePlaceholder')}
             maxLength={60}
             autoFocus
             className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
@@ -152,12 +155,12 @@ function CreateGroupModal({ onClose, onCreated }) {
 
         <div className="mb-4 flex-1 overflow-y-auto">
           <label className="block text-xs font-mono text-surface-muted mb-2">
-            Añadir amigos {selected.size > 0 && <span className="text-accent-glow">({selected.size} seleccionados)</span>}
+            {t('messages.addFriendsLabel')} {selected.size > 0 && <span className="text-accent-glow">{t('messages.selectedCount', { n: selected.size })}</span>}
           </label>
           {loadingFriends ? (
             <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 bg-surface-bg rounded-xl animate-pulse" />)}</div>
           ) : friends.length === 0 ? (
-            <p className="text-surface-muted text-sm text-center py-4">Aún no tienes amigos para añadir</p>
+            <p className="text-surface-muted text-sm text-center py-4">{t('messages.noFriendsToAdd')}</p>
           ) : (
             <div className="space-y-2">
               {friends.map(f => (
@@ -171,10 +174,10 @@ function CreateGroupModal({ onClose, onCreated }) {
 
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button onClick={handleCreate} disabled={saving || !name.trim()} className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-surface-text text-sm font-display font-semibold disabled:opacity-50 transition-all">
-            {saving ? 'Creando...' : '✓ Crear grupo'}
+            {saving ? t('common.creating') : t('messages.createGroupCta')}
           </button>
         </div>
       </div>
@@ -184,6 +187,7 @@ function CreateGroupModal({ onClose, onCreated }) {
 
 // ── Group conversation row ────────────────────────────────────────────────────
 function GroupConversationRow({ group, unread, onClick }) {
+  const { t } = useTranslation();
   const lastMsg = group.last_message;
   return (
     <button onClick={onClick} className="w-full bg-surface-card border border-surface-border rounded-2xl p-3 flex items-center gap-3 hover:bg-surface-hover active:scale-[0.99] transition-all text-left">
@@ -203,10 +207,10 @@ function GroupConversationRow({ group, unread, onClick }) {
         <div className="flex items-center gap-2">
           <p className={`text-xs truncate flex-1 ${unread > 0 ? 'text-surface-text font-medium' : 'text-slate-500'}`}>
             {lastMsg
-              ? (lastMsg.type === 'image' ? '📷 Imagen' : lastMsg.content)
-              : `${group.member_count} miembros`}
+              ? (lastMsg.type === 'image' ? t('messages.previewImage') : lastMsg.content)
+              : t('messages.groupMembersLine', { n: group.member_count })}
           </p>
-          <span className="text-xs bg-accent-primary/15 text-accent-glow border border-accent-primary/20 px-1.5 py-0.5 rounded-full font-mono flex-shrink-0">Grupo</span>
+          <span className="text-xs bg-accent-primary/15 text-accent-glow border border-accent-primary/20 px-1.5 py-0.5 rounded-full font-mono flex-shrink-0">{t('messages.groupBadge')}</span>
         </div>
       </div>
     </button>
@@ -217,6 +221,7 @@ function GroupConversationRow({ group, unread, onClick }) {
 export default function MessagesInboxPage() {
   const { profile } = useAuth();
   const { showOnline } = useSettings();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -372,14 +377,14 @@ export default function MessagesInboxPage() {
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate('/')} className="text-surface-muted hover:text-surface-text p-1 text-lg transition-colors">←</button>
           <h1 className="font-display font-bold text-surface-text flex-1">
-            Mensajes
+            {t('messages.title')}
             {totalUnread > 0 && <span className="ml-2 bg-accent-primary text-surface-text text-xs px-2 py-0.5 rounded-full font-bold">{totalUnread}</span>}
           </h1>
           {tab === 'groups' && (
             <button
               onClick={() => setShowCreateGroup(true)}
               className="w-8 h-8 rounded-full bg-accent-primary/20 border border-accent-primary/30 text-accent-glow flex items-center justify-center text-lg font-bold hover:bg-accent-primary/30 transition-colors"
-              title="Nuevo grupo"
+              title={t('messages.newGroupBtn')}
             >
               +
             </button>
@@ -390,23 +395,23 @@ export default function MessagesInboxPage() {
           {[
             {
               id: 'direct',
-              label: `Directos${conversations.length ? ` (${conversations.length})` : ''}`,
+              label: `${t('messages.tabDirect')}${conversations.length ? ` (${conversations.length})` : ''}`,
               badge: totalDirectUnread,
             },
             {
               id: 'groups',
-              label: `Grupos${groups.length ? ` (${groups.length})` : ''}`,
+              label: `${t('messages.tabGroups')}${groups.length ? ` (${groups.length})` : ''}`,
               badge: totalGroupUnread,
             },
-          ].map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id); setSearch(''); }}
+          ].map(tabItem => (
+            <button key={tabItem.id} onClick={() => { setTab(tabItem.id); setSearch(''); }}
               className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-display font-semibold transition-all relative ${
-                tab === t.id ? 'bg-accent-primary text-surface-text' : 'text-slate-400 hover:text-surface-text'
+                tab === tabItem.id ? 'bg-accent-primary text-surface-text' : 'text-slate-400 hover:text-surface-text'
               }`}>
-              {t.label}
-              {t.badge > 0 && tab !== t.id && (
+              {tabItem.label}
+              {tabItem.badge > 0 && tab !== tabItem.id && (
                 <span className="absolute -top-1 -right-1 bg-accent-primary text-surface-text text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
-                  {t.badge > 9 ? '9+' : t.badge}
+                  {tabItem.badge > 9 ? '9+' : tabItem.badge}
                 </span>
               )}
             </button>
@@ -418,7 +423,7 @@ export default function MessagesInboxPage() {
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
             <input
               type="text"
-              placeholder={tab === 'direct' ? 'Buscar conversación...' : 'Buscar grupo...'}
+              placeholder={tab === 'direct' ? t('messages.searchDirect') : t('messages.searchGroups')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full bg-surface-card border border-surface-border rounded-xl pl-9 pr-4 py-2 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary/50 transition-colors"
@@ -442,10 +447,10 @@ export default function MessagesInboxPage() {
         ) : !hasContent ? (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-10 text-center">
             <div className="text-5xl mb-4">💬</div>
-            <p className="text-slate-300 font-display font-semibold mb-1">Sin conversaciones</p>
-            <p className="text-slate-500 text-sm mb-5">Empieza a chatear con tus amigos o crea un grupo</p>
+            <p className="text-slate-300 font-display font-semibold mb-1">{t('messages.empty')}</p>
+            <p className="text-slate-500 text-sm mb-5">{t('messages.emptyHint')}</p>
             <button onClick={() => navigate('/friends')} className="bg-accent-primary/20 text-accent-glow border border-accent-primary/30 px-5 py-2.5 rounded-xl text-sm font-display font-semibold">
-              Ver amigos
+              {t('messages.seeFriends')}
             </button>
           </div>
         ) : (
@@ -456,11 +461,11 @@ export default function MessagesInboxPage() {
                   <div className="text-center text-surface-muted text-sm py-8">
                     <div className="text-3xl mb-3">👥</div>
                     {q ? (
-                      <p>Sin resultados para <span className="text-surface-text">"{search}"</span></p>
+                      <p>{t('messages.noSearchResults', { q: search })}</p>
                     ) : (
                       <>
-                        <p>Sin grupos aún</p>
-                        <button onClick={() => setShowCreateGroup(true)} className="mt-3 text-accent-glow text-sm hover:underline">Crear grupo →</button>
+                        <p>{t('messages.noGroups')}</p>
+                        <button onClick={() => setShowCreateGroup(true)} className="mt-3 text-accent-glow text-sm hover:underline">{t('messages.createGroupLink')}</button>
                       </>
                     )}
                   </div>
@@ -481,9 +486,9 @@ export default function MessagesInboxPage() {
                 {filteredConversations.length === 0 ? (
                   <div className="text-center text-surface-muted text-sm py-8">
                     {q ? (
-                      <p>Sin resultados para <span className="text-surface-text">"{search}"</span></p>
+                      <p>{t('messages.noSearchResults', { q: search })}</p>
                     ) : (
-                      <p>Sin conversaciones directas</p>
+                      <p>{t('messages.noDirect')}</p>
                     )}
                   </div>
                 ) : (

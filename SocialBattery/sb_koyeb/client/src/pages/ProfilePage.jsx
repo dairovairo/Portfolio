@@ -14,6 +14,7 @@ import BadgeUnlockModal from '../components/BadgeUnlockModal';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import BottomNav from '../components/BottomNav';
 import MascotDisplay from '../components/MascotDisplay';
+import { useTranslation } from '../i18n';
 import { ALL_INTERESTS } from './OnboardingPage';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
@@ -25,40 +26,43 @@ function getMascotTier(level) {
 }
 
 // ── Public Stats ──────────────────────────────────────────────────────────────
-function formatMemberSince(isoDate) {
-  if (!isoDate) return '—';
+// Formatea "Miembro desde X". Recibe t() como parámetro para no depender del
+// contexto — es una función pura pero necesita la tabla de plurales del
+// idioma activo, por eso el helper vive fuera del componente pero pide el t.
+function formatMemberSince(isoDate, t) {
+  if (!isoDate) return t('profile.memberDash');
   const start = new Date(isoDate);
   const now = new Date();
   const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-  if (diffDays < 1)  return 'Hoy';
-  if (diffDays < 30) return `${diffDays} día${diffDays !== 1 ? 's' : ''}`;
+  if (diffDays < 1)  return t('profile.memberToday');
+  if (diffDays < 30) return t(diffDays === 1 ? 'profile.memberDaysSingular' : 'profile.memberDaysPlural', { n: diffDays });
   const months = Math.floor(diffDays / 30);
-  if (months < 12)   return `${months} mes${months !== 1 ? 'es' : ''}`;
+  if (months < 12)   return t(months === 1 ? 'profile.memberMonthsSingular' : 'profile.memberMonthsPlural', { n: months });
   const years = Math.floor(months / 12);
   const remMonths = months % 12;
-  return remMonths > 0 ? `${years}a ${remMonths}m` : `${years} año${years !== 1 ? 's' : ''}`;
+  return remMonths > 0
+    ? t('profile.memberYearsMonths', { y: years, m: remMonths })
+    : t(years === 1 ? 'profile.memberYearsSingular' : 'profile.memberYearsPlural', { n: years });
 }
 
 function StatsGrid({ stats }) {
+  const { t } = useTranslation();
   if (!stats) return null;
   const items = [
-    { icon: '👥', label: 'Amigos',           value: stats.friends_count },
-    { icon: '📅', label: 'Planes creados',   value: stats.pools_created },
-    { icon: '🚀', label: 'Planes unidos',    value: stats.pools_joined },
-    { icon: '🔋', label: 'Updates batería',  value: stats.battery_updates },
-    { icon: '⏰', label: 'Tiempo en la app', value: formatMemberSince(stats.member_since) },
+    { icon: '👥', label: t('profile.statsFriends'),        value: stats.friends_count },
+    { icon: '📅', label: t('profile.statsPoolsCreated'),   value: stats.pools_created },
+    { icon: '🚀', label: t('profile.statsPoolsJoined'),    value: stats.pools_joined },
+    { icon: '🔋', label: t('profile.statsBatteryUpdates'), value: stats.battery_updates },
+    { icon: '⏰', label: t('profile.statsTimeInApp'),      value: formatMemberSince(stats.member_since, t) },
   ];
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
       <h3 className="font-display font-semibold text-surface-text mb-3 text-sm">
-        📊 Estadísticas públicas
+        {t('profile.statsTitle')}
       </h3>
       <div className="grid grid-cols-2 gap-2">
         {items.map(({ icon, label, value }) => (
-          <div
-            key={label}
-            className="bg-surface-bg rounded-xl px-3 py-3 flex items-center gap-3"
-          >
+          <div key={label} className="bg-surface-bg rounded-xl px-3 py-3 flex items-center gap-3">
             <span className="text-xl flex-shrink-0">{icon}</span>
             <div className="min-w-0">
               <div className="font-display font-bold text-surface-text text-base leading-none">
@@ -76,7 +80,8 @@ function StatsGrid({ stats }) {
 }
 
 function BadgeCard({ badge, earned }) {
-  const statusLabel = earned ? 'Desbloqueada' : 'Bloqueada';
+  const { t } = useTranslation();
+  const statusLabel = earned ? t('profile.badgeUnlocked') : t('profile.badgeLocked');
 
   return (
     <div
@@ -108,6 +113,7 @@ export default function ProfilePage() {
   const { addToast } = useToast();
   const { showInterests, showPublicStats } = useSettings();
   const { permission, subscribed, requestPermission } = usePush();
+  const { t, lang } = useTranslation();
   const navigate = useNavigate();
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
@@ -166,7 +172,7 @@ export default function ProfilePage() {
     ) { setEditing(false); return; }
 
     if (editInterests.length < 3) {
-      addToast('Elige al menos 3 intereses', 'error');
+      addToast(t('profile.interestsMinToast'), 'error');
       return;
     }
 
@@ -179,9 +185,9 @@ export default function ProfilePage() {
       });
       await refreshProfile();
       setEditing(false);
-      addToast('Perfil actualizado ✓', 'success');
+      addToast(t('profile.savedToast'), 'success');
     } catch (e) {
-      addToast(e?.response?.data?.error || 'Error al guardar', 'error');
+      addToast(e?.response?.data?.error || t('profile.saveError'), 'error');
     } finally {
       setSavingProfile(false);
     }
@@ -190,7 +196,7 @@ export default function ProfilePage() {
   async function handleAvatarChange(e) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { addToast('Imagen máximo 2MB', 'warning'); return; }
+    if (file.size > 2 * 1024 * 1024) { addToast(t('profile.photoTooLarge'), 'warning'); return; }
 
     const reader = new FileReader();
     reader.onload = ev => setAvatarPreview(ev.target.result);
@@ -202,9 +208,9 @@ export default function ProfilePage() {
       formData.append('avatar', file);
       await api.postForm('/users/avatar', formData);
       await refreshProfile();
-      addToast('Foto actualizada ✓', 'success');
+      addToast(t('profile.photoUpdated'), 'success');
     } catch (err) {
-      addToast('Error al subir foto', 'error');
+      addToast(t('profile.photoUploadError'), 'error');
       setAvatarPreview(null);
     } finally {
       setUploadingAvatar(false);
@@ -213,12 +219,12 @@ export default function ProfilePage() {
 
   async function handlePushToggle() {
     if (subscribed || permission === 'granted') {
-      addToast('Notificaciones ya activadas', 'info');
+      addToast(t('profile.pushAlreadyOn'), 'info');
       return;
     }
     const granted = await requestPermission();
-    if (granted) addToast('Notificaciones activadas 🔔', 'success');
-    else addToast('Permiso denegado', 'warning');
+    if (granted) addToast(t('profile.pushEnabled'), 'success');
+    else addToast(t('profile.pushDenied'), 'warning');
   }
 
   const color = getBatteryColor(profile?.battery_level ?? 50);
@@ -234,12 +240,12 @@ export default function ProfilePage() {
           <button onClick={() => navigate('/')} className="text-surface-muted hover:text-surface-text transition-colors p-1">
             ←
           </button>
-          <h1 className="font-display font-bold text-surface-text flex-1">Mi Perfil</h1>
+          <h1 className="font-display font-bold text-surface-text flex-1">{t('profile.title')}</h1>
           <button
             onClick={() => navigate('/settings')}
             className="text-surface-muted hover:text-surface-text transition-colors p-1.5 rounded-xl hover:bg-surface-hover"
-            title="Ajustes"
-            aria-label="Ajustes"
+            title={t('profile.settingsTitle')}
+            aria-label={t('profile.settingsTitle')}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
@@ -339,7 +345,7 @@ export default function ProfilePage() {
                     text-xs font-display font-semibold text-surface-text hover:text-accent-glow transition-all flex items-center gap-1.5"
                 >
                   <span className="sb-symbol text-sm" aria-hidden="true">✎</span>
-                  Editar
+                  {t('profile.editBtn')}
                 </button>
               )}
             </div>
@@ -348,14 +354,14 @@ export default function ProfilePage() {
             {editing ? (
               <div className="space-y-3 animate-slide-down">
                 <div>
-                  <label className="block text-xs font-mono text-surface-muted mb-1 uppercase tracking-widest">Bio</label>
+                  <label className="block text-xs font-mono text-surface-muted mb-1 uppercase tracking-widest">{t('profile.bioLabel')}</label>
                   <textarea
                     value={bio}
                     onChange={e => setBio(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Escape') setEditing(false); }}
                     maxLength={160}
                     rows={2}
-                    placeholder="Cuéntanos algo sobre ti..."
+                    placeholder={t('profile.bioPlaceholder')}
                     autoFocus
                     className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2
                       text-surface-text text-sm focus:outline-none focus:border-accent-primary
@@ -364,7 +370,7 @@ export default function ProfilePage() {
                   <p className="text-right text-xs text-surface-muted/60">{bio.length}/160</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">Intereses</label>
+                  <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">{t('profile.interestsLabel')}</label>
                   <div className="grid grid-cols-3 gap-1.5">
                     {ALL_INTERESTS.map(({ id, emoji }) => {
                       const selected = editInterests.includes(id);
@@ -391,13 +397,13 @@ export default function ProfilePage() {
                     disabled={savingProfile}
                     className="flex-1 bg-accent-primary text-white text-xs px-3 py-2 rounded-xl font-display font-semibold"
                   >
-                    {savingProfile ? '...' : 'Guardar'}
+                    {savingProfile ? '...' : t('profile.saveBtn')}
                   </button>
                   <button
                     onClick={() => setEditing(false)}
                     className="flex-1 border border-surface-border text-surface-muted text-xs px-3 py-2 rounded-xl"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                 </div>
               </div>
@@ -428,14 +434,22 @@ export default function ProfilePage() {
                 {profile?.interests && profile.interests.length > 0 && !showInterests && (
                   <div className="flex items-center gap-1.5 mt-3">
                     <span className="text-xs text-surface-muted/60 font-mono italic">
-                      🔒 Intereses ocultos para otros
+                      {t('profile.interestsHidden')}
                     </span>
                   </div>
                 )}
                 <div className="text-xs text-surface-muted/60 mt-2">
-                  Miembro desde {profile?.created_at
-                    ? new Date(profile.created_at).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
-                    : '—'}
+                  {t('profile.memberSince', {
+                    when: profile?.created_at
+                      // Localizamos el "mes año" usando el idioma activo — ISO (es→es-ES,
+                      // en→en-US, fr→fr-FR). Si el navegador no reconoce el locale hace
+                      // fallback al del sistema, así que es seguro.
+                      ? new Date(profile.created_at).toLocaleDateString(
+                          lang === 'es' ? 'es-ES' : lang === 'fr' ? 'fr-FR' : 'en-US',
+                          { month: 'long', year: 'numeric' }
+                        )
+                      : '—',
+                  })}
                 </div>
               </>
             )}
@@ -445,9 +459,9 @@ export default function ProfilePage() {
               <div className="mt-4 pt-4 border-t border-surface-border flex items-center gap-4">
                 <div>
                   <div className="text-xs text-surface-muted font-mono uppercase tracking-widest mb-0.5">
-                    Batería
+                    {t('profile.batteryLabel')}
                     {profile?.battery_is_estimated && (
-                      <span className="ml-2 text-yellow-400">⚡ estimada</span>
+                      <span className="ml-2 text-yellow-400">{t('profile.batteryEstimated')}</span>
                     )}
                   </div>
                   <div className="flex items-end gap-1.5">
@@ -472,7 +486,7 @@ export default function ProfilePage() {
         {/* ── Badges ── */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-semibold text-surface-text">Insignias</h3>
+            <h3 className="font-display font-semibold text-surface-text">{t('profile.badgesTitle')}</h3>
             <div className="flex items-center gap-2">
               <span className="text-xs text-surface-muted font-mono">
                 {Object.keys(earnedBadgesMap).length}/{allBadges.length}
@@ -481,7 +495,7 @@ export default function ProfilePage() {
                 onClick={() => navigate('/badges')}
                 className="text-xs text-accent-glow hover:text-accent-primary transition-colors font-mono"
               >
-                Ver todas →
+                {t('profile.badgesSeeAll')}
               </button>
             </div>
           </div>
@@ -496,7 +510,7 @@ export default function ProfilePage() {
           )}
 
           {allBadges.length === 0 ? (
-            <div className="text-center text-surface-muted text-sm py-4">Cargando insignias...</div>
+            <div className="text-center text-surface-muted text-sm py-4">{t('profile.badgesLoading')}</div>
           ) : (
             <div className="grid grid-cols-4 gap-2">
               {[
@@ -514,7 +528,7 @@ export default function ProfilePage() {
               className="mt-3 w-full text-xs text-surface-muted hover:text-surface-text text-center py-2
                 rounded-xl hover:bg-surface-border transition-all"
             >
-              +{allBadges.length - 8} insignias más →
+              {t('profile.badgesMore', { n: allBadges.length - 8 })}
             </button>
           )}
         </div>
@@ -526,7 +540,7 @@ export default function ProfilePage() {
           <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
             <div className="flex items-center gap-2 text-surface-muted/60">
               <span className="text-sm">📊</span>
-              <span className="text-xs font-mono italic">Estadísticas ocultas para otros</span>
+              <span className="text-xs font-mono italic">{t('profile.statsHidden')}</span>
             </div>
           </div>
         )}
@@ -534,7 +548,7 @@ export default function ProfilePage() {
         {/* ── Battery history ── */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-semibold text-surface-text">Historial de batería</h3>
+            <h3 className="font-display font-semibold text-surface-text">{t('profile.historyTitle')}</h3>
             <div className="flex gap-1">
               {[{ id: 'line', label: '📈' }, { id: 'heatmap', label: '🗓️' }].map(v => (
                 <button
@@ -558,7 +572,7 @@ export default function ProfilePage() {
           )}
           {history.length > 0 && (
             <p className="text-xs text-surface-muted/60 text-center mt-3 font-mono">
-              {history.length} registros totales
+              {t('profile.historyRecords', { n: history.length })}
             </p>
           )}
         </div>
@@ -567,20 +581,20 @@ export default function ProfilePage() {
 
         {/* ── Danger zone ── */}
         <div className="bg-surface-card border border-red-500/10 rounded-2xl p-4">
-          <h3 className="font-display font-semibold text-red-400/70 text-sm mb-3">Zona peligrosa</h3>
+          <h3 className="font-display font-semibold text-red-400/70 text-sm mb-3">{t('profile.dangerZone')}</h3>
           <button
             onClick={signOut}
             className="w-full bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl py-2.5
               text-sm font-display font-semibold hover:bg-red-500/20 transition-all"
           >
-            Cerrar sesión
+            {t('profile.logoutBtn')}
           </button>
           <button
             onClick={() => setShowDeleteAccount(true)}
             className="w-full mt-2 bg-red-500/5 text-red-400 border border-red-500/30 rounded-xl py-2.5
               text-sm font-display font-semibold hover:bg-red-500/15 transition-all"
           >
-            Eliminar mi cuenta
+            {t('profile.deleteAccountBtn')}
           </button>
         </div>
       </main>

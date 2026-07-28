@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '../i18n';
+import LanguageSelector from '../components/LanguageSelector';
 
 // Landing pública que ven los usuarios NO autenticados en la raíz del
 // dominio (https://socialbattery.pro). Antes esa URL redirigía directo
@@ -20,6 +22,7 @@ import { useNavigate } from 'react-router-dom';
 // login la ve directamente al entrar en el dominio.
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   return (
     <div className="min-h-screen bg-surface-bg text-surface-text noise">
@@ -30,6 +33,14 @@ export default function LandingPage() {
       </div>
 
       <div className="relative max-w-2xl mx-auto px-6 py-16">
+        {/* Selector de idioma arriba a la derecha — la landing la ven visitantes
+            SIN sesión, así que sólo persistimos en localStorage; cuando pasen a
+            /auth y luego al onboarding, el idioma elegido aquí viaja con ellos
+            porque el LanguageProvider vive por encima de todas las rutas. */}
+        <div className="absolute top-4 right-4">
+          <LanguageSelector variant="compact" />
+        </div>
+
         {/* Logo + nombre en texto plano — el <h1> es el nombre exacto de
             la app tal como está configurado en Google OAuth consent
             screen, para que el bot de verificación pueda hacer match
@@ -40,8 +51,7 @@ export default function LandingPage() {
             SocialBattery
           </h1>
           <p className="text-surface-muted text-base font-body max-w-md mx-auto">
-            La app social para compartir tu energía social del día, quedar
-            con amigos y descubrir eventos y comunidades cerca de ti.
+            {t('landing.heroTagline')}
           </p>
         </header>
 
@@ -50,46 +60,23 @@ export default function LandingPage() {
             (humano o automatizado) qué hace la aplicación. */}
         <section className="mb-14 space-y-5 text-sm leading-relaxed text-surface-muted">
           <p>
-            <strong className="text-surface-text">SocialBattery</strong> es
-            una red social pensada para gente honesta con su energía: cada
-            usuario indica su "batería social" del momento — desde 0% (necesito
-            estar solo) hasta 100% (con ganas de todo) — y decide con quién
-            compartirla.
+            <strong className="text-surface-text">{t('landing.purposeAppName')}</strong>{t('landing.purposeP1Suffix')}
           </p>
           <p>
-            Con la app puedes chatear con amigos y grupos, unirte a
-            comunidades con intereses afines, apuntarte a quedadas ("pools")
-            organizadas por otros usuarios, participar en eventos y sorteos
-            de tu comunidad, y personalizar tu propia mascota dentro de la
-            app.
+            {t('landing.purposeP2')}
           </p>
         </section>
 
         {/* Qué puedes hacer — lista concreta de funciones, refuerza el
             "purpose" ante cualquier revisor (humano o automatizado). */}
         <section className="mb-14">
-          <h2 className="font-display text-lg font-semibold mb-4">Qué puedes hacer</h2>
+          <h2 className="font-display text-lg font-semibold mb-4">{t('landing.whatYouCan')}</h2>
           <ul className="grid gap-3 text-sm text-surface-muted">
-            <li className="flex gap-3">
-              <span className="text-accent-glow">⚡</span>
-              Compartir tu nivel de energía social con tus amigos
-            </li>
-            <li className="flex gap-3">
-              <span className="text-accent-glow">💬</span>
-              Chatear en privado, en grupo o dentro de tu comunidad
-            </li>
-            <li className="flex gap-3">
-              <span className="text-accent-glow">📍</span>
-              Unirte a quedadas y eventos cerca de ti
-            </li>
-            <li className="flex gap-3">
-              <span className="text-accent-glow">🎟️</span>
-              Participar en sorteos organizados por tu comunidad
-            </li>
-            <li className="flex gap-3">
-              <span className="text-accent-glow">🏅</span>
-              Conseguir insignias y personalizar tu mascota
-            </li>
+            <li className="flex gap-3"><span className="text-accent-glow">⚡</span>{t('landing.feature1')}</li>
+            <li className="flex gap-3"><span className="text-accent-glow">💬</span>{t('landing.feature2')}</li>
+            <li className="flex gap-3"><span className="text-accent-glow">📍</span>{t('landing.feature3')}</li>
+            <li className="flex gap-3"><span className="text-accent-glow">🎟️</span>{t('landing.feature4')}</li>
+            <li className="flex gap-3"><span className="text-accent-glow">🏅</span>{t('landing.feature5')}</li>
           </ul>
         </section>
 
@@ -99,21 +86,21 @@ export default function LandingPage() {
             onClick={() => navigate('/auth')}
             className="flex-1 bg-accent-primary hover:bg-accent-primary/80 text-surface-text font-display font-semibold py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-accent-primary/20"
           >
-            Crear cuenta
+            {t('landing.ctaCreate')}
           </button>
           <button
             onClick={() => navigate('/auth')}
             className="flex-1 bg-surface-card border border-surface-border hover:border-accent-primary/50 text-surface-text font-display font-semibold py-3 rounded-xl transition-colors duration-200"
           >
-            Ya tengo cuenta
+            {t('landing.ctaExisting')}
           </button>
         </section>
 
         <footer className="text-center text-xs text-surface-muted/60 font-mono space-y-2">
-          <p>SocialBattery · Hecho con ⚡</p>
+          <p>{t('landing.footerMade')}</p>
           <p>
             <a href="/privacidad" className="underline underline-offset-4 hover:text-surface-muted">
-              Política de privacidad
+              {t('landing.footerPrivacy')}
             </a>
           </p>
         </footer>
