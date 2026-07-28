@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useToast } from '../context/ToastContext';
 import { useUserLocation } from '../context/UserLocationContext';
 import { getBatteryColor } from '../lib/battery';
+import { useTranslation } from '../i18n';
 
 // ── Discover section — "Cerca de ti" (por ubicación) y "Quizás conozcas"
 // (por amigos en común), debajo de Amigos y Grupos en HomePage.jsx. Backend:
@@ -27,6 +28,7 @@ function DiscoverAvatar({ user }) {
 }
 
 function DiscoverCard({ user, subtitle, onAdd, adding, added }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   return (
     <div className="flex-shrink-0 w-[124px] bg-surface-card border border-surface-border rounded-2xl p-3 flex flex-col items-center text-center gap-2 snap-start">
@@ -38,14 +40,14 @@ function DiscoverCard({ user, subtitle, onAdd, adding, added }) {
         <div className="text-[10px] text-surface-muted font-mono truncate mt-0.5">{subtitle}</div>
       </button>
       {added ? (
-        <span className="text-[10px] text-surface-muted border border-surface-border px-2 py-1 rounded-lg w-full">✓ Enviado</span>
+        <span className="text-[10px] text-surface-muted border border-surface-border px-2 py-1 rounded-lg w-full">{t('discover.sent')}</span>
       ) : (
         <button
           onClick={() => onAdd(user)}
           disabled={adding}
           className="text-[10px] font-display font-semibold px-2 py-1.5 rounded-lg bg-accent-primary text-surface-text hover:bg-accent-primary/80 disabled:opacity-50 transition-all w-full"
         >
-          {adding ? '...' : '+ Añadir'}
+          {adding ? '...' : t('discover.addBtn')}
         </button>
       )}
     </div>
@@ -70,12 +72,13 @@ function CardSkeletonRow() {
   );
 }
 
-function formatDistance(km) {
-  if (km < 1) return `A ${Math.round(km * 1000)} m`;
-  return `A ${km.toFixed(km < 10 ? 1 : 0)} km`;
+function formatDistance(km, t) {
+  if (km < 1) return t('discover.metersAway', { m: Math.round(km * 1000) });
+  return t('discover.kmAway', { km: km.toFixed(km < 10 ? 1 : 0) });
 }
 
 export default function DiscoverSection() {
+  const { t } = useTranslation();
   const { addToast } = useToast();
   const { status: locationStatus, requestLocation } = useUserLocation();
 
@@ -106,9 +109,9 @@ export default function DiscoverSection() {
     try {
       await api.post('/friends/request', { addressee_id: user.id });
       setSentIds(s => new Set([...s, user.id]));
-      addToast(`Solicitud enviada a ${user.username} 🤝`);
+      addToast(t('discover.requestSentToast', { name: user.username }));
     } catch (e) {
-      addToast(e.message || 'Error al enviar la solicitud', 'error');
+      addToast(e.message || t('discover.requestError'), 'error');
     } finally {
       setActionLoading(l => ({ ...l, [user.id]: false }));
     }
@@ -131,7 +134,7 @@ export default function DiscoverSection() {
 
   return (
     <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
-      <h3 className="font-display font-semibold text-surface-text mb-3">Descubrir</h3>
+      <h3 className="font-display font-semibold text-surface-text mb-3">{t('discover.title')}</h3>
 
       {loading ? (
         <div className="space-y-4">
@@ -150,7 +153,7 @@ export default function DiscoverSection() {
                     <DiscoverCard
                       key={user.id}
                       user={user}
-                      subtitle={formatDistance(user.distance_km)}
+                      subtitle={formatDistance(user.distance_km, t)}
                       onAdd={sendRequest}
                       adding={!!actionLoading[user.id]}
                       added={sentIds.has(user.id)}
@@ -161,8 +164,8 @@ export default function DiscoverSection() {
                 <div className="w-full bg-surface-card border border-surface-border rounded-2xl p-4 flex items-center gap-3 text-left">
                   <span className="text-2xl flex-shrink-0 opacity-60">📍</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-display font-semibold text-surface-muted">Ubicación no disponible</div>
-                    <div className="text-xs text-surface-muted">Tu navegador no permite compartir ubicación</div>
+                    <div className="text-sm font-display font-semibold text-surface-muted">{t('discover.unsupportedTitle')}</div>
+                    <div className="text-xs text-surface-muted">{t('discover.unsupportedHint')}</div>
                   </div>
                 </div>
               ) : (
@@ -172,8 +175,8 @@ export default function DiscoverSection() {
                 >
                   <span className="text-2xl flex-shrink-0">📍</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-display font-semibold text-surface-text">Activa tu ubicación</div>
-                    <div className="text-xs text-surface-muted">Para ver gente cerca de ti</div>
+                    <div className="text-sm font-display font-semibold text-surface-text">{t('discover.enableLocationTitle')}</div>
+                    <div className="text-xs text-surface-muted">{t('discover.enableLocationHint')}</div>
                   </div>
                 </button>
               )}
@@ -190,7 +193,7 @@ export default function DiscoverSection() {
                   <DiscoverCard
                     key={user.id}
                     user={user}
-                    subtitle={user.mutual_friends === 1 ? '1 amigo en común' : `${user.mutual_friends} amigos en común`}
+                    subtitle={user.mutual_friends === 1 ? t('discover.oneMutual') : t('discover.manyMutual', { n: user.mutual_friends })}
                     onAdd={sendRequest}
                     adding={!!actionLoading[user.id]}
                     added={sentIds.has(user.id)}

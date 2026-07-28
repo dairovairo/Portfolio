@@ -3,6 +3,42 @@ import { useAuth } from '../context/AuthContext';
 import { getBatteryColor } from '../lib/battery';
 import MascotDisplay from './MascotDisplay';
 import MascotPreviewOverlay from './MascotPreviewOverlay';
+import { useTranslation } from '../i18n';
+
+// Fallback t() para cuando los helpers puros de este módulo se llaman
+// desde código aún no migrado a i18n. Devuelve el string ES tal cual usaba
+// antes el sitio original, para que la app siga funcionando exactamente
+// igual mientras se van traduciendo las páginas una a una. Se elimina en
+// cuanto todas las llamadas a formatPoolDate*, etc. pasen su propio `t`
+// desde arriba — que es lo que hacen ya PoolsPage y PoolDetailPage.
+const ES_FALLBACK = {
+  'poolShared.alreadyPassed':    'Ya pasó',
+  'poolShared.startsNow':        'Empieza ya',
+  'poolShared.minsLeftOne':      'Falta 1 min',
+  'poolShared.minsLeftMany':     'Faltan {n} min',
+  'poolShared.hoursLeftOne':     'Falta 1 hora',
+  'poolShared.hoursLeftMany':    'Faltan {n} horas',
+  'poolShared.daysLeftOne':      'Falta 1 día',
+  'poolShared.daysLeftMany':     'Faltan {n} días',
+  'poolShared.todayAt':          'Hoy a las {time}',
+  'poolShared.tomorrowAt':       'Mañana a las {time}',
+  'poolShared.activeNow':        '🟢 Activo ahora',
+  'poolShared.activeUntil':      '🟢 Activo ahora - fin {end}',
+  'poolShared.dateWithEnd':      '{start} - fin {end}',
+  'poolShared.statusOpen':       'Abierto',
+  'poolShared.statusFull':       'Completo',
+  'poolShared.statusClosed':     'Cerrado',
+  'poolShared.statusCancelled':  'Cancelado',
+  'poolShared.peopleUnlimited':  '{n} personas',
+};
+function tFallback(key, params = {}) {
+  let s = ES_FALLBACK[key] || key;
+  Object.entries(params).forEach(([k, v]) => { s = s.replace(`{${k}}`, v); });
+  return s;
+}
+function localeTagFor(lang) {
+  return lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
+}
 
 // ── Activity emoji mapping ────────────────────────────────────────────────────
 export function getActivityEmoji(activity = '') {
@@ -25,34 +61,30 @@ export function getActivityEmoji(activity = '') {
 }
 
 // ── Date formatting ───────────────────────────────────────────────────────────
-export function formatPoolDate(dateStr) {
+// Todos estos helpers aceptan `t` y `lang` opcionales. Si no llegan, caen
+// al español (comportamiento antiguo). PoolsPage y PoolDetailPage ya
+// pasan ambos desde useTranslation(); el resto de páginas irán migrando.
+export function formatPoolDate(dateStr, t = tFallback, lang = 'es') {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   const now = new Date();
   const diffMs = d - now;
   const diffHours = diffMs / (1000 * 60 * 60);
+  const tag = localeTagFor(lang);
 
-  if (diffMs < 0) return 'Ya pasó';
-  // Antes, si faltaba menos de una hora, aquí se mostraba "En X min" — pero
-  // eso quedaba duplicado con el reloj de arena ámbar (getPoolDaysUntilLabel)
-  // que se pinta justo al lado en la tarjeta. Esta función ahora solo da la
-  // hora concreta; "cuánto falta" es responsabilidad exclusiva del ⏳.
+  if (diffMs < 0) return t('poolShared.alreadyPassed');
   if (diffHours < 24) {
-    return `Hoy a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    return t('poolShared.todayAt', { time: d.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' }) });
   }
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (d.toDateString() === tomorrow.toDateString()) {
-    return `Mañana a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    return t('poolShared.tomorrowAt', { time: d.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' }) });
   }
-  return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(tag, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-// Etiqueta "cuánto falta" para la tarjeta de una quedada — mismo estilo
-// que en eventos (con reloj de arena amarillo). Baja a horas/minutos
-// cuando queda menos de un día para no quedarnos en "Falta 1 día" durante
-// las últimas horas antes del inicio.
-export function getPoolDaysUntilLabel(dateStr) {
+export function getPoolDaysUntilLabel(dateStr, t = tFallback) {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
   if (Number.isNaN(time)) return '';
@@ -61,22 +93,20 @@ export function getPoolDaysUntilLabel(dateStr) {
   const MIN_MS = 60 * 1000;
   const HOUR_MS = 60 * MIN_MS;
   const DAY_MS = 24 * HOUR_MS;
-  if (diffMs < MIN_MS) return 'Empieza ya';
+  if (diffMs < MIN_MS) return t('poolShared.startsNow');
   if (diffMs < HOUR_MS) {
     const mins = Math.max(1, Math.round(diffMs / MIN_MS));
-    return mins === 1 ? 'Falta 1 min' : `Faltan ${mins} min`;
+    return mins === 1 ? t('poolShared.minsLeftOne') : t('poolShared.minsLeftMany', { n: mins });
   }
   if (diffMs < DAY_MS) {
     const hours = Math.max(1, Math.round(diffMs / HOUR_MS));
-    return hours === 1 ? 'Falta 1 hora' : `Faltan ${hours} horas`;
+    return hours === 1 ? t('poolShared.hoursLeftOne') : t('poolShared.hoursLeftMany', { n: hours });
   }
   const days = Math.ceil(diffMs / DAY_MS);
-  if (days === 1) return 'Falta 1 día';
-  return `Faltan ${days} días`;
+  if (days === 1) return t('poolShared.daysLeftOne');
+  return t('poolShared.daysLeftMany', { n: days });
 }
 
-// Margen de "actividad" para quedadas sin ends_at: se consideran en curso
-// durante 2 horas desde el inicio. Mismo criterio que isActive() en PoolsPage.jsx.
 const NO_END_GRACE_MS = 2 * 60 * 60 * 1000;
 
 export function getPoolEffectiveEnd(pool) {
@@ -84,33 +114,35 @@ export function getPoolEffectiveEnd(pool) {
   return new Date(new Date(pool?.scheduled_at).getTime() + NO_END_GRACE_MS);
 }
 
-export function formatPoolDateRange(pool) {
+export function formatPoolDateRange(pool, t = tFallback, lang = 'es') {
   const now = new Date();
   const start = new Date(pool.scheduled_at);
   const end = getPoolEffectiveEnd(pool);
+  const tag = localeTagFor(lang);
 
   if (start <= now && now < end) {
     if (pool.ends_at) {
-      const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      return `🟢 Activo ahora - fin ${endLabel}`;
+      const endLabel = end.toLocaleDateString(tag, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return t('poolShared.activeUntil', { end: endLabel });
     }
-    return '🟢 Activo ahora';
+    return t('poolShared.activeNow');
   }
 
-  const startLabel = formatPoolDate(pool.scheduled_at);
+  const startLabel = formatPoolDate(pool.scheduled_at, t, lang);
   if (!pool.ends_at) return startLabel;
   if (Number.isNaN(end.getTime())) return startLabel;
-  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return `${startLabel} - fin ${endLabel}`;
+  const endLabel = end.toLocaleDateString(tag, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return t('poolShared.dateWithEnd', { start: startLabel, end: endLabel });
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 export function StatusBadge({ status }) {
+  const { t } = useTranslation();
   const map = {
-    open:      { label: 'Abierto',   cls: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    full:      { label: 'Completo',  cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-    closed:    { label: 'Cerrado',   cls: 'bg-slate-600/30 text-surface-muted border-slate-600/30' },
-    cancelled: { label: 'Cancelado', cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
+    open:      { label: t('poolShared.statusOpen'),      cls: 'bg-green-500/20 text-green-400 border-green-500/30' },
+    full:      { label: t('poolShared.statusFull'),      cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+    closed:    { label: t('poolShared.statusClosed'),    cls: 'bg-slate-600/30 text-surface-muted border-slate-600/30' },
+    cancelled: { label: t('poolShared.statusCancelled'), cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
   };
   const cfg = map[status] || map.open;
   return (
@@ -132,6 +164,7 @@ export function UnreadChatDot({ className = '' }) {
 
 // ── Pool capacity bar ─────────────────────────────────────────────────────────
 export function CapacityBar({ current, max }) {
+  const { t } = useTranslation();
   if (max === null || max === undefined) {
     return (
       <div className="flex items-center gap-2">
@@ -139,7 +172,7 @@ export function CapacityBar({ current, max }) {
           <div className="h-full rounded-full" style={{ width: '0%' }} />
         </div>
         <span className="text-xs font-mono text-surface-muted flex-shrink-0">
-          {current} personas
+          {t('poolShared.peopleUnlimited', { n: current })}
         </span>
       </div>
     );
@@ -165,18 +198,12 @@ export function CapacityBar({ current, max }) {
 // quedada antes de agrupar el resto en un "+N" (ver PoolCard en PoolsPage.jsx).
 export const PARTICIPANT_MASCOTS_VISIBLE = 5;
 
-// Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
-// HomePage.jsx / FriendCard.jsx / GroupChatPage.jsx): 0-33 → low, 34-66 →
-// mid, 67-100 → high.
 export function getMascotTier(level) {
   if (level <= 33) return 'low';
   if (level <= 66) return 'mid';
   return 'high';
 }
 
-// Mascota en miniatura — mismo criterio que en el panel de integrantes del
-// grupo (GroupChatPage.jsx): capa base según tier de batería + overlay
-// "horneado" (mascot_preview_url) con la personalización del usuario.
 export function MiniMascot({ user, size = 32 }) {
   const { profile } = useAuth();
   const isMe = Boolean(profile?.id) && user?.id === profile.id;
@@ -208,8 +235,6 @@ export function MiniMascot({ user, size = 32 }) {
   );
 }
 
-// Cuadrito de texto con nombre + descripción de la insignia (mismo
-// componente que en GroupChatPage.jsx).
 export function BadgeDescriptionPopover({ badge, align = 'left', placement = 'top' }) {
   return (
     <div
@@ -225,8 +250,6 @@ export function BadgeDescriptionPopover({ badge, align = 'left', placement = 'to
   );
 }
 
-// Insignia pulsable (mismo componente que en GroupChatPage.jsx): al
-// tocarla muestra su descripción en un cuadrito de texto.
 export function IdentityBadge({ identity, size = 'panel', align = 'left', showName = false, popoverPlacement = 'top' }) {
   const [open, setOpen] = useState(false);
 

@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { RaffleCard, ConfirmEndModal } from './CommunityDashboardPage';
 import TimeseriesChart from '../components/TimeseriesChart';
+import { useTranslation } from '../i18n';
 
 // ── Subpágina del dashboard: detalle de UN sorteo ─────────────────────────
 // Fase 124 — hermana simétrica de CommunityDashboardEventPage. El
@@ -23,6 +24,7 @@ export default function CommunityDashboardRafflePage() {
   const { communityId, raffleId } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { t } = useTranslation();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export default function CommunityDashboardRafflePage() {
       const res = await api.get(`/community/communities/${communityId}/dashboard`);
       setData(res);
     } catch (e) {
-      setError(e.message || 'No se pudo cargar el sorteo');
+      setError(e.message || t('dashboardDetail.failedRaffle'));
     } finally {
       setLoading(false);
     }
@@ -65,7 +67,7 @@ export default function CommunityDashboardRafflePage() {
         showToast('Publicidad renovada — se ha vuelto a avisar a la comunidad', 'success');
         await load();
       } catch (e) {
-        showToast(e.message || 'Error al renovar', 'error');
+        showToast(e.message || t('dashboardDetail.renewError'), 'error');
       }
       return;
     }
@@ -94,11 +96,11 @@ export default function CommunityDashboardRafflePage() {
     setEndingBusy(true);
     try {
       await api.post(path, {});
-      showToast('Publicidad finalizada', 'success');
+      showToast(t('dashboardDetail.endedToast'), 'success');
       setEnding(null);
       await load();
     } catch (e) {
-      showToast(e.message || 'No se pudo finalizar', 'error');
+      showToast(e.message || t('dashboardDetail.endError'), 'error');
     } finally {
       setEndingBusy(false);
     }
@@ -107,7 +109,7 @@ export default function CommunityDashboardRafflePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center">
-        <p className="text-surface-muted font-mono text-sm">Cargando sorteo...</p>
+        <p className="text-surface-muted font-mono text-sm">{t('dashboardDetail.loadingRaffle')}</p>
         <BottomNav />
       </div>
     );
@@ -117,17 +119,17 @@ export default function CommunityDashboardRafflePage() {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center px-4">
         <div className="text-center max-w-sm space-y-3">
-          <p className="font-display font-bold text-surface-text">No se pudo cargar el sorteo</p>
+          <p className="font-display font-bold text-surface-text">{t('dashboardDetail.failedRaffle')}</p>
           <p className="text-sm text-surface-muted leading-relaxed">{error}</p>
           <div className="flex items-center justify-center gap-2">
             <button onClick={load} className="px-4 py-2 rounded-xl border border-surface-border text-surface-text text-xs font-display font-semibold">
-              Reintentar
+              {t('dashboardDetail.retry')}
             </button>
             <button
               onClick={() => navigate(`/community/${communityId}/dashboard`)}
               className="px-4 py-2 rounded-xl bg-accent-primary text-white text-xs font-display font-semibold"
             >
-              Volver
+              {t('dashboardDetail.back')}
             </button>
           </div>
         </div>
@@ -140,15 +142,15 @@ export default function CommunityDashboardRafflePage() {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center px-4">
         <div className="text-center max-w-sm space-y-3">
-          <p className="font-display font-bold text-surface-text">Este sorteo ya no está</p>
+          <p className="font-display font-bold text-surface-text">{t('dashboardDetail.gonRaffle')}</p>
           <p className="text-sm text-surface-muted leading-relaxed">
-            No aparece en el dashboard de esta comunidad. Puede que se haya borrado o que hayas seguido un enlace desactualizado.
+            {t('dashboardDetail.goneHint')}
           </p>
           <button
             onClick={() => navigate(`/community/${communityId}/dashboard`)}
             className="px-4 py-2 rounded-xl bg-accent-primary text-white text-xs font-display font-semibold"
           >
-            Volver al dashboard
+            {t('dashboardDetail.backToDashboard')}
           </button>
         </div>
         <BottomNav />
@@ -167,12 +169,12 @@ export default function CommunityDashboardRafflePage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text text-base truncate">📊 Detalle del sorteo</h1>
+            <h1 className="font-display font-bold text-surface-text text-base truncate">{t('dashboardDetail.detailRaffle')}</h1>
             <p className="text-[10px] font-mono text-surface-muted truncate">{data.community.name}</p>
           </div>
           <button
             onClick={load}
-            title="Actualizar"
+            title={t('dashboardDetail.refresh')}
             className="w-9 h-9 rounded-xl border border-surface-border text-surface-muted flex items-center justify-center flex-shrink-0 hover:text-accent-glow hover:border-accent-primary/40 transition-colors"
           >
             ↻

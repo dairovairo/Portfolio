@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from '../i18n';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -36,11 +37,11 @@ function ensureAbsoluteUrl(url) {
   }
 }
 
-function formatDateTime(dateStr) {
+function formatDateTime(dateStr, lang = 'es') {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-ES', {
+  return d.toLocaleDateString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -50,21 +51,21 @@ function formatDateTime(dateStr) {
   });
 }
 
-function formatRelative(dateStr) {
+function formatRelative(dateStr, t, lang) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   const diffMs = Date.now() - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'ahora mismo';
-  if (diffMin < 60) return `hace ${diffMin} min`;
+  if (diffMin < 1) return t('eventDetail.justNow');
+  if (diffMin < 60) return t('eventDetail.minsAgo', { n: diffMin });
   const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `hace ${diffH}h`;
+  if (diffH < 24) return t('eventDetail.hoursAgo', { n: diffH });
   const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `hace ${diffD}d`;
-  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  if (diffD < 7) return t('eventDetail.daysAgo', { n: diffD });
+  return d.toLocaleDateString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { day: 'numeric', month: 'short' });
 }
 
-function getDaysLabel(dateStr) {
+function getDaysLabel(dateStr, t) {
   if (!dateStr) return null;
   const diffMs = new Date(dateStr).getTime() - Date.now();
   if (diffMs < 0) return null;
@@ -73,18 +74,17 @@ function getDaysLabel(dateStr) {
   const MIN_MS = 60 * 1000;
   const HOUR_MS = 60 * MIN_MS;
   const DAY_MS = 24 * HOUR_MS;
-  if (diffMs < MIN_MS) return 'Empieza ya';
+  if (diffMs < MIN_MS) return t('eventDetail.startsNow');
   if (diffMs < HOUR_MS) {
     const mins = Math.max(1, Math.round(diffMs / MIN_MS));
-    return mins === 1 ? 'En 1 min' : `En ${mins} min`;
+    return mins === 1 ? t('eventDetail.inMinOne') : t('eventDetail.inMinMany', { n: mins });
   }
   if (diffMs < DAY_MS) {
     const hours = Math.max(1, Math.round(diffMs / HOUR_MS));
-    return hours === 1 ? 'En 1 hora' : `En ${hours} horas`;
+    return hours === 1 ? t('eventDetail.inHourOne') : t('eventDetail.inHourMany', { n: hours });
   }
   const days = Math.ceil(diffMs / DAY_MS);
-  if (days === 1) return 'Mañana';
-  return `En ${days} días`;
+  return days === 1 ? t('eventDetail.tomorrow') : t('eventDetail.inDaysMany', { n: days });
 }
 
 // Mínimo de notificaciones enviadas para que una promoción premium/ultra
@@ -133,6 +133,7 @@ function InfoRow({ icon, label, children }) {
 
 // ── Poll options bar ─────────────────────────────────────────────────────────
 function PollOptions({ update, onVote, voting }) {
+  const { t } = useTranslation();
   const poll = update.poll || {
     options: update.poll_options || [],
     votes: (update.poll_options || []).map(() => 0),
@@ -176,8 +177,8 @@ function PollOptions({ update, onVote, voting }) {
         })}
       </div>
       <p className="text-[10px] font-mono text-surface-muted mt-1.5">
-        🔴 En vivo · {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'}
-        {poll.myVote != null ? ' · toca tu opción otra vez para quitar el voto' : ''}
+        {poll.totalVotes === 1 ? t('eventDetail.pollLiveOne') : t('eventDetail.pollLiveMany', { n: poll.totalVotes })}
+        {poll.myVote != null ? t('eventDetail.pollUnvoteHint') : ''}
       </p>
     </div>
   );
@@ -185,6 +186,7 @@ function PollOptions({ update, onVote, voting }) {
 
 // ── Update bubble ─────────────────────────────────────────────────────────────
 function UpdateBubble({ update, isOwn, onDelete, onVote, voting }) {
+  const { t, lang } = useTranslation();
   const isPoll = !!update.poll_question;
   return (
     <div className="flex flex-col gap-1">
@@ -193,7 +195,7 @@ function UpdateBubble({ update, isOwn, onDelete, onVote, voting }) {
           <div className="w-full">
             <img
               src={update.image_url}
-              alt="Foto del evento"
+              alt={t('eventDetail.updateImgAlt')}
               className="w-full max-h-72 object-cover"
             />
           </div>
@@ -201,10 +203,10 @@ function UpdateBubble({ update, isOwn, onDelete, onVote, voting }) {
         <div className="px-4 py-3">
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="text-xs font-display font-semibold text-accent-glow">
-              📣 {update.creator?.username || 'Organizador'}
+              📣 {update.creator?.username || t('eventDetail.fallbackOrganizer')}
             </span>
             <span className="text-[10px] font-mono text-surface-muted flex-shrink-0">
-              {formatRelative(update.created_at)}
+              {formatRelative(update.created_at, t, lang)}
             </span>
           </div>
           {update.content && (
@@ -218,7 +220,7 @@ function UpdateBubble({ update, isOwn, onDelete, onVote, voting }) {
           onClick={() => onDelete(update.id)}
           className="self-end text-[10px] font-mono text-slate-600 hover:text-red-400 transition-colors px-2"
         >
-          Eliminar
+          {t('eventDetail.deleteBubble')}
         </button>
       )}
     </div>
@@ -227,6 +229,7 @@ function UpdateBubble({ update, isOwn, onDelete, onVote, voting }) {
 
 // ── Create poll modal ────────────────────────────────────────────────────────
 function CreatePollModal({ onClose, onCreate }) {
+  const { t } = useTranslation();
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [saving, setSaving] = useState(false);
@@ -251,17 +254,17 @@ function CreatePollModal({ onClose, onCreate }) {
     setError('');
     const cleanQuestion = question.trim();
     const cleanOptions = options.map(o => o.trim()).filter(Boolean);
-    if (!cleanQuestion) return setError('Escribe una pregunta');
-    if (cleanOptions.length < 2) return setError('Añade al menos 2 opciones');
+    if (!cleanQuestion) return setError(t('eventDetail.errNoQuestion'));
+    if (cleanOptions.length < 2) return setError(t('eventDetail.errFewOptions'));
     if (new Set(cleanOptions.map(o => o.toLowerCase())).size !== cleanOptions.length) {
-      return setError('Las opciones no pueden repetirse');
+      return setError(t('eventDetail.errDupOptions'));
     }
     setSaving(true);
     try {
       await onCreate(cleanQuestion, cleanOptions);
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear la encuesta');
+      setError(e.message || t('eventDetail.errCreatePoll'));
     } finally {
       setSaving(false);
     }
@@ -275,24 +278,24 @@ function CreatePollModal({ onClose, onCreate }) {
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xl">📊</span>
           <div className="flex-1">
-            <h2 className="font-display font-bold text-surface-text">Nueva encuesta</h2>
-            <p className="text-xs text-surface-muted">Los asistentes votarán en tiempo real</p>
+            <h2 className="font-display font-bold text-surface-text">{t('eventDetail.newPollTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('eventDetail.newPollSubtitle')}</p>
           </div>
           <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
         </div>
 
-        <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Pregunta</label>
+        <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">{t('eventDetail.pollQuestionLabel')}</label>
         <input
           type="text"
           value={question}
           onChange={e => setQuestion(e.target.value)}
-          placeholder="¿A qué hora quedamos?"
+          placeholder={t('eventDetail.pollQuestionPh')}
           maxLength={200}
           autoFocus
           className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors mb-3"
         />
 
-        <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Opciones</label>
+        <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">{t('eventDetail.pollOptionsLabel')}</label>
         <div className="space-y-2">
           {options.map((opt, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -300,7 +303,7 @@ function CreatePollModal({ onClose, onCreate }) {
                 type="text"
                 value={opt}
                 onChange={e => updateOption(i, e.target.value)}
-                placeholder={`Opción ${i + 1}`}
+                placeholder={t('eventDetail.pollOptionPh', { i: i + 1 })}
                 maxLength={60}
                 className="flex-1 bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
@@ -309,7 +312,7 @@ function CreatePollModal({ onClose, onCreate }) {
                   type="button"
                   onClick={() => removeOption(i)}
                   className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-400 transition-colors"
-                  title="Quitar opción"
+                  title={t('eventDetail.removeOptionTitle')}
                 >
                   ✕
                 </button>
@@ -324,7 +327,7 @@ function CreatePollModal({ onClose, onCreate }) {
             onClick={addOption}
             className="mt-2 text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
           >
-            + Añadir opción
+            {t('eventDetail.addOptionBtn')}
           </button>
         )}
 
@@ -332,14 +335,14 @@ function CreatePollModal({ onClose, onCreate }) {
 
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-semibold disabled:opacity-50 transition-all"
           >
-            {saving ? 'Creando...' : '📊 Crear encuesta'}
+            {saving ? t('eventDetail.creating') : t('eventDetail.createPollBtn')}
           </button>
         </div>
       </div>
@@ -360,6 +363,7 @@ function CreatePollModal({ onClose, onCreate }) {
 // siendo la base del cobro, igual que si el evento hubiera empezado).
 function EndPromotionModal({ event, onClose, onEnded }) {
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -369,11 +373,11 @@ function EndPromotionModal({ event, onClose, onEnded }) {
     setSaving(true);
     try {
       const data = await api.post(`/community/events/${event.id}/end-promotion`, {});
-      showToast('Promoción finalizada 🏁', 'success');
+      showToast(t('eventDetail.endedToast'), 'success');
       onEnded?.(data.event);
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al finalizar la promoción');
+      setError(e.message || t('eventDetail.endErrToast'));
     } finally {
       setSaving(false);
     }
@@ -387,21 +391,21 @@ function EndPromotionModal({ event, onClose, onEnded }) {
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xl">🏁</span>
           <div className="flex-1">
-            <h2 className="font-display font-bold text-surface-text">Finalizar promoción</h2>
-            <p className="text-xs text-surface-muted">El evento pasará a listado Basic (gratis)</p>
+            <h2 className="font-display font-bold text-surface-text">{t('eventDetail.endModalTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('eventDetail.endModalSubtitle')}</p>
           </div>
           <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
         </div>
 
         <div className="space-y-2">
           <p className="text-sm text-surface-text/90 leading-relaxed">
-            Se dejarán de enviar notificaciones promocionales nuevas de este evento. El evento sigue publicado, solo cambia de plan.
+            {t('eventDetail.endModalBody')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-            💳 El pago se efectuará al empezar el evento, en base a las {event?.notification_sent_count || 0} notificaciones ya enviadas.
+            {t('eventDetail.endModalPayHint', { n: event?.notification_sent_count || 0 })}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-            🔁 Si más adelante quieres volver a promocionarlo, puedes renovar la promoción de nuevo.
+            {t('eventDetail.endModalRenewHint')}
           </p>
         </div>
 
@@ -409,14 +413,14 @@ function EndPromotionModal({ event, onClose, onEnded }) {
 
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleEnd}
             disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-red-500/90 hover:bg-red-500 text-white text-sm font-display font-semibold disabled:opacity-50 transition-all"
           >
-            {saving ? 'Finalizando...' : '🏁 Finalizar promoción'}
+            {saving ? t('eventDetail.endModalRunning') : t('eventDetail.endModalCta')}
           </button>
         </div>
       </div>
@@ -431,6 +435,7 @@ export default function EventDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { t, lang } = useTranslation();
   const { isConversationMuted, setConversationMuted } = useSettings();
   const { eventsWithUpdates, clearEventUpdateBadge, refreshJoinedCommunities } = useCommunityNotifications();
   const { getMascotLayers, getFeetZones, getHeadZones, getOutfitZones, getAccessoryZones } = useMascot();
@@ -499,7 +504,7 @@ export default function EventDetailPage() {
     const next = !updatesMuted;
     setConversationMuted('event', eventId, next);
     setUpdatesMuted(next);
-    showToast(next ? 'Avisos del evento silenciados 🔕' : 'Avisos del evento activados 🔔', 'success');
+    showToast(next ? t('eventDetail.updatesMutedToast') : t('eventDetail.updatesUnmutedToast'), 'success');
   };
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -508,7 +513,7 @@ export default function EventDetailPage() {
       const data = await api.get(`/community/events/${eventId}`);
       setEvent(data.event);
     } catch {
-      showToast('Evento no encontrado', 'error');
+      showToast(t('eventDetail.notFound'), 'error');
       navigate('/community');
     }
   }, [eventId, showToast, navigate]);
@@ -595,7 +600,7 @@ export default function EventDetailPage() {
   const isLiked   = Boolean(event?.liked_by_current_user);
   const isPast    = event ? new Date(event.ends_at || event.event_date) < new Date() : false;
   const isFree    = !event?.price || parseFloat(event?.price) === 0;
-  const daysLabel = event ? getDaysLabel(event.event_date) : null;
+  const daysLabel = event ? getDaysLabel(event.event_date, t) : null;
   const promoSentCount = event?.notification_sent_count || 0;
   const isPaidPromotion = event?.promotion_plan === 'premium' || event?.promotion_plan === 'ultra';
   const belowRenewThreshold = isPaidPromotion && promoSentCount < PROMO_FREE_THRESHOLD;
@@ -628,14 +633,14 @@ export default function EventDetailPage() {
           hex: color.hex,
         },
       });
-      const result = await shareOrDownloadBlob(blob, 'evento-sb.png', `${event.title} · SocialBattery`);
+      const result = await shareOrDownloadBlob(blob, t('eventDetail.storyFileName'), `${event.title} · SocialBattery`);
       if (result.method === 'download') {
-        showToast('Imagen descargada. ¡Súbela a tu historia! 📸', 'success');
+        showToast(t('eventDetail.storyDownloaded'), 'success');
       } else if (result.method === 'share') {
-        showToast('¡Historia lista para compartir! 🚀', 'success');
+        showToast(t('eventDetail.storyShared'), 'success');
       }
     } catch (e) {
-      showToast('Error al generar la historia', 'error');
+      showToast(t('eventDetail.storyError'), 'error');
     } finally {
       setSharingStory(false);
     }
@@ -646,11 +651,11 @@ export default function EventDetailPage() {
     setJoining(true);
     try {
       await api.post(`/community/events/${eventId}/join`, {});
-      showToast('¡Apuntado al evento! 📅', 'success');
+      showToast(t('eventDetail.joinedToast'), 'success');
       await fetchEvent();
       refreshJoinedCommunities(); // actualiza attendingEventIdsRef para recibir badges
     } catch (e) {
-      showToast(e.message || 'Error al apuntarse', 'error');
+      showToast(e.message || t('eventDetail.joinError'), 'error');
     } finally { setJoining(false); }
   }
 
@@ -659,11 +664,11 @@ export default function EventDetailPage() {
     setLeaving(true);
     try {
       await api.post(`/community/events/${eventId}/leave`, {});
-      showToast('Has salido del evento', 'success');
+      showToast(t('eventDetail.leftToast'), 'success');
       await fetchEvent();
       refreshJoinedCommunities(); // actualiza attendingEventIdsRef
     } catch (e) {
-      showToast(e.message || 'Error al salir', 'error');
+      showToast(e.message || t('eventDetail.leaveError'), 'error');
     } finally { setLeaving(false); }
   }
 
@@ -674,7 +679,7 @@ export default function EventDetailPage() {
       await api.post(`/community/events/${eventId}/like`, {});
       await fetchEvent();
     } catch (e) {
-      showToast(e.message || 'Error', 'error');
+      showToast(e.message || t('eventDetail.likeError'), 'error');
     } finally { setLiking(false); }
   }
 
@@ -690,9 +695,9 @@ export default function EventDetailPage() {
         ...prev,
         current_user_reminder_minutes_before: nextMinutes,
       } : prev);
-      showToast('Aviso actualizado', 'success');
+      showToast(t('eventDetail.reminderUpdated'), 'success');
     } catch (e) {
-      showToast(e.message || 'Error al cambiar el aviso', 'error');
+      showToast(e.message || t('eventDetail.reminderError'), 'error');
     } finally { setReminderSaving(false); }
   }
 
@@ -731,7 +736,7 @@ export default function EventDetailPage() {
       setImagePreview(null);
       await fetchUpdates();
     } catch (e) {
-      showToast(e.message || 'Error al publicar', 'error');
+      showToast(e.message || t('eventDetail.postError'), 'error');
     } finally { setPosting(false); }
   }
 
@@ -740,14 +745,14 @@ export default function EventDetailPage() {
       await api.delete(`/community/events/${eventId}/updates/${updateId}`);
       setUpdates(prev => prev.filter(u => u.id !== updateId));
     } catch (e) {
-      showToast(e.message || 'Error al eliminar', 'error');
+      showToast(e.message || t('eventDetail.deleteError'), 'error');
     }
   }
 
   async function handleCreatePoll(question, options) {
     const data = await api.post(`/community/events/${eventId}/polls`, { question, options });
     setUpdates(prev => [...prev, data.update]);
-    showToast('Encuesta publicada 📊', 'success');
+    showToast(t('eventDetail.pollPublished'), 'success');
   }
 
   async function handleVote(updateId, optionIndex, isMine) {
@@ -759,7 +764,7 @@ export default function EventDetailPage() {
         : await api.post(`/community/events/${eventId}/updates/${updateId}/vote`, { optionIndex });
       setUpdates(prev => prev.map(u => (u.id === updateId ? { ...u, poll: data.poll } : u)));
     } catch (e) {
-      showToast(e.message || 'Error al votar', 'error');
+      showToast(e.message || t('eventDetail.voteError'), 'error');
     } finally {
       setVotingUpdateId(null);
     }
@@ -771,7 +776,7 @@ export default function EventDetailPage() {
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-3 animate-pulse">🌐</div>
-          <p className="text-surface-muted font-mono text-sm">Cargando evento...</p>
+          <p className="text-surface-muted font-mono text-sm">{t('eventDetail.loading')}</p>
         </div>
       </div>
     );
@@ -803,19 +808,19 @@ export default function EventDetailPage() {
           {event.lat != null && event.lng != null && (
             <button
               onClick={() => navigate(`/community/event/${eventId}/locator`)}
-              title="Ver ubicación en el mapa"
-              aria-label="Ver ubicación en el mapa"
+              title={t('eventDetail.locatorTitle')}
+              aria-label={t('eventDetail.locatorTitle')}
               className="flex items-center gap-1.5 px-3 h-9 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors flex-shrink-0 text-xs font-display font-semibold whitespace-nowrap"
             >
               <span className="text-base leading-none">📍</span>
-              <span>Locator</span>
+              <span>{t('eventDetail.locatorBtn')}</span>
             </button>
           )}
           {!isCreator && (
             <button
               onClick={handleToggleUpdatesMute}
-              title={updatesMuted ? 'Activar avisos del evento' : 'Silenciar avisos del evento'}
-              aria-label={updatesMuted ? 'Activar avisos del evento' : 'Silenciar avisos del evento'}
+              title={updatesMuted ? t('eventDetail.muteOff') : t('eventDetail.muteOn')}
+              aria-label={updatesMuted ? t('eventDetail.muteOff') : t('eventDetail.muteOn')}
               className="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-border text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-all flex-shrink-0 text-base"
             >
               {updatesMuted ? '🔔' : '🔕'}
@@ -833,7 +838,7 @@ export default function EventDetailPage() {
             {eventsWithUpdates.has(eventId) && (
               <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm text-white text-xs font-display font-semibold px-2.5 py-1 rounded-full shadow-lg">
                 <span>📣</span>
-                <span>Nuevo aviso</span>
+                <span>{t('eventDetail.newBadge')}</span>
               </div>
             )}
           </div>
@@ -854,7 +859,7 @@ export default function EventDetailPage() {
             <div className="flex-1 min-w-0">
               <h2 className="font-display font-bold text-surface-text text-lg leading-snug">{event.title}</h2>
               <p className="text-xs text-surface-muted mt-0.5">
-                por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
+                {t('eventDetail.byPrefix')} <span className="text-accent-glow/80">{event.creator_name || t('eventDetail.fallbackCreator')}</span>
                 {event.community_name && (
                   <span> · <span className="text-accent-glow">{event.community_name}</span></span>
                 )}
@@ -870,7 +875,7 @@ export default function EventDetailPage() {
                 ))}
                 {isFree ? (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-                    ✓ Gratis
+                    {t('eventDetail.freeTag')}
                   </span>
                 ) : (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
@@ -879,7 +884,7 @@ export default function EventDetailPage() {
                 )}
                 {isPast && (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-slate-500 border border-surface-border">
-                    Pasado
+                    {t('eventDetail.pastTag')}
                   </span>
                 )}
               </div>
@@ -902,10 +907,10 @@ export default function EventDetailPage() {
                 {(() => {
                   const renewDisabled = belowRenewThreshold || isPast || renewingBasic;
                   const renewTitle = isPast
-                    ? 'El evento ya ha terminado — no se puede renovar la promoción'
+                    ? t('eventDetail.renewDisabledPast')
                     : belowRenewThreshold
-                      ? `Necesitas alcanzar ${PROMO_FREE_THRESHOLD} notificaciones enviadas para renovar (${promoSentCount}/${PROMO_FREE_THRESHOLD})`
-                      : 'Renovar promoción del evento';
+                      ? t('eventDetail.renewDisabledLow', { threshold: PROMO_FREE_THRESHOLD, sent: promoSentCount })
+                      : t('eventDetail.renewTitle');
                   return (
                     <button
                       onClick={async () => {
@@ -924,10 +929,10 @@ export default function EventDetailPage() {
                             await api.post(`/community/events/${event.id}/renew-promotion`, {
                               promotion_plan: 'basic',
                             });
-                            showToast('Promoción renovada — se ha vuelto a avisar a la comunidad', 'success');
+                            showToast(t('eventDetail.renewedBasic'), 'success');
                             await fetchEvent();
                           } catch (e) {
-                            showToast(e.message || 'Error al renovar', 'error');
+                            showToast(e.message || t('eventDetail.renewError'), 'error');
                           } finally {
                             setRenewingBasic(false);
                           }
@@ -962,17 +967,17 @@ export default function EventDetailPage() {
                           : 'border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20'
                       }`}
                     >
-                      🔁 Renovar
+                      {t('eventDetail.renewBtn')}
                     </button>
                   );
                 })()}
                 {isPaidPromotion && (() => {
                   const endDisabled = belowRenewThreshold || isPast;
                   const endTitle = isPast
-                    ? 'El evento ya ha terminado — la promoción se ha cerrado sola'
+                    ? t('eventDetail.endDisabledPast')
                     : belowRenewThreshold
-                      ? `Necesitas alcanzar ${PROMO_FREE_THRESHOLD} notificaciones enviadas para finalizar (${promoSentCount}/${PROMO_FREE_THRESHOLD})`
-                      : 'Finalizar promoción del evento';
+                      ? t('eventDetail.endDisabledLow', { threshold: PROMO_FREE_THRESHOLD, sent: promoSentCount })
+                      : t('eventDetail.endTitle');
                   return (
                     <button
                       onClick={() => { if (!endDisabled) setShowEndPromoModal(true); }}
@@ -984,7 +989,7 @@ export default function EventDetailPage() {
                           : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
                       }`}
                     >
-                      🏁 Finalizar
+                      {t('eventDetail.endBtn')}
                     </button>
                   );
                 })()}
@@ -994,13 +999,13 @@ export default function EventDetailPage() {
 
           {isCreator && !isPast && belowRenewThreshold && (
             <p className="mt-3 text-[11px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-              🔒 Aún no puedes renovar/finalizar la promoción: hace falta alcanzar el mínimo de {PROMO_FREE_THRESHOLD} notificaciones enviadas para que se pueda cobrar ({promoSentCount}/{PROMO_FREE_THRESHOLD} enviadas).
+              {t('eventDetail.belowThresholdWarn', { threshold: PROMO_FREE_THRESHOLD, sent: promoSentCount })}
             </p>
           )}
 
           {isCreator && isPast && isPaidPromotion && (
             <p className="mt-3 text-[11px] font-mono text-slate-400 bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-              🏁 El evento ya ha terminado. La promoción se cerró sola cuando acabó — se enseñan los controles como referencia, pero ya no se pueden accionar.
+              {t('eventDetail.pastPromoInfo')}
             </p>
           )}
 
@@ -1008,21 +1013,21 @@ export default function EventDetailPage() {
           <div className="flex items-center gap-4 mt-4 pt-3 border-t border-surface-border">
             <div className="text-center">
               <p className="text-base font-display font-bold text-surface-text">{event.attendee_count || 0}</p>
-              <p className="text-[10px] font-mono text-surface-muted">planificaciones</p>
+              <p className="text-[10px] font-mono text-surface-muted">{t('eventDetail.statPlanning')}</p>
             </div>
             <div className="text-center">
               <p className="text-base font-display font-bold text-surface-text">{event.like_count || 0}</p>
-              <p className="text-[10px] font-mono text-surface-muted">likes</p>
+              <p className="text-[10px] font-mono text-surface-muted">{t('eventDetail.statLikes')}</p>
             </div>
             <div className="text-center">
               <p className="text-base font-display font-bold text-surface-text">{updates.length}</p>
-              <p className="text-[10px] font-mono text-surface-muted">actualizaciones</p>
+              <p className="text-[10px] font-mono text-surface-muted">{t('eventDetail.statUpdates')}</p>
             </div>
             <div className="ml-auto flex items-center gap-2">
               {!isCreator && (
                 <button
                   onClick={() => setShowReport(true)}
-                  title="Denunciar evento"
+                  title={t('eventDetail.reportEventTitle')}
                   className="flex items-center justify-center w-9 h-9 rounded-xl border border-red-500/30 text-red-300 bg-red-500/5 hover:bg-red-500/15 transition-all"
                 >
                   🚩
@@ -1031,7 +1036,7 @@ export default function EventDetailPage() {
               <button
                 onClick={handleShareStory}
                 disabled={sharingStory}
-                title="Compartir evento"
+                title={t('eventDetail.shareTitle')}
                 className="flex items-center justify-center w-9 h-9 rounded-xl border border-pink-500/40 text-pink-300 bg-pink-500/5 transition-all disabled:opacity-50"
               >
                 {sharingStory
@@ -1063,12 +1068,12 @@ export default function EventDetailPage() {
           <div className="flex-1">
             {isPast ? (
               <div className="w-full py-2.5 rounded-xl bg-surface-card border border-surface-border text-center text-sm font-mono text-slate-500">
-                Evento finalizado
+                {t('eventDetail.pastFinished')}
               </div>
             ) : isJoined ? (
               <div className="flex gap-2">
                 <div className="flex-1 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center text-sm font-display font-semibold text-green-400">
-                  📅 Planificado
+                  {t('eventDetail.joinedTag')}
                 </div>
                 <ReminderBellButton
                   value={event.current_user_reminder_minutes_before}
@@ -1081,7 +1086,7 @@ export default function EventDetailPage() {
                   disabled={leaving}
                   className="px-4 py-2.5 rounded-xl border border-red-500/25 text-red-300 text-sm font-display font-semibold hover:bg-red-500/10 transition-all disabled:opacity-50"
                 >
-                  {leaving ? '...' : 'Quitar'}
+                  {leaving ? '...' : t('eventDetail.removeBtn')}
                 </button>
               </div>
             ) : (
@@ -1090,7 +1095,7 @@ export default function EventDetailPage() {
                 disabled={joining || (event.attendee_count >= event.max_attendees)}
                 className="w-full py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-bold transition-all disabled:opacity-50 active:scale-[0.98]"
               >
-                {joining ? '...' : event.attendee_count >= event.max_attendees ? 'Completo' : '📅 Planificar'}
+                {joining ? '...' : event.attendee_count >= event.max_attendees ? t('eventDetail.fullBtn') : t('eventDetail.joinBtn')}
               </button>
             )}
           </div>
@@ -1100,22 +1105,22 @@ export default function EventDetailPage() {
         <div className="bg-surface-card border border-surface-border rounded-2xl px-4">
 
           {event.description && (
-            <InfoRow icon="📝" label="Descripción">
+            <InfoRow icon="📝" label={t('eventDetail.labelDesc')}>
               <p className="leading-relaxed text-surface-text/90 whitespace-pre-wrap">{event.description}</p>
             </InfoRow>
           )}
 
-          <InfoRow icon="📅" label="Fecha de inicio">
+          <InfoRow icon="📅" label={t('eventDetail.labelStart')}>
             <span>{formatDateTime(event.event_date)}</span>
           </InfoRow>
 
           {event.ends_at && (
-            <InfoRow icon="🏁" label="Fecha de fin">
-              <span>{formatDateTime(event.ends_at)}</span>
+            <InfoRow icon="🏁" label={t('eventDetail.labelEnd')}>
+              <span>{formatDateTime(event.ends_at, lang)}</span>
             </InfoRow>
           )}
 
-          <InfoRow icon="📍" label="Ubicación">
+          <InfoRow icon="📍" label={t('eventDetail.labelLocation')}>
             <span>{event.location || '—'}</span>
           </InfoRow>
 
@@ -1126,20 +1131,20 @@ export default function EventDetailPage() {
           )}
 
           {event.organization && (
-            <InfoRow icon="🏢" label="Organización">
+            <InfoRow icon="🏢" label={t('eventDetail.labelOrg')}>
               <span className="text-amber-300/90">{event.organization}</span>
             </InfoRow>
           )}
 
-          <InfoRow icon={isFree ? '✓' : '💳'} label="Precio">
+          <InfoRow icon={isFree ? '✓' : '💳'} label={t('eventDetail.labelPrice')}>
             {isFree
-              ? <span className="text-green-400 font-semibold">Gratis</span>
+              ? <span className="text-green-400 font-semibold">{t('eventDetail.priceFree')}</span>
               : <span className="text-amber-300 font-semibold">{parseFloat(event.price).toFixed(2)} €</span>
             }
           </InfoRow>
 
           {event.url && ensureAbsoluteUrl(event.url) && (
-            <InfoRow icon="🔗" label="Enlace">
+            <InfoRow icon="🔗" label={t('eventDetail.labelLink')}>
               <a
                 href={ensureAbsoluteUrl(event.url)}
                 target="_blank"
@@ -1153,7 +1158,7 @@ export default function EventDetailPage() {
           )}
 
           {event.additional_info && (
-            <InfoRow icon="ℹ️" label="Información adicional">
+            <InfoRow icon="ℹ️" label={t('eventDetail.labelExtra')}>
               <p className="leading-relaxed text-surface-text/90 whitespace-pre-wrap">{event.additional_info}</p>
             </InfoRow>
           )}
@@ -1163,8 +1168,8 @@ export default function EventDetailPage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="font-display font-bold text-surface-text">Actualizaciones del evento</h3>
-              <p className="text-xs text-surface-muted">El organizador puede publicar novedades aquí</p>
+              <h3 className="font-display font-bold text-surface-text">{t('eventDetail.threadTitle')}</h3>
+              <p className="text-xs text-surface-muted">{t('eventDetail.threadSubtitle')}</p>
             </div>
             {updates.length > 0 && (
               <span className="text-xs font-mono text-surface-muted bg-surface-card border border-surface-border px-2 py-1 rounded-lg">
@@ -1177,9 +1182,9 @@ export default function EventDetailPage() {
           {updates.length === 0 ? (
             <div className="text-center py-8 bg-surface-card border border-surface-border rounded-2xl">
               <p className="text-2xl mb-2">📢</p>
-              <p className="text-sm text-surface-muted">Sin actualizaciones todavía</p>
+              <p className="text-sm text-surface-muted">{t('eventDetail.threadEmpty')}</p>
               {isCreator && (
-                <p className="text-xs text-surface-muted mt-1">Usa el formulario de abajo para informar a los asistentes</p>
+                <p className="text-xs text-surface-muted mt-1">{t('eventDetail.threadEmptyHint')}</p>
               )}
             </div>
           ) : (
@@ -1202,7 +1207,7 @@ export default function EventDetailPage() {
           {isCreator && (
             <div className="mt-4 bg-surface-card border border-accent-primary/25 rounded-2xl p-4">
               <p className="text-xs font-mono text-accent-glow mb-2">
-                📣 Publicar actualización como organizador
+                {t('eventDetail.composerLabel')}
               </p>
 
               {/* Hidden file inputs */}
@@ -1233,13 +1238,13 @@ export default function EventDetailPage() {
                 <div className="relative mb-3 rounded-xl overflow-hidden border border-surface-border">
                   <img
                     src={imagePreview}
-                    alt="Vista previa"
+                    alt={t('eventDetail.previewAlt')}
                     className="w-full max-h-48 object-cover"
                   />
                   <button
                     onClick={handleRemoveImage}
                     className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-black/60 text-white text-xs hover:bg-black/80 transition-colors"
-                    title="Eliminar imagen"
+                    title={t('eventDetail.removeImageTitle')}
                   >
                     ✕
                   </button>
@@ -1250,7 +1255,7 @@ export default function EventDetailPage() {
                 ref={textareaRef}
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
-                placeholder="Escribe una novedad, cambio de hora, instrucciones de acceso..."
+                placeholder={t('eventDetail.composerPh')}
                 maxLength={2000}
                 rows={3}
                 className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
@@ -1261,18 +1266,18 @@ export default function EventDetailPage() {
                   <span className="text-[10px] font-mono text-slate-600">{draft.length}/2000</span>
                   <button
                     onClick={() => setShowPhotoMenu(true)}
-                    title="Adjuntar foto"
+                    title={t('eventDetail.photoTitle')}
                     className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono transition-all ${
                       selectedImage
                         ? 'border-accent-primary/40 bg-accent-primary/10 text-accent-glow'
                         : 'border-surface-border text-slate-500 hover:border-accent-primary/30 hover:text-accent-glow'
                     }`}
                   >
-                    📷 {selectedImage ? '1 foto' : 'Foto'}
+                    📷 {selectedImage ? t('eventDetail.photoBtnSelected') : t('eventDetail.photoBtn')}
                   </button>
                   <button
                     onClick={() => setShowPollModal(true)}
-                    title="Crear encuesta"
+                    title={t('eventDetail.pollTitle')}
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono border-surface-border text-slate-500 hover:border-accent-primary/30 hover:text-accent-glow transition-all"
                   >
                     📊
@@ -1283,7 +1288,7 @@ export default function EventDetailPage() {
                   disabled={posting || (!draft.trim() && !selectedImage)}
                   className="px-5 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-bold transition-all disabled:opacity-50 active:scale-95"
                 >
-                  {posting ? 'Publicando...' : '📣 Publicar'}
+                  {posting ? t('eventDetail.posting') : t('eventDetail.postBtn')}
                 </button>
               </div>
             </div>

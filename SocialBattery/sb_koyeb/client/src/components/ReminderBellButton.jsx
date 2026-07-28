@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from '../i18n';
 
 export const MIN_REMINDER_MINUTES = 10;
 export const MAX_REMINDER_MINUTES = 7 * 24 * 60;
@@ -19,12 +20,6 @@ const PRESETS = [
   7 * 24 * 60,
 ];
 
-const UNITS = [
-  { key: 'minutes', label: 'min', factor: 1, min: 10, max: MAX_REMINDER_MINUTES },
-  { key: 'hours', label: 'h', factor: 60, min: 1, max: 7 * 24 },
-  { key: 'days', label: 'dias', factor: 24 * 60, min: 1, max: 7 },
-];
-
 function normalizeMinutes(value, fallback) {
   const minutes = Number.parseInt(value, 10);
   if (Number.isFinite(minutes) && minutes >= MIN_REMINDER_MINUTES && minutes <= MAX_REMINDER_MINUTES) {
@@ -33,18 +28,35 @@ function normalizeMinutes(value, fallback) {
   return fallback;
 }
 
-export function formatReminderLead(minutes) {
+// Etiqueta legible del "cuánto antes se avisa" — se traduce con el t()
+// del componente. Recibe t como parámetro para poder llamarse fuera del
+// componente si hiciera falta (por ahora solo lo llama el propio botón).
+export function formatReminderLead(minutes, t) {
+  // Fallback ES si el llamador no pasa t (compatibilidad con código no
+  // migrado — algunas pantallas pintan la lead label en otro sitio).
+  const _t = t || ((k, p = {}) => {
+    const map = {
+      'reminderBell.leadOneWeek': '1 semana',
+      'reminderBell.leadOneDay':  '1 día',
+      'reminderBell.leadNDays':   `${p.n} días`,
+      'reminderBell.leadOneHour': '1 hora',
+      'reminderBell.leadNHours':  `${p.n} horas`,
+      'reminderBell.leadOneMin':  '1 minuto',
+      'reminderBell.leadNMins':   `${p.n} minutos`,
+    };
+    return map[k] || k;
+  });
   const value = normalizeMinutes(minutes, DEFAULT_POOL_REMINDER_MINUTES);
-  if (value === 7 * 24 * 60) return '1 semana';
+  if (value === 7 * 24 * 60) return _t('reminderBell.leadOneWeek');
   if (value >= 24 * 60 && value % (24 * 60) === 0) {
     const days = value / (24 * 60);
-    return days === 1 ? '1 dia' : `${days} dias`;
+    return days === 1 ? _t('reminderBell.leadOneDay') : _t('reminderBell.leadNDays', { n: days });
   }
   if (value >= 60 && value % 60 === 0) {
     const hours = value / 60;
-    return hours === 1 ? '1 hora' : `${hours} horas`;
+    return hours === 1 ? _t('reminderBell.leadOneHour') : _t('reminderBell.leadNHours', { n: hours });
   }
-  return value === 1 ? '1 minuto' : `${value} minutos`;
+  return value === 1 ? _t('reminderBell.leadOneMin') : _t('reminderBell.leadNMins', { n: value });
 }
 
 function splitMinutes(minutes) {
@@ -68,6 +80,13 @@ export default function ReminderBellButton({
   wide = false,
   className = '',
 }) {
+  const { t } = useTranslation();
+  const UNITS = useMemo(() => [
+    { key: 'minutes', label: t('reminderBell.unitMin'),  factor: 1,        min: 10, max: MAX_REMINDER_MINUTES },
+    { key: 'hours',   label: t('reminderBell.unitHour'), factor: 60,       min: 1,  max: 7 * 24 },
+    { key: 'days',    label: t('reminderBell.unitDay'),  factor: 24 * 60,  min: 1,  max: 7 },
+  ], [t]);
+
   const [open, setOpen] = useState(false);
   const minutes = normalizeMinutes(value, defaultMinutes);
   const initialCustom = splitMinutes(minutes);
@@ -116,21 +135,21 @@ export default function ReminderBellButton({
     >
       <button
         type="button"
-        title="Ajustar aviso"
-        aria-label="Ajustar aviso"
+        title={t('reminderBell.tooltip')}
+        aria-label={t('reminderBell.tooltip')}
         disabled={disabled || saving}
         onClick={() => setOpen(prev => !prev)}
         className={`${wide ? 'w-full justify-center' : ''} min-h-[42px] px-3 py-2 rounded-xl border border-accent-primary/25 bg-accent-primary/10 text-accent-glow hover:border-accent-primary/45 hover:bg-accent-primary/15 text-xs font-display font-semibold transition-all disabled:opacity-50 disabled:hover:bg-accent-primary/10 flex items-center gap-2 whitespace-nowrap`}
       >
         <span className="text-base leading-none">{BELL_ICON}</span>
-        <span>{saving ? 'Guardando...' : formatReminderLead(minutes)}</span>
+        <span>{saving ? t('reminderBell.saving') : formatReminderLead(minutes, t)}</span>
       </button>
 
       {open && (
         <div className={`absolute z-50 ${menuPlacement} ${menuAlign} w-64 max-w-[calc(100vw-2rem)] rounded-2xl border border-surface-border bg-surface-card p-3 shadow-2xl shadow-black/40`}>
           <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="text-xs font-display font-bold text-surface-text">Aviso</p>
-            <span className="text-[10px] font-mono text-surface-muted">10 min - 1 semana</span>
+            <p className="text-xs font-display font-bold text-surface-text">{t('reminderBell.title')}</p>
+            <span className="text-[10px] font-mono text-surface-muted">{t('reminderBell.range')}</span>
           </div>
 
           <div className="grid grid-cols-3 gap-1.5">
@@ -148,14 +167,14 @@ export default function ReminderBellButton({
                       : 'border-surface-border bg-surface-bg text-surface-muted hover:text-surface-text hover:border-accent-primary/30'
                   }`}
                 >
-                  {formatReminderLead(option)}
+                  {formatReminderLead(option, t)}
                 </button>
               );
             })}
           </div>
 
           <div className="mt-3 pt-3 border-t border-surface-border">
-            <p className="text-[10px] font-mono text-surface-muted uppercase mb-2">Personalizado</p>
+            <p className="text-[10px] font-mono text-surface-muted uppercase mb-2">{t('reminderBell.custom')}</p>
             <div className="grid grid-cols-[1fr_auto_auto] gap-2">
               <input
                 type="number"

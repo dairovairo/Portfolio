@@ -1,46 +1,32 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { useToast } from '../context/ToastContext';
+import { useTranslation } from '../i18n';
 
-// Modal reutilizable de "Denunciar contenido/usuario". Se usa desde:
-//   - Menú de opciones de un chat 1:1 (denunciar al otro usuario)
-//   - Long-press sobre un mensaje (denunciar el mensaje)
-//   - Long-press sobre un mensaje de grupo/quedada/comunidad
-//   - Menú de una publicación de hilo de comunidad
-//   - Menú de un evento o comunidad
-//   - Perfil ajeno (denunciar perfil)
-//
-// Props:
-//   - targetType: uno de los enums que acepta el backend
-//     ('user', 'message', 'group_message', 'pool_message',
-//     'community_message', 'community_post', 'event', 'pool',
-//     'community', 'other'). Ver server/routes/reports.js.
-//   - targetId: UUID del contenido/usuario denunciado.
-//   - targetLabel: string corto que aparece en el modal para dar
-//     contexto ("este mensaje", "@juan", "esta publicación"). Opcional.
-//   - onClose: se llama tanto al cancelar como al enviar con éxito.
-//
-// Un mismo usuario solo puede tener una denuncia pendiente por target
-// (constraint del esquema). Si envía otra sobre el mismo target antes de
-// que se revise, el backend hace UPSERT y actualiza motivo/detalles —
-// desde la UI se percibe como "actualicé mi denuncia", que es lo esperado.
-
-const REASONS = [
-  { id: 'spam',           label: 'Spam o publicidad no deseada' },
-  { id: 'harassment',     label: 'Acoso, insultos o intimidación' },
-  { id: 'hate',           label: 'Discurso de odio o discriminación' },
-  { id: 'sexual',         label: 'Contenido sexual o desnudos' },
-  { id: 'minor',          label: 'Contenido que implica a menores', highlight: true },
-  { id: 'dangerous',      label: 'Contenido peligroso o amenazas' },
-  { id: 'impersonation',  label: 'Suplantación de identidad' },
-  { id: 'other',          label: 'Otro motivo' },
-];
+// Modal reutilizable de "Denunciar contenido/usuario". Ver comentario
+// original en la versión anterior — los usos siguen siendo los mismos
+// (chat 1:1, mensajes de grupo/pool/community, publicaciones, perfil).
 
 export default function ReportModal({ targetType, targetId, targetLabel, onClose }) {
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const [reason, setReason] = useState('');
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Los motivos vienen del hook para que se retraduzcan al cambiar idioma
+  // (mientras el modal esté abierto). El `id` sí es estable — es lo que se
+  // envía al backend en `reason`.
+  const REASONS = useMemo(() => [
+    { id: 'spam',           label: t('reportModal.reasonSpam') },
+    { id: 'harassment',     label: t('reportModal.reasonHarassment') },
+    { id: 'hate',           label: t('reportModal.reasonHate') },
+    { id: 'sexual',         label: t('reportModal.reasonSexual') },
+    { id: 'minor',          label: t('reportModal.reasonMinor'), highlight: true },
+    { id: 'dangerous',      label: t('reportModal.reasonDangerous') },
+    { id: 'impersonation',  label: t('reportModal.reasonImpersonation') },
+    { id: 'other',          label: t('reportModal.reasonOther') },
+  ], [t]);
 
   async function handleSubmit() {
     if (!reason || submitting) return;
@@ -52,10 +38,10 @@ export default function ReportModal({ targetType, targetId, targetLabel, onClose
         reason,
         details: details.trim() || undefined,
       });
-      showToast('Gracias. Revisaremos la denuncia lo antes posible.');
+      showToast(t('reportModal.thanksToast'));
       onClose();
     } catch (err) {
-      showToast(err?.message || 'No se pudo enviar la denuncia.');
+      showToast(err?.message || t('reportModal.submitError'));
       setSubmitting(false);
     }
   }
@@ -65,7 +51,7 @@ export default function ReportModal({ targetType, targetId, targetLabel, onClose
       <div className="bg-surface-card border border-surface-border rounded-t-2xl sm:rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <h3 className="font-display font-bold text-surface-text text-lg">Denunciar</h3>
+            <h3 className="font-display font-bold text-surface-text text-lg">{t('reportModal.title')}</h3>
             {targetLabel && (
               <p className="text-xs text-surface-muted mt-0.5">{targetLabel}</p>
             )}
@@ -74,16 +60,14 @@ export default function ReportModal({ targetType, targetId, targetLabel, onClose
             onClick={onClose}
             disabled={submitting}
             className="text-surface-muted hover:text-surface-text text-xl leading-none px-1"
-            aria-label="Cerrar"
+            aria-label={t('reportModal.closeLabel')}
           >
             ×
           </button>
         </div>
 
         <p className="text-xs text-surface-muted mb-4 leading-relaxed">
-          Elige el motivo que mejor describa el problema. Revisamos todas las
-          denuncias — las que impliquen a menores o riesgo físico tienen
-          prioridad.
+          {t('reportModal.intro')}
         </p>
 
         <div className="space-y-1.5 mb-4">
@@ -111,12 +95,12 @@ export default function ReportModal({ targetType, targetId, targetLabel, onClose
         </div>
 
         <label className="block text-xs text-surface-muted mb-1.5">
-          Detalles adicionales (opcional)
+          {t('reportModal.detailsLabel')}
         </label>
         <textarea
           value={details}
           onChange={(e) => setDetails(e.target.value.slice(0, 1000))}
-          placeholder="Explica brevemente el contexto si crees que ayuda a la revisión…"
+          placeholder={t('reportModal.detailsPh')}
           rows={3}
           disabled={submitting}
           className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2 text-sm
@@ -133,7 +117,7 @@ export default function ReportModal({ targetType, targetId, targetLabel, onClose
             className="flex-1 bg-surface-bg border border-surface-border text-surface-text rounded-xl py-2.5
               text-sm font-display font-semibold hover:bg-surface-border/40 transition-all disabled:opacity-50"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -142,7 +126,7 @@ export default function ReportModal({ targetType, targetId, targetLabel, onClose
               text-sm font-display font-semibold hover:bg-red-500/30 transition-all
               disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {submitting ? 'Enviando...' : 'Enviar denuncia'}
+            {submitting ? t('reportModal.submitting') : t('reportModal.submitCta')}
           </button>
         </div>
       </div>

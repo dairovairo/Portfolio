@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
+import { useTranslation } from '../i18n';
 
 /**
  * PoolSnifferPage — "🐽 Sniffer" a pantalla completa.
@@ -48,16 +49,17 @@ const SNIFFER_RADIUS_METERS = 75;
 // volver a golpear Nominatim cada vez que se abre el Sniffer de la misma quedada.
 const geocodeCache = new Map();
 
-async function geocodeLocation(query) {
-  if (geocodeCache.has(query)) return geocodeCache.get(query);
+async function geocodeLocation(query, lang = 'es') {
+  const cacheKey = `${lang}:${query}`;
+  if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey);
   const res = await fetch(
-    `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=es`,
-    { headers: { 'Accept-Language': 'es' } }
+    `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=${lang}`,
+    { headers: { 'Accept-Language': lang } }
   );
   const data = await res.json();
   const hit = data?.[0];
   const result = hit ? { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) } : null;
-  geocodeCache.set(query, result);
+  geocodeCache.set(cacheKey, result);
   return result;
 }
 
@@ -127,6 +129,7 @@ export default function PoolSnifferPage() {
   const { poolId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { t, lang } = useTranslation();
   const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
 
   const [pool, setPool] = useState(null);
@@ -186,7 +189,7 @@ export default function PoolSnifferPage() {
     setPoolError('');
     api.get(`/pools/${poolId}`)
       .then(({ pool: full }) => { if (!cancelled) setPool(full); })
-      .catch(() => { if (!cancelled) setPoolError('No se ha podido cargar la quedada.'); })
+      .catch(() => { if (!cancelled) setPoolError(t('sniffer.loadPoolError')); })
       .finally(() => { if (!cancelled) setPoolLoading(false); });
     return () => { cancelled = true; };
   }, [poolId]);
@@ -228,19 +231,19 @@ export default function PoolSnifferPage() {
     const query = pool?.location_hint?.trim();
     if (!query) {
       setLoading(false);
-      setError('Esta quedada no tiene una ubicación indicada.');
+      setError(t('sniffer.noLocation'));
       return;
     }
     setLoading(true);
     setError('');
-    geocodeLocation(query)
+    geocodeLocation(query, lang)
       .then(result => {
         if (cancelled) return;
-        if (!result) setError('No se ha podido localizar esta dirección en el mapa.');
+        if (!result) setError(t('sniffer.mapMissing'));
         else setCoords(result);
       })
       .catch(() => {
-        if (!cancelled) setError('No se ha podido localizar esta dirección en el mapa.');
+        if (!cancelled) setError(t('sniffer.mapMissing'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -289,7 +292,7 @@ export default function PoolSnifferPage() {
     if (alreadyCheckedIn || checkingIn) return;
     if (!userCoords) {
       requestLocation();
-      setCheckMsg({ type: 'error', text: 'Activa tu ubicación para poder comprobarlo.' });
+      setCheckMsg({ type: 'error', text: t('sniffer.needLocationToast') });
       return;
     }
     if (!coords) return;
@@ -304,15 +307,15 @@ export default function PoolSnifferPage() {
       setCheckins(prev => prev.some(c => c.id === checkin.id) ? prev : [...prev, checkin]);
       setCheckMsg({
         type: 'ok',
-        text: already_checked_in ? 'Ya estabas anotado en la lista.' : '¡Estás dentro del radio! Anotado.',
+        text: already_checked_in ? t('sniffer.alreadyInList') : t('sniffer.checkedInToast'),
       });
     } catch (e) {
       const metros = e?.distance_meters;
       setCheckMsg({
         type: 'error',
         text: metros != null
-          ? `Todavía no estás dentro (a ~${metros} m del punto).`
-          : (e?.message || 'No se ha podido comprobar tu distancia.'),
+          ? t('sniffer.notInRadiusMeters', { m: metros })
+          : (e?.message || t('sniffer.checkInError')),
       });
     } finally {
       setCheckingIn(false);
@@ -326,7 +329,7 @@ export default function PoolSnifferPage() {
           <button onClick={() => navigate(-1)} className="text-surface-muted hover:text-surface-text transition-colors p-1 text-lg">←</button>
           <span className="text-xl">🐽</span>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text">Sniffer</h1>
+            <h1 className="font-display font-bold text-surface-text">{t('sniffer.title')}</h1>
             {pool?.location_hint && (
               <p className="text-xs text-surface-muted font-mono truncate">{pool.location_hint}</p>
             )}
@@ -351,13 +354,13 @@ export default function PoolSnifferPage() {
               {showLocationWarning && (
                 <div className="flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
                   <span>
-                    📍 {locationStatus === 'denied'
-                      ? 'Has denegado la ubicación: actívala para verte en el mapa.'
+                    {locationStatus === 'denied'
+                      ? t('sniffer.warnDenied')
                       : locationStatus === 'unsupported'
-                        ? 'Tu navegador no permite compartir ubicación.'
+                        ? t('sniffer.warnUnsupported')
                         : locationStatus === 'requesting'
-                          ? 'Pidiendo acceso a tu ubicación…'
-                          : 'No tienes activada la ubicación de tu móvil.'}
+                          ? t('sniffer.warnRequesting')
+                          : t('sniffer.warnGeneric')}
                   </span>
                   {locationStatus !== 'unsupported' && locationStatus !== 'requesting' && (
                     <button
@@ -379,10 +382,10 @@ export default function PoolSnifferPage() {
                 <div className="h-[260px] rounded-2xl bg-surface-card border border-surface-border flex flex-col items-center justify-center gap-2 px-6 text-center">
                   <span className="text-2xl">🔒</span>
                   <p className="text-sm text-surface-text font-display font-semibold">
-                    El modo Sniffer se activa 30 min antes de la quedada
+                    {t('sniffer.lockedTitle')}
                   </p>
                   <p className="text-xs text-surface-muted font-mono">
-                    Vuelve más tarde para ver la ubicación en el mapa.
+                    {t('sniffer.lockedHint')}
                   </p>
                 </div>
               ) : error ? (
@@ -405,7 +408,7 @@ export default function PoolSnifferPage() {
                     disabled={checkingIn || alreadyCheckedIn}
                     className="w-full font-display font-bold text-sm px-4 py-3 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 hover:border-emerald-500/50 transition-colors active:scale-[0.98] disabled:opacity-60"
                   >
-                    {checkingIn ? 'Comprobando…' : alreadyCheckedIn ? '✅ Ya estás anotado' : '📍 Estoy dentro'}
+                    {checkingIn ? t('sniffer.checkingIn') : alreadyCheckedIn ? t('sniffer.alreadyCheckedIn') : t('sniffer.checkInBtn')}
                   </button>
 
                   {checkMsg ? (
@@ -415,8 +418,8 @@ export default function PoolSnifferPage() {
                   ) : distanceToPool != null && (
                     <p className="text-xs font-mono text-center text-surface-muted">
                       {distanceToPool <= SNIFFER_RADIUS_METERS
-                        ? 'Estás dentro del radio ✅'
-                        : `Estás a ~${Math.round(distanceToPool)} m del punto`}
+                        ? t('sniffer.insideRadius')
+                        : t('sniffer.distanceMeters', { m: Math.round(distanceToPool) })}
                     </p>
                   )}
 
@@ -426,11 +429,11 @@ export default function PoolSnifferPage() {
                         <div key={c.id} className="px-3 py-2.5 flex items-center gap-2.5">
                           <MiniMascot user={c.user} size={30} />
                           <span className="flex-1 min-w-0 text-sm font-display font-semibold text-surface-text truncate">
-                            {c.user?.username || 'Alguien'}
-                            {c.user?.id === profile?.id && <span className="text-surface-muted font-normal"> (tú)</span>}
+                            {c.user?.username || t('sniffer.someone')}
+                            {c.user?.id === profile?.id && <span className="text-surface-muted font-normal">{t('sniffer.youSuffix')}</span>}
                           </span>
                           <span className="flex-shrink-0 text-xs font-mono text-surface-muted">
-                            {new Date(c.checked_in_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(c.checked_in_at).toLocaleTimeString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       ))}

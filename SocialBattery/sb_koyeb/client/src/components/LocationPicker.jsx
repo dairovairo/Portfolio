@@ -1,16 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from '../i18n';
 
 /**
  * LocationPicker — selección de ubicación con mapa interactivo.
- *
- * Props:
- *   value        {string}   — texto de dirección actual (form.location)
- *   lat          {number|null}
- *   lng          {number|null}
- *   onChange     (location, lat, lng) => void
- *
- * Usa Leaflet (cargado dinámicamente desde CDN) + OpenStreetMap + Nominatim.
- * No requiere API key.
+ * Ver documentación en la versión anterior — la lógica no cambia.
  */
 
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
@@ -22,14 +15,12 @@ let leafletLoadPromise = null;
 function loadLeaflet() {
   if (leafletLoadPromise) return leafletLoadPromise;
   leafletLoadPromise = new Promise((resolve, reject) => {
-    // CSS
     if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = LEAFLET_CSS;
       document.head.appendChild(link);
     }
-    // JS
     if (window.L) { resolve(window.L); return; }
     const script = document.createElement('script');
     script.src = LEAFLET_JS;
@@ -41,10 +32,11 @@ function loadLeaflet() {
 }
 
 export default function LocationPicker({ value, lat, lng, onChange, typingWarning = '' }) {
+  const { t, lang } = useTranslation();
   const mapContainerRef  = useRef(null);
   const mapInstanceRef   = useRef(null);
   const markerRef        = useRef(null);
-  const ignoreNextRef    = useRef(false); // evita bucle geocode→reverseGeocode
+  const ignoreNextRef    = useRef(false);
 
   const [query,       setQuery]       = useState(value || '');
   const [searching,   setSearching]   = useState(false);
@@ -105,8 +97,8 @@ export default function LocationPicker({ value, lat, lng, onChange, typingWarnin
           setSearching(true);
           setError('');
           const res = await fetch(
-            `${NOMINATIM}/reverse?lat=${clickLat}&lon=${clickLng}&format=json&accept-language=es`,
-            { headers: { 'Accept-Language': 'es' } }
+            `${NOMINATIM}/reverse?lat=${clickLat}&lon=${clickLng}&format=json&accept-language=${lang}`,
+            { headers: { 'Accept-Language': lang } }
           );
           const data = await res.json();
           const address = data.display_name || `${clickLat.toFixed(5)}, ${clickLng.toFixed(5)}`;
@@ -126,7 +118,7 @@ export default function LocationPicker({ value, lat, lng, onChange, typingWarnin
       mapInstanceRef.current = map;
       setMapReady(true);
     }).catch(() => {
-      setError('No se pudo cargar el mapa. Verifica tu conexión.');
+      setError(t('locationPicker.loadMapError'));
     });
 
     return () => {
@@ -178,18 +170,18 @@ export default function LocationPicker({ value, lat, lng, onChange, typingWarnin
         setSearching(true);
         setError('');
         const res = await fetch(
-          `${NOMINATIM}/search?q=${encodeURIComponent(v)}&format=json&limit=5&accept-language=es`,
-          { headers: { 'Accept-Language': 'es' } }
+          `${NOMINATIM}/search?q=${encodeURIComponent(v)}&format=json&limit=5&accept-language=${lang}`,
+          { headers: { 'Accept-Language': lang } }
         );
         const data = await res.json();
         setSuggestions(data);
       } catch {
-        setError('Error buscando la dirección');
+        setError(t('locationPicker.searchError'));
       } finally {
         setSearching(false);
       }
     }, 500);
-  }, [onChange]);
+  }, [onChange, lang, t]);
 
   // ── 4. Seleccionar sugerencia ──────────────────────────────────────────────
   function selectSuggestion(s) {
@@ -222,7 +214,7 @@ export default function LocationPicker({ value, lat, lng, onChange, typingWarnin
             type="text"
             value={query}
             onChange={handleQueryChange}
-            placeholder="Escribe una dirección o haz clic en el mapa…"
+            placeholder={t('locationPicker.placeholder')}
             maxLength={300}
             autoComplete="off"
             className="w-full bg-surface-bg border border-surface-border rounded-xl pl-9 pr-8 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
@@ -232,7 +224,7 @@ export default function LocationPicker({ value, lat, lng, onChange, typingWarnin
               type="button"
               onClick={clearLocation}
               className="absolute right-3 text-slate-500 hover:text-slate-300 transition-colors text-xs"
-              title="Limpiar"
+              title={t('locationPicker.clearTitle')}
             >
               ✕
             </button>
@@ -287,7 +279,7 @@ export default function LocationPicker({ value, lat, lng, onChange, typingWarnin
           <div className="absolute inset-0 flex items-center justify-center bg-surface-bg z-10">
             <div className="flex flex-col items-center gap-2 text-surface-muted">
               <div className="w-6 h-6 border-2 border-accent-primary/40 border-t-accent-primary rounded-full animate-spin" />
-              <span className="text-xs font-mono">Cargando mapa…</span>
+              <span className="text-xs font-mono">{t('locationPicker.loadingMap')}</span>
             </div>
           </div>
         )}
@@ -297,7 +289,7 @@ export default function LocationPicker({ value, lat, lng, onChange, typingWarnin
         {mapReady && !lat && !lng && (
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-[400]">
             <span className="text-xs bg-black/70 text-slate-300 rounded-lg px-2.5 py-1 font-mono backdrop-blur-sm whitespace-nowrap">
-              Haz clic en el mapa para fijar la ubicación
+              {t('locationPicker.clickToPin')}
             </span>
           </div>
         )}

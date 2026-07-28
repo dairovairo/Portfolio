@@ -9,6 +9,7 @@ import MascotPreviewOverlay from '../components/MascotPreviewOverlay';
 import { getBatteryColor } from '../lib/battery';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { useTranslation } from '../i18n';
 
 // Cada cuánto se envía la posición al servidor como máximo mientras
 // watchPosition() está activo (throttle — el navegador puede disparar el
@@ -71,24 +72,25 @@ function LocatorMiniMascot({ user, size = 34 }) {
   );
 }
 
-function statusMeta(status) {
-  if (status === 'accepted') return { label: 'En el grupo', className: 'text-green-400 bg-green-500/10 border-green-500/25' };
-  if (status === 'declined') return { label: 'Rechazó', className: 'text-red-400 bg-red-500/10 border-red-500/25' };
-  return { label: 'Pendiente', className: 'text-amber-300 bg-amber-500/10 border-amber-500/25' };
+function statusMeta(status, t) {
+  if (status === 'accepted') return { label: t('locator.statusAccepted'), className: 'text-green-400 bg-green-500/10 border-green-500/25' };
+  if (status === 'declined') return { label: t('locator.statusDeclined'), className: 'text-red-400 bg-red-500/10 border-red-500/25' };
+  return { label: t('locator.statusPending'), className: 'text-amber-300 bg-amber-500/10 border-amber-500/25' };
 }
 
 // ── Selector de amigos para invitar al grupo de localización ────────────────
 function FriendPicker({ friends, selectedIds, onToggle, onCancel, onConfirm, creating }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
       <div>
-        <h3 className="font-display font-bold text-surface-text text-sm">Elige a quién invitar</h3>
-        <p className="text-xs text-surface-muted mt-0.5">Solo se muestran amigos que también van a este evento.</p>
+        <h3 className="font-display font-bold text-surface-text text-sm">{t('locator.pickerTitle')}</h3>
+        <p className="text-xs text-surface-muted mt-0.5">{t('locator.pickerSubtitle')}</p>
       </div>
 
       {friends.length === 0 ? (
         <p className="text-sm text-surface-muted text-center py-6">
-          Ninguno de tus amigos está apuntado a este evento todavía.
+          {t('locator.pickerEmpty')}
         </p>
       ) : (
         <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
@@ -124,7 +126,7 @@ function FriendPicker({ friends, selectedIds, onToggle, onCancel, onConfirm, cre
           onClick={onCancel}
           className="flex-1 py-2.5 rounded-xl border border-surface-border text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
         >
-          Cancelar
+          {t('locator.pickerCancel')}
         </button>
         <button
           type="button"
@@ -132,7 +134,7 @@ function FriendPicker({ friends, selectedIds, onToggle, onCancel, onConfirm, cre
           disabled={creating || selectedIds.size === 0}
           className="flex-1 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-display font-bold transition-all disabled:opacity-50"
         >
-          {creating ? 'Creando...' : `Crear grupo (${selectedIds.size})`}
+          {creating ? t('locator.pickerCreating') : t('locator.pickerCreate', { n: selectedIds.size })}
         </button>
       </div>
     </div>
@@ -148,6 +150,7 @@ export default function EventLocatorPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const { coords: userCoords, status: locationStatus, requestLocation } = useUserLocation();
 
   const [event, setEvent] = useState(null);
@@ -198,7 +201,7 @@ export default function EventLocatorPage() {
         const data = await api.get(`/community/events/${eventId}`);
         if (!cancelled) setEvent(data.event);
       } catch (e) {
-        if (!cancelled) showToast(e.message || 'Error al cargar el evento', 'error');
+        if (!cancelled) showToast(e.message || t('locator.loadEventError'), 'error');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -267,7 +270,7 @@ export default function EventLocatorPage() {
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-3 animate-pulse">📍</div>
-          <p className="text-surface-muted font-mono text-sm">Cargando locator...</p>
+          <p className="text-surface-muted font-mono text-sm">{t('locator.loading')}</p>
         </div>
       </div>
     );
@@ -310,7 +313,7 @@ export default function EventLocatorPage() {
       const data = await api.get(`/community/events/${eventId}/locator-friends`);
       setFriends(data.friends || []);
     } catch (e) {
-      showToast(e.message || 'Error al cargar tus amigos', 'error');
+      showToast(e.message || t('locator.loadFriendsError'), 'error');
     } finally {
       setFriendsLoading(false);
     }
@@ -328,12 +331,12 @@ export default function EventLocatorPage() {
     setCreatingGroup(true);
     try {
       await api.post(`/community/events/${eventId}/locator`, { friendIds: [...selectedIds] });
-      showToast('Grupo de localización creado 📍', 'success');
+      showToast(t('locator.createdToast'), 'success');
       setShowPicker(false);
       setSelectedIds(new Set());
       await fetchGroup();
     } catch (e) {
-      showToast(e.message || 'Error al crear el grupo', 'error');
+      showToast(e.message || t('locator.createError'), 'error');
     } finally {
       setCreatingGroup(false);
     }
@@ -345,7 +348,7 @@ export default function EventLocatorPage() {
       await api.post(`/community/events/${eventId}/locator/respond`, { status });
       await fetchGroup();
     } catch (e) {
-      showToast(e.message || 'Error al responder', 'error');
+      showToast(e.message || t('locator.respondError'), 'error');
     } finally {
       setResponding(false);
     }
@@ -362,7 +365,7 @@ export default function EventLocatorPage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text text-base truncate">📍 Locator</h1>
+            <h1 className="font-display font-bold text-surface-text text-base truncate">{t('locator.title')}</h1>
             <p className="text-xs font-mono text-surface-muted truncate">{event.title}</p>
           </div>
         </div>
@@ -381,11 +384,9 @@ export default function EventLocatorPage() {
             className="w-full flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5 text-left hover:bg-amber-500/15 transition-colors"
           >
             <span>
-              📍 {locationStatus === 'denied'
-                ? 'Has denegado la ubicación: actívala para usar el localizador.'
-                : 'No tienes la ubicación activada. Actívala para usar el localizador.'}
+              {locationStatus === 'denied' ? t('locator.warnDenied') : t('locator.warnNotActive')}
             </span>
-            <span className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap">Activar</span>
+            <span className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap">{t('locator.activate')}</span>
           </button>
         )}
 
@@ -393,7 +394,7 @@ export default function EventLocatorPage() {
           <GlobeLocationView lat={event.lat} lng={event.lng} label={event.location} friends={memberMarkers} />
         ) : (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-4">
-            <p className="text-sm text-surface-muted text-center py-8">Este evento no tiene ubicación en el mapa.</p>
+            <p className="text-sm text-surface-muted text-center py-8">{t('locator.noMapLocation')}</p>
           </div>
         )}
 
@@ -412,13 +413,13 @@ export default function EventLocatorPage() {
             >
               <span className="text-xl flex-shrink-0">📍</span>
               <span className="flex-1 min-w-0 text-left">
-                <span className="block font-display font-bold text-sm">Crear grupo de localización</span>
-                <span className="block text-xs mt-0.5 opacity-90">Añade a tus amigos a un grupo para saber dónde están durante el evento</span>
+                <span className="block font-display font-bold text-sm">{t('locator.createGroupTitle')}</span>
+                <span className="block text-xs mt-0.5 opacity-90">{t('locator.createGroupHint')}</span>
               </span>
             </button>
             {!canCreateLocatorGroup && (
               <p className="text-[11px] text-surface-muted mt-1.5 px-1">
-                Podrás crear el grupo de localización cuando falte 1 hora o menos para que empiece el evento.
+                {t('locator.createGroupTooEarly')}
               </p>
             )}
           </div>
@@ -427,7 +428,7 @@ export default function EventLocatorPage() {
         {!group && showPicker && (
           friendsLoading ? (
             <div className="bg-surface-card border border-surface-border rounded-2xl p-8 text-center">
-              <p className="text-sm text-surface-muted font-mono">Cargando amigos...</p>
+              <p className="text-sm text-surface-muted font-mono">{t('locator.pickerLoading')}</p>
             </div>
           ) : (
             <FriendPicker
@@ -446,32 +447,32 @@ export default function EventLocatorPage() {
             <div className="flex items-center gap-2">
               <span className="text-xl">📍</span>
               <div>
-                <h3 className="font-display font-bold text-surface-text text-sm">Grupo de localización</h3>
+                <h3 className="font-display font-bold text-surface-text text-sm">{t('locator.groupTitle')}</h3>
                 <p className="text-xs text-surface-muted">
                   {group.my_status === 'accepted'
-                    ? 'Estás compartiendo tu ubicación en vivo con el grupo'
-                    : 'Comparten ubicación durante el evento'}
+                    ? t('locator.sharingHint')
+                    : t('locator.othersSharingHint')}
                 </p>
               </div>
             </div>
 
             {group.my_status === 'pending' && (
               <div className="bg-accent-primary/10 border border-accent-primary/25 rounded-xl p-3 space-y-2">
-                <p className="text-sm text-surface-text">Te han invitado a este grupo de localización. ¿Te unes?</p>
+                <p className="text-sm text-surface-text">{t('locator.inviteAskJoin')}</p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleRespond('declined')}
                     disabled={responding}
                     className="flex-1 py-2 rounded-lg border border-surface-border text-surface-muted text-xs font-display font-semibold hover:text-surface-text transition-colors disabled:opacity-50"
                   >
-                    Rechazar
+                    {t('locator.reject')}
                   </button>
                   <button
                     onClick={() => handleRespond('accepted')}
                     disabled={responding}
                     className="flex-1 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-bold transition-colors disabled:opacity-50"
                   >
-                    Aceptar
+                    {t('locator.accept')}
                   </button>
                 </div>
               </div>
@@ -479,11 +480,11 @@ export default function EventLocatorPage() {
 
             <div className="space-y-1.5">
               {group.members.map(m => {
-                const meta = statusMeta(m.status);
+                const meta = statusMeta(m.status, t);
                 return (
                   <div key={m.user_id} className="flex items-center gap-3 bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
                     <LocatorAvatar user={m.user} />
-                    <span className="flex-1 min-w-0 text-sm text-surface-text truncate">{m.user?.username || 'Usuario'}</span>
+                    <span className="flex-1 min-w-0 text-sm text-surface-text truncate">{m.user?.username || t('locator.fallbackUser')}</span>
                     <LocatorMiniMascot user={m.user} />
                     <span className={`flex-shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-full border ${meta.className}`}>
                       {meta.label}

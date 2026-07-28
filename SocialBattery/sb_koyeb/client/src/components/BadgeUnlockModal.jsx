@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from '../i18n';
 
 /**
  * BadgeUnlockModal — celebration popup when the user earns a new badge.
@@ -52,7 +53,7 @@ export default function BadgeUnlockModal({ badges = [], onClose }) {
           {/* Sparkle header */}
           <div className="text-xs font-mono uppercase tracking-widest text-accent-glow mb-4 flex items-center justify-center gap-2">
             <span>✨</span>
-            <span>¡Insignia desbloqueada!</span>
+            <span>{t('badgeUnlock.header')}</span>
             <span>✨</span>
           </div>
 
@@ -100,7 +101,7 @@ export default function BadgeUnlockModal({ badges = [], onClose }) {
             onClick={handleNext}
             className="w-full bg-accent-primary hover:bg-accent-glow text-surface-text font-display font-bold py-3 rounded-2xl transition-all active:scale-95 text-sm"
           >
-            {index < badges.length - 1 ? `Siguiente (${index + 1}/${badges.length})` : '¡Genial! 🎉'}
+            {index < badges.length - 1 ? t('badgeUnlock.nextBtn', { i: index + 1, n: badges.length }) : t('badgeUnlock.finishBtn')}
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { isOnline } from '../hooks/usePresence';
 import { useSettings } from '../context/SettingsContext';
 import MascotDisplay from './MascotDisplay';
 import MascotPreviewOverlay from './MascotPreviewOverlay';
+import { useTranslation } from '../i18n';
 
 // Mismo criterio de tier que usa el resto de la app (ver getMascotTier en
 // HomePage.jsx): 0-33 → low, 34-66 → mid, 67-100 → high.
@@ -13,6 +14,7 @@ function getMascotTier(level) {
 }
 
 export default function FriendCard({ friend, online: onlineProp, onClick }) {
+  const { t } = useTranslation();
   const color = getBatteryColor(friend.battery_level ?? 50);
   const tier = getMascotTier(friend.battery_level ?? 50);
   const { showLastSeen } = useSettings();
@@ -58,7 +60,7 @@ export default function FriendCard({ friend, online: onlineProp, onClick }) {
         </div>
         {showLastSeen && (
           <div className="text-xs text-surface-muted mt-1">
-            Última actualización: {formatRelativeTime(friend.battery_updated_at)}
+            {t('friends.lastUpdate', { when: formatRelativeTime(friend.battery_updated_at) })}
           </div>
         )}
       </div>

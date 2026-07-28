@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LogoWordmark from '../components/LogoWordmark';
+import { useTranslation } from '../i18n';
 
 export default function ResetPasswordPage() {
   const { updatePassword, signOut } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [password, setPassword] = useState('');
@@ -18,11 +20,11 @@ export default function ResetPasswordPage() {
     setError('');
 
     if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres.');
+      setError(t('resetPassword.passwordShort'));
       return;
     }
     if (password !== confirm) {
-      setError('Las contraseñas no coinciden.');
+      setError(t('resetPassword.passwordsMismatch'));
       return;
     }
 
@@ -33,7 +35,7 @@ export default function ResetPasswordPage() {
       // Give the user 2 seconds to read the confirmation, then go home
       setTimeout(() => navigate('/'), 2000);
     } catch (err) {
-      setError(err.message || 'Algo salió mal. Inténtalo de nuevo.');
+      setError(err.message || t('resetPassword.saveError'));
     } finally {
       setLoading(false);
     }
@@ -45,10 +47,10 @@ export default function ResetPasswordPage() {
         <div className="max-w-sm w-full text-center animate-fade-in">
           <div className="text-6xl mb-6">✅</div>
           <h2 className="font-display text-2xl font-bold text-surface-text mb-3">
-            ¡Contraseña actualizada!
+            {t('resetPassword.successTitle')}
           </h2>
           <p className="text-surface-muted text-sm">
-            Tu nueva contraseña ya está guardada. Redirigiendo...
+            {t('resetPassword.successBody')}
           </p>
         </div>
       </div>
@@ -79,17 +81,17 @@ export default function ResetPasswordPage() {
           <div className="mb-6">
             <div className="text-3xl mb-3">🔑</div>
             <h2 className="font-display text-lg font-bold text-surface-text mb-1">
-              Nueva contraseña
+              {t('resetPassword.title')}
             </h2>
             <p className="text-surface-muted text-xs font-body leading-relaxed">
-              Elige una contraseña segura de al menos 6 caracteres.
+              {t('resetPassword.subtitle')}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                Nueva contraseña
+                {t('resetPassword.newPassword')}
               </label>
               <input
                 type="password"
@@ -105,7 +107,7 @@ export default function ResetPasswordPage() {
 
             <div>
               <label className="block text-xs font-mono text-surface-muted mb-2 uppercase tracking-widest">
-                Confirmar contraseña
+                {t('resetPassword.confirmPassword')}
               </label>
               <input
                 type="password"
@@ -129,7 +131,7 @@ export default function ResetPasswordPage() {
               disabled={loading}
               className="w-full bg-accent-primary hover:bg-accent-primary/80 disabled:opacity-50 text-surface-text font-display font-semibold py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-accent-primary/20"
             >
-              {loading ? '...' : 'Guardar contraseña'}
+              {loading ? t('resetPassword.saving') : t('resetPassword.submit')}
             </button>
 
             <button
@@ -137,7 +139,7 @@ export default function ResetPasswordPage() {
               onClick={async () => { await signOut(); navigate('/auth'); }}
               className="w-full text-surface-muted hover:text-surface-text text-sm transition-colors font-mono py-1"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           </form>
         </div>

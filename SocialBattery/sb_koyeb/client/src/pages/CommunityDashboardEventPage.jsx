@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { EventCard, ConfirmEndModal } from './CommunityDashboardPage';
 import TimeseriesChart from '../components/TimeseriesChart';
+import { useTranslation } from '../i18n';
 
 // ── Subpágina del dashboard: detalle de UN evento ─────────────────────────
 // Fase 124 — el listado del dashboard (CommunityDashboardPage) enseña
@@ -30,6 +31,7 @@ export default function CommunityDashboardEventPage() {
   const { communityId, eventId } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { t } = useTranslation();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export default function CommunityDashboardEventPage() {
       const res = await api.get(`/community/communities/${communityId}/dashboard`);
       setData(res);
     } catch (e) {
-      setError(e.message || 'No se pudo cargar el evento');
+      setError(e.message || t('dashboardDetail.failedEvent'));
     } finally {
       setLoading(false);
     }
@@ -71,10 +73,10 @@ export default function CommunityDashboardEventPage() {
     if (ev.promotion_plan !== 'premium' && ev.promotion_plan !== 'ultra') {
       try {
         await api.post(`/community/events/${ev.id}/renew-promotion`, { promotion_plan: 'basic' });
-        showToast('Promoción renovada — se ha vuelto a avisar a la comunidad', 'success');
+        showToast(t('dashboardDetail.renewedToast'), 'success');
         await load();
       } catch (e) {
-        showToast(e.message || 'Error al renovar', 'error');
+        showToast(e.message || t('dashboardDetail.renewError'), 'error');
       }
       return;
     }
@@ -102,11 +104,11 @@ export default function CommunityDashboardEventPage() {
     setEndingBusy(true);
     try {
       await api.post(path, {});
-      showToast('Publicidad finalizada', 'success');
+      showToast(t('dashboardDetail.endedToast'), 'success');
       setEnding(null);
       await load();
     } catch (e) {
-      showToast(e.message || 'No se pudo finalizar', 'error');
+      showToast(e.message || t('dashboardDetail.endError'), 'error');
     } finally {
       setEndingBusy(false);
     }
@@ -115,7 +117,7 @@ export default function CommunityDashboardEventPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center">
-        <p className="text-surface-muted font-mono text-sm">Cargando evento...</p>
+        <p className="text-surface-muted font-mono text-sm">{t('dashboardDetail.loadingEvent')}</p>
         <BottomNav />
       </div>
     );
@@ -125,17 +127,17 @@ export default function CommunityDashboardEventPage() {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center px-4">
         <div className="text-center max-w-sm space-y-3">
-          <p className="font-display font-bold text-surface-text">No se pudo cargar el evento</p>
+          <p className="font-display font-bold text-surface-text">{t('dashboardDetail.failedEvent')}</p>
           <p className="text-sm text-surface-muted leading-relaxed">{error}</p>
           <div className="flex items-center justify-center gap-2">
             <button onClick={load} className="px-4 py-2 rounded-xl border border-surface-border text-surface-text text-xs font-display font-semibold">
-              Reintentar
+              {t('dashboardDetail.retry')}
             </button>
             <button
               onClick={() => navigate(`/community/${communityId}/dashboard`)}
               className="px-4 py-2 rounded-xl bg-accent-primary text-white text-xs font-display font-semibold"
             >
-              Volver
+              {t('dashboardDetail.back')}
             </button>
           </div>
         </div>
@@ -150,15 +152,15 @@ export default function CommunityDashboardEventPage() {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center px-4">
         <div className="text-center max-w-sm space-y-3">
-          <p className="font-display font-bold text-surface-text">Este evento ya no está</p>
+          <p className="font-display font-bold text-surface-text">{t('dashboardDetail.gonEvent')}</p>
           <p className="text-sm text-surface-muted leading-relaxed">
-            No aparece en el dashboard de esta comunidad. Puede que se haya borrado o que hayas seguido un enlace desactualizado.
+            {t('dashboardDetail.goneHint')}
           </p>
           <button
             onClick={() => navigate(`/community/${communityId}/dashboard`)}
             className="px-4 py-2 rounded-xl bg-accent-primary text-white text-xs font-display font-semibold"
           >
-            Volver al dashboard
+            {t('dashboardDetail.backToDashboard')}
           </button>
         </div>
         <BottomNav />
@@ -177,12 +179,12 @@ export default function CommunityDashboardEventPage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text text-base truncate">📊 Detalle del evento</h1>
+            <h1 className="font-display font-bold text-surface-text text-base truncate">{t('dashboardDetail.detailEvent')}</h1>
             <p className="text-[10px] font-mono text-surface-muted truncate">{data.community.name}</p>
           </div>
           <button
             onClick={load}
-            title="Actualizar"
+            title={t('dashboardDetail.refresh')}
             className="w-9 h-9 rounded-xl border border-surface-border text-surface-muted flex items-center justify-center flex-shrink-0 hover:text-accent-glow hover:border-accent-primary/40 transition-colors"
           >
             ↻

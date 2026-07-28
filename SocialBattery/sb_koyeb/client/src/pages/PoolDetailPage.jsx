@@ -267,7 +267,7 @@ export default function PoolDetailPage() {
                 <h2 className="font-display font-bold text-surface-text text-lg leading-tight">{pool.activity}</h2>
                 <StatusBadge status={pool.status} />
               </div>
-              <p className="text-xs text-surface-muted font-mono mt-0.5">{formatPoolDateRange(pool)}</p>
+              <p className="text-xs text-surface-muted font-mono mt-0.5">{formatPoolDateRange(pool, t, lang)}</p>
             </div>
           </div>
           {pool.description && (

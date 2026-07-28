@@ -265,7 +265,7 @@ function PoolInviteModal({ pool, onClose, onToast }) {
 
 // ── Pool Card ──────────────────────────────────────────────────────────────────
 function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, joining, leaving }) {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const emoji = getActivityEmoji(pool.activity);
   const canJoin = pool.status === 'open' && !pool.has_joined;
   const isPast = new Date(pool.scheduled_at) <= new Date();
@@ -332,12 +332,12 @@ function PoolCard({ pool, onJoin, onLeave, onCancel, onOpenDetail, onToast, join
       <div className="space-y-1.5 mb-3">
         <div className="flex items-center gap-2 text-xs text-surface-muted flex-wrap">
           <span>🕐</span>
-          <span className="font-mono">{formatPoolDateRange(pool)}</span>
+          <span className="font-mono">{formatPoolDateRange(pool, t, lang)}</span>
           {/* Reloj de arena amarillo con "cuánto falta" — mismo estilo que
               las tarjetas de eventos. Solo aparece si la quedada aún no
               ha empezado (el helper devuelve '' si diffMs < 0). */}
           {(() => {
-            const untilLabel = getPoolDaysUntilLabel(pool.scheduled_at);
+            const untilLabel = getPoolDaysUntilLabel(pool.scheduled_at, t);
             if (!untilLabel) return null;
             return (
               <span className="text-xs text-amber-300/90 font-mono flex items-center gap-1">

@@ -1,21 +1,11 @@
+import { useTranslation } from '../i18n';
+
 /**
- * PhotoSourceMenu — action sheet para elegir entre "Hacer una foto" (cámara)
- * y "Elegir de la galería" cuando el usuario quiere subir una imagen.
- *
- * No gestiona los <input type="file"> en sí: cada pantalla mantiene sus
- * propios refs (uno normal para galería y uno con `capture` para cámara) y
- * les pasa el click a través de onCamera / onGallery. Así reutilizamos el
- * mismo handleChange que ya existía en cada pantalla, sin tocar su lógica.
- *
- * Uso:
- *   <PhotoSourceMenu
- *     open={showPhotoMenu}
- *     onClose={() => setShowPhotoMenu(false)}
- *     onCamera={() => cameraInputRef.current?.click()}
- *     onGallery={() => fileRef.current?.click()}
- *   />
+ * PhotoSourceMenu — action sheet para elegir entre cámara y galería.
+ * Ver documentación en la versión anterior — la lógica no cambia.
  */
 export default function PhotoSourceMenu({ open, onClose, onCamera, onGallery }) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   return (
@@ -38,7 +28,7 @@ export default function PhotoSourceMenu({ open, onClose, onCamera, onGallery }) 
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-accent-primary/10 active:bg-accent-primary/15 transition-colors text-left"
           >
             <span className="text-xl">📷</span>
-            <span className="text-sm font-display font-semibold text-surface-text">Hacer una foto</span>
+            <span className="text-sm font-display font-semibold text-surface-text">{t('photoMenu.takePhoto')}</span>
           </button>
           <button
             type="button"
@@ -46,14 +36,14 @@ export default function PhotoSourceMenu({ open, onClose, onCamera, onGallery }) 
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-accent-primary/10 active:bg-accent-primary/15 transition-colors text-left"
           >
             <span className="text-xl">🖼️</span>
-            <span className="text-sm font-display font-semibold text-surface-text">Elegir de la galería</span>
+            <span className="text-sm font-display font-semibold text-surface-text">{t('photoMenu.fromGallery')}</span>
           </button>
           <button
             type="button"
             onClick={onClose}
             className="w-full flex items-center justify-center px-4 py-3 mt-1 rounded-2xl text-sm font-display font-semibold text-surface-muted hover:bg-surface-bg transition-colors"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
         </div>
       </div>

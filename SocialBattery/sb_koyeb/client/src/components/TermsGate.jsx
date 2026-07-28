@@ -2,23 +2,14 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useTranslation } from '../i18n';
 
-// Pantalla obligatoria que se muestra cuando el usuario autenticado tiene
-// `terms_accepted_at` = null en la BD (columna añadida en phase 130).
-// Se dispara en App.jsx justo antes de las rutas privadas.
-//
-// El caso principal que resuelve: registro por primera vez con Google o
-// Apple desde el tab "Entrar". El cliente no puede pedir el checkbox en
-// ese tab (rompería la UX del 99% que ya tiene cuenta), así que hasta que
-// no aceptan aquí, no ven la app.
-//
-// El caso email/registro normal (que sí tiene checkbox previo al signUp)
-// llama a acceptTerms() automáticamente tras el signUp, así que no llega
-// aquí — pero si por alguna razón fallara ese POST, este gate lo cazaría.
-
+// Gate legal — obligatorio cuando terms_accepted_at es null en la BD.
+// Ver comentario largo en la versión anterior (phase 130).
 export default function TermsGate() {
   const { acceptTerms, signOut } = useAuth();
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,12 +18,39 @@ export default function TermsGate() {
     setSubmitting(true);
     try {
       await acceptTerms();
-      // No hace falta navegar: AuthContext refresca profile,
-      // hasAcceptedTerms pasa a true y App.jsx desmonta este gate.
     } catch (err) {
-      showToast(err?.message || 'No se pudo registrar la aceptación. Inténtalo de nuevo.');
+      showToast(err?.message || t('termsGate.submitError'));
       setSubmitting(false);
     }
+  }
+
+  // Reconstruimos el texto del checkbox insertando los tres tramos
+  // dinámicos ({age} en <strong>, {terms}/{privacy} como <Link>). Cada
+  // idioma controla el orden y la puntuación de esos tres huecos vía
+  // t('termsGate.checkboxTemplate'). El truco del split-por-marcador es
+  // el mismo que usamos en AuthPage/OnboardingPage con \u0000.
+  const template = t('termsGate.checkboxTemplate');
+  const AGE = '\u0000AGE\u0000';
+  const TERMS = '\u0000TERMS\u0000';
+  const PRIVACY = '\u0000PRIVACY\u0000';
+  const filled = template
+    .replace('{age}', AGE)
+    .replace('{terms}', TERMS)
+    .replace('{privacy}', PRIVACY);
+
+  // Reemplazamos secuencialmente para respetar el orden que dicte cada idioma.
+  const parts = [];
+  let remaining = filled;
+  while (remaining.length > 0) {
+    const idxs = [AGE, TERMS, PRIVACY]
+      .map(marker => ({ marker, idx: remaining.indexOf(marker) }))
+      .filter(({ idx }) => idx >= 0)
+      .sort((a, b) => a.idx - b.idx);
+    if (idxs.length === 0) { parts.push({ type: 'text', value: remaining }); break; }
+    const first = idxs[0];
+    if (first.idx > 0) parts.push({ type: 'text', value: remaining.slice(0, first.idx) });
+    parts.push({ type: 'marker', value: first.marker });
+    remaining = remaining.slice(first.idx + first.marker.length);
   }
 
   return (
@@ -40,10 +58,9 @@ export default function TermsGate() {
       <div className="max-w-md w-full">
         <img src="/logo-icon.png" alt="SocialBattery" className="h-10 w-auto mx-auto mb-6" />
 
-        <h1 className="font-display text-2xl font-bold text-center mb-2">Antes de continuar</h1>
+        <h1 className="font-display text-2xl font-bold text-center mb-2">{t('termsGate.title')}</h1>
         <p className="text-sm text-surface-muted text-center mb-8 leading-relaxed">
-          Para usar SocialBattery necesitamos que confirmes tu edad y aceptes
-          nuestros términos.
+          {t('termsGate.subtitle')}
         </p>
 
         <label className="flex items-start gap-3 bg-surface-card border border-surface-border rounded-2xl p-4 cursor-pointer select-none">
@@ -55,14 +72,21 @@ export default function TermsGate() {
               text-accent-primary focus:ring-accent-primary/40 focus:ring-offset-0 shrink-0"
           />
           <span className="text-sm text-surface-text leading-relaxed">
-            Confirmo que tengo al menos <strong>16 años</strong> y acepto los{' '}
-            <Link to="/terminos" target="_blank" className="text-accent-glow underline underline-offset-2">
-              Términos y Condiciones
-            </Link>{' '}
-            y la{' '}
-            <Link to="/privacidad" target="_blank" className="text-accent-glow underline underline-offset-2">
-              Política de Privacidad
-            </Link>.
+            {parts.map((p, i) => {
+              if (p.type === 'text') return <span key={i}>{p.value}</span>;
+              if (p.value === AGE)   return <strong key={i}>{t('termsGate.checkboxAge')}</strong>;
+              if (p.value === TERMS) return (
+                <Link key={i} to="/terminos" target="_blank" className="text-accent-glow underline underline-offset-2">
+                  {t('termsGate.checkboxTerms')}
+                </Link>
+              );
+              if (p.value === PRIVACY) return (
+                <Link key={i} to="/privacidad" target="_blank" className="text-accent-glow underline underline-offset-2">
+                  {t('termsGate.checkboxPrivacy')}
+                </Link>
+              );
+              return null;
+            })}
           </span>
         </label>
 
@@ -73,7 +97,7 @@ export default function TermsGate() {
             disabled:cursor-not-allowed text-surface-text font-display font-semibold py-3 rounded-xl
             transition-all duration-200 hover:shadow-lg hover:shadow-accent-primary/20"
         >
-          {submitting ? 'Continuando...' : 'Continuar'}
+          {submitting ? t('termsGate.continuing') : t('termsGate.continueBtn')}
         </button>
 
         <button
@@ -82,7 +106,7 @@ export default function TermsGate() {
           className="mt-3 w-full text-surface-muted hover:text-surface-text text-sm font-display
             font-semibold py-2 transition-colors disabled:opacity-50"
         >
-          Cerrar sesión
+          {t('termsGate.signOutBtn')}
         </button>
       </div>
     </div>

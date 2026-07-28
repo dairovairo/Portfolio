@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import LogoWordmark from '../components/LogoWordmark';
+import { useTranslation } from '../i18n';
 
 // Página pública de Términos y Condiciones. Como la de Privacidad, va
 // montada FUERA del gate de sesión (ver App.jsx) para que sea accesible
@@ -13,8 +14,10 @@ import LogoWordmark from '../components/LogoWordmark';
 // virtual "Volts", ubicación en vivo durante quedadas. NO es un texto
 // certificado por un abogado — cuando se activen los pagos reales o se
 // entre en mercados con regulación estricta, conviene que lo revise un
-// gestor/asesor.
+// gestor/asesor. El "chrome" está traducido; el texto legal en sí se
+// mantiene solo en español (ver comentario homólogo en PrivacyPolicyPage).
 export default function TermsPage() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-surface-bg text-surface-text">
       <div className="max-w-2xl mx-auto px-6 py-12">
@@ -25,8 +28,14 @@ export default function TermsPage() {
           </span>
         </div>
 
-        <h1 className="font-display text-3xl font-bold mb-2">Términos y Condiciones</h1>
-        <p className="text-surface-muted text-sm mb-10">Última actualización: julio de 2026</p>
+        <h1 className="font-display text-3xl font-bold mb-2">{t('terms.title')}</h1>
+        <p className="text-surface-muted text-sm mb-6">{t('terms.updated')}</p>
+
+        {t('terms.langNotice') && (
+          <div className="mb-8 p-4 rounded-2xl border border-accent-primary/30 bg-accent-primary/5 text-accent-glow text-sm">
+            {t('terms.langNotice')}
+          </div>
+        )}
 
         <div className="space-y-8 text-sm leading-relaxed text-surface-muted">
           <section>
@@ -200,7 +209,7 @@ export default function TermsPage() {
           to="/auth"
           className="inline-block mt-12 text-accent-glow text-sm underline underline-offset-4"
         >
-          ← Volver
+          {t('terms.back')}
         </Link>
       </div>
     </div>

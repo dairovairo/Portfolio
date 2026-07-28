@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useTutorial } from '../context/TutorialContext';
+import { useTranslation } from '../i18n';
 
 // ── Definición de los 7 pasos ─────────────────────────────────────────────────
 //
@@ -12,98 +13,103 @@ import { useTutorial } from '../context/TutorialContext';
 //  switchTab:  nombre del tab a activar al llegar a este paso dentro de /community
 //  spotlight:  true = usar efecto recorte (todo borroso menos el elemento)
 //
-const STEPS = [
-  {
-    mascot:     '/mascot-high.png',
-    title:      'Bienvenido a SocialBattery',
-    body:       '\u00a1Hola! soy Volty. Aqu\u00ed podr\u00e1s compartir c\u00f3mo te sientes socialmente cada d\u00eda y conectar con quienes tienen la misma actitud que t\u00fa. \ud83d\udd0b',
-    cta:        '\u00a1Vamos! \u26a1',
-    page:       '/',
-    highlight:  null,
-    navigateTo: null,
-    switchTab:  null,
-  },
-  {
-    mascot:     '/mascot-high.png',
-    title:      'Tu bater\u00eda social',
-    body:       '\u00a1Actualiza tu bater\u00eda social para que la vean todos tus amigos! \ud83d\udd0b\u2728',
-    cta:        'Entendido',
-    page:       '/',
-    highlight:  'tutorial-battery-bar',
-    navigateTo: null,
-    switchTab:  null,
-    spotlight:  true,
-    mascotRight: true,   // mascota flotante a la derecha del título
-  },
-  {
-    mascot:     '/mascot-high.png',
-    title:      'Tu c\u00edrculo social',
-    body:       '\u00a1Invita a tus amigos para crear tu c\u00edrculo social! \ud83d\udc65\ud83c\udf1f',
-    cta:        'Siguiente',
-    page:       '/',
-    highlight:  'tutorial-social-panels',
-    navigateTo: '/pools',
-    switchTab:  null,
-    panelTop:   true,
-    compactTop:  true,       // panel pequeño anclado arriba
-    mascotRight: true,       // mascota a la derecha dentro del panel
-    noHighlight: true,       // sin cuadrado azul de realce
-    noBlur:      true,       // sin efecto borroso en el fondo
-    scrollBlock: 'start',    // scroll mínimo: lleva el top del elemento al top visible
-  },
-  {
-    mascot:     '/mascot-high.png',
-    title:      'Quedadas',
-    body:       '\u00a1Puedes organizar quedadas con tus amigos! \ud83e\udd1d\ud83d\udcc5',
-    cta:        'Siguiente',
-    page:       '/pools',
-    highlight:  'tutorial-pools-header',
-    navigateTo: '/messages/inbox',
-    switchTab:  null,
-    spotlight:  true,
-    mascotRight: true,
-  },
-  {
-    mascot:     '/mascot-high.png',
-    title:      'Mensajes',
-    body:       '\u00a1Comun\u00edcate con tus amigos cuando quieras! \ud83d\udcac\u26a1',
-    cta:        'Siguiente',
-    page:       '/messages/inbox',
-    highlight:  'tutorial-messages-header',
-    navigateTo: '/community',
-    switchTab:  null,
-    spotlight:  true,
-    mascotRight: true,
-  },
-  {
-    mascot:     '/mascot-high.png',
-    title:      'Actividades',
-    body:       'En "Actividades" puedes cambiar entre eventos y sorteos con el toggle de arriba y apuntarte a los que te gusten. \ud83d\udcc5\ud83c\udf81',
-    cta:        'Siguiente',
-    page:       '/community',
-    highlight:  'tutorial-events-section',
-    navigateTo: null,
-    switchTab:  'events',
-  },
-  {
-    mascot:     '/mascot-high.png',
-    title:      'Comunidades',
-    body:       '\u00a1Adem\u00e1s puedes unirte a comunidades seg\u00fan tus gustos! \ud83d\udc65\u2728',
-    cta:        '\u00a1Empezar!',
-    page:       '/community',
-    highlight:  null,
-    navigateTo: '/',
-    switchTab:  'communities',
-  },
-];
-
-const TOTAL = STEPS.length;
+// Se construye a partir de t() para que los textos (título / body / CTA)
+// se traduzcan; el resto de metadatos (page/highlight/…) es estable.
+function buildSteps(t) {
+  return [
+    {
+      mascot:     '/mascot-high.png',
+      title:      t('tutorial.step1Title'),
+      body:       t('tutorial.step1Body'),
+      cta:        t('tutorial.step1Cta'),
+      page:       '/',
+      highlight:  null,
+      navigateTo: null,
+      switchTab:  null,
+    },
+    {
+      mascot:     '/mascot-high.png',
+      title:      t('tutorial.step2Title'),
+      body:       t('tutorial.step2Body'),
+      cta:        t('tutorial.step2Cta'),
+      page:       '/',
+      highlight:  'tutorial-battery-bar',
+      navigateTo: null,
+      switchTab:  null,
+      spotlight:  true,
+      mascotRight: true,
+    },
+    {
+      mascot:     '/mascot-high.png',
+      title:      t('tutorial.step3Title'),
+      body:       t('tutorial.step3Body'),
+      cta:        t('tutorial.step3Cta'),
+      page:       '/',
+      highlight:  'tutorial-social-panels',
+      navigateTo: '/pools',
+      switchTab:  null,
+      panelTop:   true,
+      compactTop:  true,
+      mascotRight: true,
+      noHighlight: true,
+      noBlur:      true,
+      scrollBlock: 'start',
+    },
+    {
+      mascot:     '/mascot-high.png',
+      title:      t('tutorial.step4Title'),
+      body:       t('tutorial.step4Body'),
+      cta:        t('tutorial.step4Cta'),
+      page:       '/pools',
+      highlight:  'tutorial-pools-header',
+      navigateTo: '/messages/inbox',
+      switchTab:  null,
+      spotlight:  true,
+      mascotRight: true,
+    },
+    {
+      mascot:     '/mascot-high.png',
+      title:      t('tutorial.step5Title'),
+      body:       t('tutorial.step5Body'),
+      cta:        t('tutorial.step5Cta'),
+      page:       '/messages/inbox',
+      highlight:  'tutorial-messages-header',
+      navigateTo: '/community',
+      switchTab:  null,
+      spotlight:  true,
+      mascotRight: true,
+    },
+    {
+      mascot:     '/mascot-high.png',
+      title:      t('tutorial.step6Title'),
+      body:       t('tutorial.step6Body'),
+      cta:        t('tutorial.step6Cta'),
+      page:       '/community',
+      highlight:  'tutorial-events-section',
+      navigateTo: null,
+      switchTab:  'events',
+    },
+    {
+      mascot:     '/mascot-high.png',
+      title:      t('tutorial.step7Title'),
+      body:       t('tutorial.step7Body'),
+      cta:        t('tutorial.step7Cta'),
+      page:       '/community',
+      highlight:  null,
+      navigateTo: '/',
+      switchTab:  'communities',
+    },
+  ];
+}
 
 // ── Componente ────────────────────────────────────────────────────────────────
 // Props:
 //   currentPage  — ruta actual (p.ej. "/community")
 //   onSwitchTab  — callback(tabName) para que CommunityPage cambie su tab activo
 export default function TutorialOverlay({ currentPage, onSwitchTab }) {
+  const { t } = useTranslation();
+  const STEPS = useMemo(() => buildSteps(t), [t]);
+  const TOTAL = STEPS.length;
   const { isLight } = useTheme();
   const { active, step, advance, dismiss } = useTutorial();
   const navigate = useNavigate();
@@ -327,7 +333,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
                     <img
                       key={`mascot-${step}`}
                       src={current.mascot}
-                      alt="Mascota SocialBattery"
+                      alt={t('tutorial.mascotAlt')}
                       className="w-20 h-20 object-contain"
                       draggable={false}
                       style={mascotStyle}
@@ -367,7 +373,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
                 <img
                   key={`mascot-${step}`}
                   src={current.mascot}
-                  alt="Mascota SocialBattery"
+                  alt={t('tutorial.mascotAlt')}
                   className="w-36 h-36 object-contain"
                   draggable={false}
                   style={mascotStyle}
@@ -421,7 +427,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
                     <img
                       key={`mascot-${step}`}
                       src={current.mascot}
-                      alt="Mascota SocialBattery"
+                      alt={t('tutorial.mascotAlt')}
                       className="w-24 h-24 object-contain"
                       draggable={false}
                       style={mascotStyle}
@@ -453,7 +459,7 @@ export default function TutorialOverlay({ currentPage, onSwitchTab }) {
                 <img
                   key={`mascot-${step}`}
                   src={current.mascot}
-                  alt="Mascota SocialBattery"
+                  alt={t('tutorial.mascotAlt')}
                   className="w-36 h-36 object-contain"
                   draggable={false}
                   style={mascotStyle}

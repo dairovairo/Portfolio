@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import LogoWordmark from '../components/LogoWordmark';
+import { useTranslation } from '../i18n';
 
 // Página pública de política de privacidad. Montada en App.jsx FUERA de
 // la lógica de gating por sesión (ver comentario ahí) para que sea
@@ -13,7 +14,14 @@ import LogoWordmark from '../components/LogoWordmark';
 // legal certificado por un abogado — si el proyecto crece o entra en
 // mercados con más regulación (RGPD estricto, menores de edad, pagos),
 // conviene que lo revise alguien especializado.
+//
+// El "chrome" (título, subtítulo, botón Volver) está traducido; el
+// texto legal se mantiene sólo en español y en EN/FR se muestra un
+// aviso pidiendo contactar para la traducción oficial — es la práctica
+// habitual para textos legales que aún no han sido revisados por un
+// abogado en cada idioma de destino.
 export default function PrivacyPolicyPage() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-surface-bg text-surface-text">
       <div className="max-w-2xl mx-auto px-6 py-12">
@@ -24,8 +32,14 @@ export default function PrivacyPolicyPage() {
           </span>
         </div>
 
-        <h1 className="font-display text-3xl font-bold mb-2">Política de Privacidad</h1>
-        <p className="text-surface-muted text-sm mb-10">Última actualización: julio de 2026</p>
+        <h1 className="font-display text-3xl font-bold mb-2">{t('privacy.title')}</h1>
+        <p className="text-surface-muted text-sm mb-6">{t('privacy.updated')}</p>
+
+        {t('privacy.langNotice') && (
+          <div className="mb-8 p-4 rounded-2xl border border-accent-primary/30 bg-accent-primary/5 text-accent-glow text-sm">
+            {t('privacy.langNotice')}
+          </div>
+        )}
 
         <div className="space-y-8 text-sm leading-relaxed text-surface-muted">
           <section>
@@ -127,7 +141,7 @@ export default function PrivacyPolicyPage() {
           to="/auth"
           className="inline-block mt-12 text-accent-glow text-sm underline underline-offset-4"
         >
-          ← Volver
+          {t('privacy.back')}
         </Link>
       </div>
     </div>
