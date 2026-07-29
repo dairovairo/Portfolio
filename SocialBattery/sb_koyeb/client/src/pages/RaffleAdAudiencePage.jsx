@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { RAFFLE_AD_PRICING, computeRaffleAdPriceCents, formatEurFromCents } from '../lib/adPricing';
+import { useTranslation } from '../i18n';
 
 // ── Configuración de publicidad de un sorteo Light ──────────────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -37,11 +38,7 @@ const CHARGE_MIN = 500;
 
 const LIGHT_META = {
   emoji: '🎫',
-  label: 'Sorteo Light',
-  // Precio dinámico — se calcula abajo con computeRaffleAdPriceCents en
-  // función de las visualizaciones contratadas. Ya no hay tarifa
-  // estática aquí (antes: '20 €' fijo, que era el precio del mínimo
-  // contratable y engañaba al escalar el slider). Ver lib/adPricing.js.
+  labelKey: 'raffleLightLabel',
   ring: 'border-amber-400 bg-amber-500/10',
   pill: 'text-amber-300 bg-amber-500/10 border border-amber-500/20',
   check: 'text-amber-300',
@@ -50,11 +47,7 @@ const LIGHT_META = {
   toggleOn: 'bg-amber-400',
   spinnerBorder: 'border-amber-400',
   button: 'bg-amber-500 hover:bg-amber-400 text-surface-bg',
-  includes: [
-    'Notificaciones a toda la comunidad',
-    'Apariciones de banner al número de usuarios contratado',
-    'Publicidad fuera de la comunidad — llega a gente nueva',
-  ],
+  includeKeys: ['raffleLightInc1', 'raffleLightInc2', 'raffleLightInc3'],
 };
 
 export default function RaffleAdAudiencePage() {
@@ -62,6 +55,8 @@ export default function RaffleAdAudiencePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { t, lang } = useTranslation();
+  const localeTag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
 
   // Fase 112 — la misma página cubre creación (state.draft, viene del
   // modal de crear sorteo) y renovación (state.renewRaffle, viene del
@@ -74,7 +69,7 @@ export default function RaffleAdAudiencePage() {
   const draft = location.state?.draft || null;
   const renewRaffle = location.state?.renewRaffle || null;
   const isRenew = !!renewRaffle;
-  const communityName = location.state?.communityName || 'tu comunidad';
+  const communityName = location.state?.communityName || t('adConfig.raffleFallbackCommunity');
 
   const [loadingTotal, setLoadingTotal] = useState(true);
   const [total, setTotal] = useState(null);
@@ -136,7 +131,7 @@ export default function RaffleAdAudiencePage() {
       const data = await api.get(url);
       setTotal(data?.total ?? 0);
     } catch (e) {
-      setLoadError(e.message || 'No se pudo calcular la audiencia');
+      setLoadError(e.message || t('adConfig.audienceCalcError'));
     } finally {
       setLoadingTotal(false);
     }
@@ -201,7 +196,7 @@ export default function RaffleAdAudiencePage() {
       setInterested(data?.interested ?? null);
       setCategoriesDefined(Boolean(data?.categories_defined));
     } catch (e) {
-      showToast(e.message || 'No se pudo filtrar por interesados', 'error');
+      showToast(e.message || t('adConfig.errRaffleInterestFilter'), 'error');
       setFilterInterested(false);
     } finally {
       setLoadingInterested(false);
@@ -222,7 +217,7 @@ export default function RaffleAdAudiencePage() {
           banner_views_contracted: bannerViews,
           banner_interested_only: filterInterested,
         });
-        showToast('¡Publicidad renovada! 🔄', 'success');
+        showToast(t('adConfig.raffleRenewed'), 'success');
         navigate(`/community/${communityId}`, { replace: true });
         return;
       }
@@ -255,19 +250,19 @@ export default function RaffleAdAudiencePage() {
         formData.append('prizes', JSON.stringify(meta));
       }
       await api.postForm(`/community/communities/${communityId}/raffles`, formData);
-      showToast('¡Sorteo creado! 🎁', 'success');
+      showToast(t('adConfig.raffleCreated'), 'success');
       navigate(`/community/${communityId}`, { replace: true });
     } catch (e) {
-      setCreateError(e.message || (isRenew ? 'Error al renovar la publicidad' : 'Error al crear el sorteo'));
+      setCreateError(e.message || (isRenew ? t('adConfig.errRaffleRenew') : t('adConfig.errRaffleCreate')));
     } finally {
       setCreating(false);
     }
   }
 
   const audienceLabel = useMemo(() => {
-    if (filterInterested) return 'usuarios interesados';
-    return 'usuarios notificables';
-  }, [filterInterested]);
+    if (filterInterested) return t('adConfig.raffleInterestedLabel');
+    return t('adConfig.raffleReachableLabel');
+  }, [filterInterested, t]);
 
   if (!draft && !isRenew) return null;
 
@@ -282,7 +277,7 @@ export default function RaffleAdAudiencePage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text text-base truncate">🎫 Configurar publicidad</h1>
+            <h1 className="font-display font-bold text-surface-text text-base truncate">{t('adConfig.raffleConfigTitle')}</h1>
             <p className="text-xs font-mono text-surface-muted truncate">{communityName}</p>
           </div>
         </div>
@@ -291,9 +286,9 @@ export default function RaffleAdAudiencePage() {
       <main className="max-w-lg mx-auto px-4 pb-32 pt-4 space-y-4">
         {isRenew && (
           <div className="bg-surface-card border border-amber-500/30 rounded-2xl p-5 space-y-2">
-            <p className="text-sm font-display font-bold text-surface-text">🔄 Renovando publicidad</p>
+            <p className="text-sm font-display font-bold text-surface-text">{t('adConfig.raffleRenewingTitle')}</p>
             <p className="text-[12px] text-surface-muted leading-relaxed">
-              Estás renovando la publicidad de <span className="text-surface-text">{renewRaffle.title}</span>. Al confirmar, se cierra el ciclo actual: los banners pendientes se borran y se reasignan a otros usuarios con los nuevos parámetros. El sorteo en sí (fecha, tier, participantes) se mantiene.
+              {t('adConfig.raffleRenewingExplain', { title: renewRaffle.title })}
             </p>
           </div>
         )}
@@ -301,7 +296,7 @@ export default function RaffleAdAudiencePage() {
         {/* Resumen del sorteo en creación */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-1">
           <h2 className="font-display font-bold text-surface-text text-sm truncate">
-            {isRenew ? renewRaffle.title : (draft?.title || 'Nuevo sorteo')}
+            {isRenew ? renewRaffle.title : (draft?.title || t('adConfig.raffleNewTitle'))}
           </h2>
           <p className="text-xs font-mono text-surface-muted truncate">
             👥 {communityName}
@@ -316,17 +311,17 @@ export default function RaffleAdAudiencePage() {
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-2 text-base font-display font-bold text-surface-text">
               <span className="text-xl">{LIGHT_META.emoji}</span>
-              {LIGHT_META.label}
+              {t('adConfig.' + LIGHT_META.labelKey)}
             </span>
             <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${LIGHT_META.pill}`}>
-              {formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents)} / {RAFFLE_AD_PRICING.light.unitLabel}
+              {t('adConfig.perUnit', { price: formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents), unit: RAFFLE_AD_PRICING.light.unitLabel })}
             </span>
           </div>
           <ul className="space-y-1.5 text-[12px] font-mono text-surface-muted leading-relaxed">
-            {LIGHT_META.includes.map((item, i) => (
+            {LIGHT_META.includeKeys.map((key, i) => (
               <li key={i} className="flex items-start gap-1.5">
                 <span className={`${LIGHT_META.check} flex-shrink-0`}>✓</span>
-                <span>{item}</span>
+                <span>{t('adConfig.' + key)}</span>
               </li>
             ))}
           </ul>
@@ -335,7 +330,7 @@ export default function RaffleAdAudiencePage() {
         {/* Audiencia total notificable — usuarios fuera de la comunidad
             del sorteo (misma lógica que getRaffleLightAudienceIds). */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-2">
-          <p className="text-xs font-mono text-surface-muted uppercase tracking-wide">Usuarios notificables</p>
+          <p className="text-xs font-mono text-surface-muted uppercase tracking-wide">{t('adConfig.raffleReachable')}</p>
           {loadingTotal ? (
             <div className="h-10 flex items-center justify-center">
               <span className={`w-5 h-5 border-2 ${LIGHT_META.spinnerBorder} border-t-transparent rounded-full animate-spin`} />
@@ -348,16 +343,16 @@ export default function RaffleAdAudiencePage() {
                 onClick={loadTotal}
                 className="text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
               >
-                Reintentar
+                {t('adConfig.retry')}
               </button>
             </div>
           ) : (
             <p className={`font-display font-bold text-4xl ${LIGHT_META.audienceText}`}>
-              {Number(total).toLocaleString('es-ES')}
+              {Number(total).toLocaleString(localeTag)}
             </p>
           )}
           <p className="text-[11px] text-surface-muted leading-relaxed">
-            Usuarios de la app fuera de {communityName} a los que puede llegar el banner de este sorteo Light.
+            {t('adConfig.raffleReachableHint', { community: communityName })}
           </p>
         </div>
 
@@ -368,9 +363,9 @@ export default function RaffleAdAudiencePage() {
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-display font-bold text-surface-text">🎯 Filtrar por intereses</p>
+              <p className="text-sm font-display font-bold text-surface-text">{t('adConfig.filterInterestTitle')}</p>
               <p className="text-[11px] text-surface-muted mt-0.5 leading-relaxed">
-                Contrata solo entre los notificables con intereses afines a tu comunidad.
+                {t('adConfig.raffleFilterHintLight')}
               </p>
             </div>
             <InterestToggle
@@ -389,23 +384,23 @@ export default function RaffleAdAudiencePage() {
             ) : categoriesDefined === false ? (
               <div className="text-center py-1 space-y-2 border-t border-surface-border/60 pt-3">
                 <p className="text-xs text-surface-muted leading-relaxed">
-                  Ni el sorteo ni la comunidad tienen categorías de intereses definidas. Añade categorías al sorteo o edita el perfil de la comunidad para poder filtrar por interesados.
+                  {t('adConfig.raffleNoCatsCommunity')}
                 </p>
                 <button
                   type="button"
                   onClick={() => navigate(`/community/${communityId}`)}
                   className="text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
                 >
-                  Editar comunidad
+                  {t('adConfig.raffleEditCommunity')}
                 </button>
               </div>
             ) : (
               <div className="text-center py-1 border-t border-surface-border/60 pt-3">
                 <p className={`font-display font-bold text-2xl ${LIGHT_META.audienceText}`}>
-                  {Number(interested).toLocaleString('es-ES')}
+                  {Number(interested).toLocaleString(localeTag)}
                 </p>
                 <p className="text-[11px] text-surface-muted mt-1">
-                  interesados de {Number(total).toLocaleString('es-ES')} notificables
+                  {t('adConfig.interestedOfTotal', { total: Number(total).toLocaleString(localeTag) })}
                 </p>
               </div>
             )
@@ -421,18 +416,18 @@ export default function RaffleAdAudiencePage() {
         {blockedByFilterShortfall ? (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-1">
             <p className="text-sm text-surface-muted leading-relaxed">
-              Con el filtro de intereses activo solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios interesados, por debajo del mínimo contratable ({VIEWS_MIN.toLocaleString('es-ES')}).
+              {t('adConfig.raffleBelowMinL', { n: Number(audienceCap).toLocaleString(localeTag), min: VIEWS_MIN.toLocaleString(localeTag) })}
             </p>
-            <p className="text-xs text-surface-muted">Desactiva el filtro para poder contratar publicidad.</p>
+            <p className="text-xs text-surface-muted">{t('adConfig.raffleBelowMinLHint')}</p>
           </div>
         ) : (
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <label className="text-xs font-mono text-surface-muted">
-              👁️ Visualizaciones a contratar
+              {t('adConfig.raffleContractSlots')}
             </label>
             <span className="text-xs font-mono font-semibold text-surface-text">
-              {Number(bannerViews).toLocaleString('es-ES')}
+              {Number(bannerViews).toLocaleString(localeTag)}
             </span>
           </div>
 
@@ -446,13 +441,13 @@ export default function RaffleAdAudiencePage() {
             className={`w-full ${LIGHT_META.slider} cursor-pointer`}
           />
           <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-            <span>Mín. {VIEWS_MIN.toLocaleString('es-ES')}</span>
-            <span>Máx. {VIEWS_MAX.toLocaleString('es-ES')}</span>
+            <span>{t('adConfig.minLbl', { n: VIEWS_MIN.toLocaleString(localeTag) })}</span>
+            <span>{t('adConfig.maxLbl', { n: VIEWS_MAX.toLocaleString(localeTag) })}</span>
           </div>
 
           {contractedExceedsAudience && (
             <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 leading-relaxed">
-              ⚠️ Solo hay {Number(audienceCap).toLocaleString('es-ES')} {audienceLabel}: se mostrarán como mucho {Number(audienceCap).toLocaleString('es-ES')} banners, y no se cobrará por el resto.
+              {t('adConfig.raffleWarnCap', { n: Number(audienceCap).toLocaleString(localeTag), n2: Number(audienceCap).toLocaleString(localeTag), label: audienceLabel })}
             </p>
           )}
 
@@ -463,26 +458,26 @@ export default function RaffleAdAudiencePage() {
               real (solo se cobra lo entregado). */}
           <div className="border-t border-surface-border/60 pt-2 mt-1 space-y-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-mono text-surface-muted">💶 Importe contratado</span>
+              <span className="text-xs font-mono text-surface-muted">{t('adConfig.priceContracted')}</span>
               <span className={`text-sm font-display font-bold ${LIGHT_META.audienceText}`}>
                 {formatEurFromCents(maxPriceCents)}
               </span>
             </div>
             {contractedExceedsAudience && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-mono text-surface-muted">Estimado a facturar</span>
+                <span className="text-[11px] font-mono text-surface-muted">{t('adConfig.priceEstBilled')}</span>
                 <span className="text-xs font-mono font-semibold text-surface-text">
                   {formatEurFromCents(estPriceCents)}
                 </span>
               </div>
             )}
             <p className="text-[10px] font-mono text-surface-muted leading-relaxed">
-              {formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents)} por visualización entregada.
+              {t('adConfig.rafflePricePerView', { price: formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents) })}
             </p>
           </div>
 
           <p className="text-[10px] font-mono text-surface-muted">
-            ℹ️ Si no se alcanzan {CHARGE_MIN} banners enseñados no se cobrará nada.
+            {t('adConfig.raffleMinChargeNote', { n: CHARGE_MIN })}
           </p>
         </div>
         )}
@@ -490,16 +485,16 @@ export default function RaffleAdAudiencePage() {
         {/* Notas informativas */}
         <div className="space-y-2">
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            💳 Se aplicará una retención al comenzar el sorteo; el pago se efectuará al renovar o finalizar el contrato publicitario, o en su defecto al finalizar el sorteo.
+            {t('adConfig.raffleNote1')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            📶 Los banners publicitarios tienen preferencia en sorteos Light frente a sorteos Volt.
+            {t('adConfig.raffleNote2')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            🔁 Se mostrará como máximo un banner a cada usuario dentro de un mismo sorteo.
+            {t('adConfig.raffleNote3')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            📡 Los banners se enviarán conforme los usuarios estén disponibles.
+            {t('adConfig.raffleNote4')}
           </p>
         </div>
 
@@ -513,8 +508,8 @@ export default function RaffleAdAudiencePage() {
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${LIGHT_META.button}`}
         >
           {creating
-            ? (isRenew ? 'Renovando...' : 'Creando...')
-            : (isRenew ? '🔄 Renovar publicidad' : '🎁 Crear sorteo Light')}
+            ? (isRenew ? t('adConfig.renewing') : t('adConfig.raffleCreating'))
+            : (isRenew ? t('adConfig.raffleRenewSimpleBtn') : t('adConfig.raffleCreateBtn'))}
         </button>
       </main>
     </div>

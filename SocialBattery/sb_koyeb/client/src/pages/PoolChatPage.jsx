@@ -8,6 +8,7 @@ import { getBatteryColor } from '../lib/battery';
 import { supabase } from '../lib/supabase';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import ReportModal from '../components/ReportModal';
+import { useTranslation } from '../i18n';
 
 // ── Activity emoji mapping — mismo criterio que PoolsPage.jsx ────────────────
 function getActivityEmoji(activity = '') {
@@ -32,18 +33,19 @@ function getActivityEmoji(activity = '') {
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
 // ── Reply preview helpers — mismo patrón que en MessagesPage.jsx ────────────
-function replyPreviewText(replyTo) {
+function replyPreviewText(replyTo, t) {
   if (!replyTo) return '';
-  if (replyTo.deleted_for_everyone) return '🚫 Mensaje eliminado';
-  if (replyTo.type === 'image') return '📷 Imagen';
+  if (replyTo.deleted_for_everyone) return t('chat.deletedLabel');
+  if (replyTo.type === 'image') return t('chat.imageLabel');
   if (replyTo.type === 'poll') return `📊 ${replyTo.content}`;
   return replyTo.content;
 }
 
 // ── ReplyQuote — cita renderizada dentro de una burbuja de mensaje ────────────
 function ReplyQuote({ replyTo, currentUserId, onClick }) {
+  const { t } = useTranslation();
   if (!replyTo) return null;
-  const label = replyTo.sender_id === currentUserId ? 'Tú' : (replyTo.sender?.username || 'Alguien');
+  const label = replyTo.sender_id === currentUserId ? t('chat.you') : (replyTo.sender?.username || t('chat.fallbackSomeone'));
   return (
     <button
       type="button"
@@ -54,7 +56,7 @@ function ReplyQuote({ replyTo, currentUserId, onClick }) {
         {label}
       </span>
       <span className="text-xs opacity-80 leading-tight truncate">
-        {replyPreviewText(replyTo)}
+        {replyPreviewText(replyTo, t)}
       </span>
     </button>
   );
@@ -62,21 +64,22 @@ function ReplyQuote({ replyTo, currentUserId, onClick }) {
 
 // ── ReplyComposerPreview — barra sobre el input mientras se redacta la respuesta
 function ReplyComposerPreview({ replyingTo, label, onCancel }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-xl px-3 py-2 mb-2 animate-slide-up">
       <div className="w-1 self-stretch rounded-full bg-accent-primary flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="text-xs font-display font-bold text-accent-glow truncate">
-          Respondiendo a {label}
+          {t('chat.replyingTo', { who: label })}
         </div>
         <div className="text-xs text-surface-muted truncate">
-          {replyPreviewText(replyingTo)}
+          {replyPreviewText(replyingTo, t)}
         </div>
       </div>
       <button
         onClick={onCancel}
         className="flex-shrink-0 w-7 h-7 rounded-full text-surface-muted hover:text-surface-text hover:bg-surface-hover flex items-center justify-center text-lg leading-none transition-colors"
-        title="Cancelar respuesta"
+        title={t('chat.cancelReplyTitle')}
       >
         ×
       </button>
@@ -142,6 +145,7 @@ function IdentityBadge({ identity, align = 'left' }) {
 }
 
 function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
       <div
@@ -155,7 +159,7 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
             onClick={onCancel}
             className="flex-1 py-2.5 rounded-xl bg-surface-bg border border-surface-border text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -170,12 +174,13 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
 }
 
 function DeletedBubble({ isMe, msgId }) {
+  const { t } = useTranslation();
   return (
     <div id={msgId ? `msg-${msgId}` : undefined} className={`flex gap-2 items-end ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       <div className="max-w-[75%] rounded-2xl px-4 py-2.5 border border-surface-border bg-surface-card/50">
         <p className="text-sm italic text-surface-muted flex items-center gap-1.5">
           <span className="text-base">🚫</span>
-          {isMe ? 'Eliminaste este mensaje' : 'Este mensaje ha sido eliminado'}
+          {isMe ? t('chat.deletedByMe') : t('chat.deletedByOther')}
         </p>
       </div>
     </div>
@@ -183,11 +188,12 @@ function DeletedBubble({ isMe, msgId }) {
 }
 
 function LikeBadge({ liked, isMe }) {
+  const { t } = useTranslation();
   if (!liked) return null;
   return (
     <span
       className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} w-5 h-5 rounded-full bg-surface-bg border border-surface-border flex items-center justify-center text-[11px] shadow-md z-10 leading-none animate-scale-in`}
-      title="Le gusta este mensaje"
+      title={t('chat.likeBadgeTitle')}
     >
       ❤️
     </span>
@@ -195,6 +201,7 @@ function LikeBadge({ liked, isMe }) {
 }
 
 function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLongPress, onQuoteClick, currentUserId }) {
+  const { lang } = useTranslation();
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
 
@@ -229,7 +236,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLo
             <ReplyQuote replyTo={msg.reply_to} currentUserId={currentUserId} onClick={onQuoteClick} />
             <p className="text-sm leading-relaxed break-words" style={{ color: 'inherit' }}>{msg.content}</p>
             <div className="text-xs mt-1 opacity-60">
-              <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>{new Date(msg.created_at).toLocaleTimeString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
           </div>
@@ -243,6 +250,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLo
 }
 
 function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onLongPress, onQuoteClick, currentUserId }) {
+  const { t, lang } = useTranslation();
   const [lightbox, setLightbox] = useState(false);
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const isOptimistic = typeof msg.id === 'string' && msg.id.startsWith('opt-');
@@ -285,7 +293,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
               <div className="relative">
                 <img
                   src={msg.content}
-                  alt="Imagen"
+                  alt={t('chat.imageAlt')}
                   className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
                   onClick={() => { if (!isOptimistic) setLightbox(true); }}
                 />
@@ -296,7 +304,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
                 )}
               </div>
               <div className="text-xs px-3 pb-2 pt-1 opacity-60">
-                <span>{new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+                <span>{new Date(msg.created_at).toLocaleTimeString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
               <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
             </div>
@@ -320,7 +328,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
           </button>
           <img
             src={msg.content}
-            alt="Imagen"
+            alt={t('chat.imageAlt')}
             className="max-w-[95vw] max-h-[90vh] object-contain rounded-xl"
             onClick={e => e.stopPropagation()}
           />
@@ -332,6 +340,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, identity, onL
 
 // ── Poll bubble — mensaje de encuesta con votación en vivo ───────────────────
 function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress, onQuoteClick, currentUserId }) {
+  const { t, lang } = useTranslation();
   const poll = msg.poll || {
     options: msg.poll_options || [],
     votes: (msg.poll_options || []).map(() => 0),
@@ -401,7 +410,7 @@ function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress, onQuoteC
             </div>
             <div className="text-[10px] font-mono text-surface-muted mt-2">
               <span>
-                {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'} · {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                {poll.totalVotes} voto{poll.totalVotes === 1 ? '' : 's'} · {new Date(msg.created_at).toLocaleTimeString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { hour: '2-digit', minute: '2-digit' })}
                 {poll.myVote != null ? ' · toca tu opción para quitar el voto' : ''}
               </span>
             </div>
@@ -418,6 +427,7 @@ function PollBubble({ msg, isMe, identity, onVote, voting, onLongPress, onQuoteC
 
 // ── Create poll modal ─────────────────────────────────────────────────────────
 function CreatePollModal({ onClose, onCreate }) {
+  const { t } = useTranslation();
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [saving, setSaving] = useState(false);
@@ -442,17 +452,17 @@ function CreatePollModal({ onClose, onCreate }) {
     setError('');
     const cleanQuestion = question.trim();
     const cleanOptions = options.map(o => o.trim()).filter(Boolean);
-    if (!cleanQuestion) return setError('Escribe una pregunta');
-    if (cleanOptions.length < 2) return setError('Añade al menos 2 opciones');
+    if (!cleanQuestion) return setError(t('chat.pollErrNoQuestion'));
+    if (cleanOptions.length < 2) return setError(t('chat.pollErrFewOptions'));
     if (new Set(cleanOptions.map(o => o.toLowerCase())).size !== cleanOptions.length) {
-      return setError('Las opciones no pueden repetirse');
+      return setError(t('chat.pollErrDupOptions'));
     }
     setSaving(true);
     try {
       await onCreate(cleanQuestion, cleanOptions);
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear la encuesta');
+      setError(e.message || t('chat.pollErrCreate'));
     } finally {
       setSaving(false);
     }
@@ -467,19 +477,19 @@ function CreatePollModal({ onClose, onCreate }) {
         <div className="flex items-center gap-3">
           <span className="text-xl">📊</span>
           <div className="flex-1">
-            <h2 className="font-display font-bold text-surface-text">Nueva encuesta</h2>
-            <p className="text-xs text-surface-muted">Los apuntados votarán en tiempo real</p>
+            <h2 className="font-display font-bold text-surface-text">{t('chat.pollNewTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('chat.pollNewSubtitle')}</p>
           </div>
           <button onClick={onClose} className="text-surface-muted hover:text-surface-text text-xl leading-none">×</button>
         </div>
 
         <div>
-          <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Pregunta</label>
+          <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">{t('chat.pollQuestionLabel')}</label>
           <input
             type="text"
             value={question}
             onChange={e => setQuestion(e.target.value)}
-            placeholder="¿A qué hora quedamos?"
+            placeholder={t('chat.pollQuestionPh')}
             maxLength={200}
             autoFocus
             className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
@@ -487,7 +497,7 @@ function CreatePollModal({ onClose, onCreate }) {
         </div>
 
         <div>
-          <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">Opciones</label>
+          <label className="block text-[10px] font-mono text-surface-muted uppercase tracking-wider mb-1">{t('chat.pollOptionsLabel')}</label>
           <div className="space-y-2">
             {options.map((opt, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -495,7 +505,7 @@ function CreatePollModal({ onClose, onCreate }) {
                   type="text"
                   value={opt}
                   onChange={e => updateOption(i, e.target.value)}
-                  placeholder={`Opción ${i + 1}`}
+                  placeholder={t('chat.pollOptionPh', { i: i + 1 })}
                   maxLength={60}
                   className="flex-1 bg-surface-bg border border-surface-border rounded-xl px-4 py-2.5 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
                 />
@@ -504,7 +514,7 @@ function CreatePollModal({ onClose, onCreate }) {
                     type="button"
                     onClick={() => removeOption(i)}
                     className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-400 transition-colors"
-                    title="Quitar opción"
+                    title={t('chat.pollRemoveOption')}
                   >
                     ✕
                   </button>
@@ -518,7 +528,7 @@ function CreatePollModal({ onClose, onCreate }) {
               onClick={addOption}
               className="mt-2 text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
             >
-              + Añadir opción
+              {t('chat.pollAddOption')}
             </button>
           )}
         </div>
@@ -527,14 +537,14 @@ function CreatePollModal({ onClose, onCreate }) {
 
         <div className="flex gap-2 pt-1">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors border border-surface-border">
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-semibold disabled:opacity-50 transition-all"
           >
-            {saving ? 'Creando...' : '📊 Crear encuesta'}
+            {saving ? t('chat.pollCreating') : t('chat.pollCreateBtn')}
           </button>
         </div>
       </div>
@@ -543,11 +553,12 @@ function CreatePollModal({ onClose, onCreate }) {
 }
 
 function DateDivider({ date }) {
+  const { t, lang } = useTranslation();
   const today = new Date().toDateString();
   const yesterday = new Date(Date.now() - 86400000).toDateString();
-  const label = date === today ? 'Hoy'
-    : date === yesterday ? 'Ayer'
-    : new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+  const label = date === today ? t('chat.today')
+    : date === yesterday ? t('chat.yesterday')
+    : new Date(date).toLocaleDateString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   return (
     <div className="text-center text-xs text-slate-600 font-mono py-3">
       <span className="bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">{label}</span>
@@ -559,8 +570,9 @@ function DateDivider({ date }) {
 
 // ── Pinned message banner ────────────────────────────────────────────────────
 function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
+  const { t } = useTranslation();
   if (!pinned) return null;
-  const preview = pinned.type === 'image' ? '📷 Foto' : pinned.type === 'poll' ? `📊 ${pinned.content}` : pinned.content;
+  const preview = pinned.type === 'image' ? t('chat.photoLabel') : pinned.type === 'poll' ? `📊 ${pinned.content}` : pinned.content;
   return (
     <div
       className="sticky top-0 z-10 -mx-4 mb-2 px-4 py-2 bg-surface-card/95 backdrop-blur-xl border-b border-surface-border flex items-center gap-2 cursor-pointer"
@@ -569,7 +581,7 @@ function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
       <span className="text-base flex-shrink-0">📌</span>
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-mono text-surface-muted">
-          Fijado por {pinned.pinned_by?.username || pinned.sender?.username || 'alguien'}
+          {t('chat.pinnedByPrefix')} {pinned.pinned_by?.username || pinned.sender?.username || t('chat.someone')}
         </div>
         <div className="text-sm text-surface-text truncate">{preview}</div>
       </div>
@@ -578,7 +590,7 @@ function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
           type="button"
           onClick={(e) => { e.stopPropagation(); onUnpin(); }}
           className="flex-shrink-0 text-surface-muted hover:text-surface-text text-lg leading-none px-1"
-          title="Desfijar mensaje"
+          title={t('chat.unpinTitle')}
         >
           ×
         </button>
@@ -589,6 +601,7 @@ function PinnedBanner({ pinned, canUnpin, onUnpin, onJumpTo }) {
 
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
 function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone, onReport }) {
+  const { t } = useTranslation();
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -605,7 +618,7 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
         {/* Preview */}
         {!msg.deleted_for_everyone && (
           <p className="text-xs text-surface-muted font-mono text-center truncate px-8 mb-3 opacity-60">
-            {msg.type === 'image' ? '📷 Imagen' : msg.type === 'poll' ? `📊 ${msg.content}` : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
+            {msg.type === 'image' ? t('chat.imageLabel') : msg.type === 'poll' ? `📊 ${msg.content}` : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
           </p>
         )}
 
@@ -617,9 +630,9 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
             >
               <span className="text-xl">❤️</span>
               <div>
-                <div>{isLiked ? 'Quitar me gusta' : 'Me gusta'}</div>
+                <div>{isLiked ? t('chat.ctxLikeRemove') : t('chat.ctxLikeAdd')}</div>
                 <div className="text-xs text-surface-muted font-normal">
-                  {isLiked ? 'Deja de destacar este mensaje' : 'Destaca este mensaje con un corazón'}
+                  {isLiked ? t('chat.ctxLikeRemoveHint') : t('chat.ctxLikeAddHint')}
                 </div>
               </div>
             </button>
@@ -632,9 +645,9 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
             >
               <span className="text-xl">{isPinned ? '📌' : '📍'}</span>
               <div>
-                <div>{isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}</div>
+                <div>{isPinned ? t('chat.ctxPinRemove') : t('chat.ctxPinAdd')}</div>
                 <div className="text-xs text-surface-muted font-normal">
-                  {isPinned ? 'Deja de destacarlo arriba del chat' : 'Lo destaca arriba del chat'}
+                  {isPinned ? t('chat.ctxPinRemoveHint') : t('chat.ctxPinAddHint')}
                 </div>
               </div>
             </button>
@@ -647,8 +660,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
             >
               <span className="text-xl">↩️</span>
               <div>
-                <div>Responder</div>
-                <div className="text-xs text-surface-muted font-normal">Cita este mensaje en tu respuesta</div>
+                <div>{t('chat.ctxReply')}</div>
+                <div className="text-xs text-surface-muted font-normal">{t('chat.ctxReplyHint')}</div>
               </div>
             </button>
           )}
@@ -660,8 +673,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
             >
               <span className="text-xl">🗑️</span>
               <div>
-                <div>Eliminar para mí</div>
-                <div className="text-xs text-surface-muted font-normal">Solo desaparece de tu vista</div>
+                <div>{t('chat.ctxDeleteMine')}</div>
+                <div className="text-xs text-surface-muted font-normal">{t('chat.ctxDeleteMineHint')}</div>
               </div>
             </button>
           )}
@@ -673,8 +686,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
             >
               <span className="text-xl">❌</span>
               <div>
-                <div>Eliminar para todos</div>
-                <div className="text-xs text-red-400/60 font-normal">Queda rastro en la conversación</div>
+                <div>{t('chat.ctxDeleteAll')}</div>
+                <div className="text-xs text-red-400/60 font-normal">{t('chat.ctxDeleteAllHint')}</div>
               </div>
             </button>
           )}
@@ -686,8 +699,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
             >
               <span className="text-xl">🚩</span>
               <div>
-                <div>Denunciar mensaje</div>
-                <div className="text-xs text-red-400/60 font-normal">Lo revisará nuestro equipo</div>
+                <div>{t('chat.ctxReport')}</div>
+                <div className="text-xs text-red-400/60 font-normal">{t('chat.ctxReportHint')}</div>
               </div>
             </button>
           )}
@@ -696,7 +709,7 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
             onClick={onClose}
             className="w-full text-center py-3.5 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
         </div>
       </div>
@@ -708,6 +721,7 @@ export default function PoolChatPage() {
   const { poolId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const { myBubbleStyle, otherBubbleStyle, isConversationMuted, setConversationMuted } = useSettings();
   const { clearPoolChatBadge } = usePoolChatNotifications();
 
@@ -748,7 +762,7 @@ export default function PoolChatPage() {
     const next = !chatMuted;
     setConversationMuted('pool', poolId, next);
     setChatMuted(next);
-    showToast(next ? 'Notificaciones silenciadas' : 'Notificaciones activadas');
+    showToast(next ? t('chat.mutedToast') : t('chat.unmutedToast'));
   };
 
   // Cierra el menú de opciones (⋯) al hacer click fuera — mismo patrón que en GroupChatPage.jsx
@@ -781,7 +795,7 @@ export default function PoolChatPage() {
         setBadgeData({ assignments: badgesResult.assignments || [] });
       } catch (e) {
         console.error(e);
-        showToast(e.message || 'Error al cargar el chat', 'error');
+        showToast(e.message || t('chat.chatLoadError'), 'error');
       } finally {
         setLoading(false);
       }
@@ -889,7 +903,7 @@ export default function PoolChatPage() {
       if (isPinned) {
         await api.delete(`/pools/${poolId}/pin`);
         setPinnedMessage(null);
-        showToast('Mensaje desfijado');
+        showToast(t('chat.msgUnpinnedToast'));
       } else {
         const target = messages.find(m => m.id === messageId);
         const result = await api.post(`/pools/${poolId}/messages/${messageId}/pin`);
@@ -898,10 +912,10 @@ export default function PoolChatPage() {
           pinned_at: result.pinned_at,
           pinned_by: { id: profile?.id, username: profile?.username },
         } : null);
-        showToast('Mensaje fijado');
+        showToast(t('chat.msgPinnedToast'));
       }
     } catch (e) {
-      showToast('Error al fijar el mensaje', 'error');
+      showToast(t('chat.pinError'), 'error');
     }
   }
 
@@ -911,7 +925,7 @@ export default function PoolChatPage() {
       const { message: updated } = await api.patch(`/pools/${poolId}/messages/${msg.id}/like`);
       setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
     } catch (e) {
-      showToast(e.message || 'Error al reaccionar', 'error');
+      showToast(e.message || t('chat.likeError'), 'error');
     }
   }
 
@@ -924,9 +938,9 @@ export default function PoolChatPage() {
       } else {
         setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
       }
-      showToast(scope === 'me' ? 'Mensaje eliminado' : 'Mensaje eliminado para todos');
+      showToast(scope === 'me' ? t('chat.delMineToast') : t('chat.delAllToast'));
     } catch (e) {
-      showToast(e.message || 'Error al eliminar', 'error');
+      showToast(e.message || t('chat.delError'), 'error');
     }
   }
 
@@ -951,9 +965,9 @@ export default function PoolChatPage() {
       await api.post(`/pools/${poolId}/clear`);
       setClearedAt(new Date().toISOString());
       setShowClearConfirm(false);
-      showToast('Chat vaciado');
+      showToast(t('chat.chatClearedShort'));
     } catch (e) {
-      showToast('Error al vaciar el chat', 'error');
+      showToast(t('chat.chatClearErrorShort'), 'error');
     } finally {
       setClearingChat(false);
     }
@@ -996,7 +1010,7 @@ export default function PoolChatPage() {
       setMessages(m => m.filter(msg => msg.id !== optimistic.id));
       setInput(content);
       setReplyingTo(replyTarget);
-      showToast('Error al enviar', 'error');
+      showToast(t('chat.sendErrorShort'), 'error');
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -1042,7 +1056,7 @@ export default function PoolChatPage() {
     } catch (e) {
       URL.revokeObjectURL(localUrl);
       setMessages(m => m.filter(msg => msg.id !== optimisticId));
-      showToast(e.message || 'Error al enviar la imagen', 'error');
+      showToast(e.message || t('chat.imageSendError'), 'error');
     } finally {
       setSendingImage(false);
     }
@@ -1051,7 +1065,7 @@ export default function PoolChatPage() {
   async function handleCreatePoll(question, options) {
     const { message } = await api.post(`/pools/${poolId}/polls`, { question, options });
     setMessages(m => [...m, message]);
-    showToast('Encuesta enviada 📊');
+    showToast(t('chat.pollSentToast'));
   }
 
   async function handleVote(messageId, optionIndex, isMine) {
@@ -1063,7 +1077,7 @@ export default function PoolChatPage() {
         : await api.post(`/pools/${poolId}/messages/${messageId}/vote`, { optionIndex });
       setMessages(m => m.map(msg => (msg.id === messageId ? { ...msg, poll: data.poll } : msg)));
     } catch (e) {
-      showToast(e.message || 'Error al votar', 'error');
+      showToast(e.message || t('chat.voteError'), 'error');
     } finally {
       setVotingMessageId(null);
     }
@@ -1116,8 +1130,8 @@ export default function PoolChatPage() {
                 </span>
               </div>
               <div className="text-xs text-surface-muted font-mono">
-                💬 Chat de la quedada · {pool.participant_count} apuntados
-                {badgeData.assignments.length > 0 && ` · ${badgeData.assignments.length} identidades`}
+                {t('chat.poolChatSubtitle')} · {t('chat.attendeesCount', { n: pool.participant_count })}
+                {badgeData.assignments.length > 0 && ` · ${t('chat.identitiesCount', { n: badgeData.assignments.length })}`}
               </div>
             </div>
           ) : loading ? (
@@ -1130,7 +1144,7 @@ export default function PoolChatPage() {
               <button
                 onClick={() => setShowHeaderMenu(v => !v)}
                 className="w-9 h-9 rounded-xl text-surface-muted hover:text-surface-text hover:bg-surface-card border border-transparent hover:border-surface-border transition-all flex items-center justify-center text-xl font-bold"
-                title="Opciones"
+                title={t('chat.optionsTitle')}
               >
                 ⋯
               </button>
@@ -1140,13 +1154,13 @@ export default function PoolChatPage() {
                     onClick={() => { setShowHeaderMenu(false); handleToggleMute(); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-surface-text hover:bg-surface-hover transition-colors flex items-center gap-2.5"
                   >
-                    <span>{chatMuted ? '🔔' : '🔕'}</span> {chatMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+                    <span>{chatMuted ? '🔔' : '🔕'}</span> {chatMuted ? t('chat.unmuteNotifs') : t('chat.muteNotifs')}
                   </button>
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
                   >
-                    <span>🧹</span> Vaciar chat
+                    <span>🧹</span> {t('chat.clearChatShort')}
                   </button>
                 </div>
               )}
@@ -1159,7 +1173,7 @@ export default function PoolChatPage() {
       <div className="flex-1 min-h-0 overflow-y-auto max-w-lg w-full mx-auto px-4 py-4 space-y-3">
         {loading ? (
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
-            Cargando mensajes...
+            {t('chat.loading')}
           </div>
         ) : (
           <>
@@ -1173,9 +1187,7 @@ export default function PoolChatPage() {
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <div className="text-4xl">🤝</div>
             <p className="text-slate-500 text-sm text-center">
-              {clearedAt
-                ? 'Chat vaciado. ¡Sé el primero en escribir!'
-                : '¡El chat está vacío! Habla con los apuntados antes de la quedada.'}
+              {clearedAt ? t('chat.emptyPoolCleared') : t('chat.emptyPoolIntro')}
             </p>
           </div>
         ) : (
@@ -1263,12 +1275,12 @@ export default function PoolChatPage() {
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
           onReport={() => {
             const preview = contextMenu.type === 'image'
-              ? '📷 Imagen'
-              : (contextMenu.content?.slice(0, 60) || 'este mensaje');
+              ? t('chat.imageLabel')
+              : (contextMenu.content?.slice(0, 60) || t('chat.ctxReport'));
             setReportTarget({
               targetType: 'pool_message',
               targetId: contextMenu.id,
-              targetLabel: `Mensaje: "${preview}${contextMenu.content?.length > 60 ? '…' : ''}"`,
+              targetLabel: `${t('chat.reportMsgPrefix')}: "${preview}${contextMenu.content?.length > 60 ? '…' : ''}"`,
             });
             setContextMenu(null);
           }}
@@ -1289,14 +1301,14 @@ export default function PoolChatPage() {
           {replyingTo && (
             <ReplyComposerPreview
               replyingTo={replyingTo}
-              label={replyingTo.sender_id === profile?.id ? 'ti mismo' : (replyingTo.sender?.username || 'este usuario')}
+              label={replyingTo.sender_id === profile?.id ? t('chat.yourself') : (replyingTo.sender?.username || t('chat.fallbackUser'))}
               onCancel={() => setReplyingTo(null)}
             />
           )}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowPhotoMenu(true)}
-              title="Enviar foto"
+              title={t('chat.sendPhotoTitle')}
               disabled={sendingImage}
               className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all disabled:opacity-40"
             >
@@ -1327,7 +1339,7 @@ export default function PoolChatPage() {
             />
             <button
               onClick={() => setShowPollModal(true)}
-              title="Crear encuesta"
+              title={t('chat.createPollTitle')}
               className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all"
             >
               📊
@@ -1337,7 +1349,7 @@ export default function PoolChatPage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } }}
-              placeholder="Escribe a los apuntados..."
+              placeholder={t('chat.inputPhPool')}
               maxLength={1000}
               className="flex-1 bg-surface-card border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
             />
@@ -1355,9 +1367,9 @@ export default function PoolChatPage() {
       {/* Clear chat confirm */}
       {showClearConfirm && (
         <ConfirmModal
-          title="Vaciar chat"
-          message="Los mensajes desaparecerán solo para ti. El resto de apuntados seguirá viendo el historial completo."
-          confirmLabel={clearingChat ? 'Vaciando…' : 'Vaciar'}
+          title={t('chat.clearChatShort')}
+          message={t('chat.clearChatBodyGroup')}
+          confirmLabel={clearingChat ? t('chat.clearing') : t('chat.clearBtn')}
           onConfirm={clearChat}
           onCancel={() => setShowClearConfirm(false)}
         />

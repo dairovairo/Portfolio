@@ -11,6 +11,7 @@ import { trackUrlClick } from '../lib/urlClickTracker';
 import TutorialOverlay from '../components/TutorialOverlay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
+import { useTranslation } from '../i18n';
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -28,58 +29,62 @@ function normalizeText(value = '') {
 const getEventEmoji = getCategoryEmoji;
 const getCommunityEmoji = getCategoryEmoji;
 
-function formatEventDate(dateStr) {
+function formatEventDate(dateStr, t, lang = 'es') {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   const now = new Date();
   const diffMs = d - now;
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const tag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
 
-  if (diffMs < 0) return 'Ya pasó';
+  if (diffMs < 0) return t ? t('community.alreadyPassed') : 'Ya pasó';
   if (diffDays === 0) {
-    return `Hoy · ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    const time = d.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' });
+    return t ? t('community.todayAt', { time }) : `Hoy · ${time}`;
   }
   if (diffDays === 1) {
-    return `Mañana · ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    const time = d.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' });
+    return t ? t('community.tomorrowAt', { time }) : `Mañana · ${time}`;
   }
   if (diffDays < 7) {
-    return d.toLocaleDateString('es-ES', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString(tag, { weekday: 'long', hour: '2-digit', minute: '2-digit' });
   }
-  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(tag, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function formatEventDateRange(event) {
-  const start = formatEventDate(event.event_date);
+function formatEventDateRange(event, t, lang = 'es') {
+  const start = formatEventDate(event.event_date, t, lang);
   if (!event.ends_at) return start;
   const end = new Date(event.ends_at);
   if (Number.isNaN(end.getTime())) return start;
-  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return `${start} - fin ${endLabel}`;
+  const tag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
+  const endLabel = end.toLocaleDateString(tag, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return t ? t('community.endsWithLabel', { start, end: endLabel }) : `${start} - fin ${endLabel}`;
 }
 
-function getDaysUntilLabel(dateStr) {
+function getDaysUntilLabel(dateStr, t) {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
   if (Number.isNaN(time)) return '';
   const diffMs = time - Date.now();
-  if (diffMs < 0) return 'Ya empezó';
-  // Menos de 24 h: bajamos a horas/minutos para no quedarnos en "Falta 1 día"
-  // durante todas las últimas horas antes del evento.
+  if (diffMs < 0) return t ? t('community.alreadyStarted') : 'Ya empezó';
   const MIN_MS = 60 * 1000;
   const HOUR_MS = 60 * MIN_MS;
   const DAY_MS = 24 * HOUR_MS;
-  if (diffMs < MIN_MS) return 'Empieza ya';
+  if (diffMs < MIN_MS) return t ? t('community.startsNow') : 'Empieza ya';
   if (diffMs < HOUR_MS) {
     const mins = Math.max(1, Math.round(diffMs / MIN_MS));
-    return mins === 1 ? 'Falta 1 min' : `Faltan ${mins} min`;
+    if (!t) return mins === 1 ? 'Falta 1 min' : `Faltan ${mins} min`;
+    return mins === 1 ? t('community.inMinOne') : t('community.inMinMany', { n: mins });
   }
   if (diffMs < DAY_MS) {
     const hours = Math.max(1, Math.round(diffMs / HOUR_MS));
-    return hours === 1 ? 'Falta 1 hora' : `Faltan ${hours} horas`;
+    if (!t) return hours === 1 ? 'Falta 1 hora' : `Faltan ${hours} horas`;
+    return hours === 1 ? t('community.inHourOne') : t('community.inHourMany', { n: hours });
   }
   const days = Math.ceil(diffMs / DAY_MS);
-  if (days === 1) return 'Falta 1 día';
-  return `Faltan ${days} días`;
+  if (!t) return days === 1 ? 'Falta 1 día' : `Faltan ${days} días`;
+  return days === 1 ? t('community.inDayOne') : t('community.inDayMany', { n: days });
 }
 
 function ensureAbsoluteUrl(url) {
@@ -252,15 +257,16 @@ function matchesEventDateFilter(event, dateFilter) {
 // handleEventProximityChange/handleEventRankChange más abajo y sortEventsBy).
 // Por eso cada grupo lleva su propio value/onChange, en vez de un único
 // value plano como antes, pero solo uno de los dos puede estar activo.
-const EVENT_PROXIMITY_OPTIONS = [
-  { key: 'cercania', label: '📍 Cercanía' },
-  { key: 'cercania_intereses', label: '📍✨ Cercanía e intereses' },
-];
-const EVENT_RANK_OPTIONS = [
-  { key: 'app', label: '✨ Selección' },
-  { key: 'planificaciones', label: '📅 Planificaciones' },
-  { key: 'likes', label: '♥ Likes' },
-];
+const EVENT_PROXIMITY_KEYS = ['cercania', 'cercania_intereses'];
+function eventProximityLabel(key, t) {
+  return key === 'cercania' ? t('community.sortCercania') : t('community.sortCercaniaInt');
+}
+const EVENT_RANK_KEYS = ['app', 'planificaciones', 'likes'];
+function eventRankLabel(key, t) {
+  if (key === 'app') return t('community.sortApp');
+  if (key === 'planificaciones') return t('community.sortPlans');
+  return t('community.sortLikes');
+}
 
 // ── Sorteos: sort options ────────────────────────────────────────────────
 // Réplica del patrón de EVENT_RANK_OPTIONS. Con la fase 119 los sorteos ya
@@ -272,12 +278,13 @@ const EVENT_RANK_OPTIONS = [
 // count desc dentro de los que hacen match. En eventos la análoga es
 // 'cercania_intereses'; aquí no hay parte de cercanía (los sorteos no
 // tienen ubicación) y por eso vive solo en este dropdown.
-const RAFFLE_RANK_OPTIONS = [
-  { key: 'app',           label: '✨ Selección' },
-  { key: 'participantes', label: '👥 Participantes' },
-  { key: 'likes',         label: '♥ Likes' },
-  { key: 'intereses',     label: '✨ Intereses' },
-];
+const RAFFLE_RANK_KEYS = ['app', 'participantes', 'likes', 'intereses'];
+function raffleRankLabel(key, t) {
+  if (key === 'app') return t('community.sortApp');
+  if (key === 'participantes') return t('community.sortParticipants');
+  if (key === 'likes') return t('community.sortLikes');
+  return t('community.sortInterests');
+}
 
 function raffleRankScoreOf(raffle, rankKey) {
   const participants = raffle.participant_count || 0;
@@ -333,16 +340,16 @@ function sortRafflesBy(raffleList = [], { rankKey = 'app', userInterests = [] } 
   return [...list].sort((a, b) => raffleRankScoreOf(b, rankKey) - raffleRankScoreOf(a, rankKey));
 }
 
-function formatRaffleEndShort(dateStr) {
+function formatRaffleEndShort(dateStr, t) {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
   if (Number.isNaN(time)) return '';
   const diffMs = time - Date.now();
-  if (diffMs <= 0) return 'Terminado';
+  if (diffMs <= 0) return t ? t('community.raffleEnded') : 'Terminado';
   const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return 'Termina hoy';
-  if (days === 1) return 'Termina mañana';
-  return `Termina en ${days} días`;
+  if (days <= 0) return t ? t('community.raffleEndsToday') : 'Termina hoy';
+  if (days === 1) return t ? t('community.raffleEndsTomorrow') : 'Termina mañana';
+  return t ? t('community.raffleEndsInDays', { n: days }) : `Termina en ${days} días`;
 }
 
 // Metadata visual de cada tier — solo emoji y label corto, ya que las
@@ -356,6 +363,7 @@ const RAFFLE_TIER_EMOJI = { light: '🎫', volt: '⚡', community: '🤝' };
 const RAFFLE_TIER_BORDER_STYLES = { volt: 'border-blue-400/50', community: 'border-red-400/50', light: 'border-amber-400/50' };
 
 function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRankChange }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -367,9 +375,9 @@ function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRan
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  const proximityLabel = EVENT_PROXIMITY_OPTIONS.find(opt => opt.key === proximityValue)?.label;
-  const rankLabel = EVENT_RANK_OPTIONS.find(opt => opt.key === rankValue)?.label;
-  const currentLabel = [proximityLabel, rankLabel].filter(Boolean).join(' + ') || 'Ordenar';
+  const proximityLabel = proximityValue ? eventProximityLabel(proximityValue, t) : null;
+  const rankLabel = rankValue ? eventRankLabel(rankValue, t) : null;
+  const currentLabel = [proximityLabel, rankLabel].filter(Boolean).join(' + ') || t('community.sortOrder');
 
   return (
     <div className="relative flex-shrink-0" ref={menuRef}>
@@ -385,39 +393,39 @@ function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRan
         <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[230px] py-1.5 overflow-hidden animate-fade-in">
           <div>
             <p className="px-4 pt-2 pb-1 text-[10px] font-display font-bold uppercase tracking-wide text-surface-muted/70">
-              Cercanía
+              {t('community.sortHeaderProximity')}
             </p>
-            {EVENT_PROXIMITY_OPTIONS.map(opt => (
+            {EVENT_PROXIMITY_KEYS.map(key => (
               <button
-                key={opt.key}
+                key={key}
                 type="button"
-                onClick={() => onProximityChange(opt.key)}
+                onClick={() => onProximityChange(key)}
                 className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
-                  proximityValue === opt.key
+                  proximityValue === key
                     ? 'text-accent-glow bg-accent-primary/10'
                     : 'text-surface-text hover:bg-surface-hover'
                 }`}
               >
-                {opt.label}
+                {eventProximityLabel(key, t)}
               </button>
             ))}
           </div>
           <div>
             <p className="px-4 pt-2 pb-1 text-[10px] font-display font-bold uppercase tracking-wide text-surface-muted/70">
-              Otros
+              {t('community.sortHeaderOthers')}
             </p>
-            {EVENT_RANK_OPTIONS.map(opt => (
+            {EVENT_RANK_KEYS.map(key => (
               <button
-                key={opt.key}
+                key={key}
                 type="button"
-                onClick={() => onRankChange(opt.key)}
+                onClick={() => onRankChange(key)}
                 className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
-                  rankValue === opt.key
+                  rankValue === key
                     ? 'text-accent-glow bg-accent-primary/10'
                     : 'text-surface-text hover:bg-surface-hover'
                 }`}
               >
-                {opt.label}
+                {eventRankLabel(key, t)}
               </button>
             ))}
           </div>
@@ -435,6 +443,7 @@ function EventSortDropdown({ proximityValue, onProximityChange, rankValue, onRan
 // prefiero un componente hermano corto que mantener el condicionamiento
 // dentro del genérico.
 function RaffleSortDropdown({ value, onChange }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -446,7 +455,7 @@ function RaffleSortDropdown({ value, onChange }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  const currentLabel = RAFFLE_RANK_OPTIONS.find(opt => opt.key === value)?.label || 'Ordenar';
+  const currentLabel = value ? raffleRankLabel(value, t) : t('community.sortOrder');
 
   return (
     <div className="relative flex-shrink-0" ref={menuRef}>
@@ -460,18 +469,18 @@ function RaffleSortDropdown({ value, onChange }) {
       </button>
       {open && (
         <div className="absolute right-0 top-[calc(100%+0.5rem)] bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-30 min-w-[210px] py-1.5 overflow-hidden animate-fade-in">
-          {RAFFLE_RANK_OPTIONS.map(opt => (
+          {RAFFLE_RANK_KEYS.map(key => (
             <button
-              key={opt.key}
+              key={key}
               type="button"
-              onClick={() => { onChange(opt.key); setOpen(false); }}
+              onClick={() => { onChange(key); setOpen(false); }}
               className={`w-full text-left px-4 py-2.5 text-sm font-display font-semibold transition-colors ${
-                value === opt.key
+                value === key
                   ? 'text-amber-300 bg-amber-500/10'
                   : 'text-surface-text hover:bg-surface-hover'
               }`}
             >
-              {opt.label}
+              {raffleRankLabel(key, t)}
             </button>
           ))}
         </div>
@@ -485,7 +494,9 @@ function RaffleSortDropdown({ value, onChange }) {
 // hacer click fuera), pero de propósito genérico: agrupa dentro los filtros
 // que antes iban sueltos en la pantalla (precio/tiempo/categoría en Eventos,
 // y todos los de Comunidades), para no saturar la vista con filas de chips.
-function FilterDropdown({ label = 'Filtrar', active = false, children }) {
+function FilterDropdown({ label, active = false, children }) {
+  const { t } = useTranslation();
+  const displayLabel = label || t('community.filterLabel');
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -504,7 +515,7 @@ function FilterDropdown({ label = 'Filtrar', active = false, children }) {
         onClick={() => setOpen(v => !v)}
         className="relative flex items-center gap-1.5 text-xs bg-surface-card border border-surface-border rounded-lg pl-2.5 pr-2 py-1.5 text-surface-muted hover:border-accent-primary/50 transition-colors cursor-pointer"
       >
-        <span>🔎 {label}</span>
+        <span>🔎 {displayLabel}</span>
         <span className={`text-[9px] leading-none transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
         {active && (
           <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent-primary rounded-full ring-2 ring-surface-card" />
@@ -546,6 +557,7 @@ function getEntityCategories(entity) {
 }
 
 function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId, hasUnreadUpdate }) {
+  const { t, lang } = useTranslation();
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -554,7 +566,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
   const isLiked = Boolean(event.liked_by_current_user);
   const eventCategories = getEntityCategories(event);
   const emoji = getEventEmoji(eventCategories[0]);
-  const daysLabel = getDaysUntilLabel(event.event_date);
+  const daysLabel = getDaysUntilLabel(event.event_date, t);
   const attendeeCount = event.attendee_count || 0;
   const likeCount = event.like_count || 0;
 
@@ -668,7 +680,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
           </div>
           {/* Creator + comunidad */}
           <p className="text-xs text-surface-muted mt-0.5 leading-snug">
-            <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
+            <span className="text-accent-glow/80">{event.creator_name || t('community.fallbackCreator')}</span>
             {event.community_name && (
               <span className="text-surface-muted"> · <span className="text-accent-glow">{event.community_name}</span></span>
             )}
@@ -687,7 +699,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
           </span>
         )}
         {isPast && !daysLabel && (
-          <span className="text-xs text-slate-500 font-mono">Ya pasó</span>
+          <span className="text-xs text-slate-500 font-mono">{t('community.alreadyPassed')}</span>
         )}
         {event.location && (
           <span className="text-xs text-slate-400 font-mono flex items-center gap-1 truncate max-w-[160px]">
@@ -708,7 +720,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
           </span>
         ) : (
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-green-500/25 bg-green-500/10 text-green-400">
-            ✓ Gratis
+            {t('community.freeTag')}
           </span>
         )}
         {event.url && ensureAbsoluteUrl(event.url) && (
@@ -719,7 +731,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             onClick={e => { e.stopPropagation(); trackUrlClick('event', event.id); }}
             className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-accent-primary/20 bg-accent-primary/10 text-accent-glow/80 hover:text-accent-glow"
           >
-            🔗 Ver más
+            {t('community.seeMore')}
           </a>
         )}
       </div>
@@ -756,19 +768,19 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
         {/* Acción principal */}
         {isPast && !isJoined ? (
           <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
-            Pasado
+            {t('community.passedTag')}
           </span>
         ) : isJoined ? (
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-green-400 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-1">
-              ✓ Planificado
+              {t('community.joinedTag')}
             </span>
             <button
               onClick={handleLeave}
               disabled={leaving}
               className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
             >
-              {leaving ? '...' : 'Quitar'}
+              {leaving ? '...' : t('community.removeBtn')}
             </button>
           </div>
         ) : (
@@ -777,7 +789,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
             disabled={joining}
             className="text-xs font-display font-semibold px-4 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white transition-all disabled:opacity-50 active:scale-95"
           >
-            {joining ? '...' : '+ Planificar'}
+            {joining ? '...' : t('community.planBtn')}
           </button>
         )}
       </div>
@@ -787,6 +799,7 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
 
 // ── Community Card ────────────────────────────────────────────────────────────
 function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasNewEvents, hasNewThreadPost }) {
+  const { t } = useTranslation();
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const isMember = community.members?.includes(currentUserId);
@@ -862,7 +875,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
               dos "cosas nuevas" a la vez cuando lo prioritario es el rojo. */}
           {hasNewThreadPost && !hasNewEvents && (
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/20 text-accent-glow border border-accent-primary/40 flex-shrink-0">
-              🧵 Nuevo en el hilo
+              {t('community.newInThread')}
             </span>
           )}
           {communityCategories.map(cat => (
@@ -888,12 +901,12 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
             onClick={e => { e.stopPropagation(); trackUrlClick('community', community.id); }}
             className="text-xs text-accent-glow/80 font-mono mt-0.5 hover:text-accent-glow flex items-center gap-1 w-fit"
           >
-            🔗 Ver más
+            {t('community.seeMore')}
           </a>
         )}
         <p className="text-xs text-surface-muted font-mono mt-1">
-          👥 {community.member_count || 0} miembros · por {community.creator_name || 'Alguien'}
-          {community.is_admin && <span className="text-yellow-300"> · admin</span>}
+          {t('community.membersCount', { n: community.member_count || 0, creator: community.creator_name || t('community.fallbackCreator') })}
+          {community.is_admin && <span className="text-yellow-300">{t('community.adminSuffix')}</span>}
         </p>
       </div>
 
@@ -905,7 +918,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
               disabled={leaving}
               className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50"
             >
-              {leaving ? '...' : 'Salir'}
+              {leaving ? '...' : t('community.leaveBtn')}
             </button>
           </>
         ) : (
@@ -917,7 +930,7 @@ function CommunityCard({ community, onJoin, onLeave, onOpen, currentUserId, hasN
             disabled={joining}
             className="text-xs font-display font-semibold px-3 py-1.5 rounded-xl bg-accent-primary/20 hover:bg-accent-primary/30 text-accent-glow border border-accent-primary/30 transition-all disabled:opacity-50"
           >
-            {joining ? '...' : 'Unirse'}
+            {joining ? '...' : t('community.joinBtn')}
           </button>
         )}
       </div>
@@ -966,6 +979,7 @@ function matchesCommunityCategory(community, selectedCategory) {
 }
 
 function CreateCommunityModal({ onClose, onCreate }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -1007,7 +1021,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) {
-      setError('La foto no puede superar 3MB');
+      setError(t('community.errPhotoSize'));
       e.target.value = '';
       return;
     }
@@ -1023,17 +1037,17 @@ function CreateCommunityModal({ onClose, onCreate }) {
   }
 
   async function handleSubmit() {
-    if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
-    if (!form.categories.length) { setError('Elige al menos una categoría'); return; }
+    if (!form.name.trim()) { setError(t('community.errNameRequired')); return; }
+    if (!form.categories.length) { setError(t('community.errPickCategory')); return; }
     if (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim()) {
-      setError('Especifica la categoria');
+      setError(t('community.errSpecifyCategory'));
       return;
     }
     let collabAmountCents = null;
     if (collabEnabled) {
       const parsed = Number(String(collabAmount).replace(',', '.'));
       if (!Number.isFinite(parsed) || parsed < 0.99) {
-        setError('El importe de colaboración debe ser de al menos 0,99 €');
+        setError(t('community.errCollabMin'));
         return;
       }
       collabAmountCents = Math.round(parsed * 100);
@@ -1052,7 +1066,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
       await onCreate(formData);
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear la comunidad');
+      setError(e.message || t('community.errCreate'));
     } finally {
       setSaving(false);
     }
@@ -1067,20 +1081,20 @@ function CreateCommunityModal({ onClose, onCreate }) {
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">{emoji || '👥'}</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">Crear comunidad</h2>
-            <p className="text-xs text-surface-muted">Un espacio para conectar con personas afines</p>
+            <h2 className="font-display font-bold text-surface-text text-lg">{t('community.createTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('community.createSubtitle')}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Nombre *</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('community.fieldName')}</label>
             <input
               type="text"
               value={form.name}
               onChange={e => set('name', e.target.value)}
-              placeholder="Ej: Runners de Madrid, Amantes del Café..."
+              placeholder={t('community.namePh')}
               maxLength={80}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -1089,7 +1103,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
           {/* Category */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Categoría * <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+              {t('community.fieldCategoryCount', { n: form.categories.length, max: MAX_CATEGORIES })}
             </label>
             <div className="flex flex-wrap gap-2">
               {COMMUNITY_CATEGORIES.map(cat => {
@@ -1120,12 +1134,12 @@ function CreateCommunityModal({ onClose, onCreate }) {
                   type="text"
                   value={form.custom_category}
                   onChange={e => set('custom_category', e.target.value)}
-                  placeholder="Escribe la categoría"
+                  placeholder={t('community.customCategoryPh')}
                   maxLength={60}
                   className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
                 />
                 <p className="mt-2 text-xs text-amber-400/80 font-mono">
-                  ⚠️ La publicidad funcionará notablemente mejor escogiendo una categoría de la lista.
+                  {t('community.otherCatWarning')}
                 </p>
               </>
             )}
@@ -1134,13 +1148,13 @@ function CreateCommunityModal({ onClose, onCreate }) {
           {/* Organization */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Organización <span className="text-slate-600">(opcional)</span>
+              {t('community.fieldOrg')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <input
               type="text"
               value={form.organization}
               onChange={e => set('organization', e.target.value)}
-              placeholder="Ej: Universidad, asociación, club..."
+              placeholder={t('community.orgPh')}
               maxLength={120}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -1149,12 +1163,12 @@ function CreateCommunityModal({ onClose, onCreate }) {
           {/* Description */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Descripción <span className="text-slate-600">(opcional)</span>
+              {t('community.fieldDesc')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <textarea
               value={form.description}
               onChange={e => set('description', e.target.value)}
-              placeholder="¿De qué trata tu comunidad? ¿A quién está dirigida?"
+              placeholder={t('community.descPh')}
               maxLength={400}
               rows={3}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
@@ -1164,13 +1178,13 @@ function CreateCommunityModal({ onClose, onCreate }) {
           {/* URL */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              URL <span className="text-slate-600">(opcional)</span>
+              {t('community.fieldUrl')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <input
               type="url"
               value={form.url}
               onChange={e => set('url', e.target.value)}
-              placeholder="Ej: https://discord.gg/mi-comunidad"
+              placeholder={t('community.urlPh')}
               maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -1180,7 +1194,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
           <div className="rounded-xl border border-surface-border bg-surface-bg p-3.5">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <span className="text-xs font-mono text-surface-muted">
-                🤝 Permitir colaboraciones económicas <span className="text-slate-600">(opcional)</span>
+                {t('community.fieldCollab')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
               </span>
               <input
                 type="checkbox"
@@ -1191,7 +1205,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
             </label>
             {collabEnabled && (
               <div className="mt-3 space-y-2">
-                <label className="block text-xs font-mono text-surface-muted">Importe por colaboración</label>
+                <label className="block text-xs font-mono text-surface-muted">{t('community.fieldCollabAmount')}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -1201,11 +1215,10 @@ function CreateCommunityModal({ onClose, onCreate }) {
                     onChange={e => setCollabAmount(e.target.value)}
                     className="w-28 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
                   />
-                  <span className="text-sm text-surface-muted font-mono">€ (mínimo 0,99 €)</span>
+                  <span className="text-sm text-surface-muted font-mono">{t('community.collabMinHint')}</span>
                 </div>
                 <p className="text-[11px] text-surface-muted leading-relaxed">
-                  Los miembros de la comunidad (no admins) verán un botón "Colaborar" con este importe.
-                  SocialBattery no obtiene nada por este pago.
+                  {t('community.collabExplainer')}
                 </p>
               </div>
             )}
@@ -1214,7 +1227,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
           {/* Photo */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Foto de la comunidad <span className="text-slate-600">(opcional)</span>
+              {t('community.fieldPhoto')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             {coverPreview ? (
               <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
@@ -1228,7 +1241,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
                     onClick={clearCover}
                     className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
                   >
-                    Quitar
+                    {t('community.photoRemove')}
                   </button>
                 </div>
               </div>
@@ -1238,7 +1251,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
                 onClick={() => coverInputRef.current?.click()}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto de la galería
+                {t('community.photoPick')}
               </button>
             )}
             <input
@@ -1253,7 +1266,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
           {/* Info card */}
           <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3">
             <p className="text-xs text-accent-glow/80 font-mono leading-relaxed">
-              💡 Tu comunidad será visible para todos los usuarios de SocialBattery. Cualquiera podrá unirse y participar.
+              {t('community.infoCard')}
             </p>
           </div>
 
@@ -1268,7 +1281,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
             disabled={saving || !form.name.trim() || !form.categories.length || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
-            {saving ? 'Creando...' : '👥 Crear comunidad'}
+            {saving ? t('community.creating') : t('community.createCta')}
           </button>
         </div>
       </div>
@@ -1277,16 +1290,23 @@ function CreateCommunityModal({ onClose, onCreate }) {
 }
 
 // ── Ranking Modal ─────────────────────────────────────────────────────────────
-const RANK_METRICS = [
-  { key: 'combined',        label: '🔥 Likes + Planes' },
-  { key: 'likes',           label: '♥ Likes' },
-  { key: 'planificaciones', label: '📅 Planificaciones' },
-];
+const RANK_METRICS_KEYS = ['combined', 'likes', 'planificaciones'];
+function rankMetricLabel(key, t) {
+  if (key === 'combined') return t('community.rankCombined');
+  if (key === 'likes') return t('community.rankLikes');
+  return t('community.rankPlans');
+}
 
-const RANK_VIEWS = [
-  { key: 'current',  label: '⚡ Ahora',    sub: 'Top 20 eventos activos' },
-  { key: 'alltime',  label: '📜 Histórico', sub: 'Top 100 de todos los tiempos' },
-];
+const RANK_VIEWS_KEYS = ['current', 'alltime'];
+function rankViewLabel(key, t) {
+  return key === 'current' ? t('community.rankNow') : t('community.rankHistoric');
+}
+function rankViewSubEvents(key, t) {
+  return key === 'current' ? t('community.rankSubNowEvents') : t('community.rankSubAllEvents');
+}
+function rankViewSubRaffles(key, t) {
+  return key === 'current' ? t('community.rankSubNowRaffles') : t('community.rankSubAllRaffles');
+}
 
 // Colores de fondo por posición (inline styles para evitar purge de Tailwind)
 const PODIUM_STYLES = [
@@ -1322,6 +1342,7 @@ function medalEmoji(i) {
 }
 
 function RankingModal({ events, loading, onClose, onOpen }) {
+  const { t } = useTranslation();
   const [metric, setMetric]   = useState('combined');
   const [view,   setView]     = useState('current');
 
@@ -1342,7 +1363,7 @@ function RankingModal({ events, loading, onClose, onOpen }) {
     .slice(0, 100);
 
   const list        = view === 'current' ? currentSorted : allTimeSorted;
-  const emptyLabel  = view === 'current' ? 'Sin eventos activos aún.' : 'Sin eventos aún.';
+  const emptyLabel  = view === 'current' ? t('community.rankingEmptyNow') : t('community.rankingEmptyAll');
 
   function ScoreChip({ event }) {
     const likes = event.like_count || 0;
@@ -1416,8 +1437,8 @@ function RankingModal({ events, loading, onClose, onOpen }) {
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">🏆</span>
             <div>
-              <h2 className="font-display font-bold text-surface-text text-lg leading-tight">Rankings</h2>
-              <p className="text-xs text-surface-muted font-mono">{RANK_VIEWS.find(v => v.key === view)?.sub}</p>
+              <h2 className="font-display font-bold text-surface-text text-lg leading-tight">{t('community.rankingTitle')}</h2>
+              <p className="text-xs text-surface-muted font-mono">{rankViewSubEvents(view, t)}</p>
             </div>
           </div>
           <button
@@ -1428,34 +1449,34 @@ function RankingModal({ events, loading, onClose, onOpen }) {
 
         {/* View toggle: Ahora / Histórico */}
         <div className="flex gap-1.5 px-5 pb-2 flex-shrink-0">
-          {RANK_VIEWS.map(v => (
+          {RANK_VIEWS_KEYS.map(key => (
             <button
-              key={v.key}
-              onClick={() => setView(v.key)}
+              key={key}
+              onClick={() => setView(key)}
               className={`flex-1 py-2 rounded-xl text-sm font-display font-semibold transition-all ${
-                view === v.key
+                view === key
                   ? 'bg-surface-text text-surface-card'
                   : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-accent-primary/40 hover:text-surface-text'
               }`}
             >
-              {v.label}
+              {rankViewLabel(key, t)}
             </button>
           ))}
         </div>
 
         {/* Metric filter */}
         <div className="flex gap-1.5 px-5 pb-3 flex-shrink-0">
-          {RANK_METRICS.map(m => (
+          {RANK_METRICS_KEYS.map(key => (
             <button
-              key={m.key}
-              onClick={() => setMetric(m.key)}
+              key={key}
+              onClick={() => setMetric(key)}
               className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                metric === m.key
+                metric === key
                   ? 'bg-accent-primary text-white shadow-sm'
                   : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-accent-primary/40'
               }`}
             >
-              {m.label}
+              {rankMetricLabel(key, t)}
             </button>
           ))}
         </div>
@@ -1465,7 +1486,7 @@ function RankingModal({ events, loading, onClose, onOpen }) {
           {loading ? (
             <div className="text-center py-12">
               <div className="text-4xl mb-3 animate-pulse">🏆</div>
-              <p className="text-sm text-surface-muted font-mono">Cargando ranking...</p>
+              <p className="text-sm text-surface-muted font-mono">{t('community.rankingLoading')}</p>
             </div>
           ) : list.length === 0 ? (
             <div className="text-center py-12">
@@ -1491,11 +1512,12 @@ function RankingModal({ events, loading, onClose, onOpen }) {
 // deja fuera del ranking igual que "intereses" tampoco está en el de
 // eventos), dos vistas (activos / histórico incluyendo ya sorteados),
 // y tema ámbar en vez del azul global.
-const RAFFLE_RANK_METRICS = [
-  { key: 'combined',     label: '🔥 Likes + Participantes' },
-  { key: 'likes',        label: '♥ Likes' },
-  { key: 'participantes', label: '👥 Participantes' },
-];
+const RAFFLE_RANK_METRICS_KEYS = ['combined', 'likes', 'participantes'];
+function raffleRankMetricLabel(key, t) {
+  if (key === 'combined') return t('community.rankCombinedRaffle');
+  if (key === 'likes') return t('community.rankLikes');
+  return t('community.rankParticipants');
+}
 
 function raffleRankScore(raffle, metric) {
   const likes = raffle.like_count || 0;
@@ -1506,6 +1528,7 @@ function raffleRankScore(raffle, metric) {
 }
 
 function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
+  const { t } = useTranslation();
   const [metric, setMetric] = useState('combined');
   const [view,   setView]   = useState('current');
 
@@ -1527,7 +1550,7 @@ function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
     .slice(0, 100);
 
   const list       = view === 'current' ? currentSorted : allTimeSorted;
-  const emptyLabel = view === 'current' ? 'Sin sorteos activos aún.' : 'Sin sorteos aún.';
+  const emptyLabel = view === 'current' ? t('community.raffleRankEmptyNow') : t('community.raffleRankEmptyAll');
 
   function ScoreChip({ raffle }) {
     const likes = raffle.like_count || 0;
@@ -1573,7 +1596,7 @@ function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
           </p>
           <p className="text-xs text-slate-500 font-mono truncate">
             {raffle.community?.name ? `👥 ${raffle.community.name}` : ''}
-            {isDrawn ? ' · Sorteado' : hasEnded ? ' · Terminado' : ''}
+            {isDrawn ? t('community.raffleDrawnTag') : hasEnded ? t('community.raffleEndedTag') : ''}
           </p>
         </div>
         <ScoreChip raffle={raffle} />
@@ -1590,8 +1613,8 @@ function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">🏆</span>
             <div>
-              <h2 className="font-display font-bold text-surface-text text-lg leading-tight">Rankings de sorteos</h2>
-              <p className="text-xs text-surface-muted font-mono">{RANK_VIEWS.find(v => v.key === view)?.sub?.replace('eventos', 'sorteos')}</p>
+              <h2 className="font-display font-bold text-surface-text text-lg leading-tight">{t('community.rankingRaffleTitle')}</h2>
+              <p className="text-xs text-surface-muted font-mono">{rankViewSubRaffles(view, t)}</p>
             </div>
           </div>
           <button
@@ -1601,33 +1624,33 @@ function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
         </div>
 
         <div className="flex gap-1.5 px-5 pb-2 flex-shrink-0">
-          {RANK_VIEWS.map(v => (
+          {RANK_VIEWS_KEYS.map(key => (
             <button
-              key={v.key}
-              onClick={() => setView(v.key)}
+              key={key}
+              onClick={() => setView(key)}
               className={`flex-1 py-2 rounded-xl text-sm font-display font-semibold transition-all ${
-                view === v.key
+                view === key
                   ? 'bg-surface-text text-surface-card'
                   : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-amber-500/40 hover:text-surface-text'
               }`}
             >
-              {v.label}
+              {rankViewLabel(key, t)}
             </button>
           ))}
         </div>
 
         <div className="flex gap-1.5 px-5 pb-3 flex-shrink-0">
-          {RAFFLE_RANK_METRICS.map(m => (
+          {RAFFLE_RANK_METRICS_KEYS.map(key => (
             <button
-              key={m.key}
-              onClick={() => setMetric(m.key)}
+              key={key}
+              onClick={() => setMetric(key)}
               className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                metric === m.key
+                metric === key
                   ? 'bg-amber-500 text-white shadow-sm'
                   : 'bg-surface-bg border border-surface-border text-surface-muted hover:border-amber-500/40'
               }`}
             >
-              {m.label}
+              {raffleRankMetricLabel(key, t)}
             </button>
           ))}
         </div>
@@ -1636,7 +1659,7 @@ function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
           {loading ? (
             <div className="text-center py-12">
               <div className="text-4xl mb-3 animate-pulse">🏆</div>
-              <p className="text-sm text-surface-muted font-mono">Cargando ranking...</p>
+              <p className="text-sm text-surface-muted font-mono">{t('community.rankingLoading')}</p>
             </div>
           ) : list.length === 0 ? (
             <div className="text-center py-12">
@@ -1667,6 +1690,7 @@ function RaffleRankingModal({ raffles, loading, onClose, onOpen }) {
 // <div data-raffles-theme> más abajo — aquí simplemente usamos utilidades
 // de Tailwind con la paleta amber, sin tocar las CSS vars globales).
 function RaffleDiscoveryCard({ raffle, onOpen, onLike, currentUserId }) {
+  const { t } = useTranslation();
   const tierEmoji = RAFFLE_TIER_EMOJI[raffle.tier] || '🎁';
   const tierBorder = RAFFLE_TIER_BORDER_STYLES[raffle.tier] || 'border-surface-border';
   const cats = getRaffleCategories(raffle);
@@ -1711,7 +1735,7 @@ function RaffleDiscoveryCard({ raffle, onOpen, onLike, currentUserId }) {
               onClick={handleLikeClick}
               disabled={liking}
               aria-pressed={liked}
-              title={liked ? 'Quitar like' : 'Dar like'}
+              title={liked ? t('community.raffleLikeRemove') : t('community.raffleLikeAdd')}
               className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-display font-semibold transition-colors disabled:opacity-50 ${
                 liked
                   ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
@@ -1747,10 +1771,10 @@ function RaffleDiscoveryCard({ raffle, onOpen, onLike, currentUserId }) {
         )}
 
         <div className="flex items-center gap-3 text-[11px] font-mono text-surface-muted">
-          <span className="text-amber-300">{formatRaffleEndShort(raffle.ends_at)}</span>
+          <span className="text-amber-300">{formatRaffleEndShort(raffle.ends_at, t)}</span>
           <span>·</span>
-          <span>👥 {raffle.participant_count ?? 0} participantes</span>
-          {isCreator && <><span>·</span><span className="text-amber-400/80">Tuyo</span></>}
+          <span>{t('community.raffleParticipants', { n: raffle.participant_count ?? 0 })}</span>
+          {isCreator && <><span>·</span><span className="text-amber-400/80">{t('community.raffleYours')}</span></>}
         </div>
       </div>
     </div>
@@ -1762,6 +1786,7 @@ export default function CommunityPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const { showToast } = useToast();
   const { clearEventBadge, clearCommunityBadge, communitiesWithEvents, refreshJoinedCommunities, planningUpdateCount, clearAllEventUpdateBadges, clearEventUpdateBadge, eventsWithUpdates, communitiesWithNewThreadPosts, clearThreadPostBadge, communitiesWithNewRaffles } = useCommunityNotifications();
   // Badge rojo: evento nuevo O sorteo nuevo (mismo peso, misma prioridad).
@@ -1828,7 +1853,7 @@ export default function CommunityPage() {
       const data = await api.get('/community/events');
       setEvents(data.events || []);
     } catch (e) {
-      showToast('Error cargando eventos', 'error');
+      showToast(t('community.loadEventsError'), 'error');
     }
   }, [showToast]);
 
@@ -1837,7 +1862,7 @@ export default function CommunityPage() {
       const data = await api.get('/community/communities');
       setCommunities(data.communities || []);
     } catch (e) {
-      showToast('Error cargando comunidades', 'error');
+      showToast(t('community.loadCommsError'), 'error');
     }
   }, [showToast]);
 
@@ -1850,7 +1875,7 @@ export default function CommunityPage() {
       const data = await api.get('/community/raffles');
       setRaffles(data.raffles || []);
     } catch (e) {
-      showToast('Error cargando sorteos', 'error');
+      showToast(t('community.loadRafflesError'), 'error');
     } finally {
       setRafflesLoading(false);
     }
@@ -1865,7 +1890,7 @@ export default function CommunityPage() {
       const data = await api.get('/community/events/ranking');
       setRankingEvents(data.events || []);
     } catch (e) {
-      showToast('Error cargando el ranking', 'error');
+      showToast(t('community.loadRankError'), 'error');
     } finally {
       setRankingLoading(false);
     }
@@ -1879,7 +1904,7 @@ export default function CommunityPage() {
       const data = await api.get('/community/raffles/ranking');
       setRankingRaffles(data.raffles || []);
     } catch (e) {
-      showToast('Error cargando el ranking de sorteos', 'error');
+      showToast(t('community.loadRaffleRankErr'), 'error');
     } finally {
       setRankingRafflesLoading(false);
     }
@@ -1934,7 +1959,7 @@ export default function CommunityPage() {
       await fetchEvents();
       refreshJoinedCommunities(); // actualiza attendingEventIdsRef para recibir badges
     } catch (e) {
-      showToast(e.message || 'Error al apuntarse', 'error');
+      showToast(e.message || t('community.joinEventError'), 'error');
     }
   }
 
@@ -1945,7 +1970,7 @@ export default function CommunityPage() {
       await fetchEvents();
       refreshJoinedCommunities(); // actualiza attendingEventIdsRef
     } catch (e) {
-      showToast(e.message || 'Error al salir del evento', 'error');
+      showToast(e.message || t('community.leaveEventError'), 'error');
     }
   }
 
@@ -1954,7 +1979,7 @@ export default function CommunityPage() {
       await api.post(`/community/events/${eventId}/like`, {});
       await fetchEvents();
     } catch (e) {
-      showToast(e.message || 'Error al cambiar el like', 'error');
+      showToast(e.message || t('community.likeError'), 'error');
     }
   }
 
@@ -1976,7 +2001,7 @@ export default function CommunityPage() {
     try {
       await api.post(`/community/raffles/${raffleId}/like`, {});
     } catch (e) {
-      showToast(e.message || 'Error al cambiar el like', 'error');
+      showToast(e.message || t('community.likeError'), 'error');
       // Refetch para volver al estado real
       fetchRaffles();
     }
@@ -1989,7 +2014,7 @@ export default function CommunityPage() {
       await fetchCommunities();
       refreshJoinedCommunities(); // update badge subscription set
     } catch (e) {
-      showToast(e.message || 'Error al unirse', 'error');
+      showToast(e.message || t('community.joinCommError'), 'error');
     }
   }
 
@@ -2000,7 +2025,7 @@ export default function CommunityPage() {
       await fetchCommunities();
       refreshJoinedCommunities(); // update badge subscription set
     } catch (e) {
-      showToast(e.message || 'Error al salir de la comunidad', 'error');
+      showToast(e.message || t('community.leaveCommError'), 'error');
     }
   }
 
@@ -2099,8 +2124,8 @@ export default function CommunityPage() {
   const isCommunityFiltered = normalizedCommunitySearch || communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES || communityMembershipFilter !== 'all' || communityInterestsOnly || communityRaffleOnly || communityUpcomingEventOnly;
   const isCommunityFilterActive = communityCategoryFilter !== ALL_COMMUNITY_CATEGORIES || communityMembershipFilter !== 'all' || communityInterestsOnly || communityRaffleOnly || communityUpcomingEventOnly;
   const communityCountLabel = isCommunityFiltered
-    ? `${filteredCommunities.length}/${communities.length} comunidades`
-    : `${communities.length} comunidades`;
+    ? t('community.countCommunitiesFiltered', { n: filteredCommunities.length, total: communities.length })
+    : t('community.countCommunities', { n: communities.length });
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -2109,7 +2134,7 @@ export default function CommunityPage() {
       <header className="sticky top-0 z-40 bg-surface-bg/90 backdrop-blur-xl border-b border-surface-border pt-safe">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="font-display font-bold text-surface-text text-xl">Comunidad</h1>
+            <h1 className="font-display font-bold text-surface-text text-xl">{t('community.pageTitle')}</h1>
             <p className="text-xs text-surface-muted font-mono">
               {headerSubtitle || communityCountLabel}
             </p>
@@ -2121,7 +2146,7 @@ export default function CommunityPage() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-semibold transition-all active:scale-95"
               >
                 <span className="text-base leading-none">+</span>
-                Comunidad
+                {t('community.createShort')}
               </button>
             )}
           </div>
@@ -2138,7 +2163,7 @@ export default function CommunityPage() {
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
-              🌐 Actividades
+              {t('community.tabActivities')}
             </button>
             <button
               onClick={() => { setTab('planning'); clearAllEventUpdateBadges(); }}
@@ -2148,7 +2173,7 @@ export default function CommunityPage() {
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
-              📅 Plan
+              {t('community.tabPlanning')}
               {planningUpdateCount > 0 && tab !== 'planning' && (
                 <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
                   {planningUpdateCount > 9 ? '9+' : planningUpdateCount}
@@ -2163,7 +2188,7 @@ export default function CommunityPage() {
                   : 'text-surface-muted hover:text-surface-text'
               }`}
             >
-              👥 Comunidades
+              {t('community.tabCommunities')}
               {communitiesNeedingAttention.size > 0 && (
                 <span className="absolute -top-1 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 leading-none">
                   {communitiesNeedingAttention.size > 9 ? '9+' : communitiesNeedingAttention.size}
@@ -2181,7 +2206,7 @@ export default function CommunityPage() {
             <div className="text-3xl animate-pulse">
               {tab === 'events' ? '🌐' : tab === 'planning' ? '📅' : '👥'}
             </div>
-            <p className="text-surface-muted font-mono text-sm">Cargando...</p>
+            <p className="text-surface-muted font-mono text-sm">{t('community.loading')}</p>
           </div>
         ) : tab === 'events' ? (
           <div id="tutorial-events-section" className="rounded-2xl transition-all duration-300">
@@ -2200,7 +2225,7 @@ export default function CommunityPage() {
                     : 'text-surface-muted hover:text-surface-text'
                 }`}
               >
-                📅 Eventos
+                {t('community.subToggleEvents')}
               </button>
               <button
                 onClick={() => setActivityView('raffles')}
@@ -2210,7 +2235,7 @@ export default function CommunityPage() {
                     : 'text-surface-muted hover:text-surface-text'
                 }`}
               >
-                🎁 Sorteos
+                {t('community.subToggleRaffles')}
               </button>
             </div>
 
@@ -2218,22 +2243,22 @@ export default function CommunityPage() {
               <>
             {/* Events title + filter/sort selectors */}
             <div className="relative mb-4 flex items-center justify-between gap-3">
-              <h2 className="font-display font-bold text-surface-text text-lg">Eventos</h2>
+              <h2 className="font-display font-bold text-surface-text text-lg">{t('community.eventsTitle')}</h2>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setShowRanking(true); fetchRankingEvents(); }}
-                  title="Rankings históricos"
+                  title={t('community.rankingsHistorical')}
                   className="text-lg leading-none px-2 py-1.5 rounded-lg border border-surface-border bg-surface-card hover:border-accent-primary/50 hover:bg-surface-bg transition-colors"
                 >
                   🏆
                 </button>
-                <FilterDropdown label="Filtrar" active={isEventFilterActive}>
-                  <FilterDropdownSection title="Precio">
+                <FilterDropdown label={t('community.filterLabel')} active={isEventFilterActive}>
+                  <FilterDropdownSection title={t('community.filterPrice')}>
                     <div className="flex gap-2">
                       {[
-                        { key: 'all', label: '🌐 Todos' },
-                        { key: 'free', label: '✓ Gratis' },
-                        { key: 'paid', label: '💳 De pago' },
+                        { key: 'all', label: t('community.priceAll') },
+                        { key: 'free', label: t('community.priceFree') },
+                        { key: 'paid', label: t('community.pricePaid') },
                       ].map(({ key, label }) => (
                         <button
                           key={key}
@@ -2251,12 +2276,12 @@ export default function CommunityPage() {
                     </div>
                   </FilterDropdownSection>
 
-                  <FilterDropdownSection title="Tiempo">
+                  <FilterDropdownSection title={t('community.filterTime')}>
                     <div className="flex flex-col gap-2">
                       {[
-                        { key: 'week', label: '🗓️ Esta semana' },
-                        { key: 'month', label: '📆 Este mes' },
-                        { key: 'all', label: '♾️ Todo el tiempo' },
+                        { key: 'week', label: t('community.timeWeek') },
+                        { key: 'month', label: t('community.timeMonth') },
+                        { key: 'all', label: t('community.timeAll') },
                       ].map(({ key, label }) => (
                         <button
                           key={key}
@@ -2274,7 +2299,7 @@ export default function CommunityPage() {
                     </div>
                   </FilterDropdownSection>
 
-                  <FilterDropdownSection title="Categoría">
+                  <FilterDropdownSection title={t('community.filterCategory')}>
                     <div className="flex flex-wrap gap-2">
                       {EVENT_CATEGORY_FILTERS.map(cat => (
                         <button
@@ -2315,11 +2340,11 @@ export default function CommunityPage() {
             {locationStatus !== 'requesting' && locationStatus !== 'granted' && !userCoords && (
               <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
                 <span>
-                  📍 {locationStatus === 'denied'
-                    ? 'Has denegado la ubicación: actívala para ver eventos cerca de ti y ordenarlos por cercanía.'
+                  {locationStatus === 'denied'
+                    ? t('community.warnLocDenied')
                     : locationStatus === 'unsupported'
-                      ? 'Tu navegador no permite compartir ubicación.'
-                      : 'Activa tu ubicación para ver eventos cerca de ti y ordenarlos por cercanía.'}
+                      ? t('community.warnLocUnsupported')
+                      : t('community.warnLocInactive')}
                 </span>
                 {locationStatus !== 'unsupported' && (
                   <button
@@ -2337,13 +2362,13 @@ export default function CommunityPage() {
                 configurados en el perfil no tiene nada que comparar. */}
             {eventProximitySort === 'cercania_intereses' && !(profile?.interests?.length > 0) && (
               <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-accent-primary/10 border border-accent-primary/25 text-accent-glow rounded-xl px-3 py-2.5">
-                <span>✨ Añade tus intereses en el perfil para afinar este filtro.</span>
+                <span>{t('community.warnInterestsEvent')}</span>
                 <button
                   type="button"
                   onClick={() => navigate('/profile')}
                   className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:brightness-125 transition-colors"
                 >
-                  Ir al perfil
+                  {t('community.goToProfile')}
                 </button>
               </div>
             )}
@@ -2354,7 +2379,7 @@ export default function CommunityPage() {
                 type="search"
                 value={eventSearch}
                 onChange={e => setEventSearch(e.target.value)}
-                placeholder="Buscar eventos..."
+                placeholder={t('community.searchEventsPh')}
                 className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
@@ -2362,14 +2387,14 @@ export default function CommunityPage() {
             {events.length === 0 ? (
               <div className="text-center py-16">
                 <div className="text-5xl mb-4">🌐</div>
-                <p className="font-display font-bold text-surface-text mb-1">Sin eventos todavía</p>
-                <p className="text-sm text-surface-muted">Los eventos se crean desde una comunidad. Únete a alguna o crea la tuya para empezar.</p>
+                <p className="font-display font-bold text-surface-text mb-1">{t('community.emptyEventsTitle')}</p>
+                <p className="text-sm text-surface-muted">{t('community.emptyEventsHint')}</p>
               </div>
             ) : filteredSortedEvents.length === 0 ? (
               <div className="text-center py-14">
                 <div className="text-4xl mb-3">🌐</div>
-                <p className="font-display font-bold text-surface-text mb-1">Sin resultados</p>
-                <p className="text-sm text-surface-muted mb-5">Prueba con otra búsqueda o categoría.</p>
+                <p className="font-display font-bold text-surface-text mb-1">{t('community.noResultsTitle')}</p>
+                <p className="text-sm text-surface-muted mb-5">{t('community.noResultsHint')}</p>
                 <button
                   onClick={() => {
                     setEventSearch('');
@@ -2381,7 +2406,7 @@ export default function CommunityPage() {
                   }}
                   className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                 >
-                  Limpiar filtros
+                  {t('community.clearFilters')}
                 </button>
               </div>
             ) : (
@@ -2416,22 +2441,22 @@ export default function CommunityPage() {
                  criterio de reset del toggle. */
               <>
                 <div className="relative mb-4 flex items-center justify-between gap-3">
-                  <h2 className="font-display font-bold text-surface-text text-lg">Sorteos</h2>
+                  <h2 className="font-display font-bold text-surface-text text-lg">{t('community.rafflesTitle')}</h2>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => { setShowRaffleRanking(true); fetchRankingRaffles(); }}
-                      title="Rankings de sorteos"
+                      title={t('community.rankingsRaffleBtn')}
                       className="text-lg leading-none px-2 py-1.5 rounded-lg border border-surface-border bg-surface-card hover:border-amber-500/50 hover:bg-surface-bg transition-colors"
                     >
                       🏆
                     </button>
-                    <FilterDropdown label="Filtrar" active={isRaffleFilterActive}>
-                      <FilterDropdownSection title="Tiempo">
+                    <FilterDropdown label={t('community.filterLabel')} active={isRaffleFilterActive}>
+                      <FilterDropdownSection title={t('community.filterTime')}>
                         <div className="flex flex-col gap-2">
                           {[
-                            { key: 'week',  label: '🗓️ Termina esta semana' },
-                            { key: 'month', label: '📆 Termina este mes' },
-                            { key: 'all',   label: '♾️ Todo el tiempo' },
+                            { key: 'week',  label: t('community.timeEndsWeek') },
+                            { key: 'month', label: t('community.timeEndsMonth') },
+                            { key: 'all',   label: t('community.timeAll') },
                           ].map(({ key, label }) => (
                             <button
                               key={key}
@@ -2449,7 +2474,7 @@ export default function CommunityPage() {
                         </div>
                       </FilterDropdownSection>
 
-                      <FilterDropdownSection title="Categoría">
+                      <FilterDropdownSection title={t('community.filterCategory')}>
                         <div className="flex flex-wrap gap-2">
                           {EVENT_CATEGORY_FILTERS.map(cat => (
                             <button
@@ -2480,13 +2505,13 @@ export default function CommunityPage() {
                     intereses configurados, se le lleva al perfil. */}
                 {raffleRankSort === 'intereses' && !(profile?.interests?.length > 0) && (
                   <div className="mb-4 flex items-center justify-between gap-3 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl px-3 py-2.5">
-                    <span>✨ Añade tus intereses en el perfil para usar este filtro.</span>
+                    <span>{t('community.warnInterestsRaffle')}</span>
                     <button
                       type="button"
                       onClick={() => navigate('/profile')}
                       className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:text-amber-200 transition-colors"
                     >
-                      Ir al perfil
+                      {t('community.goToProfile')}
                     </button>
                   </div>
                 )}
@@ -2496,7 +2521,7 @@ export default function CommunityPage() {
                     type="search"
                     value={raffleSearch}
                     onChange={e => setRaffleSearch(e.target.value)}
-                    placeholder="Buscar sorteos..."
+                    placeholder={t('community.searchRafflesPh')}
                     className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
                   />
                 </div>
@@ -2504,13 +2529,13 @@ export default function CommunityPage() {
                 {rafflesLoading ? (
                   <div className="flex flex-col items-center justify-center py-16 gap-3">
                     <div className="text-3xl animate-pulse">🎁</div>
-                    <p className="text-surface-muted font-mono text-sm">Cargando sorteos...</p>
+                    <p className="text-surface-muted font-mono text-sm">{t('community.loadingRaffles')}</p>
                   </div>
                 ) : raffles.length === 0 ? (
                   <div className="text-center py-16">
                     <div className="text-5xl mb-4">🎁</div>
-                    <p className="font-display font-bold text-surface-text mb-1">Sin sorteos en marcha</p>
-                    <p className="text-sm text-surface-muted">Los sorteos se crean desde una comunidad. Únete a alguna para ver los suyos y crear los tuyos.</p>
+                    <p className="font-display font-bold text-surface-text mb-1">{t('community.emptyRafflesTitle')}</p>
+                    <p className="text-sm text-surface-muted">{t('community.emptyRafflesHint')}</p>
                   </div>
                 ) : filteredSortedRaffles.length === 0 ? (
                   <div className="text-center py-14">
@@ -2526,7 +2551,7 @@ export default function CommunityPage() {
                       }}
                       className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-amber-500/40 font-display font-semibold text-sm transition-all"
                     >
-                      Limpiar filtros
+                      {t('community.clearFilters')}
                     </button>
                   </div>
                 ) : (
@@ -2554,20 +2579,20 @@ export default function CommunityPage() {
         ) : tab === 'planning' ? (
           <>
             <div className="mb-4">
-              <h2 className="font-display font-bold text-surface-text text-lg">Planificación</h2>
-              <p className="text-xs text-surface-muted">Eventos futuros en los que estás apuntado</p>
+              <h2 className="font-display font-bold text-surface-text text-lg">{t('community.planningTitle')}</h2>
+              <p className="text-xs text-surface-muted">{t('community.planningSubtitle')}</p>
             </div>
 
             {planningEvents.length === 0 ? (
               <div className="text-center py-16">
                 <div className="text-5xl mb-4">📅</div>
-                <p className="font-display font-bold text-surface-text mb-1">Sin planes pendientes</p>
-                <p className="text-sm text-surface-muted mb-6">Apúntate a un evento para verlo aquí.</p>
+                <p className="font-display font-bold text-surface-text mb-1">{t('community.emptyPlanTitle')}</p>
+                <p className="text-sm text-surface-muted mb-6">{t('community.emptyPlanHint')}</p>
                 <button
                   onClick={() => setTab('events')}
                   className="px-6 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-semibold text-sm transition-all"
                 >
-                  Ver eventos
+                  {t('community.seeEventsBtn')}
                 </button>
               </div>
             ) : (
@@ -2592,15 +2617,15 @@ export default function CommunityPage() {
             {/* Communities title + filter selector */}
             <div className="relative mb-4 flex items-center justify-between gap-3">
               <div>
-                <h2 className="font-display font-bold text-surface-text text-lg">Comunidades</h2>
-                <p className="text-xs text-surface-muted">Grupos de interés abiertos a todos</p>
+                <h2 className="font-display font-bold text-surface-text text-lg">{t('community.commsTitle')}</h2>
+                <p className="text-xs text-surface-muted">{t('community.commsSubtitle')}</p>
               </div>
-              <FilterDropdown label="Filtrar" active={isCommunityFilterActive}>
-                <FilterDropdownSection title="Membresía">
+              <FilterDropdown label={t('community.filterLabel')} active={isCommunityFilterActive}>
+                <FilterDropdownSection title={t('community.filterMembership')}>
                   <div className="flex gap-2">
                     {[
-                      { key: 'all', label: '🌐 Todas' },
-                      { key: 'mine', label: '👤 Tus comunidades' },
+                      { key: 'all', label: t('community.memberAll') },
+                      { key: 'mine', label: t('community.memberMine') },
                     ].map(({ key, label }) => (
                       <button
                         key={key}
@@ -2618,7 +2643,7 @@ export default function CommunityPage() {
                   </div>
                 </FilterDropdownSection>
 
-                <FilterDropdownSection title="Otros">
+                <FilterDropdownSection title={t('community.filterOthers')}>
                   <div className="flex flex-col gap-2">
                     <button
                       type="button"
@@ -2637,18 +2662,18 @@ export default function CommunityPage() {
                       }`}>
                         {communityInterestsOnly ? '✓' : ''}
                       </span>
-                      ✨ Solo con intereses en común
+                      {t('community.onlyInterests')}
                     </button>
 
                     {communityInterestsOnly && !(profile?.interests?.length > 0) && (
                       <div className="flex items-center justify-between gap-3 text-xs bg-accent-primary/10 border border-accent-primary/25 text-accent-glow rounded-xl px-3 py-2.5">
-                        <span>✨ Añade tus intereses en el perfil para usar este filtro.</span>
+                        <span>{t('community.warnInterestsRaffle')}</span>
                         <button
                           type="button"
                           onClick={() => navigate('/profile')}
                           className="flex-shrink-0 underline font-display font-semibold whitespace-nowrap hover:brightness-125 transition-colors"
                         >
-                          Ir al perfil
+                          {t('community.goToProfile')}
                         </button>
                       </div>
                     )}
@@ -2670,7 +2695,7 @@ export default function CommunityPage() {
                       }`}>
                         {communityRaffleOnly ? '✓' : ''}
                       </span>
-                      🎟️ Sorteo en marcha
+                      {t('community.onlyRaffle')}
                     </button>
 
                     <button
@@ -2690,12 +2715,12 @@ export default function CommunityPage() {
                       }`}>
                         {communityUpcomingEventOnly ? '✓' : ''}
                       </span>
-                      📅 Evento próximo
+                      {t('community.onlyUpcoming')}
                     </button>
                   </div>
                 </FilterDropdownSection>
 
-                <FilterDropdownSection title="Categoría">
+                <FilterDropdownSection title={t('community.filterCategory')}>
                   <div className="flex flex-wrap gap-2">
                     {COMMUNITY_CATEGORY_FILTERS.map(cat => (
                       <button
@@ -2721,7 +2746,7 @@ export default function CommunityPage() {
                 type="search"
                 value={communitySearch}
                 onChange={e => setCommunitySearch(e.target.value)}
-                placeholder="Buscar comunidades..."
+                placeholder={t('community.searchCommsPh')}
                 className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
             </div>
@@ -2729,13 +2754,13 @@ export default function CommunityPage() {
             {communities.length === 0 ? (
               <div className="text-center py-16">
                 <div className="text-5xl mb-4">👥</div>
-                <p className="font-display font-bold text-surface-text mb-1">Sin comunidades todavía</p>
-                <p className="text-sm text-surface-muted mb-6">¡Crea la primera comunidad!</p>
+                <p className="font-display font-bold text-surface-text mb-1">{t('community.emptyCommsTitle')}</p>
+                <p className="text-sm text-surface-muted mb-6">{t('community.emptyCommsHint')}</p>
                 <button
                   onClick={() => setShowCreateCommunity(true)}
                   className="px-6 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-semibold text-sm transition-all"
                 >
-                  + Crear comunidad
+                  {t('community.createFirstBtn')}
                 </button>
               </div>
             ) : (
@@ -2756,7 +2781,7 @@ export default function CommunityPage() {
                       }}
                       className="px-5 py-2.5 rounded-xl border border-surface-border text-surface-text hover:border-accent-primary/40 font-display font-semibold text-sm transition-all"
                     >
-                      Limpiar filtros
+                      {t('community.clearFilters')}
                     </button>
                   </div>
                 ) : (

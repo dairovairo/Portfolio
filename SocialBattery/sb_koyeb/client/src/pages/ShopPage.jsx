@@ -9,6 +9,7 @@ import HeadCustomizationsModal from '../components/HeadCustomizationsModal';
 import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
 import { getEffectiveBatteryLevel } from '../lib/battery';
 import { loadVolts, saveVolts, CURRENCY_SYMBOL, DAILY_BATTERY_REWARD } from '../lib/currency';
+import { useTranslation } from '../i18n';
 
 function getMascotTier(level) {
   if (level <= 33) return 'low';
@@ -25,16 +26,21 @@ function getMascotTier(level) {
 // renderPreview(item, size) — función opcional para renderizar el preview de
 // cada ítem. Si no se pasa, se usa el default de pies (feetSrc).
 function MyCustomizationsCard({
-  title = 'Mis personalizaciones',
+  title,
   count,
   previewItems,
   onClick,
   renderPreview,
   previewTier = 'mid',
-  singularLabel = 'prenda personalizada',
-  pluralLabel = 'prendas personalizadas',
-  emptyLabel = 'Aún no has personalizado ninguna prenda',
+  singularLabel,
+  pluralLabel,
+  emptyLabel,
 }) {
+  const { t } = useTranslation();
+  const _title = title ?? t('shop.myCustomizationsTitle');
+  const _sing = singularLabel ?? t('shop.singularCustomOutfit');
+  const _plur = pluralLabel ?? t('shop.pluralCustomOutfit');
+  const _empty = emptyLabel ?? t('shop.emptyCustomOutfit');
   return (
     <button
       onClick={onClick}
@@ -73,12 +79,12 @@ function MyCustomizationsCard({
       <div className="px-3 pt-2 pb-3 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
-          <div className="font-display font-bold text-surface-text text-sm leading-tight">{title}</div>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{_title}</div>
         </div>
         <div className="text-surface-muted text-[11px] leading-snug flex-1">
           {count > 0
-            ? `${count} ${count === 1 ? singularLabel : pluralLabel}`
-            : emptyLabel}
+            ? `${count} ${count === 1 ? _sing : _plur}`
+            : _empty}
         </div>
       </div>
     </button>
@@ -87,6 +93,7 @@ function MyCustomizationsCard({
 
 // ── Tarjeta genérica de item con preview de mascota ───────────────────────────
 function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEquip, children }) {
+  const { t } = useTranslation();
   return (
     <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
       ${isActive
@@ -104,14 +111,14 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
           isActive ? (
             isBase ? (
               <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
-                ✓ Equipado
+                {t('shop.equippedTag')}
               </div>
             ) : (
               <button
                 onClick={onEquip}
                 className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2 hover:bg-accent-primary/20 transition-all"
               >
-                ✓ Equipado (quitar)
+                {t('shop.equippedRemove')}
               </button>
             )
           ) : (
@@ -119,7 +126,7 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
               onClick={onEquip}
               className="w-full py-2 rounded-xl text-xs font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
             >
-              Equipar
+              {t('shop.equipBtn')}
             </button>
           )
         ) : (
@@ -142,6 +149,7 @@ function ItemCard({ isUnlocked, isActive, canAfford, price, isBase, onBuy, onEqu
 
 // ── Tarjeta de ACTIVIDAD ──────────────────────────────────────────────────────
 function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -152,7 +160,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
-            ✓ Activa
+            {t('shop.activeTag')}
           </span>
         )}
         {!isUnlocked && (
@@ -189,6 +197,7 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
 // o desactiva de forma independiente (como un interruptor), sin afectar a los
 // demás accesorios ya equipados.
 function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, onCustomize, isCustomized, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <div className={`bg-surface-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-200
       ${isActive
@@ -202,13 +211,13 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
-            ✓ Activo
+            {t('shop.activeAccessoryTag')}
           </span>
         )}
         {accessory.src && onCustomize && (
           <button
             onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
+            title={t('shop.customizeColors')}
             className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
           >
             <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -249,7 +258,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
       <div className="px-3 pb-3 pt-1">
         {accessory.isBase ? (
           <div className="w-full text-center text-xs font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-xl py-2">
-            ✓ Por defecto
+            {t('shop.defaultTag')}
           </div>
         ) : isUnlocked ? (
           <button
@@ -260,7 +269,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
                 : 'bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40'
               }`}
           >
-            {isActive ? 'Quitar' : 'Equipar'}
+            {isActive ? t('shop.removeBtn') : t('shop.equipBtn')}
           </button>
         ) : (
           <button
@@ -289,6 +298,7 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
 // pueda haber un accesorio activo a la vez — al activar uno se desactivan
 // automáticamente los demás del mismo carrusel, sin tocar el resto.
 function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onToggle, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -330,14 +340,14 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
         {accessory.isBase ? (
           isActive ? (
             <div className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5">
-              ✓ Por defecto
+              {t('shop.defaultTag')}
             </div>
           ) : (
             <button
               onClick={onToggle}
               className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
             >
-              Poner
+              {t('shop.putOnBtn')}
             </button>
           )
         ) : isUnlocked ? (
@@ -349,7 +359,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
                 : 'bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40'
               }`}
           >
-            {isActive ? 'Quitar' : 'Poner'}
+            {isActive ? t('shop.removeBtn') : t('shop.putOnBtn')}
           </button>
         ) : (
           <button
@@ -371,6 +381,7 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
 
 // ── Tarjeta de OUTFIT ─────────────────────────────────────────────────────────
 function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -381,13 +392,13 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
-            ✓ Puesto
+            {t('shop.equippedTagPuesto')}
           </span>
         )}
         {outfit.src && onCustomize && (
           <button
             onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
+            title={t('shop.customizeColors')}
             className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
           >
             <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -435,6 +446,7 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
 // camisetas/camisas básicas (colores lisos): preview pequeño + nombre +
 // acción, sin descripción larga, con ancho fijo para que se vea el scroll.
 function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -484,14 +496,14 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
               onClick={onEquip}
               className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5 hover:bg-accent-primary/20 transition-all"
             >
-              Puesto
+              {t('shop.equippedShort')}
             </button>
           ) : (
             <button
               onClick={onEquip}
               className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
             >
-              Poner
+              {t('shop.putOnBtn')}
             </button>
           )
         ) : (
@@ -517,6 +529,7 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
 // colores de la zapatilla retro (misma silueta, distinto color): preview
 // pequeño + nombre + acción, sin descripción larga, ancho fijo.
 function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -568,14 +581,14 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, 
               onClick={onEquip}
               className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5 hover:bg-accent-primary/20 transition-all"
             >
-              Puesto
+              {t('shop.equippedShort')}
             </button>
           ) : (
             <button
               onClick={onEquip}
               className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
             >
-              Poner
+              {t('shop.putOnBtn')}
             </button>
           )
         ) : (
@@ -598,6 +611,7 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, 
 
 // ── Tarjeta de PIES ───────────────────────────────────────────────────────────
 function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -608,7 +622,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
-            ✓ Puesto
+            {t('shop.equippedTagPuesto')}
           </span>
         )}
         {/* Botón de personalización extrema de color — uno por cada ítem
@@ -621,7 +635,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
         {feet.src && (
           <button
             onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
+            title={t('shop.customizeColors')}
             className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
           >
             <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -665,6 +679,7 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
 
 // ── Tarjeta de CABEZA ─────────────────────────────────────────────────────────
 function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCustomize, isCustomized, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <ItemCard
       isUnlocked={isUnlocked} isActive={isActive}
@@ -675,7 +690,7 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
       <div className="relative flex items-center justify-center py-4 px-2 bg-surface-hover/30">
         {isActive && (
           <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-accent-primary text-white z-10">
-            ✓ Puesto
+            {t('shop.equippedTagPuesto')}
           </span>
         )}
         {/* Botón de personalización extrema de color — solo en ítems con
@@ -683,7 +698,7 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
         {head.src && onCustomize && (
           <button
             onClick={(e) => { e.stopPropagation(); onCustomize(); }}
-            title="Personalizar colores"
+            title={t('shop.customizeColors')}
             className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-surface-card/90 border-2 border-white/90 text-sm hover:border-accent-primary/70 hover:bg-surface-hover transition-all"
           >
             <span style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
@@ -729,6 +744,7 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
 // Igual que BasicFeetCard/BasicOutfitCard pero para prendas de cabeza:
 // preview pequeño + nombre + acción "Poner/Puesto", sin descripción larga.
 function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex-shrink-0 w-36 bg-surface-card border rounded-xl overflow-hidden flex flex-col transition-all duration-200
@@ -777,14 +793,14 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, 
               onClick={onEquip}
               className="w-full text-center text-[10px] font-mono text-accent-glow bg-accent-primary/10 border border-accent-primary/20 rounded-lg py-1.5 hover:bg-accent-primary/20 transition-all"
             >
-              Puesto
+              {t('shop.equippedShort')}
             </button>
           ) : (
             <button
               onClick={onEquip}
               className="w-full py-1.5 rounded-lg text-[10px] font-display font-semibold bg-surface-hover border border-surface-border text-surface-text hover:border-accent-primary/40 transition-all"
             >
-              Poner
+              {t('shop.putOnBtn')}
             </button>
           )
         ) : (
@@ -811,6 +827,7 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, 
 // (gris, candado 🔒, sin hover) hasta que el usuario haya comprado TODAS las
 // prendas de esa familia de colores (todo el scroll horizontal).
 function CarouselPersonalizeButton({ family, unlockedSet, onOpen, onLocked }) {
+  const { t } = useTranslation();
   const unlocked = family.length > 0 && family.every(item => unlockedSet.has(item.id));
   return (
     <button
@@ -823,7 +840,7 @@ function CarouselPersonalizeButton({ family, unlockedSet, onOpen, onLocked }) {
         }`}
     >
       <span style={{ fontVariantEmoji: 'emoji' }}>{unlocked ? '🎨' : '🔒'}</span>
-      Personalizar
+      {t('shop.personalizeBtn')}
     </button>
   );
 }
@@ -842,36 +859,26 @@ const VOLT_PACKS = [
 const SUBSCRIPTION_PLANS = [
   {
     id: 'sub_volt',
-    name: 'Suscripción Volt',
+    nameKey: 'subVoltName',
     priceLabel: '1,99 €',
-    period: '/mes',
+    periodKey: 'perMonth',
     emoji: '⚡',
-    perks: [
-      'Sin anuncios',
-      '150 créditos semanales',
-      'Modo localizador',
-      'Participación en hilos y chats de comunidades',
-      'Participación gratuita en sorteos Volt',
-    ],
+    perkKeys: ['subVoltPerk1', 'subVoltPerk2', 'subVoltPerk3', 'subVoltPerk4', 'subVoltPerk5'],
   },
   {
     id: 'sub_enterprise',
-    name: 'SocialBattery Enterprise',
+    nameKey: 'subEnterpriseName',
     priceLabel: '4,99 €',
-    period: '/mes',
+    periodKey: 'perMonth',
     emoji: '🏢',
-    perks: [
-      'Sin anuncios',
-      'Creación de eventos',
-      'Creación de sorteos',
-      'Dashboard de control',
-      'Recibir donaciones de miembros de la comunidad',
-    ],
+    perkKeys: ['subEntPerk1', 'subEntPerk2', 'subEntPerk3', 'subEntPerk4', 'subEntPerk5'],
     highlight: true,
   },
 ];
 
 function VoltPackCard({ pack, onBuy }) {
+  const { t, lang } = useTranslation();
+  const localeTag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
   return (
     <button
       onClick={() => onBuy(pack)}
@@ -883,18 +890,19 @@ function VoltPackCard({ pack, onBuy }) {
     >
       {pack.highlight && (
         <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-display font-bold uppercase tracking-wide text-white bg-accent-primary rounded-full px-2 py-0.5">
-          Popular
+          {t('shop.popular')}
         </span>
       )}
       <span className="text-2xl" style={{ fontVariantEmoji: 'emoji' }}>{pack.emoji}</span>
-      <span className="font-display font-bold text-surface-text text-base">{pack.volts.toLocaleString('es-ES')}</span>
-      <span className="text-[10px] text-surface-muted -mt-1">Volts</span>
+      <span className="font-display font-bold text-surface-text text-base">{pack.volts.toLocaleString(localeTag)}</span>
+      <span className="text-[10px] text-surface-muted -mt-1">{t('shop.voltsUnit')}</span>
       <span className="mt-1 font-display font-semibold text-accent-glow text-sm">{pack.priceLabel}</span>
     </button>
   );
 }
 
 function SubscriptionCard({ plan, onSubscribe }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`rounded-2xl border p-4 flex flex-col gap-3 ${
@@ -906,18 +914,18 @@ function SubscriptionCard({ plan, onSubscribe }) {
       <div className="flex items-center gap-3">
         <span className="text-2xl flex-shrink-0" style={{ fontVariantEmoji: 'emoji' }}>{plan.emoji}</span>
         <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-surface-text text-sm">{plan.name}</div>
+          <div className="font-display font-bold text-surface-text text-sm">{t('shop.' + plan.nameKey)}</div>
           <div className="text-xs text-surface-muted">
-            <span className="font-display font-bold text-accent-glow">{plan.priceLabel}</span> {plan.period}
+            <span className="font-display font-bold text-accent-glow">{plan.priceLabel}</span> {t('shop.' + plan.periodKey)}
           </div>
         </div>
       </div>
 
       <ul className="space-y-1.5">
-        {plan.perks.map(perk => (
-          <li key={perk} className="flex items-start gap-2 text-xs text-surface-text">
+        {plan.perkKeys.map(k => (
+          <li key={k} className="flex items-start gap-2 text-xs text-surface-text">
             <span className="text-accent-glow flex-shrink-0 leading-tight">✓</span>
-            <span className="leading-tight">{perk}</span>
+            <span className="leading-tight">{t('shop.' + k)}</span>
           </li>
         ))}
       </ul>
@@ -926,18 +934,20 @@ function SubscriptionCard({ plan, onSubscribe }) {
         onClick={() => onSubscribe(plan)}
         className="w-full py-2.5 rounded-xl text-sm font-display font-semibold transition-all active:scale-95 bg-accent-primary text-white hover:opacity-90"
       >
-        Suscribirse
+        {t('shop.subscribeBtn')}
       </button>
     </div>
   );
 }
 
 function AppStoreSection({ coins, showToast }) {
+  const { t, lang } = useTranslation();
+  const localeTag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
   function handleBuyVolts(pack) {
-    showToast(`Próximamente: compra de ${pack.volts.toLocaleString('es-ES')} Volts por ${pack.priceLabel}`);
+    showToast(t('shop.soonBuyVolts', { n: pack.volts.toLocaleString(localeTag), price: pack.priceLabel }));
   }
   function handleSubscribe(plan) {
-    showToast(`Próximamente: ${plan.name} (${plan.priceLabel}${plan.period})`);
+    showToast(t('shop.soonSubscribe', { name: t('shop.' + plan.nameKey), price: plan.priceLabel, period: t('shop.' + plan.periodKey) }));
   }
 
   return (
@@ -948,15 +958,15 @@ function AppStoreSection({ coins, showToast }) {
           ⚡
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-surface-text text-sm">Tu saldo de Volts</div>
+          <div className="font-display font-bold text-surface-text text-sm">{t('shop.yourVoltBalance')}</div>
           <div className="font-mono font-bold text-accent-glow text-xl">{coins}</div>
         </div>
       </div>
 
       {/* Paquetes de Volts */}
       <div>
-        <h2 className="font-display font-bold text-surface-text text-base mb-1">Comprar Volts</h2>
-        <p className="text-xs text-surface-muted mb-3">La moneda de SocialBattery, para la tienda de la mascota y más.</p>
+        <h2 className="font-display font-bold text-surface-text text-base mb-1">{t('shop.buyVolts')}</h2>
+        <p className="text-xs text-surface-muted mb-3">{t('shop.buyVoltsSubtitle')}</p>
         <div className="grid grid-cols-2 gap-3">
           {VOLT_PACKS.map(pack => (
             <VoltPackCard key={pack.id} pack={pack} onBuy={handleBuyVolts} />
@@ -966,8 +976,8 @@ function AppStoreSection({ coins, showToast }) {
 
       {/* Suscripciones */}
       <div>
-        <h2 className="font-display font-bold text-surface-text text-base mb-1">Suscripciones</h2>
-        <p className="text-xs text-surface-muted mb-3">Desbloquea ventajas extra cada mes.</p>
+        <h2 className="font-display font-bold text-surface-text text-base mb-1">{t('shop.subscriptions')}</h2>
+        <p className="text-xs text-surface-muted mb-3">{t('shop.subsSubtitle')}</p>
         <div className="space-y-3">
           {SUBSCRIPTION_PLANS.map(plan => (
             <SubscriptionCard key={plan.id} plan={plan} onSubscribe={handleSubscribe} />
@@ -976,7 +986,7 @@ function AppStoreSection({ coins, showToast }) {
       </div>
 
       <p className="text-[10px] text-surface-muted/60 text-center leading-relaxed">
-        Los pagos y las suscripciones estarán disponibles próximamente.
+        {t('shop.subsSoonNote')}
       </p>
     </div>
   );
@@ -986,6 +996,7 @@ function AppStoreSection({ coins, showToast }) {
 export default function ShopPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { t, lang } = useTranslation();
   const {
     unlockedActivities, unlockedAccessories, unlockedOutfits, unlockedFeet, unlockedHead,
     activeActivity, activeAccessories, activeOutfit, activeFeet, activeHead,
@@ -1077,7 +1088,7 @@ export default function ShopPage() {
   // Mensaje del botón "🎨 Personalizar" cuando el carrusel aún no está
   // completo (ver CarouselPersonalizeButton).
   function showLockedCustomizeToast() {
-    showToast('Bloqueado hasta tener todos los items de esta sección');
+    showToast(t('shop.lockedCarousel'));
   }
 
   // Coste en Volts de guardar cualquier personalización de color (calzado,
@@ -1087,23 +1098,23 @@ export default function ShopPage() {
 
   function handleSaveCurrentOutfit() {
     if (activeOutfit === 'out_none') {
-      showToast('Equipa alguna prenda antes de guardar el outfit');
+      showToast(t('shop.equipSomethingFirst'));
       return;
     }
     const saved = saveCurrentOutfit();
     setShowSavedOutfits(true);
-    showToast(`"${saved.name}" guardado`);
+    showToast(t('shop.outfitSaved', { name: saved.name }));
   }
 
   function handleApplySavedOutfit(outfit) {
     applySavedOutfit(outfit);
     setShowSavedOutfits(false);
-    showToast(`"${outfit.name}" aplicado`);
+    showToast(t('shop.outfitApplied', { name: outfit.name }));
   }
 
   function handleRemoveSavedOutfit(outfit) {
     removeSavedOutfit(outfit.id);
-    showToast(`"${outfit.name}" eliminado`);
+    showToast(t('shop.outfitDeleted', { name: outfit.name }));
   }
 
   // Botón "🎨 Personalizar" de cada carrusel horizontal: SIEMPRE aplica
@@ -1151,18 +1162,18 @@ export default function ShopPage() {
   function outfitCustomizationLabels(subcategory = outfitSubTab) {
     return subcategory === 'camisa'
       ? {
-          title: 'Camisas personalizadas',
-          singular: 'camisa personalizada',
-          plural: 'camisas personalizadas',
-          empty: 'Aún no has personalizado ninguna camisa',
-          saved: 'Camisas personalizadas',
+          title: t('shop.customShirtLongTitle'),
+          singular: t('shop.singularCustomShirtLong'),
+          plural: t('shop.pluralCustomShirtLong'),
+          empty: t('shop.emptyCustomShirtLong'),
+          saved: t('shop.customShirtLongTitle'),
         }
       : {
-          title: 'Camisetas personalizadas',
-          singular: 'camiseta personalizada',
-          plural: 'camisetas personalizadas',
-          empty: 'Aún no has personalizado ninguna camiseta',
-          saved: 'Camisetas personalizadas',
+          title: t('shop.customShirtTitle'),
+          singular: t('shop.singularCustomShirt'),
+          plural: t('shop.pluralCustomShirt'),
+          empty: t('shop.emptyCustomShirt'),
+          saved: t('shop.customShirtTitle'),
         };
   }
 
@@ -1185,14 +1196,14 @@ export default function ShopPage() {
 
   function handleSaveOutfitColors(zones) {
     if (coins < CUSTOMIZATION_SAVE_COST) {
-      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      showToast(t('shop.needCoinsForCustom', { n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
       return;
     }
     const labels = outfitCustomizationLabels(editingOutfitItem?.subcategory);
     const newId = saveOutfitCustomization(editingOutfitItem, zones, editingOutfitCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast(`¡"${editingOutfitItem.baseName ?? editingOutfitItem.name}" guardada en ${labels.saved}! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+      showToast((editingOutfitItem?.subcategory === 'camisa' ? t('shop.savedToShirtsLongCustom', { name: editingOutfitItem.baseName ?? editingOutfitItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }) : t('shop.savedToShirtsCustom', { name: editingOutfitItem.baseName ?? editingOutfitItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })));
     }
     setEditingOutfitItem(null);
     setEditingOutfitCustomId(null);
@@ -1205,15 +1216,14 @@ export default function ShopPage() {
   }
 
   function handleRemoveOutfitCustomization(item) {
-    const labels = outfitCustomizationLabels(item.subcategory);
     removeOutfitCustomization(item.id);
-    showToast(`"${item.name}" eliminada de ${labels.saved} ✨`);
+    showToast(item.subcategory === 'camisa' ? t('shop.removedShirtLongCustom', { name: item.name }) : t('shop.removedShirtCustom', { name: item.name }));
   }
 
   function handleEquipCustomOutfit(item) {
     const wasActive = activeOutfit === item.id;
     equipOutfit(item.id);
-    showToast(wasActive ? `${item.name} retirada` : `¡${item.name} puesta! ✨`);
+    showToast(wasActive ? t('shop.outfitTakenOff', { name: item.name }) : t('shop.outfitPutOn', { name: item.name }));
   }
 
   function hasAnyCustomizationOfAccessory(baseId) {
@@ -1235,13 +1245,13 @@ export default function ShopPage() {
 
   function handleSaveAccessoryColors(zones) {
     if (coins < CUSTOMIZATION_SAVE_COST) {
-      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      showToast(t('shop.needCoinsForCustom', { n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
       return;
     }
     const newId = saveAccessoryCustomization(editingAccessoryItem, zones, editingAccessoryCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast(`¡"${editingAccessoryItem.baseName ?? editingAccessoryItem.name}" guardado en Accesorios personalizados! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+      showToast(t('shop.savedToAccCustom', { name: editingAccessoryItem.baseName ?? editingAccessoryItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
     }
     setEditingAccessoryItem(null);
     setEditingAccessoryCustomId(null);
@@ -1255,24 +1265,24 @@ export default function ShopPage() {
 
   function handleRemoveAccessoryCustomization(item) {
     removeAccessoryCustomization(item.id);
-    showToast(`"${item.name}" eliminado de Accesorios personalizados ✨`);
+    showToast(t('shop.removedAccCustom', { name: item.name }));
   }
 
   function handleEquipCustomAccessory(item) {
     const wasActive = activeAccessories.has(item.id);
     toggleAccessory(item.id);
-    showToast(wasActive ? `${item.name} retirado` : `¡${item.name} equipado! ✨`);
+    showToast(wasActive ? t('shop.accessoryRemoved', { name: item.name }) : t('shop.accessoryEquipped', { name: item.name }));
   }
 
   function handleSaveHeadColors(zones) {
     if (coins < CUSTOMIZATION_SAVE_COST) {
-      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      showToast(t('shop.needCoinsForCustom', { n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
       return;
     }
     const newId = saveHeadCustomization(editingHeadItem, zones, editingHeadCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast(`¡"${editingHeadItem.baseName ?? editingHeadItem.name}" guardada en Gorros personalizados! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+      showToast(t('shop.savedToHeadCustom', { name: editingHeadItem.baseName ?? editingHeadItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
     }
     setEditingHeadItem(null);
     setEditingHeadCustomId(null);
@@ -1286,24 +1296,24 @@ export default function ShopPage() {
 
   function handleRemoveHeadCustomization(item) {
     removeHeadCustomization(item.id);
-    showToast(`"${item.name}" eliminada de Gorros personalizados ✨`);
+    showToast(t('shop.removedHeadCustom', { name: item.name }));
   }
 
   function handleEquipCustomHead(item) {
     const wasActive = activeHead === item.id;
     equipHead(item.id);
-    showToast(wasActive ? `${item.name} retirada` : `¡${item.name} puesto! ✨`);
+    showToast(wasActive ? t('shop.headTakenOff', { name: item.name }) : t('shop.headPutOn', { name: item.name }));
   }
 
   function handleSaveFeetColors(zones) {
     if (coins < CUSTOMIZATION_SAVE_COST) {
-      showToast(`Necesitas ${CUSTOMIZATION_SAVE_COST} ${CURRENCY_SYMBOL} para guardar una personalización`);
+      showToast(t('shop.needCoinsForCustom', { n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
       return;
     }
     const newId = saveFeetCustomization(editingFeetItem, zones, editingCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast(`¡"${editingFeetItem.baseName ?? editingFeetItem.name}" guardada en Calzado personalizado! 🎨 (-${CUSTOMIZATION_SAVE_COST}${CURRENCY_SYMBOL})`);
+      showToast(t('shop.savedToFeetCustom', { name: editingFeetItem.baseName ?? editingFeetItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
     }
     setEditingFeetItem(null);
     setEditingCustomId(null);
@@ -1319,7 +1329,7 @@ export default function ShopPage() {
   }
   function handleRemoveCustomization(item) {
     removeFeetCustomization(item.id);
-    showToast(`"${item.name}" eliminada de Calzado personalizado ✨`);
+    showToast(t('shop.removedFeetCustom', { name: item.name }));
   }
 
   // ── Actividades ─────────────────────────────────────────────────────────────
@@ -1328,12 +1338,12 @@ export default function ShopPage() {
     setCoins(c => c - activity.price);
     unlockActivity(activity.id);
     equipActivity(activity.id);
-    showToast(`¡${activity.name} desbloqueada y equipada! 🎉`);
+    showToast(t('shop.activityUnlocked', { name: activity.name }));
   }
   function handleEquipActivity(activity) {
     const wasActive = activeActivity === activity.id;
     equipActivity(activity.id);
-    showToast(wasActive ? `${activity.name} retirada` : `¡${activity.name} equipada! ✨`);
+    showToast(wasActive ? t('shop.activityRemoved', { name: activity.name }) : t('shop.activityEquipped', { name: activity.name }));
   }
 
   // ── Accesorios — selección múltiple: cada uno se enciende/apaga sin
@@ -1343,12 +1353,12 @@ export default function ShopPage() {
     setCoins(c => c - accessory.price);
     unlockAccessory(accessory.id);
     toggleAccessory(accessory.id);
-    showToast(`¡${accessory.name} desbloqueado y equipado! 🎉`);
+    showToast(t('shop.accessoryUnlocked', { name: accessory.name }));
   }
   function handleToggleAccessory(accessory) {
     const wasActive = activeAccessories.has(accessory.id);
     toggleAccessory(accessory.id);
-    showToast(wasActive ? `${accessory.name} retirado` : `¡${accessory.name} equipado! ✨`);
+    showToast(wasActive ? t('shop.accessoryRemoved', { name: accessory.name }) : t('shop.accessoryEquipped', { name: accessory.name }));
   }
 
   // ── Outfits — Torso ──────────────────────────────────────────────────────────
@@ -1357,12 +1367,12 @@ export default function ShopPage() {
     setCoins(c => c - outfit.price);
     unlockOutfit(outfit.id);
     equipOutfit(outfit.id);
-    showToast(`¡${outfit.name} desbloqueada y puesta! 🎉`);
+    showToast(t('shop.outfitUnlocked', { name: outfit.name }));
   }
   function handleEquipOutfit(outfit) {
     const wasActive = activeOutfit === outfit.id;
     equipOutfit(outfit.id);
-    showToast(wasActive ? `${outfit.name} retirada` : `¡${outfit.name} puesta! ✨`);
+    showToast(wasActive ? t('shop.outfitTakenOff', { name: outfit.name }) : t('shop.outfitPutOn', { name: outfit.name }));
   }
 
   // ── Outfits — Pies ───────────────────────────────────────────────────────────
@@ -1371,12 +1381,12 @@ export default function ShopPage() {
     setCoins(c => c - feet.price);
     unlockFeet(feet.id);
     equipFeet(feet.id);
-    showToast(`¡${feet.name} desbloqueado y puesto! 🎉`);
+    showToast(t('shop.feetUnlocked', { name: feet.name }));
   }
   function handleEquipFeet(feet) {
     const wasActive = activeFeet === feet.id;
     equipFeet(feet.id);
-    showToast(wasActive ? `${feet.name} retirado` : `¡${feet.name} puesto! ✨`);
+    showToast(wasActive ? t('shop.feetTakenOff', { name: feet.name }) : t('shop.feetPutOn', { name: feet.name }));
   }
   // Equipar una personalización desde la galería "Mis personalizaciones":
   // usa el mismo equipFeet del contexto (acepta cualquier id activo, sea
@@ -1384,7 +1394,7 @@ export default function ShopPage() {
   function handleEquipCustomFeet(item) {
     const wasActive = activeFeet === item.id;
     equipFeet(item.id);
-    showToast(wasActive ? `${item.name} retirada` : `¡${item.name} puesta! ✨`);
+    showToast(wasActive ? t('shop.outfitTakenOff', { name: item.name }) : t('shop.outfitPutOn', { name: item.name }));
   }
 
   // ── Outfits — Cabeza ─────────────────────────────────────────────────────────
@@ -1393,12 +1403,12 @@ export default function ShopPage() {
     setCoins(c => c - head.price);
     unlockHead(head.id);
     equipHead(head.id);
-    showToast(`¡${head.name} desbloqueada y puesta! 🎉`);
+    showToast(t('shop.headUnlocked', { name: head.name }));
   }
   function handleEquipHead(head) {
     const wasActive = activeHead === head.id;
     equipHead(head.id);
-    showToast(wasActive ? `${head.name} retirada` : `¡${head.name} puesta! ✨`);
+    showToast(wasActive ? t('shop.headTakenOff', { name: head.name }) : t('shop.headPutOn', { name: head.name }));
   }
 
   const activeAct  = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);
@@ -1547,18 +1557,18 @@ export default function ShopPage() {
           onClose={() => { setEditingFeetItem(null); setEditingCustomId(null); }}
           onSave={handleSaveFeetColors}
           saveCost={CUSTOMIZATION_SAVE_COST}
-          helpText="Toca una zona de la zapatilla para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (suela, cuerpo, cordones…)."
+          helpText={t('shop.helpFeet')}
         />
       )}
 
       {showMyCustomizations && (
         <MyCustomizationsModal
-          title="Calzado personalizado"
+          title={t('shop.customFeetTitle')}
           items={customizedFeetItems}
           activeFeetId={activeFeet}
-          emptyText="Aún no has personalizado ningún calzado. Toca el botón 🎨 de cualquier zapatilla para crear tu propia variante de color."
-          singularLabel="calzado personalizado"
-          pluralLabel="calzados personalizados"
+          emptyText={t('shop.emptyModalFeet')}
+          singularLabel={t('shop.singularCustomFeet')}
+          pluralLabel={t('shop.pluralCustomFeet')}
           onEquip={handleEquipCustomFeet}
           onEdit={handleEditFromGallery}
           onRemove={handleRemoveCustomization}
@@ -1576,7 +1586,7 @@ export default function ShopPage() {
           onClose={() => { setEditingOutfitItem(null); setEditingOutfitCustomId(null); }}
           onSave={handleSaveOutfitColors}
           saveCost={CUSTOMIZATION_SAVE_COST}
-          helpText={`Toca una zona de la ${editingOutfitItem.subcategory === 'camisa' ? 'camisa' : 'camiseta'} para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites.`}
+          helpText={editingOutfitItem.subcategory === 'camisa' ? t('shop.helpShirtLong') : t('shop.helpShirt')}
         />
       )}
 
@@ -1606,7 +1616,7 @@ export default function ShopPage() {
           onClose={() => { setEditingHeadItem(null); setEditingHeadCustomId(null); }}
           onSave={handleSaveHeadColors}
           saveCost={CUSTOMIZATION_SAVE_COST}
-          helpText="Toca una zona del gorro para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (copa, visera, logo…)."
+          helpText={t('shop.helpHead')}
         />
       )}
 
@@ -1631,20 +1641,20 @@ export default function ShopPage() {
           onClose={() => { setEditingAccessoryItem(null); setEditingAccessoryCustomId(null); }}
           onSave={handleSaveAccessoryColors}
           saveCost={CUSTOMIZATION_SAVE_COST}
-          helpText="Toca una zona del accesorio para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites."
+          helpText={t('shop.helpAccessory')}
         />
       )}
 
       {showAccessoryCustomizations && (
         <MyCustomizationsModal
-          title="Accesorios personalizados"
+          title={t('shop.customAccTitle')}
           items={customizedAccessoryItems}
           activeItemIds={activeAccessories}
-          activeLabel="Activo"
-          equipLabel="Equipar"
-          emptyText="Aún no has personalizado ningún accesorio. Toca el botón 🎨 de cualquier accesorio para crear tu propia variante de color."
-          singularLabel="accesorio personalizado"
-          pluralLabel="accesorios personalizados"
+          activeLabel={t('shop.activeSwitchLabel')}
+          equipLabel={t('shop.equipBtn')}
+          emptyText={t('shop.emptyModalAccessory')}
+          singularLabel={t('shop.singularCustomAcc')}
+          pluralLabel={t('shop.pluralCustomAcc')}
           renderPreview={renderAccessoryCustomizationPreview}
           onEquip={handleEquipCustomAccessory}
           onEdit={handleEditAccessoryFromGallery}
@@ -1676,7 +1686,7 @@ export default function ShopPage() {
               }`}
             >
               <span style={{ fontVariantEmoji: 'emoji' }}>🛒</span>
-              Mascota
+              {t('shop.tabMascot')}
             </button>
             <button
               onClick={() => setShopSection('app')}
@@ -1687,10 +1697,10 @@ export default function ShopPage() {
               }`}
             >
               <span style={{ fontVariantEmoji: 'emoji' }}>⚡</span>
-              App
+              {t('shop.tabApp')}
             </button>
           </div>
-          <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border rounded-xl px-3 py-1.5" title="Volts">
+          <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border rounded-xl px-3 py-1.5" title={t('shop.voltsTitle')}>
             <span className="text-sm">⚡</span>
             <span className="font-mono font-bold text-accent-glow text-sm">{coins}</span>
           </div>
@@ -1731,9 +1741,9 @@ export default function ShopPage() {
           />
           <div className="flex-1 min-w-0 flex items-center gap-2">
             <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-              <div className="font-display font-bold text-surface-text text-sm">Tu mascota ahora</div>
+              <div className="font-display font-bold text-surface-text text-sm">{t('shop.mascotNow')}</div>
               <div className="text-[10px] text-surface-muted/60 mt-0.5 leading-tight">
-                Gana ⚡ {DAILY_BATTERY_REWARD} Volts al actualizar<br />tu batería cada día.
+                {t('shop.dailyRewardHint1', { n: DAILY_BATTERY_REWARD })}<br />{t('shop.dailyRewardHint2')}
               </div>
             </div>
             <div className="flex flex-col gap-1.5 shrink-0">
@@ -1742,7 +1752,7 @@ export default function ShopPage() {
                 className="flex items-center gap-1 text-[10px] font-display font-semibold text-surface-text bg-surface-bg border border-surface-border rounded-lg px-2 py-1 hover:bg-surface-card transition-all whitespace-nowrap"
               >
                 <span style={{ fontVariantEmoji: 'emoji' }}>👗</span>
-                Tus outfits
+                {t('shop.yourOutfitsBtn')}
               </button>
               <button
                 onClick={handleSaveCurrentOutfit}
@@ -1750,7 +1760,7 @@ export default function ShopPage() {
                 className="flex items-center gap-1 text-[10px] font-display font-semibold text-surface-text bg-surface-bg border border-surface-border rounded-lg px-2 py-1 hover:bg-surface-card transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface-bg"
               >
                 <span style={{ fontVariantEmoji: 'emoji' }}>💾</span>
-                Guardar outfit
+                {t('shop.saveOutfitBtn')}
               </button>
             </div>
           </div>
@@ -1761,9 +1771,9 @@ export default function ShopPage() {
       <div className="max-w-lg mx-auto w-full px-4 py-3">
         <div className="flex bg-surface-card border border-surface-border rounded-2xl p-1 gap-1">
           {[
-            { key: 'activities',  label: 'Actividades', emoji: '🥳' },
-            { key: 'outfit',      label: 'Outfit',      emoji: '👕' },
-            { key: 'accessories', label: 'Accesorios',  emoji: '😎' },
+            { key: 'activities',  label: t('shop.tabActivities'), emoji: '🥳' },
+            { key: 'outfit',      label: t('shop.tabOutfit'),      emoji: '👕' },
+            { key: 'accessories', label: t('shop.tabAccessories'),  emoji: '😎' },
           ].map(t => (
             <button
               key={t.key}
@@ -1808,9 +1818,9 @@ export default function ShopPage() {
             {/* Sub-tabs principales del Outfit */}
             <div className="flex bg-surface-card border border-surface-border rounded-xl p-0.5 gap-0.5">
               {[
-                { key: 'pies',   label: 'Pies',   emoji: '👟' },
-                { key: 'torso',  label: 'Torso',  emoji: '👕' },
-                { key: 'cabeza', label: 'Cabeza', emoji: '🧢' },
+                { key: 'pies',   label: t('shop.outfitTabFeet'),   emoji: '👟' },
+                { key: 'torso',  label: t('shop.outfitTabTorso'),  emoji: '👕' },
+                { key: 'cabeza', label: t('shop.outfitTabHead'), emoji: '🧢' },
               ].map(s => (
                 <button
                   key={s.key}
@@ -1850,12 +1860,12 @@ export default function ShopPage() {
                       previewTier={previewTier}
                     />
                     <MyCustomizationsCard
-                      title="Calzado personalizado"
+                      title={t('shop.customFeetTitle')}
                       count={customizedFeetItems.length}
                       previewItems={customizedFeetItems}
-                      singularLabel="calzado personalizado"
-                      pluralLabel="calzados personalizados"
-                      emptyLabel="Aún no has personalizado ningún calzado"
+                      singularLabel={t('shop.singularCustomFeet')}
+                      pluralLabel={t('shop.pluralCustomFeet')}
+                      emptyLabel={t('shop.emptyCustomFeet')}
                       onClick={() => setShowMyCustomizations(true)}
                       previewTier={previewTier}
                     />
@@ -1869,7 +1879,7 @@ export default function ShopPage() {
                   <div className="mb-3">
                     <div className="flex items-center justify-between px-0.5 mb-1.5">
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
-                        Retro · colores
+                        {t('shop.retroColors')}
                       </div>
                       <CarouselPersonalizeButton
                         family={basicFeet}
@@ -1901,7 +1911,7 @@ export default function ShopPage() {
                   <div className="mb-3">
                     <div className="flex items-center justify-between px-0.5 mb-1.5">
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
-                        Chunky · colores
+                        {t('shop.chunkyColors')}
                       </div>
                       <CarouselPersonalizeButton
                         family={basicFeet2}
@@ -1952,8 +1962,8 @@ export default function ShopPage() {
                 {/* Sub-tabs: Camisetas / Camisas */}
                 <div className="flex bg-surface-card border border-surface-border rounded-xl p-0.5 gap-0.5 mb-3">
                   {[
-                    { key: 'camiseta', label: 'Camisetas', emoji: '👕' },
-                    { key: 'camisa',   label: 'Camisas',   emoji: '👔' },
+                    { key: 'camiseta', label: t('shop.outfitSubShirt'), emoji: '👕' },
+                    { key: 'camisa',   label: t('shop.outfitSubShirtLong'),   emoji: '👔' },
                   ].map(s => (
                     <button
                       key={s.key}
@@ -2008,7 +2018,7 @@ export default function ShopPage() {
                   <div className="mb-3">
                     <div className="flex items-center justify-between px-0.5 mb-1.5">
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
-                        Básicos
+                        {t('shop.basics')}
                       </div>
                       <CarouselPersonalizeButton
                         family={basicOutfits}
@@ -2070,7 +2080,7 @@ export default function ShopPage() {
                       previewTier={previewTier}
                     />
                     <MyCustomizationsCard
-                      title="Gorros personalizados"
+                      title={t('shop.customHeadTitle')}
                       count={customizedHeadItems.length}
                       previewItems={customizedHeadItems}
                       onClick={() => setShowHeadCustomizations(true)}
@@ -2100,7 +2110,7 @@ export default function ShopPage() {
                   <div>
                     <div className="flex items-center justify-between px-0.5 mb-1.5">
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
-                        Gorras lisas
+                        {t('shop.capsPlain')}
                       </div>
                       <CarouselPersonalizeButton
                         family={basicHead}
@@ -2131,7 +2141,7 @@ export default function ShopPage() {
                   <div>
                     <div className="flex items-center justify-between px-0.5 mb-1.5">
                       <div className="text-[11px] font-display font-semibold text-surface-muted">
-                        Gorras
+                        {t('shop.caps')}
                       </div>
                       <CarouselPersonalizeButton
                         family={basicHead2}
@@ -2192,12 +2202,12 @@ export default function ShopPage() {
             {/* Acceso a la galería "Mis personalizaciones" — arriba del
                 todo del scroll vertical, antes de cualquier carrusel. */}
             <MyCustomizationsCard
-              title="Accesorios personalizados"
+              title={t('shop.customAccTitle')}
               count={customizedAccessoryItems.length}
               previewItems={customizedAccessoryItems}
-              singularLabel="accesorio personalizado"
-              pluralLabel="accesorios personalizados"
-              emptyLabel="Aún no has personalizado ningún accesorio"
+              singularLabel={t('shop.singularCustomAcc')}
+              pluralLabel={t('shop.pluralCustomAcc')}
+              emptyLabel={t('shop.emptyCustomAcc')}
               onClick={() => setShowAccessoryCustomizations(true)}
               renderPreview={renderAccessoryCustomizationPreview}
               previewTier={previewTier}
@@ -2211,7 +2221,7 @@ export default function ShopPage() {
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    Riñoneras · elige una
+                    {t('shop.fannyPacks')}
                   </div>
                   <CarouselPersonalizeButton
                     family={rinonAccessories}
@@ -2244,7 +2254,7 @@ export default function ShopPage() {
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    Corbatas · elige una
+                    {t('shop.ties')}
                   </div>
                   <CarouselPersonalizeButton
                     family={tieAccessories}
@@ -2275,7 +2285,7 @@ export default function ShopPage() {
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    Pajaritas · elige una
+                    {t('shop.bowTies')}
                   </div>
                   <CarouselPersonalizeButton
                     family={bowTieAccessories}
@@ -2306,7 +2316,7 @@ export default function ShopPage() {
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    Cadenas · elige una
+                    {t('shop.chains')}
                   </div>
                   <CarouselPersonalizeButton
                     family={chainAccessories}
@@ -2337,7 +2347,7 @@ export default function ShopPage() {
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    Grillz · elige uno
+                    {t('shop.grillz')}
                   </div>
                   <CarouselPersonalizeButton
                     family={grillzAccessories}
@@ -2370,7 +2380,7 @@ export default function ShopPage() {
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    Gafas de sol · elige unas
+                    {t('shop.sunglasses')}
                   </div>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
@@ -2442,7 +2452,7 @@ export default function ShopPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <span className="text-lg" style={{ fontVariantEmoji: 'emoji' }}>👗</span>
-                <span className="font-display font-bold text-surface-text">Tus outfits guardados</span>
+                <span className="font-display font-bold text-surface-text">{t('shop.savedOutfitsTitle')}</span>
               </div>
               <button
                 onClick={() => setShowSavedOutfits(false)}
@@ -2456,9 +2466,9 @@ export default function ShopPage() {
             {savedOutfits.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 py-8 text-center">
                 <span className="text-3xl" style={{ fontVariantEmoji: 'emoji' }}>🪆</span>
-                <div className="font-display font-semibold text-surface-text text-sm">Aún no hay outfits guardados</div>
+                <div className="font-display font-semibold text-surface-text text-sm">{t('shop.emptySavedOutfitsTitle')}</div>
                 <div className="text-[11px] text-surface-muted max-w-[220px]">
-                  Equipa tu look favorito y pulsa «Guardar outfit» para guardarlo aquí.
+                  {t('shop.emptySavedOutfitsHint')}
                 </div>
               </div>
             ) : (
@@ -2501,20 +2511,20 @@ export default function ShopPage() {
                     })()}
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-semibold text-surface-text text-sm truncate">{outfit.name}</div>
-                      <div className="text-[10px] text-surface-muted mt-0.5">{outfit.createdAt ? new Date(outfit.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : ''}</div>
+                      <div className="text-[10px] text-surface-muted mt-0.5">{outfit.createdAt ? new Date(outfit.createdAt).toLocaleDateString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { day: 'numeric', month: 'short' }) : ''}</div>
                     </div>
                     <div className="flex flex-col gap-1.5 shrink-0">
                       <button
                         onClick={() => handleApplySavedOutfit(outfit)}
                         className="text-[11px] font-display font-semibold text-white bg-accent-primary rounded-xl px-3 py-1.5 hover:opacity-90 transition-all"
                       >
-                        Aplicar
+                        {t('shop.applyBtn')}
                       </button>
                       <button
                         onClick={() => handleRemoveSavedOutfit(outfit)}
                         className="text-[11px] font-display font-semibold text-surface-muted bg-surface-hover border border-surface-border rounded-xl px-3 py-1.5 hover:text-surface-text hover:border-red-400/40 transition-all"
                       >
-                        🗑 Eliminar
+                        {t('shop.deleteBtn')}
                       </button>
                     </div>
                   </div>
@@ -2529,7 +2539,7 @@ export default function ShopPage() {
               className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-surface-border bg-surface-bg text-surface-text font-display font-semibold text-sm hover:bg-surface-card transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface-bg"
             >
               <span style={{ fontVariantEmoji: 'emoji' }}>💾</span>
-              Guardar outfit actual
+              {t('shop.saveCurrentOutfitBtn')}
             </button>
           </div>
         </div>

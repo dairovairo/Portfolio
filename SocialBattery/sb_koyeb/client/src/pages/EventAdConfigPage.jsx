@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import AudienceCircleMap from '../components/AudienceCircleMap';
 import { EVENT_AD_PRICING, computeEventAdPriceCents, formatEurFromCents } from '../lib/adPricing';
+import { useTranslation } from '../i18n';
 
 // ── Configuración de publicidad de un evento Premium / Ultra ──────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -34,41 +35,27 @@ const NOTIF_STEP = 500;
 const PLAN_META = {
   premium: {
     emoji: '⚡',
-    label: 'Premium',
-    // Precio dinámico — se calcula abajo con computeEventAdPriceCents en
-    // función de las notificaciones contratadas. Ya no hay tarifa
-    // estática aquí (antes: '10 €' fijo, que era el precio del mínimo
-    // contratable y engañaba al escalar el slider). Ver lib/adPricing.js.
+    labelKey: 'planPremium',
+    fullKey: 'planPremiumFull',
     accent: 'purple',
     ring: 'border-purple-400 bg-purple-500/10',
     pill: 'text-purple-300 bg-purple-500/10 border border-purple-500/20',
     check: 'text-purple-300',
     slider: 'accent-purple-400',
     button: 'bg-purple-500 hover:bg-purple-400 text-white',
-    includes: [
-      'Aparición en lista de eventos',
-      'Notificaciones a miembros de la comunidad',
-      'Notificaciones a número de usuarios contratado',
-      'Insignia premium',
-    ],
+    includeKeys: ['premiumInc1', 'premiumInc2', 'premiumInc3', 'premiumInc4'],
   },
   ultra: {
     emoji: '🚀',
-    label: 'Ultra',
-    // Precio dinámico — ver comentario en `premium` arriba.
+    labelKey: 'planUltra',
+    fullKey: 'planUltraFull',
     accent: 'blue',
     ring: 'border-accent-primary bg-accent-primary/10',
     pill: 'text-accent-glow bg-accent-primary/10 border border-accent-primary/20',
     check: 'text-accent-glow',
     slider: 'accent-accent-primary',
     button: 'bg-accent-primary hover:bg-accent-primary/80 text-white',
-    includes: [
-      'Aparición en lista de eventos',
-      'Notificaciones a miembros de la comunidad',
-      'Notificaciones a número de usuarios contratado',
-      'Apariciones en banner menú principal a número de usuarios contratado',
-      'Insignia ultra',
-    ],
+    includeKeys: ['premiumInc1', 'premiumInc2', 'premiumInc3', 'ultraInc4', 'ultraInc5'],
   },
 };
 
@@ -128,6 +115,8 @@ export default function EventAdConfigPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { t, lang } = useTranslation();
+  const localeTag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
 
   // Fase 112 — la misma página cubre dos flujos:
   //
@@ -239,7 +228,7 @@ export default function EventAdConfigPage() {
       const data = await api.get(`/community/events/promotion-audience${query}`);
       setTotal(data?.total ?? 0);
     } catch (e) {
-      setLoadError(e.message || 'No se pudo calcular la audiencia');
+      setLoadError(e.message || t('adConfig.audienceCalcError'));
     } finally {
       setLoadingTotal(false);
     }
@@ -279,7 +268,7 @@ export default function EventAdConfigPage() {
         setNearby(data?.nearby ?? 0);
         setInterestedNearby(data?.interested_nearby ?? null);
       } catch (e) {
-        showToast(e.message || 'No se pudo calcular audiencia por ubicación', 'error');
+        showToast(e.message || t('adConfig.audienceLocError'), 'error');
       } finally {
         setLoadingNearby(false);
       }
@@ -333,7 +322,7 @@ export default function EventAdConfigPage() {
       setInterested(data?.interested ?? null);
       setCategoriesDefined(Boolean(data?.categories_defined));
     } catch (e) {
-      showToast(e.message || 'No se pudo filtrar por intereses', 'error');
+      showToast(e.message || t('adConfig.interestFilterError'), 'error');
       setFilterInterested(false);
     } finally {
       setLoadingInterested(false);
@@ -367,8 +356,8 @@ export default function EventAdConfigPage() {
   );
 
   const headerSubtitle = isRenew
-    ? `Renovar publicidad de ${renewEvent.title}`
-    : (draft?.communityName ? `Evento en ${draft.communityName}` : 'Nuevo evento');
+    ? t('adConfig.renewSubtitle', { title: renewEvent.title })
+    : (draft?.communityName ? t('adConfig.eventInSubtitle', { name: draft.communityName }) : t('adConfig.newEventSubtitle'));
 
   async function handlePublish() {
     if (!audienceReady || blockedByFilterShortfall) return;
@@ -385,7 +374,7 @@ export default function EventAdConfigPage() {
           promotion_plan: plan,
           notification_count: notificationCount,
         });
-        showToast('¡Publicidad renovada! 🔄', 'success');
+        showToast(t('adConfig.adRenewedToast'), 'success');
       } else {
         if (!draft) return;
         const formData = buildEventFormData(draft, plan, notificationCount, {
@@ -395,11 +384,11 @@ export default function EventAdConfigPage() {
             : null,
         });
         await api.postForm('/community/events', formData);
-        showToast('¡Evento creado! 🌐', 'success');
+        showToast(t('adConfig.eventCreatedToast'), 'success');
       }
       navigate(backTarget, { replace: true });
     } catch (e) {
-      setError(e.message || (isRenew ? 'Error al renovar la publicidad' : 'Error al crear el evento'));
+      setError(e.message || (isRenew ? t('adConfig.errRenew') : t('adConfig.errCreate')));
     } finally {
       setSaving(false);
     }
@@ -419,7 +408,7 @@ export default function EventAdConfigPage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text text-base truncate">🌐 Configurar publicidad</h1>
+            <h1 className="font-display font-bold text-surface-text text-base truncate">{t('adConfig.configTitle')}</h1>
             <p className="text-xs font-mono text-surface-muted truncate">{headerSubtitle}</p>
           </div>
         </div>
@@ -429,7 +418,7 @@ export default function EventAdConfigPage() {
         {/* Resumen del evento en creación */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-1">
           <h2 className="font-display font-bold text-surface-text text-sm truncate">
-            {draft.title || 'Nuevo evento'}
+            {draft.title || t('adConfig.newEventTitle')}
           </h2>
           {/* Desde fase 108 todo evento pertenece a una comunidad y el
               useEffect de más arriba hace kick-out si el draft llegara sin
@@ -447,7 +436,7 @@ export default function EventAdConfigPage() {
         <div className="bg-surface-card border border-surface-border rounded-2xl p-2">
           <div
             role="tablist"
-            aria-label="Plan de publicidad"
+            aria-label={t('adConfig.planTablabel')}
             className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-surface-bg border border-surface-border"
           >
             {['premium', 'ultra'].map(key => {
@@ -470,7 +459,7 @@ export default function EventAdConfigPage() {
                   }`}
                 >
                   <span className="text-base">{opt.emoji}</span>
-                  <span>{opt.label}</span>
+                  <span>{t('adConfig.' + opt.labelKey)}</span>
                 </button>
               );
             })}
@@ -486,17 +475,17 @@ export default function EventAdConfigPage() {
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-2 text-base font-display font-bold text-surface-text">
               <span className="text-xl">{meta.emoji}</span>
-              {meta.label} Promotion
+              {t('adConfig.' + meta.fullKey)}
             </span>
             <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${meta.pill}`}>
-              {formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents)} / {EVENT_AD_PRICING[plan].unitLabel}
+              {t('adConfig.perUnit', { price: formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents), unit: EVENT_AD_PRICING[plan].unitLabel })}
             </span>
           </div>
           <ul className="space-y-1.5 text-[12px] font-mono text-surface-muted leading-relaxed">
-            {meta.includes.map((item, i) => (
+            {meta.includeKeys.map((key, i) => (
               <li key={i} className="flex items-start gap-1.5">
                 <span className={`${meta.check} flex-shrink-0`}>✓</span>
-                <span>{item}</span>
+                <span>{t('adConfig.' + key)}</span>
               </li>
             ))}
           </ul>
@@ -504,9 +493,9 @@ export default function EventAdConfigPage() {
 
         {isRenew ? (
           <div className="bg-surface-card border border-accent-primary/30 rounded-2xl p-5 space-y-2">
-            <p className="text-sm font-display font-bold text-surface-text">🔄 Renovando publicidad</p>
+            <p className="text-sm font-display font-bold text-surface-text">{t('adConfig.renewBlockTitle')}</p>
             <p className="text-[12px] text-surface-muted leading-relaxed">
-              Estás renovando la publicidad de <span className="text-surface-text">{renewEvent.title}</span>. Solo se pueden cambiar el plan y la cuota — la audiencia y los filtros del evento se mantienen. Al confirmar, se cierra el ciclo actual y arranca uno nuevo: el contador de envíos vuelve a cero y se re-notifica a los miembros de la comunidad.
+              {t('adConfig.renewBlockExplain', { title: renewEvent.title })}
             </p>
           </div>
         ) : (
@@ -517,7 +506,7 @@ export default function EventAdConfigPage() {
             pool del que luego el pacing (server/jobs/eventPromoPacing.js)
             sortea a quién notificar cada tick. */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-2">
-          <p className="text-xs font-mono text-surface-muted uppercase tracking-wide">Usuarios notificables</p>
+          <p className="text-xs font-mono text-surface-muted uppercase tracking-wide">{t('adConfig.audienceHeader')}</p>
           {loadingTotal ? (
             <div className="h-10 flex items-center justify-center">
               <span className="w-5 h-5 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
@@ -530,16 +519,16 @@ export default function EventAdConfigPage() {
                 onClick={loadTotal}
                 className="text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
               >
-                Reintentar
+                {t('adConfig.retry')}
               </button>
             </div>
           ) : (
             <p className={`font-display font-bold text-4xl ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
-              {Number(total).toLocaleString('es-ES')}
+              {Number(total).toLocaleString(localeTag)}
             </p>
           )}
           <p className="text-[11px] text-surface-muted leading-relaxed">
-            Usuarios de la app a los que puede llegar la notificación de este evento.
+            {t('adConfig.audienceExplain')}
           </p>
         </div>
 
@@ -552,9 +541,9 @@ export default function EventAdConfigPage() {
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-display font-bold text-surface-text">🎯 Filtrar por intereses</p>
+              <p className="text-sm font-display font-bold text-surface-text">{t('adConfig.filterInterestTitle')}</p>
               <p className="text-[11px] text-surface-muted mt-0.5 leading-relaxed">
-                Contrata solo entre los notificables cuyos intereses coincidan con alguna categoría del evento.
+                {t('adConfig.filterInterestHint')}
               </p>
             </div>
             <button
@@ -586,23 +575,23 @@ export default function EventAdConfigPage() {
             ) : categoriesDefined === false ? (
               <div className="text-center py-1 space-y-2 border-t border-surface-border/60 pt-3">
                 <p className="text-xs text-surface-muted leading-relaxed">
-                  No definiste ninguna categoría en el evento, vuelve al paso anterior para añadir alguna y así poder filtrar por intereses.
+                  {t('adConfig.noCategoriesNote')}
                 </p>
                 <button
                   type="button"
                   onClick={() => navigate(-1)}
                   className="text-xs font-mono text-accent-glow hover:text-accent-primary transition-colors"
                 >
-                  Volver al formulario
+                  {t('adConfig.backToForm')}
                 </button>
               </div>
             ) : (
               <div className="text-center py-1 border-t border-surface-border/60 pt-3">
                 <p className={`font-display font-bold text-2xl ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
-                  {Number(interested).toLocaleString('es-ES')}
+                  {Number(interested).toLocaleString(localeTag)}
                 </p>
                 <p className="text-[11px] text-surface-muted mt-1">
-                  interesados de {Number(total).toLocaleString('es-ES')} notificables
+                  {t('adConfig.interestedOfTotal', { total: Number(total).toLocaleString(localeTag) })}
                 </p>
               </div>
             )
@@ -620,11 +609,11 @@ export default function EventAdConfigPage() {
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-display font-bold text-surface-text">📍 Filtrar por ubicación</p>
+              <p className="text-sm font-display font-bold text-surface-text">{t('adConfig.filterLocationTitle')}</p>
               <p className="text-[11px] text-surface-muted mt-0.5 leading-relaxed">
                 {canFilterLocation
-                  ? 'Contrata solo entre los notificables que viven cerca del evento.'
-                  : 'El evento no tiene ubicación asignada, vuelve al paso anterior para ponerla.'}
+                  ? t('adConfig.filterLocationHint')
+                  : t('adConfig.noLocationHint')}
               </p>
             </div>
             <button
@@ -664,10 +653,10 @@ export default function EventAdConfigPage() {
                   value={radiusKm}
                   onChange={(e) => setRadiusKm(Number(e.target.value))}
                   className={`flex-1 accent-green-500`}
-                  aria-label="Radio en kilómetros"
+                  aria-label={t('adConfig.radiusLabel')}
                 />
                 <span className="text-xs font-mono text-surface-muted w-16 text-right">
-                  {radiusKm} km
+                  {t('adConfig.radiusKm', { n: radiusKm })}
                 </span>
               </div>
               <div className="text-center py-1">
@@ -678,12 +667,12 @@ export default function EventAdConfigPage() {
                     <p className={`font-display font-bold text-2xl ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
                       {Number(
                         filterInterested && interestedNearby != null ? interestedNearby : (nearby ?? 0)
-                      ).toLocaleString('es-ES')}
+                      ).toLocaleString(localeTag)}
                     </p>
                     <p className="text-[11px] text-surface-muted mt-1">
                       {filterInterested && interestedNearby != null
-                        ? `interesados cerca (radio ${radiusKm} km, cruce ambos filtros)`
-                        : `notificables en un radio de ${radiusKm} km`}
+                        ? t('adConfig.nearbyBothFilters', { n: radiusKm })
+                        : t('adConfig.nearbyOnly', { n: radiusKm })}
                     </p>
                   </>
                 )}
@@ -705,18 +694,18 @@ export default function EventAdConfigPage() {
         {blockedByFilterShortfall ? (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-1">
             <p className="text-sm text-surface-muted leading-relaxed">
-              Con el filtro de intereses activo solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios interesados, por debajo del mínimo contratable ({NOTIF_MIN.toLocaleString('es-ES')}).
+              {t('adConfig.belowMinTitle', { n: Number(audienceCap).toLocaleString(localeTag), min: NOTIF_MIN.toLocaleString(localeTag) })}
             </p>
-            <p className="text-xs text-surface-muted">Desactiva el filtro para poder contratar publicidad.</p>
+            <p className="text-xs text-surface-muted">{t('adConfig.belowMinHint')}</p>
           </div>
         ) : (
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <label className="text-xs font-mono text-surface-muted">
-              📨 Notificaciones a contratar (on-demand)
+              {t('adConfig.contractSlots')}
             </label>
             <span className="text-xs font-mono font-semibold text-surface-text">
-              {Number(notificationCount).toLocaleString('es-ES')}
+              {Number(notificationCount).toLocaleString(localeTag)}
             </span>
           </div>
 
@@ -730,18 +719,20 @@ export default function EventAdConfigPage() {
             className={`w-full ${meta.slider} cursor-pointer`}
           />
           <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-            <span>Mín. {NOTIF_MIN.toLocaleString('es-ES')}</span>
-            <span>Máx. {NOTIF_MAX.toLocaleString('es-ES')}</span>
+            <span>{t('adConfig.minLbl', { n: NOTIF_MIN.toLocaleString(localeTag) })}</span>
+            <span>{t('adConfig.maxLbl', { n: NOTIF_MAX.toLocaleString(localeTag) })}</span>
           </div>
 
           {contractedExceedsAudience && (
             <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 leading-relaxed">
-              ⚠️ Solo hay {Number(audienceCap).toLocaleString('es-ES')} usuarios {
-                filterInterested && filterLocation ? 'interesados cerca'
-                : filterInterested ? 'interesados'
-                : filterLocation ? 'cerca'
-                : 'notificables'
-              }: se enviarán como mucho {Number(audienceCap).toLocaleString('es-ES')} notificaciones, y no se cobrará por el resto.
+              {(() => {
+                const nStr = Number(audienceCap).toLocaleString(localeTag);
+                const key = filterInterested && filterLocation ? 'audCapWarnBoth'
+                  : filterInterested ? 'audCapWarnInt'
+                  : filterLocation ? 'audCapWarnLoc'
+                  : 'audCapWarnGeneric';
+                return t('adConfig.' + key, { n: nStr, n2: nStr });
+              })()}
             </p>
           )}
 
@@ -754,26 +745,26 @@ export default function EventAdConfigPage() {
               recalcular aquí, así que sale solo el máximo. */}
           <div className="border-t border-surface-border/60 pt-2 mt-1 space-y-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-mono text-surface-muted">💶 Importe contratado</span>
+              <span className="text-xs font-mono text-surface-muted">{t('adConfig.priceContracted')}</span>
               <span className={`text-sm font-display font-bold ${plan === 'ultra' ? 'text-accent-glow' : 'text-purple-300'}`}>
                 {formatEurFromCents(maxPriceCents)}
               </span>
             </div>
             {contractedExceedsAudience && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-mono text-surface-muted">Estimado a facturar</span>
+                <span className="text-[11px] font-mono text-surface-muted">{t('adConfig.priceEstBilled')}</span>
                 <span className="text-xs font-mono font-semibold text-surface-text">
                   {formatEurFromCents(estPriceCents)}
                 </span>
               </div>
             )}
             <p className="text-[10px] font-mono text-surface-muted leading-relaxed">
-              {formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents)} por notificación entregada.
+              {t('adConfig.pricePerNotif', { price: formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents) })}
             </p>
           </div>
 
           <p className="text-[10px] font-mono text-surface-muted">
-            ℹ️ Si no se alcanzan 200 notificaciones enviadas, no se cobrará nada.
+            {t('adConfig.minChargeNote')}
           </p>
         </div>
         )}
@@ -781,19 +772,19 @@ export default function EventAdConfigPage() {
         {/* Notas informativas — mismas que estaban antes en el modal */}
         <div className="space-y-2">
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            💳 Se aplicará una retención al comenzar la promoción; el pago se efectuará al finalizar la promoción, al renovarla o en su defecto, al empezar el evento, en base a las notificaciones enviadas hasta ese momento.
+            {t('adConfig.note1')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            📶 Las notificaciones se enviarán conforme los usuarios estén disponibles para notificar.
+            {t('adConfig.note2')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            🎯 Todas las promociones se realizan en base a algoritmos de cercanía e intereses.
+            {t('adConfig.note3')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            🔁 Se notificará como máximo una vez a cada usuario dentro de una misma promoción; para repetir notificaciones a usuarios se deberá crear otra promoción.
+            {t('adConfig.note4')}
           </p>
           <p className="text-xs text-surface-muted font-mono bg-surface-card border border-surface-border rounded-xl px-3 py-2">
-            📍 Todas las notificaciones se reparten mediante algoritmos basados en intereses y ubicación.
+            {t('adConfig.note5')}
           </p>
         </div>
 
@@ -808,7 +799,7 @@ export default function EventAdConfigPage() {
           disabled={saving || !audienceReady || blockedByFilterShortfall}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${meta.button}`}
         >
-          {saving ? (isRenew ? 'Renovando...' : 'Publicando...') : (isRenew ? `🔄 Renovar como ${meta.label}` : `🌐 Publicar evento ${meta.label}`)}
+          {saving ? (isRenew ? t('adConfig.renewing') : t('adConfig.publishing')) : (isRenew ? t('adConfig.renewBtn', { plan: t('adConfig.' + meta.labelKey) }) : t('adConfig.publishBtn', { plan: t('adConfig.' + meta.labelKey) }))}
         </button>
       </main>
     </div>

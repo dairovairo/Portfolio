@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import TimeseriesChart from '../components/TimeseriesChart';
 import { api } from '../lib/api';
+import { useTranslation } from '../i18n';
 
 // ── Acciones sobre una promoción (fase 112) ────────────────────────────────
 // Renovar y finalizar reutilizan el mismo modelo de dos botones al pie de
@@ -44,26 +45,29 @@ export const TIER_STYLE = {
 };
 
 export const PLAN_STYLE = {
-  ultra:   { emoji: '🚀', label: 'Ultra',   pill: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/25' },
-  premium: { emoji: '⚡', label: 'Premium', pill: 'bg-accent-primary/10 text-accent-glow border-accent-primary/25' },
-  basic:   { emoji: '·',  label: 'Basic',   pill: 'bg-surface-bg text-surface-muted border-surface-border' },
+  ultra:   { emoji: '🚀', labelKey: 'planUltra',   pill: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/25' },
+  premium: { emoji: '⚡', labelKey: 'planPremium', pill: 'bg-accent-primary/10 text-accent-glow border-accent-primary/25' },
+  basic:   { emoji: '·',  labelKey: 'planBasic',   pill: 'bg-surface-bg text-surface-muted border-surface-border' },
 };
 
-export function fmt(n) {
-  return Number(n || 0).toLocaleString('es-ES');
+export function fmt(n, lang = 'es') {
+  const tag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
+  return Number(n || 0).toLocaleString(tag);
 }
 
 // null = "todavía no hay base sobre la que calcular" (0 impresiones), que no
 // es lo mismo que 0 % ("hubo impresiones y no picó nadie"). Se pintan
 // distinto a propósito: un guión no es un mal resultado, un 0 % sí.
-export function pct(value) {
+export function pct(value, lang = 'es') {
   if (value == null) return '—';
-  return `${Number(value).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`;
+  const tag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
+  return `${Number(value).toLocaleString(tag, { maximumFractionDigits: 1 })} %`;
 }
 
-export function fmtDate(iso) {
+export function fmtDate(iso, lang = 'es') {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+  const tag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
+  return new Date(iso).toLocaleDateString(tag, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function Pill({ className = '', children }) {
@@ -81,8 +85,9 @@ export function Pill({ className = '', children }) {
 // deshabilita "Sí, finalizar" y se pone un spinner, para que un doble tap
 // no dispare dos peticiones.
 export function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }) {
+  const { t } = useTranslation();
   if (!open) return null;
-  const label = kind === 'event' ? 'la publicidad de este evento' : 'la publicidad de este sorteo';
+  const label = kind === 'event' ? t('dashboardDetail.confirmLabelEvt') : t('dashboardDetail.confirmLabelRaf');
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-4 pb-safe"
@@ -93,12 +98,12 @@ export function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }
         onClick={e => e.stopPropagation()}
       >
         <div>
-          <p className="font-display font-bold text-surface-text text-sm">Finalizar publicidad</p>
+          <p className="font-display font-bold text-surface-text text-sm">{t('dashboardDetail.confirmTitle')}</p>
           <p className="text-[12px] text-surface-muted mt-1 leading-relaxed">
-            Vas a cerrar {label} de <span className="text-surface-text">{title}</span>.
+            {t('dashboardDetail.confirmSubject', { label })} <span className="text-surface-text">{title}</span>.
           </p>
           <p className="text-[11px] text-surface-muted mt-2 leading-relaxed">
-            Los envíos publicitarios se detienen inmediatamente. El {kind === 'event' ? 'evento' : 'sorteo'} en sí sigue igual — esto solo cierra la promoción. Después podrás renovarla si te arrepientes.
+            {kind === 'event' ? t('dashboardDetail.confirmExplainEvt') : t('dashboardDetail.confirmExplainRaf')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -107,7 +112,7 @@ export function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }
             disabled={busy}
             className="flex-1 py-2 rounded-xl border border-surface-border text-surface-text text-xs font-display font-semibold disabled:opacity-50"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -115,7 +120,7 @@ export function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }
             className="flex-1 py-2 rounded-xl bg-red-500/90 hover:bg-red-500 text-white text-xs font-display font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {busy && <span className="w-3 h-3 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />}
-            Sí, finalizar
+            {t('dashboardDetail.confirmCta')}
           </button>
         </div>
       </div>
@@ -138,35 +143,33 @@ export function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }
 // (aunque fuese deshabilitada, con el motivo). Ahora en ese caso los
 // botones se enseñan igual, deshabilitados y con el motivo explicado.
 export function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, hasContract }) {
+  const { t } = useTranslation();
   if (!hasContract) return null;
 
   const canRenew = row.can_renew;
   const canEnd = row.can_end;
   const sent = kind === 'event' ? row.sent_official : row.shown;
   const belowThreshold = sent < freeThreshold;
-  const unitLabel = kind === 'event' ? 'envíos' : 'banners enseñados';
-  // "Terminado" cubre tanto el evento ya empezado como el sorteo ya
-  // acabado/sorteado — en ambos casos la promoción ya no se puede tocar,
-  // así que en vez de solo deshabilitar el botón se explica el porqué.
+  const unitLabel = kind === 'event' ? t('dashboardDetail.unitSends') : t('dashboardDetail.unitBanners');
   const isOver = kind === 'event' ? row.started : row.ended;
   const isDrawn = kind === 'raffle' && !!row.drawn_at;
   const overLabel = kind === 'event'
-    ? 'El evento ya ha terminado'
-    : isDrawn ? 'El sorteo ya se ha realizado' : 'El sorteo ya ha terminado';
+    ? t('dashboardDetail.overEvent')
+    : isDrawn ? t('dashboardDetail.overRaffleDrawn') : t('dashboardDetail.overRaffleEnded');
 
   const renewTitle = isOver
-    ? `${overLabel} — no se puede renovar`
+    ? overLabel + t('dashboardDetail.renewOverSuffix')
     : belowThreshold
-      ? `Necesitas alcanzar ${freeThreshold} ${unitLabel} para renovar (${sent}/${freeThreshold})`
-      : kind === 'event' ? 'Renovar promoción del evento' : 'Renovar publicidad del sorteo';
+      ? t('dashboardDetail.renewNeeded', { threshold: freeThreshold, unit: unitLabel, sent })
+      : kind === 'event' ? t('dashboardDetail.renewEventTitle') : t('dashboardDetail.renewRaffleTitle');
 
   const endTitle = isOver
-    ? `${overLabel} — la promoción se cerró sola`
+    ? overLabel + t('dashboardDetail.endOverSuffix')
     : kind === 'raffle' && row.promo_ended_at
-      ? 'La publicidad ya está finalizada'
+      ? t('dashboardDetail.endAlreadyDone')
       : belowThreshold
-        ? `Necesitas alcanzar ${freeThreshold} ${unitLabel} para finalizar (${sent}/${freeThreshold})`
-        : kind === 'event' ? 'Finalizar promoción del evento' : 'Finalizar publicidad del sorteo';
+        ? t('dashboardDetail.endNeeded', { threshold: freeThreshold, unit: unitLabel, sent })
+        : kind === 'event' ? t('dashboardDetail.endEventTitle') : t('dashboardDetail.endRaffleTitle');
 
   return (
     <div className="border-t border-surface-border/60 pt-3 space-y-2">
@@ -177,7 +180,7 @@ export function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, has
           title={renewTitle}
           className="flex-1 py-2 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/30 hover:bg-accent-primary/25 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          🔄 Renovar
+          {t('dashboardDetail.renewBtn')}
         </button>
         <button
           onClick={onEnd}
@@ -185,16 +188,16 @@ export function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, has
           title={endTitle}
           className="flex-1 py-2 rounded-xl bg-surface-bg border border-red-500/25 text-red-300 hover:bg-red-500/10 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          ⏹ Finalizar
+          {t('dashboardDetail.endBtn')}
         </button>
       </div>
       {isOver ? (
         <p className="text-[10px] text-surface-muted leading-relaxed">
-          {overLabel}. Los botones se enseñan como referencia, pero ya no se pueden accionar.
+          {t('dashboardDetail.overExplain', { overLabel })}
         </p>
       ) : belowThreshold ? (
         <p className="text-[10px] text-surface-muted leading-relaxed">
-          Todavía no puedes actuar sobre esta promoción: hace falta llegar al mínimo de {freeThreshold} {unitLabel} para que pueda cobrarse ({sent}/{freeThreshold}).
+          {t('dashboardDetail.belowExplain', { threshold: freeThreshold, unit: unitLabel, sent })}
         </p>
       ) : null}
     </div>
@@ -246,6 +249,7 @@ export function ProgressBar({ value, barClass = 'bg-accent-primary' }) {
 // filtro, el segmento de no interesados es un residuo de miembros de la
 // comunidad, no una muestra con la que comparar nada.
 export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
+  const { t, lang } = useTranslation();
   const { interested, not_interested: notInterested, unknown } = data.interest;
   const classified = interested + notInterested;
 
@@ -253,7 +257,7 @@ export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
     return (
       <div className="border-t border-surface-border/60 pt-3 mt-3">
         <p className="text-[11px] text-surface-muted leading-relaxed">
-          Todavía no hay {unit} que desglosar.
+          {t('dashboardDetail.nothingToBreak', { unit })}
         </p>
       </div>
     );
@@ -266,9 +270,9 @@ export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
     return (
       <div className="border-t border-surface-border/60 pt-3 mt-3">
         <p className="text-[11px] text-surface-muted leading-relaxed">
-          Sin clasificar ({fmt(unknown)} {unit}): {data.has_categories === false
-            ? 'no hay categorías definidas con las que cruzar los intereses de la gente.'
-            : 'son envíos anteriores a que se empezaran a registrar los segmentos.'}
+          {data.has_categories === false
+            ? t('dashboardDetail.unclassifiedNoCat', { n: fmt(unknown, lang), unit })
+            : t('dashboardDetail.unclassifiedOld', { n: fmt(unknown, lang), unit })}
         </p>
       </div>
     );
@@ -287,14 +291,14 @@ export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
     <div className="border-t border-surface-border/60 pt-3 mt-3 space-y-2.5">
       {filtered && (
         <div className="flex items-start gap-2">
-          <Pill className="bg-accent-primary/10 text-accent-glow border-accent-primary/25 mt-0.5">🎯 Solo interesados</Pill>
+          <Pill className="bg-accent-primary/10 text-accent-glow border-accent-primary/25 mt-0.5">{t('dashboardDetail.onlyInterestedTag')}</Pill>
           <p className="text-[11px] text-surface-muted leading-relaxed">{filteredNote}</p>
         </div>
       )}
 
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-mono text-surface-muted">Reparto de {unit}</p>
-        <p className="text-[10px] font-mono text-surface-muted">{interestedShare} % interesados</p>
+        <p className="text-[11px] font-mono text-surface-muted">{t('dashboardDetail.breakdownShare', { unit })}</p>
+        <p className="text-[10px] font-mono text-surface-muted">{t('dashboardDetail.interestedShare', { n: interestedShare })}</p>
       </div>
 
       <div className="flex h-2 rounded-full overflow-hidden border border-surface-border bg-surface-bg">
@@ -304,17 +308,17 @@ export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
 
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-          <p className="text-[10px] font-mono text-emerald-300">🎯 Interesados</p>
-          <p className="font-display font-bold text-surface-text text-sm mt-0.5">{fmt(interested)}</p>
+          <p className="text-[10px] font-mono text-emerald-300">{t('dashboardDetail.interestedRow')}</p>
+          <p className="font-display font-bold text-surface-text text-sm mt-0.5">{fmt(interested, lang)}</p>
           <p className="text-[10px] text-surface-muted mt-0.5">
-            {fmt(data.clicks.interested)} clicks · CTR {pct(ctrI)}
+            {t('dashboardDetail.clicksCtr', { n: fmt(data.clicks.interested, lang), ctr: pct(ctrI, lang) })}
           </p>
         </div>
         <div className="bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-          <p className="text-[10px] font-mono text-surface-muted">◦ No interesados</p>
-          <p className="font-display font-bold text-surface-text text-sm mt-0.5">{fmt(notInterested)}</p>
+          <p className="text-[10px] font-mono text-surface-muted">{t('dashboardDetail.notInterestedRow')}</p>
+          <p className="font-display font-bold text-surface-text text-sm mt-0.5">{fmt(notInterested, lang)}</p>
           <p className="text-[10px] text-surface-muted mt-0.5">
-            {fmt(data.clicks.not_interested)} clicks · CTR {pct(ctrN)}
+            {t('dashboardDetail.clicksCtr', { n: fmt(data.clicks.not_interested, lang), ctr: pct(ctrN, lang) })}
           </p>
         </div>
       </div>
@@ -322,18 +326,18 @@ export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
       {lift != null && (
         <p className="text-[11px] text-surface-muted leading-relaxed">
           {lift > 1.2
-            ? <>Los interesados picaron <span className="font-mono text-emerald-300">{lift}×</span> más. Filtrar por intereses en la próxima campaña te daría menos alcance pero mejor conversión.</>
+            ? t('dashboardDetail.liftBetter', { lift })
             : lift < 0.85
-              ? <>Curiosamente los NO interesados picaron más. Con estos números, filtrar por intereses solo te recortaría alcance.</>
-              : <>Los dos segmentos picaron prácticamente igual (<span className="font-mono text-surface-text">{lift}×</span>): aquí el filtro de intereses no te aportaría gran cosa.</>}
+              ? t('dashboardDetail.liftWorse')
+              : t('dashboardDetail.liftFlat', { lift })}
         </p>
       )}
 
       {unknown > 0 && (
         <p className="text-[10px] text-surface-muted leading-relaxed">
-          + {fmt(unknown)} sin clasificar {data.has_categories === false
-            ? '(sin categorías con las que cruzar intereses).'
-            : '(envíos anteriores al registro de segmentos).'}
+          {data.has_categories === false
+            ? t('dashboardDetail.unknownExtraNoCat', { n: fmt(unknown, lang) })
+            : t('dashboardDetail.unknownExtraOld', { n: fmt(unknown, lang) })}
         </p>
       )}
     </div>
@@ -354,6 +358,7 @@ export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
 // para dar una única cifra de "gente que interactuó con este anuncio"
 // en la fila del listado. Los desgloses viven en el detalle.
 export function EventCardCompact({ event, onOpen }) {
+  const { t, lang } = useTranslation();
   const plan = PLAN_STYLE[event.promotion_plan] || PLAN_STYLE.basic;
   const bannerClicks = Number(event.ultra_banner_clicks || 0);
   const urlClicks = Number(event.url_clicks || 0);
@@ -367,18 +372,18 @@ export function EventCardCompact({ event, onOpen }) {
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2 min-w-0">
           <p className="font-display font-bold text-surface-text text-sm truncate">{event.title}</p>
-          <Pill className={plan.pill}>{plan.emoji} {plan.label}</Pill>
+          <Pill className={plan.pill}>{plan.emoji} {t('dashboardDetail.' + plan.labelKey)}</Pill>
         </div>
         <p className="text-[10px] font-mono text-surface-muted">
-          {fmtDate(event.event_date)}{event.started ? ' · ya empezó' : ' · próximo'}
+          {fmtDate(event.event_date, lang)}{event.started ? t('dashboardDetail.startedSuffix') : t('dashboardDetail.upcomingSuffix')}
         </p>
         <div className="flex items-center gap-3 text-[11px] font-mono">
           <span className="text-surface-muted">
-            👆 <span className="text-accent-glow">{fmt(totalClicks)}</span> clicks
+            👆 <span className="text-accent-glow">{fmt(totalClicks, lang)}</span> clicks
           </span>
           {event.promoted && (
             <span className="text-surface-muted">
-              📈 CTR <span className="text-accent-glow">{pct(event.ctr)}</span>
+              📈 CTR <span className="text-accent-glow">{pct(event.ctr, lang)}</span>
             </span>
           )}
         </div>
@@ -389,6 +394,7 @@ export function EventCardCompact({ event, onOpen }) {
 }
 
 export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
+  const { t, lang } = useTranslation();
   const plan = PLAN_STYLE[event.promotion_plan] || PLAN_STYLE.basic;
 
   return (
@@ -402,33 +408,32 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
             {event.title}
           </button>
           <p className="text-[10px] font-mono text-surface-muted mt-0.5">
-            {fmtDate(event.event_date)}{event.started ? ' · ya empezó' : ' · próximo'}
+            {fmtDate(event.event_date, lang)}{event.started ? t('dashboardDetail.startedSuffix') : t('dashboardDetail.upcomingSuffix')}
           </p>
         </div>
-        <Pill className={plan.pill}>{plan.emoji} {plan.label}</Pill>
+        <Pill className={plan.pill}>{plan.emoji} {t('dashboardDetail.' + plan.labelKey)}</Pill>
       </div>
 
       {!event.promoted ? (
         <p className="text-[11px] text-surface-muted leading-relaxed">
-          Evento sin promoción de pago. Los miembros de tu comunidad recibieron el aviso igualmente
-          ({fmt(event.sends.community)} avisos, {fmt(event.clicks.total)} clicks · CTR {pct(event.ctr)}).
+          {t('dashboardDetail.unpromotedEvent', { sends: fmt(event.sends.community, lang), clicks: fmt(event.clicks.total, lang), ctr: pct(event.ctr, lang) })}
         </p>
       ) : (
         <>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
-              <span className="text-surface-muted">Enviadas de las contratadas</span>
+              <span className="text-surface-muted">{t('dashboardDetail.sentContracted')}</span>
               <span className="text-surface-text">
-                {fmt(event.sent_official)} / {fmt(event.contracted)}
+                {fmt(event.sent_official, lang)} / {fmt(event.contracted, lang)}
               </span>
             </div>
             <ProgressBar value={event.progress} />
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <StatTile label="Envíos totales" value={fmt(event.sends.total)} hint={`${fmt(event.sends.community)} a tu comunidad`} />
-            <StatTile label="Clicks" value={fmt(event.clicks.total)} accent="text-accent-glow" />
-            <StatTile label="CTR" value={pct(event.ctr)} accent="text-accent-glow" />
+            <StatTile label={t('dashboardDetail.sendsTotal')} value={fmt(event.sends.total, lang)} hint={t('dashboardDetail.sendsCommunityHint', { n: fmt(event.sends.community, lang) })} />
+            <StatTile label={t('dashboardDetail.clicksLabel')} value={fmt(event.clicks.total, lang)} accent="text-accent-glow" />
+            <StatTile label={t('dashboardDetail.ctrCol')} value={pct(event.ctr, lang)} accent="text-accent-glow" />
           </div>
 
           {/* Fase 123 — métricas del banner del menú principal
@@ -444,29 +449,27 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
           {event.promotion_plan === 'ultra' && (
             <div className="bg-fuchsia-500/5 border border-fuchsia-500/20 rounded-xl p-3 space-y-2">
               <p className="text-[10px] font-mono text-fuchsia-300/80 uppercase tracking-wide">
-                🎨 Banner del menú principal
+                {t('dashboardDetail.ultraBannerBlock')}
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <StatTile
-                  label="Alcance"
-                  value={fmt(event.ultra_banner_views)}
-                  hint="usuarios distintos"
+                  label={t('dashboardDetail.ultraReach')}
+                  value={fmt(event.ultra_banner_views, lang)}
+                  hint={t('dashboardDetail.ultraReachHint')}
                 />
                 <StatTile
-                  label="Clicks"
-                  value={fmt(event.ultra_banner_clicks)}
+                  label={t('dashboardDetail.clicksLabel')}
+                  value={fmt(event.ultra_banner_clicks, lang)}
                   accent="text-accent-glow"
                 />
                 <StatTile
-                  label="CTR banner"
-                  value={pct(event.ultra_banner_ctr)}
+                  label={t('dashboardDetail.ultraCtrCol')}
+                  value={pct(event.ultra_banner_ctr, lang)}
                   accent="text-accent-glow"
                 />
               </div>
               <p className="text-[10px] text-surface-muted leading-relaxed">
-                El alcance cuenta cada usuario notificado una sola vez, aunque recargue el menú principal varias
-                veces. Los clicks sí son brutos (no se deduplican) — por eso el CTR puede superar el 100% si alguien
-                tapea el banner más de una vez.
+                {t('dashboardDetail.ultraExplain')}
               </p>
             </div>
           )}
@@ -483,7 +486,7 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
             <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[10px] font-mono text-accent-glow/80 uppercase tracking-wide">
-                  🔗 Enlace externo del evento
+                  {t('dashboardDetail.urlBlockTitle')}
                 </p>
                 <a
                   href={event.url}
@@ -497,43 +500,43 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
               </div>
               <div className="flex items-baseline gap-3">
                 <p className="font-display font-bold text-accent-glow text-2xl">
-                  {fmt(event.url_clicks)}
+                  {fmt(event.url_clicks, lang)}
                 </p>
                 <p className="text-[11px] font-mono text-surface-muted">
-                  {event.url_clicks === 1 ? 'click al enlace' : 'clicks al enlace'}
+                  {event.url_clicks === 1 ? t('dashboardDetail.urlClickOne') : t('dashboardDetail.urlClickMany')}
                 </p>
               </div>
               <p className="text-[10px] text-surface-muted leading-relaxed">
-                Cada tap al 🔗 del evento suma uno — no se deduplica por persona.
+                {t('dashboardDetail.urlExplain')}
               </p>
             </div>
           )}
 
           <div className="flex items-center flex-wrap gap-1.5">
             {event.audience_radius_km != null && (
-              <Pill className="bg-surface-bg text-surface-muted border-surface-border">📍 {event.audience_radius_km} km</Pill>
+              <Pill className="bg-surface-bg text-surface-muted border-surface-border">{t('dashboardDetail.radiusPill', { n: event.audience_radius_km })}</Pill>
             )}
             <Pill className={event.billable
               ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25'
               : 'bg-surface-bg text-surface-muted border-surface-border'}>
               {event.billable
-                ? '💶 Se cobrará'
-                : `Gratis hasta ${fmt(freeThreshold)} envíos (${fmt(event.sent_official)}/${fmt(freeThreshold)})`}
+                ? t('dashboardDetail.billablePill')
+                : t('dashboardDetail.freeUntilPill', { threshold: fmt(freeThreshold, lang), sent: fmt(event.sent_official, lang) })}
             </Pill>
           </div>
 
           <InterestBreakdown
             data={event}
             filtered={event.audience_interested_only}
-            unit="envíos"
-            filteredNote="El filtro solo cría el pool publicitario. El aviso a los miembros de tu comunidad sale igualmente, tengan intereses afines o no, y también cuenta aquí."
+            unit={t('dashboardDetail.unitSends')}
+            filteredNote={t('dashboardDetail.filterNoteEvt')}
           />
         </>
       )}
 
       <div className="border-t border-surface-border/60 pt-3 flex items-center gap-4 text-[11px] font-mono text-surface-muted">
-        <span>👥 {fmt(event.attendees)} apuntados</span>
-        <span>❤️ {fmt(event.likes)} likes</span>
+        <span>{t('dashboardDetail.attendeesPill', { n: fmt(event.attendees, lang) })}</span>
+        <span>{t('dashboardDetail.likesPill', { n: fmt(event.likes, lang) })}</span>
       </div>
 
       <PromotionActions
@@ -554,6 +557,7 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
 // pasando con cada sorteo (tier, estado del sorteo, clicks del banner,
 // CTR si aplica) y un chevron que empuja a abrir el detalle.
 export function RaffleCardCompact({ raffle, onOpen }) {
+  const { t, lang } = useTranslation();
   const style = TIER_STYLE[raffle.tier] || TIER_STYLE.light;
   const clicks = raffle.clicks?.total || 0;
   // Estado que se muestra en la sublínea. Mismo criterio que el
@@ -562,8 +566,8 @@ export function RaffleCardCompact({ raffle, onOpen }) {
   // ya llegan calculados desde el server (r.drawn_at / r.ended), lo
   // que hacemos aquí es solo formatear.
   const statusLabel = raffle.drawn_at
-    ? `Sorteado el ${fmtDate(raffle.drawn_at)}`
-    : raffle.ended ? `Terminó el ${fmtDate(raffle.ends_at)}` : `Termina el ${fmtDate(raffle.ends_at)}`;
+    ? t('dashboardDetail.raffleDrawnDate', { date: fmtDate(raffle.drawn_at, lang) })
+    : raffle.ended ? t('dashboardDetail.raffleEndedDate', { date: fmtDate(raffle.ends_at, lang) }) : t('dashboardDetail.raffleEndsDate', { date: fmtDate(raffle.ends_at, lang) });
 
   return (
     <button
@@ -578,10 +582,10 @@ export function RaffleCardCompact({ raffle, onOpen }) {
         <p className="text-[10px] font-mono text-surface-muted">{statusLabel}</p>
         <div className="flex items-center gap-3 text-[11px] font-mono">
           <span className="text-surface-muted">
-            👆 <span className="text-accent-glow">{fmt(clicks)}</span> clicks
+            👆 <span className="text-accent-glow">{fmt(clicks, lang)}</span> clicks
           </span>
           <span className="text-surface-muted">
-            📈 CTR <span className="text-accent-glow">{pct(raffle.ctr)}</span>
+            📈 CTR <span className="text-accent-glow">{pct(raffle.ctr, lang)}</span>
           </span>
         </div>
       </div>
@@ -591,6 +595,7 @@ export function RaffleCardCompact({ raffle, onOpen }) {
 }
 
 export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
+  const { t, lang } = useTranslation();
   const style = TIER_STYLE[raffle.tier] || TIER_STYLE.light;
 
   return (
@@ -605,8 +610,8 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
           </button>
           <p className="text-[10px] font-mono text-surface-muted mt-0.5">
             {raffle.drawn_at
-              ? `Sorteado el ${fmtDate(raffle.drawn_at)}`
-              : raffle.ended ? `Terminó el ${fmtDate(raffle.ends_at)}` : `Termina el ${fmtDate(raffle.ends_at)}`}
+              ? t('dashboardDetail.raffleDrawnDate', { date: fmtDate(raffle.drawn_at, lang) })
+              : raffle.ended ? t('dashboardDetail.raffleEndedDate', { date: fmtDate(raffle.ends_at, lang) }) : t('dashboardDetail.raffleEndsDate', { date: fmtDate(raffle.ends_at, lang) })}
           </p>
         </div>
         <Pill className={style.pill}>{style.emoji} {raffle.tier_label}</Pill>
@@ -615,8 +620,8 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
       {raffle.contracted != null && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
-            <span className="text-surface-muted">Banners enseñados de los contratados</span>
-            <span className="text-surface-text">{fmt(raffle.shown)} / {fmt(raffle.contracted)}</span>
+            <span className="text-surface-muted">{t('dashboardDetail.bannersContracted')}</span>
+            <span className="text-surface-text">{fmt(raffle.shown, lang)} / {fmt(raffle.contracted, lang)}</span>
           </div>
           <ProgressBar value={raffle.progress} barClass={style.bar} />
         </div>
@@ -624,42 +629,42 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
 
       <div className="grid grid-cols-3 gap-2">
         <StatTile
-          label="Enseñados"
-          value={fmt(raffle.shown)}
-          hint={raffle.pending > 0 ? `${fmt(raffle.pending)} en cola` : 'reparto completo'}
+          label={t('dashboardDetail.bannersShown')}
+          value={fmt(raffle.shown, lang)}
+          hint={raffle.pending > 0 ? t('dashboardDetail.bannersPending', { n: fmt(raffle.pending, lang) }) : t('dashboardDetail.bannersComplete')}
         />
-        <StatTile label="Clicks" value={fmt(raffle.clicks.total)} accent="text-accent-glow" />
-        <StatTile label="CTR" value={pct(raffle.ctr)} accent="text-accent-glow" />
+        <StatTile label={t('dashboardDetail.clicksLabel')} value={fmt(raffle.clicks.total, lang)} accent="text-accent-glow" />
+        <StatTile label={t('dashboardDetail.ctrCol')} value={pct(raffle.ctr, lang)} accent="text-accent-glow" />
       </div>
 
       {/* Asignados vs enseñados: la avioneta se sirve diferida (la próxima
           vez que cada persona entre al menú principal) y como mucho una cada
           15 min por usuario, así que la cola es normal y no un error. */}
       <p className="text-[11px] text-surface-muted leading-relaxed">
-        {fmt(raffle.targets)} personas tienen el banner asignado.{' '}
+        {t('dashboardDetail.targetsExplain', { n: fmt(raffle.targets, lang) })}
         {raffle.pending > 0
-          ? `A ${fmt(raffle.pending)} aún no se les ha cruzado: la avioneta se muestra la próxima vez que entren al menú principal.`
-          : 'A todas se les ha llegado a enseñar.'}
+          ? t('dashboardDetail.targetsPending', { n: fmt(raffle.pending, lang) })
+          : t('dashboardDetail.targetsAll')}
       </p>
 
       <InterestBreakdown
         data={raffle}
         filtered={raffle.banner_interested_only}
-        unit="banners"
-        filteredNote="Contratado con filtro: los banners solo fueron a gente con intereses afines a tu comunidad."
+        unit={t('dashboardDetail.unitBanners')}
+        filteredNote={t('dashboardDetail.filterNoteRaf')}
       />
 
       {raffle.eligible_participants != null && (
         <div className="border-t border-surface-border/60 pt-3 text-[11px] font-mono text-surface-muted">
-          🎁 {fmt(raffle.eligible_participants)} participantes elegibles
+          {t('dashboardDetail.eligibleCount', { n: fmt(raffle.eligible_participants, lang) })}
         </div>
       )}
 
       {raffle.promo_ended_at && !raffle.ended && (
         <div className="border-t border-surface-border/60 pt-3">
-          <Pill className="bg-red-500/10 text-red-300 border-red-500/25">⏹ Publicidad finalizada</Pill>
+          <Pill className="bg-red-500/10 text-red-300 border-red-500/25">{t('dashboardDetail.promoEndedTag')}</Pill>
           <p className="text-[11px] text-surface-muted mt-2 leading-relaxed">
-            Cerraste el reparto el {fmtDate(raffle.promo_ended_at)}. Los banners pendientes ya no se enseñan. Puedes reabrirla con "Renovar".
+            {t('dashboardDetail.promoEndedExpl', { date: fmtDate(raffle.promo_ended_at, lang) })}
           </p>
         </div>
       )}
@@ -677,6 +682,7 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
 }
 
 export default function CommunityDashboardPage() {
+  const { t, lang } = useTranslation();
   const { communityId } = useParams();
   const navigate = useNavigate();
 
@@ -692,7 +698,7 @@ export default function CommunityDashboardPage() {
       const res = await api.get(`/community/communities/${communityId}/dashboard`);
       setData(res);
     } catch (e) {
-      setError(e.message || 'No se pudo cargar el dashboard');
+      setError(e.message || t('dashboardDetail.loadFailDefault'));
     } finally {
       setLoading(false);
     }
@@ -726,7 +732,7 @@ export default function CommunityDashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center">
-        <p className="text-surface-muted font-mono text-sm">Cargando dashboard...</p>
+        <p className="text-surface-muted font-mono text-sm">{t('dashboardDetail.loadingDash')}</p>
         <BottomNav />
       </div>
     );
@@ -736,17 +742,17 @@ export default function CommunityDashboardPage() {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center px-4">
         <div className="text-center max-w-sm space-y-3">
-          <p className="font-display font-bold text-surface-text">No se pudo abrir el dashboard</p>
+          <p className="font-display font-bold text-surface-text">{t('dashboardDetail.loadFailTitle')}</p>
           <p className="text-sm text-surface-muted leading-relaxed">{error}</p>
           <div className="flex items-center justify-center gap-2">
             <button onClick={load} className="px-4 py-2 rounded-xl border border-surface-border text-surface-text text-xs font-display font-semibold">
-              Reintentar
+              {t('dashboardDetail.retry')}
             </button>
             <button
               onClick={() => navigate(`/community/${communityId}`)}
               className="px-4 py-2 rounded-xl bg-accent-primary text-white text-xs font-display font-semibold"
             >
-              Volver
+              {t('dashboardDetail.back')}
             </button>
           </div>
         </div>
@@ -769,12 +775,12 @@ export default function CommunityDashboardPage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-surface-text text-base truncate">📊 Dashboard</h1>
+            <h1 className="font-display font-bold text-surface-text text-base truncate">{t('dashboardDetail.dashHeader')}</h1>
             <p className="text-[10px] font-mono text-surface-muted truncate">{data.community.name}</p>
           </div>
           <button
             onClick={load}
-            title="Actualizar"
+            title={t('dashboardDetail.refreshTitle')}
             className="w-9 h-9 rounded-xl border border-surface-border text-surface-muted flex items-center justify-center flex-shrink-0 hover:text-accent-glow hover:border-accent-primary/40 transition-colors"
           >
             ↻
@@ -789,35 +795,34 @@ export default function CommunityDashboardPage() {
             sorteo enseñados. Las dos son "una vez que tu anuncio apareció
             delante de alguien", que es lo que interesa sumar aquí. */}
         <section className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
-          <h2 className="font-display font-bold text-surface-text text-sm">Resumen de toda la publicidad</h2>
+          <h2 className="font-display font-bold text-surface-text text-sm">{t('dashboardDetail.summaryTitle')}</h2>
           <div className="grid grid-cols-3 gap-2">
-            <StatTile label="Impresiones" value={fmt(s.total_impressions)} hint="envíos + banners" />
-            <StatTile label="Clicks" value={fmt(s.total_clicks)} accent="text-accent-glow" hint="personas únicas" />
-            <StatTile label="CTR global" value={pct(s.total_ctr)} accent="text-accent-glow" />
+            <StatTile label={t('dashboardDetail.kpiImpressions')} value={fmt(s.total_impressions, lang)} hint={t('dashboardDetail.kpiImpressionsHint')} />
+            <StatTile label={t('dashboardDetail.kpiClicks')} value={fmt(s.total_clicks, lang)} accent="text-accent-glow" hint={t('dashboardDetail.kpiClicksHint')} />
+            <StatTile label={t('dashboardDetail.kpiCtr')} value={pct(s.total_ctr, lang)} accent="text-accent-glow" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-surface-bg border border-surface-border rounded-xl px-3 py-2.5">
-              <p className="text-[10px] font-mono text-surface-muted">📅 Eventos</p>
+              <p className="text-[10px] font-mono text-surface-muted">{t('dashboardDetail.eventsBlock')}</p>
               <p className="font-display font-bold text-surface-text text-sm mt-0.5">
-                {fmt(s.event_clicks)} <span className="font-normal text-surface-muted text-xs">de {fmt(s.event_sends)}</span>
+                {fmt(s.event_clicks, lang)} <span className="font-normal text-surface-muted text-xs">{t('dashboardDetail.ofX', { n: fmt(s.event_sends, lang) })}</span>
               </p>
               <p className="text-[10px] text-surface-muted mt-0.5">
-                CTR {pct(s.event_ctr)} · {fmt(s.events_promoted)}/{fmt(s.events_total)} promocionados
+                {t('dashboardDetail.eventsBlockSub', { ctr: pct(s.event_ctr, lang), promoted: fmt(s.events_promoted, lang), total: fmt(s.events_total, lang) })}
               </p>
             </div>
             <div className="bg-surface-bg border border-surface-border rounded-xl px-3 py-2.5">
-              <p className="text-[10px] font-mono text-surface-muted">🎁 Sorteos</p>
+              <p className="text-[10px] font-mono text-surface-muted">{t('dashboardDetail.rafflesBlock')}</p>
               <p className="font-display font-bold text-surface-text text-sm mt-0.5">
-                {fmt(s.raffle_clicks)} <span className="font-normal text-surface-muted text-xs">de {fmt(s.raffle_shown)}</span>
+                {fmt(s.raffle_clicks, lang)} <span className="font-normal text-surface-muted text-xs">{t('dashboardDetail.ofX', { n: fmt(s.raffle_shown, lang) })}</span>
               </p>
               <p className="text-[10px] text-surface-muted mt-0.5">
-                CTR {pct(s.raffle_ctr)} · {fmt(s.raffles_total)} sorteos
+                {t('dashboardDetail.rafflesBlockSub', { ctr: pct(s.raffle_ctr, lang), total: fmt(s.raffles_total, lang) })}
               </p>
             </div>
           </div>
           <p className="text-[10px] text-surface-muted leading-relaxed">
-            Un click es una persona distinta que abrió el contenido desde el anuncio, no una visita: las vueltas
-            posteriores no vuelven a contar.
+            {t('dashboardDetail.summaryExplain')}
           </p>
         </section>
 
@@ -839,20 +844,19 @@ export default function CommunityDashboardPage() {
         {s.community_url_clicks != null && (
           <section className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-2">
             <h2 className="font-display font-bold text-surface-text text-sm flex items-center gap-2">
-              🔗 Clicks al enlace de tu comunidad
-              <span className="text-[10px] font-mono text-surface-muted font-normal">acumulado</span>
+              {t('dashboardDetail.commUrlTitle')}
+              <span className="text-[10px] font-mono text-surface-muted font-normal">{t('dashboardDetail.accumulatedTag')}</span>
             </h2>
             <div className="flex items-baseline gap-3">
               <p className="font-display font-bold text-accent-glow text-2xl">
-                {fmt(s.community_url_clicks)}
+                {fmt(s.community_url_clicks, lang)}
               </p>
               <p className="text-[11px] font-mono text-surface-muted">
-                {data.community.url ? 'a tu web' : 'aún no has puesto enlace'}
+                {data.community.url ? t('dashboardDetail.toYourWeb') : t('dashboardDetail.noUrlYet')}
               </p>
             </div>
             <p className="text-[10px] text-surface-muted leading-relaxed">
-              Cada tap al 🔗 de la comunidad suma uno — no se deduplica por persona. Los clicks al enlace de cada
-              evento se ven en el detalle de ese evento.
+              {t('dashboardDetail.commUrlExplain')}
             </p>
           </section>
         )}
@@ -887,14 +891,14 @@ export default function CommunityDashboardPage() {
             </span>
             <div className="flex-1 min-w-0">
               <p className="font-display font-bold text-surface-text text-sm">
-                Actividades activas <span className="font-mono text-surface-muted">
-                  ({fmt(s.active_activity_count)}/{fmt(s.active_activity_limit)})
+                {t('dashboardDetail.activeLimitTitle')} <span className="font-mono text-surface-muted">
+                  ({fmt(s.active_activity_count, lang)}/{fmt(s.active_activity_limit, lang)})
                 </span>
               </p>
               <p className="text-[11px] text-surface-muted mt-0.5 leading-relaxed">
                 {s.active_activity_count >= s.active_activity_limit
-                  ? 'Has llegado al tope. Espera a que alguna acabe o finalízala para poder crear otra.'
-                  : `Puedes tener hasta ${s.active_activity_limit} actividades sin acabar a la vez (eventos + sorteos juntos).`}
+                  ? t('dashboardDetail.activeLimitFull')
+                  : t('dashboardDetail.activeLimitHint', { n: s.active_activity_limit })}
               </p>
             </div>
           </section>
@@ -903,19 +907,19 @@ export default function CommunityDashboardPage() {
         {/* ── Pestañas ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-2">
           {[
-            { key: 'events',  label: `📅 Eventos (${events.length})` },
-            { key: 'raffles', label: `🎁 Sorteos (${raffles.length})` },
-          ].map(t => (
+            { key: 'events',  label: t('dashboardDetail.tabEvents', { n: events.length }) },
+            { key: 'raffles', label: t('dashboardDetail.tabRaffles', { n: raffles.length }) },
+          ].map(tb => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
+              key={tb.key}
+              onClick={() => setTab(tb.key)}
               className={`flex-1 py-2 rounded-xl text-xs font-display font-semibold border transition-colors ${
-                tab === t.key
+                tab === tb.key
                   ? 'bg-accent-primary/15 text-accent-glow border-accent-primary/30'
                   : 'bg-surface-card text-surface-muted border-surface-border hover:text-surface-text'
               }`}
             >
-              {t.label}
+              {tb.label}
             </button>
           ))}
         </div>
@@ -923,9 +927,7 @@ export default function CommunityDashboardPage() {
         {activeRows.length === 0 ? (
           <div className="text-center py-10 border border-surface-border rounded-2xl bg-surface-card px-6">
             <p className="text-sm text-surface-muted leading-relaxed">
-              {tab === 'events'
-                ? 'Todavía no has publicado ningún evento en esta comunidad. Cuando promociones uno, aquí verás a cuánta gente llegó y quién picó.'
-                : 'Todavía no has creado ningún sorteo. Cuando lo hagas, aquí verás cuántos banners se enseñaron y cuántos acabaron en visita.'}
+              {tab === 'events' ? t('dashboardDetail.emptyEvents') : t('dashboardDetail.emptyRaffles')}
             </p>
           </div>
         ) : (

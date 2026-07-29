@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { isOnline } from '../hooks/usePresence';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import ReportModal from '../components/ReportModal';
+import { useTranslation } from '../i18n';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ function hexToRgba(hex, opacity) {
 // read     → ✓✓ color acento
 
 function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tickColorUnread = '#ffffff', tickColorSent = '#ffffff' }) {
+  const { t } = useTranslation();
   const colorRead   = msg._tickColorRead   ?? tickColorRead;
   const colorUnread = msg._tickColorUnread ?? tickColorUnread;
   const colorSent   = msg._tickColorSent   ?? tickColorSent;
@@ -38,7 +40,7 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
   // When read receipts are off, treat read_at as delivered (grey double tick)
   if (msg.read_at && !hideReadTick) {
     return (
-      <span className="ml-1 inline-flex items-center" title="Leído" style={{ color: colorRead }}>
+      <span className="ml-1 inline-flex items-center" title={t('chat.tickRead')} style={{ color: colorRead }}>
         <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -49,7 +51,7 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
 
   if (msg.delivered_at || msg.read_at) {
     return (
-      <span className="ml-1 inline-flex items-center" title="Recibido" style={{ color: colorUnread }}>
+      <span className="ml-1 inline-flex items-center" title={t('chat.tickDelivered')} style={{ color: colorUnread }}>
         <svg width="16" height="9" viewBox="0 0 16 9" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M6 4.5L8.8 7.5L14.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -60,7 +62,7 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
 
   // Sent — single check
   return (
-    <span className="ml-1 inline-flex items-center" title="Enviado" style={{ color: colorSent }}>
+    <span className="ml-1 inline-flex items-center" title={t('chat.tickSent')} style={{ color: colorSent }}>
       <svg width="11" height="9" viewBox="0 0 11 9" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M1 4.5L3.8 7.5L9.5 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
@@ -70,12 +72,13 @@ function MessageTick({ msg, hideReadTick = false, tickColorRead = '#1d9bf0', tic
 
 // ── DeletedBubble — rastro de mensaje eliminado para todos ────────────────────
 function DeletedBubble({ isMe, msgId }) {
+  const { t } = useTranslation();
   return (
     <div id={msgId ? `msg-${msgId}` : undefined} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
       <div className="max-w-[78%] rounded-2xl px-4 py-2.5 border border-surface-border bg-surface-card/50">
         <p className="text-sm italic text-surface-muted flex items-center gap-1.5">
           <span className="text-base">🚫</span>
-          {isMe ? 'Eliminaste este mensaje' : 'Este mensaje ha sido eliminado'}
+          {isMe ? t('chat.deletedByMe') : t('chat.deletedByOther')}
         </p>
       </div>
     </div>
@@ -84,11 +87,12 @@ function DeletedBubble({ isMe, msgId }) {
 
 // ── LikeBadge — corazoncito flotante en la esquina de la burbuja ─────────────
 function LikeBadge({ liked, isMe }) {
+  const { t } = useTranslation();
   if (!liked) return null;
   return (
     <span
       className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} w-5 h-5 rounded-full bg-surface-bg border border-surface-border flex items-center justify-center text-[11px] shadow-md z-10 leading-none animate-scale-in`}
-      title="Le gusta este mensaje"
+      title={t('chat.likeBadgeTitle')}
     >
       ❤️
     </span>
@@ -97,9 +101,10 @@ function LikeBadge({ liked, isMe }) {
 
 // ── PinnedBanner — mensaje fijado del chat, visible arriba y pinchable ────────
 function PinnedBanner({ pinned, currentUserId, friendName, onUnpin, onJumpTo }) {
+  const { t } = useTranslation();
   if (!pinned) return null;
-  const preview = pinned.type === 'image' ? '📷 Foto' : pinned.content;
-  const pinnedByName = pinned.pinned_by?.id === currentUserId ? 'ti' : (pinned.pinned_by?.username || friendName || 'alguien');
+  const preview = pinned.type === 'image' ? t('chat.photoLabel') : pinned.content;
+  const pinnedByName = pinned.pinned_by?.id === currentUserId ? t('chat.pinnedByYou') : (pinned.pinned_by?.username || friendName || t('chat.someone'));
   return (
     <div
       className="sticky top-0 z-10 -mx-4 mb-2 px-4 py-2 bg-surface-card/95 backdrop-blur-xl border-b border-surface-border flex items-center gap-2 cursor-pointer"
@@ -107,14 +112,14 @@ function PinnedBanner({ pinned, currentUserId, friendName, onUnpin, onJumpTo }) 
     >
       <span className="text-base flex-shrink-0">📌</span>
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-mono text-surface-muted">Fijado por {pinnedByName}</div>
+        <div className="text-[11px] font-mono text-surface-muted">{t('chat.pinnedByPrefix')} {pinnedByName}</div>
         <div className="text-sm text-surface-text truncate">{preview}</div>
       </div>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onUnpin(); }}
         className="flex-shrink-0 text-surface-muted hover:text-surface-text text-lg leading-none px-1"
-        title="Desfijar mensaje"
+        title={t('chat.unpinTitle')}
       >
         ×
       </button>
@@ -124,6 +129,7 @@ function PinnedBanner({ pinned, currentUserId, friendName, onUnpin, onJumpTo }) 
 
 // ── MessageContextMenu — menú al mantener pulsado ─────────────────────────────
 function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, onToggleLike, onTogglePin, onDeleteForMe, onDeleteForEveryone, onReport }) {
+  const { t } = useTranslation();
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -140,7 +146,7 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
         {/* Preview */}
         {!msg.deleted_for_everyone && (
           <p className="text-xs text-surface-muted font-mono text-center truncate px-8 mb-3 opacity-60">
-            {msg.type === 'image' ? '📷 Imagen' : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
+            {msg.type === 'image' ? t('chat.imageLabel') : (msg.content?.slice(0, 80) + (msg.content?.length > 80 ? '…' : ''))}
           </p>
         )}
 
@@ -152,9 +158,9 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
             >
               <span className="text-xl">❤️</span>
               <div>
-                <div>{isLiked ? 'Quitar me gusta' : 'Me gusta'}</div>
+                <div>{isLiked ? t('chat.ctxLikeRemove') : t('chat.ctxLikeAdd')}</div>
                 <div className="text-xs text-surface-muted font-normal">
-                  {isLiked ? 'Deja de destacar este mensaje' : 'Destaca este mensaje con un corazón'}
+                  {isLiked ? t('chat.ctxLikeRemoveHint') : t('chat.ctxLikeAddHint')}
                 </div>
               </div>
             </button>
@@ -167,9 +173,9 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
             >
               <span className="text-xl">{isPinned ? '📌' : '📍'}</span>
               <div>
-                <div>{isPinned ? 'Desfijar mensaje' : 'Fijar mensaje'}</div>
+                <div>{isPinned ? t('chat.ctxPinRemove') : t('chat.ctxPinAdd')}</div>
                 <div className="text-xs text-surface-muted font-normal">
-                  {isPinned ? 'Deja de destacarlo arriba del chat' : 'Lo destaca arriba del chat'}
+                  {isPinned ? t('chat.ctxPinRemoveHint') : t('chat.ctxPinAddHint')}
                 </div>
               </div>
             </button>
@@ -182,8 +188,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
             >
               <span className="text-xl">↩️</span>
               <div>
-                <div>Responder</div>
-                <div className="text-xs text-surface-muted font-normal">Cita este mensaje en tu respuesta</div>
+                <div>{t('chat.ctxReply')}</div>
+                <div className="text-xs text-surface-muted font-normal">{t('chat.ctxReplyHint')}</div>
               </div>
             </button>
           )}
@@ -194,8 +200,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
           >
             <span className="text-xl">🗑️</span>
             <div>
-              <div>Eliminar para mí</div>
-              <div className="text-xs text-surface-muted font-normal">Solo desaparece de tu vista</div>
+              <div>{t('chat.ctxDeleteMine')}</div>
+              <div className="text-xs text-surface-muted font-normal">{t('chat.ctxDeleteMineHint')}</div>
             </div>
           </button>
 
@@ -206,8 +212,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
             >
               <span className="text-xl">❌</span>
               <div>
-                <div>Eliminar para todos</div>
-                <div className="text-xs text-red-400/60 font-normal">Queda rastro en la conversación</div>
+                <div>{t('chat.ctxDeleteAll')}</div>
+                <div className="text-xs text-red-400/60 font-normal">{t('chat.ctxDeleteAllHint')}</div>
               </div>
             </button>
           )}
@@ -219,8 +225,8 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
             >
               <span className="text-xl">🚩</span>
               <div>
-                <div>Denunciar mensaje</div>
-                <div className="text-xs text-red-400/60 font-normal">Lo revisará nuestro equipo</div>
+                <div>{t('chat.ctxReport')}</div>
+                <div className="text-xs text-red-400/60 font-normal">{t('chat.ctxReportHint')}</div>
               </div>
             </button>
           )}
@@ -229,7 +235,7 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
             onClick={onClose}
             className="w-full text-center py-3.5 text-surface-muted text-sm font-display font-semibold hover:text-surface-text transition-colors"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
         </div>
       </div>
@@ -239,16 +245,16 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, onClose, onReply, on
 
 // ── ClearChatModal ────────────────────────────────────────────────────────────
 function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-surface-card border border-surface-border rounded-3xl p-6 w-full max-w-sm shadow-2xl">
         <div className="text-center mb-5">
           <div className="text-4xl mb-3">🧹</div>
-          <h3 className="font-display font-bold text-surface-text text-lg mb-2">Vaciar conversación</h3>
+          <h3 className="font-display font-bold text-surface-text text-lg mb-2">{t('chat.clearTitle')}</h3>
           <p className="text-surface-muted text-sm leading-relaxed">
-            Los mensajes desaparecerán solo para ti.{' '}
-            <span className="text-surface-text font-medium">{friendName}</span> seguirá viendo el historial completo.
+            {t('chat.clearBody', { name: friendName })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -257,14 +263,14 @@ function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
             disabled={loading}
             className="flex-1 py-3 rounded-2xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text border border-surface-border hover:bg-surface-hover transition-all disabled:opacity-40"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
             className="flex-1 py-3 rounded-2xl text-sm font-display font-semibold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all disabled:opacity-40"
           >
-            {loading ? 'Vaciando…' : 'Vaciar'}
+            {loading ? t('chat.clearing') : t('chat.clearBtn')}
           </button>
         </div>
       </div>
@@ -274,6 +280,7 @@ function ClearChatModal({ friendName, onConfirm, onCancel, loading }) {
 
 // ── BlockUserModal ──────────────────────────────────────────────────────────────
 function BlockUserModal({ friendName, isBlocked, onConfirm, onCancel, loading }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
@@ -281,15 +288,10 @@ function BlockUserModal({ friendName, isBlocked, onConfirm, onCancel, loading })
         <div className="text-center mb-5">
           <div className="text-4xl mb-3">{isBlocked ? '🔓' : '🚫'}</div>
           <h3 className="font-display font-bold text-surface-text text-lg mb-2">
-            {isBlocked ? 'Desbloquear' : 'Bloquear'} a {friendName}
+            {isBlocked ? t('chat.unblockTitle', { name: friendName }) : t('chat.blockTitle', { name: friendName })}
           </h3>
           <p className="text-surface-muted text-sm leading-relaxed">
-            {isBlocked ? (
-              <><span className="text-surface-text font-medium">{friendName}</span> podrá volver a enviarte mensajes.</>
-            ) : (
-              <>No podrá enviarte más mensajes. Podrás desbloquear a{' '}
-                <span className="text-surface-text font-medium">{friendName}</span> cuando quieras.</>
-            )}
+            {isBlocked ? t('chat.unblockBody', { name: friendName }) : t('chat.blockBody', { name: friendName })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -298,7 +300,7 @@ function BlockUserModal({ friendName, isBlocked, onConfirm, onCancel, loading })
             disabled={loading}
             className="flex-1 py-3 rounded-2xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text border border-surface-border hover:bg-surface-hover transition-all disabled:opacity-40"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -309,7 +311,7 @@ function BlockUserModal({ friendName, isBlocked, onConfirm, onCancel, loading })
                 : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
             }`}
           >
-            {loading ? (isBlocked ? 'Desbloqueando…' : 'Bloqueando…') : (isBlocked ? 'Desbloquear' : 'Bloquear')}
+            {loading ? (isBlocked ? t('chat.unblocking') : t('chat.blocking')) : (isBlocked ? t('chat.unblockBtn') : t('chat.blockBtn'))}
           </button>
         </div>
       </div>
@@ -319,10 +321,10 @@ function BlockUserModal({ friendName, isBlocked, onConfirm, onCancel, loading })
 
 // ── Reply preview helpers ──────────────────────────────────────────────────────
 
-function replyPreviewText(replyTo) {
+function replyPreviewText(replyTo, t) {
   if (!replyTo) return '';
-  if (replyTo.deleted_for_everyone) return '🚫 Mensaje eliminado';
-  if (replyTo.type === 'image') return '📷 Imagen';
+  if (replyTo.deleted_for_everyone) return t('chat.deletedLabel');
+  if (replyTo.type === 'image') return t('chat.imageLabel');
   if (replyTo.type === 'hangout_request') return `🤝 ${replyTo.content}`;
   return replyTo.content;
 }
@@ -351,6 +353,7 @@ function applyMessageUpdate(list, updated) {
 
 // ── ReplyQuote — cita renderizada dentro de una burbuja de mensaje ────────────
 function ReplyQuote({ replyTo, onClick }) {
+  const { t } = useTranslation();
   if (!replyTo) return null;
   return (
     <button
@@ -362,7 +365,7 @@ function ReplyQuote({ replyTo, onClick }) {
         {replyTo._quoteLabel}
       </span>
       <span className="text-xs opacity-80 leading-tight truncate">
-        {replyPreviewText(replyTo)}
+        {replyPreviewText(replyTo, t)}
       </span>
     </button>
   );
@@ -370,21 +373,22 @@ function ReplyQuote({ replyTo, onClick }) {
 
 // ── ReplyComposerPreview — barra sobre el input mientras se redacta la respuesta
 function ReplyComposerPreview({ replyingTo, label, onCancel }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-xl px-3 py-2 mb-2 animate-slide-up">
       <div className="w-1 self-stretch rounded-full bg-accent-primary flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="text-xs font-display font-bold text-accent-glow truncate">
-          Respondiendo a {label}
+          {t('chat.replyingTo', { who: label })}
         </div>
         <div className="text-xs text-surface-muted truncate">
-          {replyPreviewText(replyingTo)}
+          {replyPreviewText(replyingTo, t)}
         </div>
       </div>
       <button
         onClick={onCancel}
         className="flex-shrink-0 w-7 h-7 rounded-full text-surface-muted hover:text-surface-text hover:bg-surface-hover flex items-center justify-center text-lg leading-none transition-colors"
-        title="Cancelar respuesta"
+        title={t('chat.cancelReplyTitle')}
       >
         ×
       </button>
@@ -395,16 +399,18 @@ function ReplyComposerPreview({ replyingTo, label, onCancel }) {
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function OnlineDot({ lastSeenAt, className = '' }) {
+  const { t } = useTranslation();
   const online = isOnline(lastSeenAt);
   return (
     <span
       className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${online ? 'bg-green-400' : 'bg-slate-600'} ${className}`}
-      title={online ? 'En línea' : `Visto ${formatRelativeTime(lastSeenAt)}`}
+      title={online ? t('chat.onlineDotOnline') : t('chat.onlineDotSeen', { when: formatRelativeTime(lastSeenAt) })}
     />
   );
 }
 
 function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
+  const { t, lang } = useTranslation();
   const isPending = msg.hangout_status === 'pending';
   const isAccepted = msg.hangout_status === 'accepted';
   const isRejected = msg.hangout_status === 'rejected';
@@ -436,7 +442,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
         <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">🤝</span>
-          <span className="text-xs font-display font-bold text-accent-glow uppercase tracking-wide">Propuesta de quedada</span>
+          <span className="text-xs font-display font-bold text-accent-glow uppercase tracking-wide">{t('chat.hangoutTitle')}</span>
         </div>
         <p className="text-sm leading-relaxed">{msg.content}</p>
         {msg.hangout_time && (
@@ -445,9 +451,9 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
           </div>
         )}
         <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
-          {isAccepted && <span className="text-xs font-display font-semibold text-green-400 flex items-center gap-1">✅ ¡Quedada confirmada!</span>}
-          {isRejected && <span className="text-xs font-display font-semibold text-surface-muted flex items-center gap-1">❌ {isMe ? 'Rechazaste' : 'Rechazada'}</span>}
-          {isPending && isMe && <span className="text-xs text-surface-muted italic">Esperando respuesta...</span>}
+          {isAccepted && <span className="text-xs font-display font-semibold text-green-400 flex items-center gap-1">{t('chat.hangoutConfirmed')}</span>}
+          {isRejected && <span className="text-xs font-display font-semibold text-surface-muted flex items-center gap-1">{isMe ? t('chat.hangoutRejectedMine') : t('chat.hangoutRejected')}</span>}
+          {isPending && isMe && <span className="text-xs text-surface-muted italic">{t('chat.hangoutPending')}</span>}
           {isPending && !isMe && (
             <div className="flex gap-2 mt-1 w-full">
               <button
@@ -455,20 +461,20 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
                 disabled={responding}
                 className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 text-xs font-display font-bold py-2 rounded-xl hover:bg-green-500/30 active:scale-95 transition-all disabled:opacity-50"
               >
-                {responding ? '...' : '✓ Me apunto'}
+                {responding ? '...' : t('chat.hangoutJoinBtn')}
               </button>
               <button
                 onClick={() => onRespond(msg.id, 'rejected')}
                 disabled={responding}
                 className="flex-1 bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-display font-bold py-2 rounded-xl hover:bg-red-500/20 active:scale-95 transition-all disabled:opacity-50"
               >
-                {responding ? '...' : '✕ Paso'}
+                {responding ? '...' : t('chat.hangoutSkipBtn')}
               </button>
             </div>
           )}
         </div>
         <div className="text-xs mt-2 opacity-60 flex items-center justify-end gap-1">
-          {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+          {new Date(msg.created_at).toLocaleTimeString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
         <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
@@ -478,6 +484,7 @@ function HangoutRequestBubble({ msg, isMe, onRespond, responding, myBubbleStyle,
 }
 
 function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
+  const { lang } = useTranslation();
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
 
@@ -504,7 +511,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, o
         <ReplyQuote replyTo={msg.reply_to} onClick={onQuoteClick} />
         <p className="text-sm leading-relaxed break-words">{msg.content}</p>
         <div className="text-xs mt-1 opacity-60 flex items-center justify-end gap-1">
-          {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+          {new Date(msg.created_at).toLocaleTimeString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { hour: '2-digit', minute: '2-digit' })}
           {isMe && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
         </div>
         <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
@@ -514,6 +521,7 @@ function TextBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, o
 }
 
 function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, onQuoteClick }) {
+  const { t, lang } = useTranslation();
   const [lightbox, setLightbox] = useState(false);
   const bubbleStyle = isMe ? myBubbleStyle : otherBubbleStyle;
   const longPressTimer = useRef(null);
@@ -548,7 +556,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, 
           <div className="relative">
             <img
               src={msg.content}
-              alt="Imagen"
+              alt={t('chat.imageAlt')}
               className="block w-full max-w-[260px] max-h-[340px] object-cover cursor-pointer"
               onClick={() => { if (!isOptimistic) setLightbox(true); }}
             />
@@ -559,7 +567,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, 
             )}
           </div>
           <div className="text-xs px-3 pb-2 pt-1 opacity-60 flex items-center justify-end gap-1">
-            {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+            {new Date(msg.created_at).toLocaleTimeString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { hour: '2-digit', minute: '2-digit' })}
             {isMe && !isOptimistic && <MessageTick msg={msg} hideReadTick={!msg._readReceipts} />}
           </div>
           <LikeBadge liked={msg.liked_by?.length > 0} isMe={isMe} />
@@ -579,7 +587,7 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, 
           </button>
           <img
             src={msg.content}
-            alt="Imagen"
+            alt={t('chat.imageAlt')}
             className="max-w-[95vw] max-h-[90vh] object-contain rounded-xl"
             onClick={e => e.stopPropagation()}
           />
@@ -590,11 +598,12 @@ function ImageBubble({ msg, isMe, myBubbleStyle, otherBubbleStyle, onLongPress, 
 }
 
 function DateDivider({ date }) {
+  const { t, lang } = useTranslation();
   const today = new Date().toDateString();
   const yesterday = new Date(Date.now() - 86400000).toDateString();
-  const label = date === today ? 'Hoy'
-    : date === yesterday ? 'Ayer'
-    : new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+  const label = date === today ? t('chat.today')
+    : date === yesterday ? t('chat.yesterday')
+    : new Date(date).toLocaleDateString(lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   return (
     <div className="text-center text-xs text-slate-600 font-mono py-3">
       <span className="bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full">{label}</span>
@@ -603,6 +612,7 @@ function DateDivider({ date }) {
 }
 
 function HangoutForm({ onSend, onCancel, sending }) {
+  const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [time, setTime] = useState('');
 
@@ -615,35 +625,35 @@ function HangoutForm({ onSend, onCancel, sending }) {
     <div className="bg-surface-card border border-accent-primary/30 rounded-2xl p-4 space-y-3">
       <div className="flex items-center gap-2">
         <span className="text-xl">🤝</span>
-        <span className="font-display font-bold text-accent-glow text-sm">Nueva propuesta de quedada</span>
+        <span className="font-display font-bold text-accent-glow text-sm">{t('chat.hangoutFormTitle')}</span>
         <button onClick={onCancel} className="ml-auto text-surface-muted hover:text-surface-text text-lg leading-none">×</button>
       </div>
       <div>
-        <label className="text-xs text-surface-muted font-mono mb-1 block">¿Qué os apetece hacer? *</label>
+        <label className="text-xs text-surface-muted font-mono mb-1 block">{t('chat.hangoutQPlan')}</label>
         <input
           type="text" value={content} onChange={e => setContent(e.target.value)}
-          placeholder="Ej: ¿Unas cañas en el centro?" autoFocus maxLength={200}
+          placeholder={t('chat.hangoutPhPlan')} autoFocus maxLength={200}
           onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
           className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
         />
       </div>
       <div>
-        <label className="text-xs text-surface-muted font-mono mb-1 block">¿Cuándo? (opcional)</label>
+        <label className="text-xs text-surface-muted font-mono mb-1 block">{t('chat.hangoutQWhen')}</label>
         <input
           type="text" value={time} onChange={e => setTime(e.target.value)}
-          placeholder="Ej: Hoy a las 19h, Este finde..." maxLength={80}
+          placeholder={t('chat.hangoutPhWhen')} maxLength={80}
           className="w-full bg-surface-bg border border-surface-border rounded-xl px-3 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
         />
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-2 rounded-xl text-sm font-display font-semibold text-surface-muted hover:text-surface-text transition-colors">
-          Cancelar
+          {t('common.cancel')}
         </button>
         <button
           onClick={handleSubmit} disabled={!content.trim() || sending}
           className="flex-1 bg-accent-primary text-surface-text rounded-xl py-2 text-sm font-display font-semibold disabled:opacity-40 hover:bg-accent-primary/80 active:scale-95 transition-all"
         >
-          {sending ? 'Enviando...' : 'Proponer 🤝'}
+          {sending ? t('chat.hangoutSending') : t('chat.hangoutSendBtn')}
         </button>
       </div>
     </div>
@@ -656,6 +666,7 @@ export default function MessagesPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const { chatWallpaper, myBubbleStyle, otherBubbleStyle, readReceipts, tickColorRead, tickColorUnread, tickColorSent, showOnline, showLastSeen } = useSettings();
 
   const [friend, setFriend] = useState(null);
@@ -909,7 +920,7 @@ export default function MessagesPage() {
       setMessages(m => m.filter(msg => msg.id !== optimistic.id));
       setInput(content);
       setReplyingTo(replyTarget);
-      showToast('Error al enviar el mensaje', 'error');
+      showToast(t('chat.sendError'), 'error');
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -927,9 +938,9 @@ export default function MessagesPage() {
       setMessages(m => [...m, message]);
       setShowHangoutForm(false);
       setReplyingTo(null);
-      showToast('¡Propuesta enviada! 🤝');
+      showToast(t('chat.hangoutSentToast'));
     } catch (e) {
-      showToast('Error al enviar la propuesta', 'error');
+      showToast(t('chat.hangoutSendError'), 'error');
     } finally {
       setSending(false);
     }
@@ -975,7 +986,7 @@ export default function MessagesPage() {
     } catch (e) {
       URL.revokeObjectURL(localUrl);
       setMessages(m => m.filter(msg => msg.id !== optimisticId));
-      showToast('Error al enviar la imagen', 'error');
+      showToast(t('chat.imageSendError'), 'error');
     } finally {
       setSendingImage(false);
     }
@@ -986,8 +997,8 @@ export default function MessagesPage() {
     try {
       const { message } = await api.patch(`/messages/${messageId}/hangout`, { status });
       setMessages(m => m.map(msg => msg.id === messageId ? { ...msg, ...message } : msg));
-      if (status === 'accepted') showToast('¡Quedada confirmada! 🎉');
-      else showToast('Has rechazado la propuesta');
+      if (status === 'accepted') showToast(t('chat.hangoutConfirmToast'));
+      else showToast(t('chat.hangoutRejectToast'));
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -1001,7 +1012,7 @@ export default function MessagesPage() {
       const { message: updated } = await api.patch(`/messages/message/${msg.id}/like`);
       setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
     } catch (e) {
-      showToast(e.message || 'Error al reaccionar', 'error');
+      showToast(e.message || t('chat.likeError'), 'error');
     }
   }
 
@@ -1014,7 +1025,7 @@ export default function MessagesPage() {
       if (alreadyPinned) {
         await api.delete(`/messages/chat/${friendId}/pin`);
         setPinnedMessage(null);
-        showToast('Mensaje desfijado');
+        showToast(t('chat.msgUnpinnedToast'));
       } else {
         const result = await api.post(`/messages/chat/${friendId}/messages/${msg.id}/pin`);
         setPinnedMessage({
@@ -1022,10 +1033,10 @@ export default function MessagesPage() {
           pinned_at: result.pinned_at,
           pinned_by: { id: profile?.id, username: profile?.username },
         });
-        showToast('Mensaje fijado');
+        showToast(t('chat.msgPinnedToast'));
       }
     } catch (e) {
-      showToast(e.message || 'Error al fijar el mensaje', 'error');
+      showToast(e.message || t('chat.pinError'), 'error');
     }
   }
 
@@ -1045,9 +1056,9 @@ export default function MessagesPage() {
         // Show deleted placeholder
         setMessages(m => m.map(x => x.id === msg.id ? { ...x, ...updated } : x));
       }
-      showToast(scope === 'me' ? 'Mensaje eliminado' : 'Mensaje eliminado para todos');
+      showToast(scope === 'me' ? t('chat.delMineToast') : t('chat.delAllToast'));
     } catch (e) {
-      showToast(e.message || 'Error al eliminar', 'error');
+      showToast(e.message || t('chat.delError'), 'error');
     }
   }
 
@@ -1059,30 +1070,30 @@ export default function MessagesPage() {
       setClearedAt(now);
       setMessages([]);
       setShowClearConfirm(false);
-      showToast('Conversación vaciada');
+      showToast(t('chat.clearedToast'));
     } catch (e) {
-      showToast('Error al vaciar la conversación', 'error');
+      showToast(t('chat.clearError'), 'error');
     } finally {
       setClearingChat(false);
     }
   }
 
   async function toggleBlock() {
-    const name = friend?.username || 'este usuario';
+    const name = friend?.username || t('chat.fallbackUser');
     setBlockActionLoading(true);
     try {
       if (blockedByMe) {
         await api.post(`/messages/chat/${friendId}/unblock`);
         setBlockedByMe(false);
-        showToast(`Has desbloqueado a ${name}`);
+        showToast(t('chat.unblockedToast', { name }));
       } else {
         await api.post(`/messages/chat/${friendId}/block`);
         setBlockedByMe(true);
-        showToast(`Has bloqueado a ${name}`);
+        showToast(t('chat.blockedToast', { name }));
       }
       setShowBlockConfirm(false);
     } catch (e) {
-      showToast(e.message || 'Error al actualizar el bloqueo', 'error');
+      showToast(e.message || t('chat.blockError'), 'error');
     } finally {
       setBlockActionLoading(false);
     }
@@ -1105,7 +1116,7 @@ export default function MessagesPage() {
     _tickColorUnread: tickColorUnread,
     _tickColorSent: tickColorSent,
     reply_to: msg.reply_to
-      ? { ...msg.reply_to, _quoteLabel: msg.reply_to.sender_id === profile?.id ? 'Tú' : (friend?.username || 'este usuario') }
+      ? { ...msg.reply_to, _quoteLabel: msg.reply_to.sender_id === profile?.id ? t('chat.you') : (friend?.username || t('chat.fallbackUser')) }
       : msg.reply_to,
   }));
 
@@ -1156,12 +1167,12 @@ export default function MessagesPage() {
           onDeleteForEveryone={() => deleteMessage(contextMenu, 'everyone')}
           onReport={() => {
             const preview = contextMenu.type === 'image'
-              ? '📷 Imagen'
-              : (contextMenu.content?.slice(0, 60) || 'este mensaje');
+              ? t('chat.imageLabel')
+              : (contextMenu.content?.slice(0, 60) || t('chat.ctxReport'));
             setReportTarget({
               targetType: 'message',
               targetId: contextMenu.id,
-              targetLabel: `Mensaje: "${preview}${contextMenu.content?.length > 60 ? '…' : ''}"`,
+              targetLabel: `${t('chat.reportMsgPrefix')}: "${preview}${contextMenu.content?.length > 60 ? '…' : ''}"`,
             });
             setContextMenu(null);
           }}
@@ -1180,7 +1191,7 @@ export default function MessagesPage() {
       {/* Clear chat confirm */}
       {showClearConfirm && (
         <ClearChatModal
-          friendName={friend?.username || 'esta persona'}
+          friendName={friend?.username || t('chat.fallbackPerson')}
           onConfirm={clearChat}
           onCancel={() => setShowClearConfirm(false)}
           loading={clearingChat}
@@ -1190,7 +1201,7 @@ export default function MessagesPage() {
       {/* Block / unblock confirm */}
       {showBlockConfirm && (
         <BlockUserModal
-          friendName={friend?.username || 'este usuario'}
+          friendName={friend?.username || t('chat.fallbackUser')}
           isBlocked={blockedByMe}
           onConfirm={toggleBlock}
           onCancel={() => setShowBlockConfirm(false)}
@@ -1229,9 +1240,9 @@ export default function MessagesPage() {
                   </span>
                   <span className={`text-xs ${friendOnline && showOnline ? 'text-green-400' : 'text-slate-600'}`}>
                     {showOnline && friendOnline
-                      ? '· En línea'
+                      ? t('chat.presenceOnline')
                       : showLastSeen && friend.battery_updated_at
-                        ? `· Bat. ${formatRelativeTime(friend.battery_updated_at)}`
+                        ? t('chat.presenceLastBattery', { when: formatRelativeTime(friend.battery_updated_at) })
                         : null}
                   </span>
                 </div>
@@ -1246,7 +1257,7 @@ export default function MessagesPage() {
             <button
               onClick={() => setShowHeaderMenu(v => !v)}
               className="w-9 h-9 rounded-xl text-surface-muted hover:text-surface-text hover:bg-surface-card border border-transparent hover:border-surface-border transition-all flex items-center justify-center text-xl font-bold"
-              title="Opciones"
+              title={t('chat.optionsTitle')}
             >
               ⋯
             </button>
@@ -1256,14 +1267,14 @@ export default function MessagesPage() {
                   onClick={() => { setShowHeaderMenu(false); setShowClearConfirm(true); }}
                   className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
                 >
-                  <span>🧹</span> Vaciar conversación
+                  <span>🧹</span> {t('chat.clearOption')}
                 </button>
                 {friend && (
                   <button
                     onClick={() => { setShowHeaderMenu(false); setShowBlockConfirm(true); }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
                   >
-                    <span>{blockedByMe ? '🔓' : '🚫'}</span> {blockedByMe ? 'Desbloquear' : 'Bloquear'}
+                    <span>{blockedByMe ? '🔓' : '🚫'}</span> {blockedByMe ? t('chat.unblockBtn') : t('chat.blockBtn')}
                   </button>
                 )}
                 {friend && (
@@ -1278,7 +1289,7 @@ export default function MessagesPage() {
                     }}
                     className="w-full text-left px-4 py-3 text-sm font-display font-semibold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2.5"
                   >
-                    <span>🚩</span> Denunciar
+                    <span>🚩</span> {t('chat.reportOption')}
                   </button>
                 )}
               </div>
@@ -1307,17 +1318,17 @@ export default function MessagesPage() {
         />
         {loading ? (
           <div className="flex items-center justify-center h-32 text-surface-muted text-sm animate-pulse">
-            Cargando mensajes...
+            {t('chat.loading')}
           </div>
         ) : visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <div className="text-4xl">💬</div>
             <p className="text-slate-500 text-sm">
-              {clearedAt ? 'Conversación vaciada. ¡Di algo nuevo!' : 'Sin mensajes aún. ¡Di hola!'}
+              {clearedAt ? t('chat.emptyCleared') : t('chat.emptyIntro')}
             </p>
             {friend && !clearedAt && (
               <p className="text-xs text-slate-600">
-                {friend.username} tiene la batería al {friend.battery_level}%
+                {t('chat.friendBatteryHint', { name: friend.username, n: friend.battery_level })}
               </p>
             )}
           </div>
@@ -1386,7 +1397,7 @@ export default function MessagesPage() {
           {replyingTo && (
             <ReplyComposerPreview
               replyingTo={replyingTo}
-              label={replyingTo.sender_id === profile?.id ? 'ti mismo' : (friend?.username || 'este usuario')}
+              label={replyingTo.sender_id === profile?.id ? t('chat.yourself') : (friend?.username || t('chat.fallbackUser'))}
               onCancel={() => setReplyingTo(null)}
             />
           )}
@@ -1394,15 +1405,15 @@ export default function MessagesPage() {
             <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-surface-card border border-surface-border">
               <span className="text-surface-muted text-sm">
                 {blockedByMe
-                  ? 'Has bloqueado a esta persona. No podéis enviaros mensajes.'
-                  : 'No puedes enviar mensajes a esta persona.'}
+                  ? t('chat.blockedIntro')
+                  : t('chat.blockedByThemHint')}
               </span>
               {blockedByMe && (
                 <button
                   onClick={() => setShowBlockConfirm(true)}
                   className="flex-shrink-0 text-accent-primary text-sm font-display font-semibold hover:underline"
                 >
-                  Desbloquear
+                  {t('chat.unblockBtn')}
                 </button>
               )}
             </div>
@@ -1416,14 +1427,14 @@ export default function MessagesPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowHangoutForm(true)}
-                title="Proponer quedada"
+                title={t('chat.proposeHangoutTitle')}
                 className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all"
               >
                 🤝
               </button>
               <button
                 onClick={() => setShowPhotoMenu(true)}
-                title="Enviar foto"
+                title={t('chat.sendPhotoTitle')}
                 disabled={sendingImage}
                 className="flex-shrink-0 w-10 h-10 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-lg hover:border-accent-primary/50 hover:bg-accent-primary/10 transition-all disabled:opacity-40"
               >
@@ -1457,7 +1468,7 @@ export default function MessagesPage() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } }}
-                placeholder="Escribe un mensaje..."
+                placeholder={t('chat.inputPh')}
                 maxLength={1000}
                 className="flex-1 bg-surface-card border border-surface-border rounded-xl px-4 py-2.5 text-surface-text text-sm placeholder-slate-600 focus:outline-none focus:border-accent-primary transition-colors"
               />
