@@ -1138,6 +1138,7 @@ function MessageContextMenu({ msg, isMe, isLiked, isPinned, canPin, onClose, onR
 }
 
 export default function GroupChatPage() {
+  const { t } = useTranslation();
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();

@@ -10,6 +10,7 @@ import { useTranslation } from '../i18n';
  * The modal shows them one at a time with an animation.
  */
 export default function BadgeUnlockModal({ badges = [], onClose }) {
+  const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(false);
 

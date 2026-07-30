@@ -1053,7 +1053,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 18.132, top: 48.857, width: 60.304, height: 57.217 },
+    rinonBox: { left: 20.396, top: 68.795, width: 57.984, height: 37.344 },
   },
   {
     id: 'acc_rinon_negra',
@@ -1069,7 +1069,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 18.132, top: 48.857, width: 60.304, height: 57.217 },
+    rinonBox: { left: 20.396, top: 68.795, width: 57.984, height: 37.344 },
   },
   {
     id: 'acc_rinon_roja',
@@ -1528,7 +1528,7 @@ export const MASCOT_FEET = [
     desc: 'Estilo preppy en marrón camel con interior verde salvia.',
     emoji: '🥿',
     src: '/outfit-feet-3.png',
-    price: 50,
+    price: 150,
     isBase: false,
     // Bajados respecto al resto del calzado (el PNG los traía un poco altos,
     // sin tocar la base de la mascota).
@@ -1540,7 +1540,7 @@ export const MASCOT_FEET = [
     desc: 'Zapato formal de cordones con suela de cuero, puro clásico.',
     emoji: '👞',
     src: '/outfit-feet-4.png',
-    price: 50,
+    price: 150,
     isBase: false,
     // Bajados respecto al resto del calzado (el PNG los traía un poco altos,
     // sin tocar la base de la mascota).

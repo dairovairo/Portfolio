@@ -143,6 +143,7 @@ function getEntityCategories(entity) {
 }
 
 function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [liking, setLiking] = useState(false);
   const isJoined = event.attendee_ids?.includes(currentUserId);
@@ -861,6 +862,7 @@ const RAFFLE_TIER_BORDER_STYLES = {
 };
 
 function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, onLike }) {
+  const { t } = useTranslation();
   const [drawing, setDrawing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [endingPromo, setEndingPromo] = useState(false);
