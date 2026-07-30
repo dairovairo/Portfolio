@@ -9,13 +9,13 @@ export const CURRENCY_NAME = 'Volt';
 export const CURRENCY_NAME_PLURAL = 'Volts';
 
 // Recompensa diaria por pulsar "Actualizar batería" (una vez al día).
-export const DAILY_BATTERY_REWARD = 10;
+export const DAILY_BATTERY_REWARD = 25;
 
 // Saldo inicial de un usuario nuevo (antes de comprar nada). A partir de
 // aquí, el saldo se persiste en localStorage por usuario — ver
 // VOLTS_STORAGE_KEY — para que no se regenere cada vez que se entra a la
 // tienda o se reabre la app.
-const STARTING_VOLTS = 340;
+const STARTING_VOLTS = 150;
 
 // Se mantiene el nombre de clave original ('sb-shop-coins') para no perder
 // el saldo ya guardado de usuarios existentes al renombrar la moneda.

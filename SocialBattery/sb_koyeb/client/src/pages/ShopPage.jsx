@@ -2105,6 +2105,38 @@ export default function ShopPage() {
                   </div>
                 )}
 
+                {/* Carrusel: Gorras (basicHead2) — con botón 🎨. Va antes que
+                    "Gorras lisas" porque cuesta menos (50 vs 100 volts). */}
+                {basicHead2.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between px-0.5 mb-1.5">
+                      <div className="text-[11px] font-display font-semibold text-surface-muted">
+                        {t('shop.caps')}
+                      </div>
+                      <CarouselPersonalizeButton
+                        family={basicHead2}
+                        unlockedSet={unlockedHead}
+                        onOpen={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead2))}
+                        onLocked={showLockedCustomizeToast}
+                      />
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                      {basicHead2.map(head => (
+                        <BasicHeadCard
+                          key={head.id}
+                          head={head}
+                          isUnlocked={unlockedHead.has(head.id)}
+                          isActive={activeHead === head.id}
+                          canAfford={coins >= head.price}
+                          onBuy={() => handleBuyHead(head)}
+                          onEquip={() => handleEquipHead(head)}
+                          previewTier={previewTier}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Carrusel: Gorras lisas (basicHead) — con botón 🎨 */}
                 {basicHead.length > 0 && (
                   <div>
@@ -2121,37 +2153,6 @@ export default function ShopPage() {
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                       {basicHead.map(head => (
-                        <BasicHeadCard
-                          key={head.id}
-                          head={head}
-                          isUnlocked={unlockedHead.has(head.id)}
-                          isActive={activeHead === head.id}
-                          canAfford={coins >= head.price}
-                          onBuy={() => handleBuyHead(head)}
-                          onEquip={() => handleEquipHead(head)}
-                          previewTier={previewTier}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Carrusel: Gorras (basicHead2) — con botón 🎨 */}
-                {basicHead2.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between px-0.5 mb-1.5">
-                      <div className="text-[11px] font-display font-semibold text-surface-muted">
-                        {t('shop.caps')}
-                      </div>
-                      <CarouselPersonalizeButton
-                        family={basicHead2}
-                        unlockedSet={unlockedHead}
-                        onOpen={() => handleOpenCustomizeHeadNew(pickCarouselTargetHead(basicHead2))}
-                        onLocked={showLockedCustomizeToast}
-                      />
-                    </div>
-                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                      {basicHead2.map(head => (
                         <BasicHeadCard
                           key={head.id}
                           head={head}
@@ -2213,25 +2214,49 @@ export default function ShopPage() {
               previewTier={previewTier}
             />
 
-            {/* Carrusel: Riñoneras — elige una.
-                Subido aquí arriba, junto al resto de carruseles horizontales
-                de accesorios (antes quedaba el último, pegado a la rejilla
-                de "resto de accesorios", separado visualmente del grupo). */}
-            {rinonAccessories.length > 0 && (
+            {/* Carrusel: Pajaritas — elige una (50 volts) */}
+            {bowTieAccessories.length > 0 && (
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    {t('shop.fannyPacks')}
+                    {t('shop.bowTies')}
                   </div>
                   <CarouselPersonalizeButton
-                    family={rinonAccessories}
+                    family={bowTieAccessories}
                     unlockedSet={unlockedAccessories}
-                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(rinonAccessories))}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(bowTieAccessories))}
                     onLocked={showLockedCustomizeToast}
                   />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {[baseRinon, ...rinonAccessories].filter(Boolean).map(accessory => (
+                  {[baseBowTie, ...bowTieAccessories].filter(Boolean).map(accessory => (
+                    <CompactAccessoryCard
+                      key={accessory.id}
+                      accessory={accessory}
+                      isUnlocked={unlockedAccessories.has(accessory.id)}
+                      isActive={isAccessoryCardActive(accessory)}
+                      canAfford={coins >= accessory.price}
+                      onBuy={() => handleBuyAccessory(accessory)}
+                      onToggle={() => handleToggleAccessory(accessory)}
+                      previewTier={previewTier}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Carrusel: Gafas de sol — elige unas. Sin botón de
+                personalización de color (a diferencia de cadenas/grillz/
+                corbatas/pajaritas): esta familia no admite recolor. */}
+            {glassesAccessories.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between px-0.5 mb-1.5">
+                  <div className="text-[11px] font-display font-semibold text-surface-muted">
+                    {t('shop.sunglasses')}
+                  </div>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                  {[baseGlasses, ...glassesAccessories].filter(Boolean).map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
                       accessory={accessory}
@@ -2265,37 +2290,6 @@ export default function ShopPage() {
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
                   {[baseTie, ...tieAccessories].filter(Boolean).map(accessory => (
-                    <CompactAccessoryCard
-                      key={accessory.id}
-                      accessory={accessory}
-                      isUnlocked={unlockedAccessories.has(accessory.id)}
-                      isActive={isAccessoryCardActive(accessory)}
-                      canAfford={coins >= accessory.price}
-                      onBuy={() => handleBuyAccessory(accessory)}
-                      onToggle={() => handleToggleAccessory(accessory)}
-                      previewTier={previewTier}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Carrusel: Pajaritas — elige una */}
-            {bowTieAccessories.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between px-0.5 mb-1.5">
-                  <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    {t('shop.bowTies')}
-                  </div>
-                  <CarouselPersonalizeButton
-                    family={bowTieAccessories}
-                    unlockedSet={unlockedAccessories}
-                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(bowTieAccessories))}
-                    onLocked={showLockedCustomizeToast}
-                  />
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {[baseBowTie, ...bowTieAccessories].filter(Boolean).map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
                       accessory={accessory}
@@ -2373,18 +2367,22 @@ export default function ShopPage() {
               </div>
             )}
 
-            {/* Carrusel: Gafas de sol — elige unas. Sin botón de
-                personalización de color (a diferencia de cadenas/grillz/
-                corbatas/pajaritas): esta familia no admite recolor. */}
-            {glassesAccessories.length > 0 && (
+            {/* Carrusel: Riñoneras — elige una (200 volts). */}
+            {rinonAccessories.length > 0 && (
               <div>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <div className="text-[11px] font-display font-semibold text-surface-muted">
-                    {t('shop.sunglasses')}
+                    {t('shop.fannyPacks')}
                   </div>
+                  <CarouselPersonalizeButton
+                    family={rinonAccessories}
+                    unlockedSet={unlockedAccessories}
+                    onOpen={() => handleOpenCustomizeAccessoryNew(pickAccessoryTarget(rinonAccessories))}
+                    onLocked={showLockedCustomizeToast}
+                  />
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-                  {[baseGlasses, ...glassesAccessories].filter(Boolean).map(accessory => (
+                  {[baseRinon, ...rinonAccessories].filter(Boolean).map(accessory => (
                     <CompactAccessoryCard
                       key={accessory.id}
                       accessory={accessory}
@@ -2397,6 +2395,31 @@ export default function ShopPage() {
                     />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* "Brazos" — el ítem más caro de toda la tienda (500 volts),
+                por eso cierra la pestaña Accesorios (orden ascendente de
+                precio, de arriba a abajo). Aunque se enseña aquí,
+                mecánicamente es un ítem de PIES (FeetCard +
+                handleBuyFeet/handleEquipFeet, no los handlers de
+                accesorios): al equiparlo sustituye a cualquier calzado
+                puesto, y cualquier calzado lo sustituye a él — ver
+                comentario en MASCOT_FEET. */}
+            {armsFeetItem && (
+              <div className="grid grid-cols-2 gap-3">
+                <FeetCard
+                  key={armsFeetItem.id}
+                  feet={armsFeetItem}
+                  isUnlocked={unlockedFeet.has(armsFeetItem.id)}
+                  isActive={activeFeet === armsFeetItem.id}
+                  canAfford={coins >= armsFeetItem.price}
+                  onBuy={() => handleBuyFeet(armsFeetItem)}
+                  onEquip={() => handleEquipFeet(armsFeetItem)}
+                  onCustomize={() => handleOpenCustomizeNew(armsFeetItem)}
+                  isCustomized={hasAnyCustomizationOf(armsFeetItem.id)}
+                  previewTier={previewTier}
+                />
               </div>
             )}
 
@@ -2417,28 +2440,6 @@ export default function ShopPage() {
                   previewTier={previewTier}
                 />
               ))}
-
-              {/* "Brazos" — a propósito la última tarjeta de toda la
-                  pestaña Accesorios y el ítem más caro de la tienda.
-                  Aunque se enseña aquí, mecánicamente es un ítem de PIES
-                  (FeetCard + handleBuyFeet/handleEquipFeet, no los
-                  handlers de accesorios): al equiparlo sustituye a
-                  cualquier calzado puesto, y cualquier calzado lo
-                  sustituye a él — ver comentario en MASCOT_FEET. */}
-              {armsFeetItem && (
-                <FeetCard
-                  key={armsFeetItem.id}
-                  feet={armsFeetItem}
-                  isUnlocked={unlockedFeet.has(armsFeetItem.id)}
-                  isActive={activeFeet === armsFeetItem.id}
-                  canAfford={coins >= armsFeetItem.price}
-                  onBuy={() => handleBuyFeet(armsFeetItem)}
-                  onEquip={() => handleEquipFeet(armsFeetItem)}
-                  onCustomize={() => handleOpenCustomizeNew(armsFeetItem)}
-                  isCustomized={hasAnyCustomizationOf(armsFeetItem.id)}
-                  previewTier={previewTier}
-                />
-              )}
             </div>
           </div>
         )}
