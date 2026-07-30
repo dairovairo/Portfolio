@@ -334,7 +334,10 @@ export function CommunityNotificationsProvider({ children }) {
               title: `📅 Nuevo evento en ${communityLabel}`,
               body:  `${newEvent.title || 'Se ha creado un nuevo evento'}${newEvent.location ? ` · ${newEvent.location}` : ''}`,
               tag:   `community-event-${newEvent.id}`,
-              url:   `/community/${newEvent.community_id}`,
+              // Al pulsar, al detalle del evento (mismo criterio que ultra/
+              // premium arriba) — antes apuntaba a /community/${community_id},
+              // lo cual era inconsistente con el resto de notifs de evento.
+              url:   `/community/event/${newEvent.id}`,
             });
           }
         }
