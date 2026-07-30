@@ -1430,7 +1430,9 @@ export default function ShopPage() {
   const filteredOutfits = MASCOT_OUTFITS.filter(o => o.subcategory === outfitSubTab);
   const baseOutfit   = filteredOutfits.find(o => o.isBase) ?? null;
   const basicOutfits = filteredOutfits.filter(o => o.isBasic);
-  const restOutfits  = filteredOutfits.filter(o => !o.isBasic && !o.isBase);
+  const restOutfits  = filteredOutfits
+    .filter(o => !o.isBasic && !o.isBase)
+    .sort((a, b) => a.price - b.price);
 
   // Pies: ítem base ("Sin calzado") → botón ResetButton encima de los
   // carruseles. Retro colores → carrusel. Chunky colores → carrusel.

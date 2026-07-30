@@ -376,7 +376,7 @@ export const MASCOT_OUTFITS = [
     emoji: '🛡️',
     src: '/outfit-tshirt-18.png',
     subcategory: 'camiseta',
-    price: 95,
+    price: 75,
     isBase: false,
     scale: 0.985,
   },
