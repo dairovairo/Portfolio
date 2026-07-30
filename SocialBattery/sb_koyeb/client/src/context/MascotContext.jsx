@@ -1053,7 +1053,11 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 18.132, top: 48.857, width: 60.304, height: 57.217 },
+    // BUG (arreglado): el top estaba ~10 puntos más alto que el resto de
+    // riñoneras (48.857 en vez de ~58.86), así que quedaba a la altura del
+    // pecho en vez de la cintura. Recalculado para compartir el mismo
+    // centro vertical que el resto de colores (roja, azul, verde…).
+    rinonBox: { left: 18.132, top: 58.86, width: 60.304, height: 57.217 },
   },
   {
     id: 'acc_rinon_negra',
@@ -1069,7 +1073,9 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 18.132, top: 48.857, width: 60.304, height: 57.217 },
+    // BUG (arreglado): mismo desajuste que la riñonera blanca — top
+    // recalculado para compartir el mismo centro vertical que el resto.
+    rinonBox: { left: 18.132, top: 58.86, width: 60.304, height: 57.217 },
   },
   {
     id: 'acc_rinon_roja',
@@ -1165,7 +1171,11 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    rinonBox: { left: 20.396, top: 66.87, width: 57.984, height: 21.26 },
+    // BUG (arreglado): el top estaba ~10 puntos más alto que el resto de
+    // riñoneras (66.87 en vez de ~76.84), así que quedaba a la altura del
+    // pecho en vez de la cintura. Recalculado para compartir el mismo
+    // centro vertical que el resto de colores (roja, azul, verde…).
+    rinonBox: { left: 20.396, top: 76.84, width: 57.984, height: 21.26 },
   },
   {
     id: 'acc_rinon_amarilla',
