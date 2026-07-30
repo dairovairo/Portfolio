@@ -1053,11 +1053,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    // BUG (arreglado): el top estaba ~10 puntos más alto que el resto de
-    // riñoneras (48.857 en vez de ~58.86), así que quedaba a la altura del
-    // pecho en vez de la cintura. Recalculado para compartir el mismo
-    // centro vertical que el resto de colores (roja, azul, verde…).
-    rinonBox: { left: 18.132, top: 58.86, width: 60.304, height: 57.217 },
+    rinonBox: { left: 20.396, top: 68.795, width: 57.984, height: 37.344 },
   },
   {
     id: 'acc_rinon_negra',
@@ -1073,9 +1069,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    // BUG (arreglado): mismo desajuste que la riñonera blanca — top
-    // recalculado para compartir el mismo centro vertical que el resto.
-    rinonBox: { left: 18.132, top: 58.86, width: 60.304, height: 57.217 },
+    rinonBox: { left: 20.396, top: 68.795, width: 57.984, height: 37.344 },
   },
   {
     id: 'acc_rinon_roja',
@@ -1171,11 +1165,7 @@ export const MASCOT_ACCESSORIES = [
     // simple, dentro del cuadrado, e idéntica en la vista CSS y en el
     // horneado a canvas. No tocar una sin la otra: no hay "otra" — ambas
     // rutas leen este mismo valor.
-    // BUG (arreglado): el top estaba ~10 puntos más alto que el resto de
-    // riñoneras (66.87 en vez de ~76.84), así que quedaba a la altura del
-    // pecho en vez de la cintura. Recalculado para compartir el mismo
-    // centro vertical que el resto de colores (roja, azul, verde…).
-    rinonBox: { left: 20.396, top: 76.84, width: 57.984, height: 21.26 },
+    rinonBox: { left: 20.396, top: 66.87, width: 57.984, height: 21.26 },
   },
   {
     id: 'acc_rinon_amarilla',
@@ -1538,7 +1528,7 @@ export const MASCOT_FEET = [
     desc: 'Estilo preppy en marrón camel con interior verde salvia.',
     emoji: '🥿',
     src: '/outfit-feet-3.png',
-    price: 50,
+    price: 150,
     isBase: false,
     // Bajados respecto al resto del calzado (el PNG los traía un poco altos,
     // sin tocar la base de la mascota).
@@ -1550,7 +1540,7 @@ export const MASCOT_FEET = [
     desc: 'Zapato formal de cordones con suela de cuero, puro clásico.',
     emoji: '👞',
     src: '/outfit-feet-4.png',
-    price: 50,
+    price: 150,
     isBase: false,
     // Bajados respecto al resto del calzado (el PNG los traía un poco altos,
     // sin tocar la base de la mascota).
