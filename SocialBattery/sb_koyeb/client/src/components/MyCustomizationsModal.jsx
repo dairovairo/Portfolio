@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n';
+import { getMascotItemName } from '../context/MascotContext';
 import MascotDisplay from './MascotDisplay';
 
 /**
@@ -33,6 +35,7 @@ export default function MyCustomizationsModal({
   onRemove,
   onClose,
 }) {
+  const { t } = useTranslation();
   function isItemActive(item) {
     if (activeItemIds) return activeItemIds.has(item.id);
     return (activeItemId ?? activeFeetId) === item.id;
@@ -100,8 +103,8 @@ export default function MyCustomizationsModal({
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-display font-semibold text-surface-text text-xs truncate" title={item.name}>
-                        {item.name}
+                      <div className="font-display font-semibold text-surface-text text-xs truncate" title={getMascotItemName(item, t)}>
+                        {getMascotItemName(item, t)}
                       </div>
                       <div className="flex gap-1.5 mt-1.5 flex-wrap">
                         {isActive ? (

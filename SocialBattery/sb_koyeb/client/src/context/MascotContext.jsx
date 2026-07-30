@@ -2765,6 +2765,52 @@ export function MascotProvider({ children }) {
   );
 }
 
+// ── Resolvers de nombres/descripciones de ítems traducidos ─────────────────
+// Los arrays MASCOT_* llevan `name` y `desc` en español como texto inline
+// para no romper llamadas legacy que aún accedan a esas propiedades. Estas
+// dos funciones son la puerta oficial de renderizado: reciben el ítem y la
+// función `t()` de useTranslation, y devuelven el texto en el idioma activo
+// buscando por `mascotItems.name_<id>` / `mascotItems.desc_<id>`. Los ítems
+// personalizados (los que se guardan en feetCustomizations/head/outfit/acc)
+// llevan siempre un `baseId` con el id del ítem original del catálogo: se
+// resuelve la traducción del original y se le concatena el sufijo
+// "(personalizada)" en el idioma activo. Si por lo que sea la traducción no
+// existe en el diccionario, se cae al `name`/`desc` inline en español.
+export function getMascotItemName(item, t) {
+  if (!item) return '';
+  const baseId = item.baseId;
+  if (baseId) {
+    const suffixKey = String(item.id || '').startsWith('acc_custom_')
+      ? 'mascotItems.customSuffixMasc'
+      : 'mascotItems.customSuffixFem';
+    const baseKey = 'mascotItems.name_' + baseId;
+    const baseName = t(baseKey);
+    const resolvedBase = (typeof baseName === 'string' && baseName !== baseKey)
+      ? baseName
+      : (item.baseName || item.name || '');
+    return `${resolvedBase} ${t(suffixKey)}`;
+  }
+  const key = 'mascotItems.name_' + (item.id || '');
+  const val = t(key);
+  return (typeof val === 'string' && val !== key) ? val : (item.name || '');
+}
+
+export function getMascotItemDesc(item, t) {
+  if (!item) return '';
+  const baseId = item.baseId;
+  if (baseId) {
+    const baseKey = 'mascotItems.name_' + baseId;
+    const baseName = t(baseKey);
+    const resolvedBase = (typeof baseName === 'string' && baseName !== baseKey)
+      ? baseName
+      : (item.baseName || item.name || '');
+    return t('mascotItems.customDescTpl', { name: resolvedBase });
+  }
+  const key = 'mascotItems.desc_' + (item.id || '');
+  const val = t(key);
+  return (typeof val === 'string' && val !== key) ? val : (item.desc || '');
+}
+
 export function useMascot() {
   const ctx = useContext(MascotContext);
   if (!ctx) throw new Error('useMascot must be used inside MascotProvider');

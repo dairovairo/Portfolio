@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n';
+import { getMascotItemName } from '../context/MascotContext';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadImageData, floodFillMask, recolorWithMask, hexToHslDegrees, hslDegreesToHex } from '../lib/colorZones';
 import HslColorSquarePicker from './HslColorSquarePicker';
@@ -23,6 +25,7 @@ import HslColorSquarePicker from './HslColorSquarePicker';
 const DISPLAY_SIZE = 270;
 
 export default function HeadColorEditorModal({ item, initialZones = [], onClose, onSave }) {
+  const { t } = useTranslation();
   const canvasRef    = useRef(null);
   const masterDataRef = useRef(null);
 
@@ -153,7 +156,7 @@ export default function HeadColorEditorModal({ item, initialZones = [], onClose,
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-lg" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
               <div className="font-display font-bold text-surface-text text-sm truncate">
-                Personalizar · {item.name}
+                {t('shop.personalizeBtn')} · {getMascotItemName(item, t)}
               </div>
             </div>
             <button

@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n';
+import { getMascotItemName } from '../context/MascotContext';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadImageData, floodFillMask, recolorWithMask, hexToHslDegrees, hslDegreesToHex } from '../lib/colorZones';
 import HslColorSquarePicker from './HslColorSquarePicker';
@@ -32,6 +34,7 @@ export default function FeetColorEditorModal({
   onSave,
   helpText = 'Toca una zona de la zapatilla para seleccionarla y elige el color que quieras. Repite con tantas zonas como necesites (suela, cuerpo, cordones…).',
 }) {
+  const { t } = useTranslation();
   const canvasRef = useRef(null);
   const masterDataRef = useRef(null); // ImageData "confirmada" actual
 
@@ -171,7 +174,7 @@ export default function FeetColorEditorModal({
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-lg" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
               <div className="font-display font-bold text-surface-text text-sm truncate">
-                Personalizar · {item.name}
+                {t('shop.personalizeBtn')} · {getMascotItemName(item, t)}
               </div>
             </div>
             <button

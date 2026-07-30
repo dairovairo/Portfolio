@@ -6,7 +6,7 @@ import MascotDisplay from '../components/MascotDisplay';
 import ItemColorEditorPage from '../components/ItemColorEditorPage';
 import MyCustomizationsModal from '../components/MyCustomizationsModal';
 import HeadCustomizationsModal from '../components/HeadCustomizationsModal';
-import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot } from '../context/MascotContext';
+import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MASCOT_HEAD, useMascot, getMascotItemName, getMascotItemDesc } from '../context/MascotContext';
 import { getEffectiveBatteryLevel } from '../lib/battery';
 import { loadVolts, saveVolts, CURRENCY_SYMBOL, DAILY_BATTERY_REWARD } from '../lib/currency';
 import { useTranslation } from '../i18n';
@@ -184,9 +184,9 @@ function ActivityCard({ activity, isUnlocked, isActive, canAfford, onBuy, onEqui
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{activity.emoji}</span>
-          <div className="font-display font-bold text-surface-text text-sm leading-tight">{activity.name}</div>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{getMascotItemName(activity, t)}</div>
         </div>
-        <div className="text-surface-muted text-[11px] leading-snug flex-1">{activity.desc}</div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{getMascotItemDesc(activity, t)}</div>
       </div>
     </ItemCard>
   );
@@ -247,9 +247,9 @@ function AccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBuy, onTo
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{accessory.emoji}</span>
-          <div className="font-display font-bold text-surface-text text-sm leading-tight">{accessory.name}</div>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{getMascotItemName(accessory, t)}</div>
         </div>
-        <div className="text-surface-muted text-[11px] leading-snug flex-1">{accessory.desc}</div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{getMascotItemDesc(accessory, t)}</div>
       </div>
 
       {/* Acción — los accesorios se pueden combinar, así que el botón
@@ -334,8 +334,8 @@ function CompactAccessoryCard({ accessory, isUnlocked, isActive, canAfford, onBu
       </div>
 
       <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
-        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={accessory.name}>
-          {accessory.name}
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={getMascotItemName(accessory, t)}>
+          {getMascotItemName(accessory, t)}
         </div>
         {accessory.isBase ? (
           isActive ? (
@@ -433,9 +433,9 @@ function OutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEquip, o
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{outfit.emoji}</span>
-          <div className="font-display font-bold text-surface-text text-sm leading-tight">{outfit.name}</div>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{getMascotItemName(outfit, t)}</div>
         </div>
-        <div className="text-surface-muted text-[11px] leading-snug flex-1">{outfit.desc}</div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{getMascotItemDesc(outfit, t)}</div>
       </div>
     </ItemCard>
   );
@@ -487,8 +487,8 @@ function BasicOutfitCard({ outfit, isUnlocked, isActive, canAfford, onBuy, onEqu
       </div>
 
       <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
-        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={outfit.name}>
-          {outfit.name}
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={getMascotItemName(outfit, t)}>
+          {getMascotItemName(outfit, t)}
         </div>
         {isUnlocked ? (
           isActive ? (
@@ -572,8 +572,8 @@ function BasicFeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, 
       </div>
 
       <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
-        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={feet.name}>
-          {feet.name}
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={getMascotItemName(feet, t)}>
+          {getMascotItemName(feet, t)}
         </div>
         {isUnlocked ? (
           isActive ? (
@@ -669,9 +669,9 @@ function FeetCard({ feet, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{feet.emoji}</span>
-          <div className="font-display font-bold text-surface-text text-sm leading-tight">{feet.name}</div>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{getMascotItemName(feet, t)}</div>
         </div>
-        <div className="text-surface-muted text-[11px] leading-snug flex-1">{feet.desc}</div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{getMascotItemDesc(feet, t)}</div>
       </div>
     </ItemCard>
   );
@@ -732,9 +732,9 @@ function HeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, onCus
       <div className="px-3 pt-2 pb-1 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <span style={{ fontVariantEmoji: 'emoji' }}>{head.emoji}</span>
-          <div className="font-display font-bold text-surface-text text-sm leading-tight">{head.name}</div>
+          <div className="font-display font-bold text-surface-text text-sm leading-tight">{getMascotItemName(head, t)}</div>
         </div>
-        <div className="text-surface-muted text-[11px] leading-snug flex-1">{head.desc}</div>
+        <div className="text-surface-muted text-[11px] leading-snug flex-1">{getMascotItemDesc(head, t)}</div>
       </div>
     </ItemCard>
   );
@@ -784,8 +784,8 @@ function BasicHeadCard({ head, isUnlocked, isActive, canAfford, onBuy, onEquip, 
       </div>
 
       <div className="px-2 pt-1.5 pb-1.5 flex flex-col gap-1">
-        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={head.name}>
-          {head.name}
+        <div className="font-display font-semibold text-surface-text text-[11px] leading-tight text-center truncate" title={getMascotItemName(head, t)}>
+          {getMascotItemName(head, t)}
         </div>
         {isUnlocked ? (
           isActive ? (
@@ -1203,7 +1203,7 @@ export default function ShopPage() {
     const newId = saveOutfitCustomization(editingOutfitItem, zones, editingOutfitCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast((editingOutfitItem?.subcategory === 'camisa' ? t('shop.savedToShirtsLongCustom', { name: editingOutfitItem.baseName ?? editingOutfitItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }) : t('shop.savedToShirtsCustom', { name: editingOutfitItem.baseName ?? editingOutfitItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })));
+      { const _base = editingOutfitItem?.baseId ? { id: editingOutfitItem.baseId, name: editingOutfitItem.baseName } : editingOutfitItem; const _name = getMascotItemName(_base, t); showToast(editingOutfitItem?.subcategory === 'camisa' ? t('shop.savedToShirtsLongCustom', { name: _name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }) : t('shop.savedToShirtsCustom', { name: _name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingOutfitItem(null);
     setEditingOutfitCustomId(null);
@@ -1217,13 +1217,13 @@ export default function ShopPage() {
 
   function handleRemoveOutfitCustomization(item) {
     removeOutfitCustomization(item.id);
-    showToast(item.subcategory === 'camisa' ? t('shop.removedShirtLongCustom', { name: item.name }) : t('shop.removedShirtCustom', { name: item.name }));
+    showToast(item.subcategory === 'camisa' ? t('shop.removedShirtLongCustom', { name: getMascotItemName(item, t) }) : t('shop.removedShirtCustom', { name: getMascotItemName(item, t) }));
   }
 
   function handleEquipCustomOutfit(item) {
     const wasActive = activeOutfit === item.id;
     equipOutfit(item.id);
-    showToast(wasActive ? t('shop.outfitTakenOff', { name: item.name }) : t('shop.outfitPutOn', { name: item.name }));
+    showToast(wasActive ? t('shop.outfitTakenOff', { name: getMascotItemName(item, t) }) : t('shop.outfitPutOn', { name: getMascotItemName(item, t) }));
   }
 
   function hasAnyCustomizationOfAccessory(baseId) {
@@ -1251,7 +1251,7 @@ export default function ShopPage() {
     const newId = saveAccessoryCustomization(editingAccessoryItem, zones, editingAccessoryCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast(t('shop.savedToAccCustom', { name: editingAccessoryItem.baseName ?? editingAccessoryItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
+      { const _base = editingAccessoryItem?.baseId ? { id: editingAccessoryItem.baseId, name: editingAccessoryItem.baseName } : editingAccessoryItem; showToast(t('shop.savedToAccCustom', { name: getMascotItemName(_base, t), n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingAccessoryItem(null);
     setEditingAccessoryCustomId(null);
@@ -1265,13 +1265,13 @@ export default function ShopPage() {
 
   function handleRemoveAccessoryCustomization(item) {
     removeAccessoryCustomization(item.id);
-    showToast(t('shop.removedAccCustom', { name: item.name }));
+    showToast(t('shop.removedAccCustom', { name: getMascotItemName(item, t) }));
   }
 
   function handleEquipCustomAccessory(item) {
     const wasActive = activeAccessories.has(item.id);
     toggleAccessory(item.id);
-    showToast(wasActive ? t('shop.accessoryRemoved', { name: item.name }) : t('shop.accessoryEquipped', { name: item.name }));
+    showToast(wasActive ? t('shop.accessoryRemoved', { name: getMascotItemName(item, t) }) : t('shop.accessoryEquipped', { name: getMascotItemName(item, t) }));
   }
 
   function handleSaveHeadColors(zones) {
@@ -1282,7 +1282,7 @@ export default function ShopPage() {
     const newId = saveHeadCustomization(editingHeadItem, zones, editingHeadCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast(t('shop.savedToHeadCustom', { name: editingHeadItem.baseName ?? editingHeadItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
+      { const _base = editingHeadItem?.baseId ? { id: editingHeadItem.baseId, name: editingHeadItem.baseName } : editingHeadItem; showToast(t('shop.savedToHeadCustom', { name: getMascotItemName(_base, t), n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingHeadItem(null);
     setEditingHeadCustomId(null);
@@ -1296,13 +1296,13 @@ export default function ShopPage() {
 
   function handleRemoveHeadCustomization(item) {
     removeHeadCustomization(item.id);
-    showToast(t('shop.removedHeadCustom', { name: item.name }));
+    showToast(t('shop.removedHeadCustom', { name: getMascotItemName(item, t) }));
   }
 
   function handleEquipCustomHead(item) {
     const wasActive = activeHead === item.id;
     equipHead(item.id);
-    showToast(wasActive ? t('shop.headTakenOff', { name: item.name }) : t('shop.headPutOn', { name: item.name }));
+    showToast(wasActive ? t('shop.headTakenOff', { name: getMascotItemName(item, t) }) : t('shop.headPutOn', { name: getMascotItemName(item, t) }));
   }
 
   function handleSaveFeetColors(zones) {
@@ -1313,7 +1313,7 @@ export default function ShopPage() {
     const newId = saveFeetCustomization(editingFeetItem, zones, editingCustomId);
     if (newId) {
       setCoins(c => c - CUSTOMIZATION_SAVE_COST);
-      showToast(t('shop.savedToFeetCustom', { name: editingFeetItem.baseName ?? editingFeetItem.name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }));
+      { const _base = editingFeetItem?.baseId ? { id: editingFeetItem.baseId, name: editingFeetItem.baseName } : editingFeetItem; showToast(t('shop.savedToFeetCustom', { name: getMascotItemName(_base, t), n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingFeetItem(null);
     setEditingCustomId(null);
@@ -1329,7 +1329,7 @@ export default function ShopPage() {
   }
   function handleRemoveCustomization(item) {
     removeFeetCustomization(item.id);
-    showToast(t('shop.removedFeetCustom', { name: item.name }));
+    showToast(t('shop.removedFeetCustom', { name: getMascotItemName(item, t) }));
   }
 
   // ── Actividades ─────────────────────────────────────────────────────────────
@@ -1338,12 +1338,12 @@ export default function ShopPage() {
     setCoins(c => c - activity.price);
     unlockActivity(activity.id);
     equipActivity(activity.id);
-    showToast(t('shop.activityUnlocked', { name: activity.name }));
+    showToast(t('shop.activityUnlocked', { name: getMascotItemName(activity, t) }));
   }
   function handleEquipActivity(activity) {
     const wasActive = activeActivity === activity.id;
     equipActivity(activity.id);
-    showToast(wasActive ? t('shop.activityRemoved', { name: activity.name }) : t('shop.activityEquipped', { name: activity.name }));
+    showToast(wasActive ? t('shop.activityRemoved', { name: getMascotItemName(activity, t) }) : t('shop.activityEquipped', { name: getMascotItemName(activity, t) }));
   }
 
   // ── Accesorios — selección múltiple: cada uno se enciende/apaga sin
@@ -1353,12 +1353,12 @@ export default function ShopPage() {
     setCoins(c => c - accessory.price);
     unlockAccessory(accessory.id);
     toggleAccessory(accessory.id);
-    showToast(t('shop.accessoryUnlocked', { name: accessory.name }));
+    showToast(t('shop.accessoryUnlocked', { name: getMascotItemName(accessory, t) }));
   }
   function handleToggleAccessory(accessory) {
     const wasActive = activeAccessories.has(accessory.id);
     toggleAccessory(accessory.id);
-    showToast(wasActive ? t('shop.accessoryRemoved', { name: accessory.name }) : t('shop.accessoryEquipped', { name: accessory.name }));
+    showToast(wasActive ? t('shop.accessoryRemoved', { name: getMascotItemName(accessory, t) }) : t('shop.accessoryEquipped', { name: getMascotItemName(accessory, t) }));
   }
 
   // ── Outfits — Torso ──────────────────────────────────────────────────────────
@@ -1367,12 +1367,12 @@ export default function ShopPage() {
     setCoins(c => c - outfit.price);
     unlockOutfit(outfit.id);
     equipOutfit(outfit.id);
-    showToast(t('shop.outfitUnlocked', { name: outfit.name }));
+    showToast(t('shop.outfitUnlocked', { name: getMascotItemName(outfit, t) }));
   }
   function handleEquipOutfit(outfit) {
     const wasActive = activeOutfit === outfit.id;
     equipOutfit(outfit.id);
-    showToast(wasActive ? t('shop.outfitTakenOff', { name: outfit.name }) : t('shop.outfitPutOn', { name: outfit.name }));
+    showToast(wasActive ? t('shop.outfitTakenOff', { name: getMascotItemName(outfit, t) }) : t('shop.outfitPutOn', { name: getMascotItemName(outfit, t) }));
   }
 
   // ── Outfits — Pies ───────────────────────────────────────────────────────────
@@ -1381,12 +1381,12 @@ export default function ShopPage() {
     setCoins(c => c - feet.price);
     unlockFeet(feet.id);
     equipFeet(feet.id);
-    showToast(t('shop.feetUnlocked', { name: feet.name }));
+    showToast(t('shop.feetUnlocked', { name: getMascotItemName(feet, t) }));
   }
   function handleEquipFeet(feet) {
     const wasActive = activeFeet === feet.id;
     equipFeet(feet.id);
-    showToast(wasActive ? t('shop.feetTakenOff', { name: feet.name }) : t('shop.feetPutOn', { name: feet.name }));
+    showToast(wasActive ? t('shop.feetTakenOff', { name: getMascotItemName(feet, t) }) : t('shop.feetPutOn', { name: getMascotItemName(feet, t) }));
   }
   // Equipar una personalización desde la galería "Mis personalizaciones":
   // usa el mismo equipFeet del contexto (acepta cualquier id activo, sea
@@ -1394,7 +1394,7 @@ export default function ShopPage() {
   function handleEquipCustomFeet(item) {
     const wasActive = activeFeet === item.id;
     equipFeet(item.id);
-    showToast(wasActive ? t('shop.outfitTakenOff', { name: item.name }) : t('shop.outfitPutOn', { name: item.name }));
+    showToast(wasActive ? t('shop.outfitTakenOff', { name: getMascotItemName(item, t) }) : t('shop.outfitPutOn', { name: getMascotItemName(item, t) }));
   }
 
   // ── Outfits — Cabeza ─────────────────────────────────────────────────────────
@@ -1403,12 +1403,12 @@ export default function ShopPage() {
     setCoins(c => c - head.price);
     unlockHead(head.id);
     equipHead(head.id);
-    showToast(t('shop.headUnlocked', { name: head.name }));
+    showToast(t('shop.headUnlocked', { name: getMascotItemName(head, t) }));
   }
   function handleEquipHead(head) {
     const wasActive = activeHead === head.id;
     equipHead(head.id);
-    showToast(wasActive ? t('shop.headTakenOff', { name: head.name }) : t('shop.headPutOn', { name: head.name }));
+    showToast(wasActive ? t('shop.headTakenOff', { name: getMascotItemName(head, t) }) : t('shop.headPutOn', { name: getMascotItemName(head, t) }));
   }
 
   const activeAct  = MASCOT_ACTIVITIES.find(a => a.id === activeActivity);

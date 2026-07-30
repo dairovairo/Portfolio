@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n';
+import { getMascotItemName } from '../context/MascotContext';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   loadImageData, floodFillMask, recolorWithMask,
@@ -36,6 +38,7 @@ export default function ItemColorEditorPage({
   saveCost = 5,
   helpText = 'Toca una zona para seleccionarla y elige el color que quieras.',
 }) {
+  const { t } = useTranslation();
   const { activeAccessories, getCustomAccessoryItems } = useMascot();
 
   const canvasRef     = useRef(null);
@@ -236,7 +239,7 @@ export default function ItemColorEditorPage({
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
             <span className="text-base" style={{ fontVariantEmoji: 'emoji' }}>🎨</span>
             <span className="font-display font-bold text-surface-text text-sm truncate">
-              Personalizar · {item.name}
+              {t('shop.personalizeBtn')} · {getMascotItemName(item, t)}
             </span>
           </div>
           <button

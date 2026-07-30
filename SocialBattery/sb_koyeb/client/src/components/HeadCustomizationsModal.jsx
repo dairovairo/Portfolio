@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n';
+import { getMascotItemName } from '../context/MascotContext';
 import MascotDisplay from './MascotDisplay';
 
 /**
@@ -15,6 +17,7 @@ import MascotDisplay from './MascotDisplay';
  *   onClose        cierra el modal
  */
 export default function HeadCustomizationsModal({ items, activeHeadId, onEquip, onEdit, onRemove, onClose, previewTier = 'mid' }) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
@@ -76,8 +79,8 @@ export default function HeadCustomizationsModal({ items, activeHeadId, onEquip, 
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-display font-semibold text-surface-text text-xs truncate" title={item.name}>
-                        {item.name}
+                      <div className="font-display font-semibold text-surface-text text-xs truncate" title={getMascotItemName(item, t)}>
+                        {getMascotItemName(item, t)}
                       </div>
                       <div className="flex gap-1.5 mt-1.5 flex-wrap">
                         {isActive ? (

@@ -12,6 +12,7 @@ import { api } from '../lib/api';
 import { formatEurFromCents } from '../lib/adPricing';
 import { shareOrDownloadBlob } from '../lib/instagramStory';
 import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
+import { useTranslation } from '../i18n';
 
 function normalizeText(value = '') {
   return String(value ?? '')
@@ -43,13 +44,14 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function formatEventDateRange(event) {
-  const start = formatEventDate(event.event_date);
+function formatEventDateRange(event, t, lang = 'es') {
+  const start = formatEventDate(event.event_date, t, lang);
   if (!event.ends_at) return start;
   const end = new Date(event.ends_at);
   if (Number.isNaN(end.getTime())) return start;
-  const endLabel = end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return `${start} - fin ${endLabel}`;
+  const tag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
+  const endLabel = end.toLocaleDateString(tag, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return t ? t('community.endsWithLabel', { start, end: endLabel }) : `${start} - fin ${endLabel}`;
 }
 
 function getDaysUntilLabel(dateStr) {
@@ -204,7 +206,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
             ))}
           </div>
           <p className="text-xs text-surface-muted mt-0.5">
-            por <span className="text-accent-glow/80">{event.creator_name || 'Alguien'}</span>
+            {t('communityDetail.byPrefix')} <span className="text-accent-glow/80">{event.creator_name || t('community.fallbackCreator')}</span>
             {event.organization && (
               <span> · org <span className="text-amber-300/90">{event.organization}</span></span>
             )}
@@ -248,7 +250,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
               </>
             ) : isPast ? (
               <span className="text-xs font-mono text-slate-600 px-3 py-1.5 rounded-xl bg-surface-bg border border-surface-border">
-                Evento pasado
+                {t('communityDetail.passedEvent')}
               </span>
             ) : (
               <button
@@ -267,6 +269,7 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
 }
 
 function CreateCommunityEventModal({ onClose, onCreate, communityName, communityOrganization, communityId }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const minDate = new Date(Date.now() + 30 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
@@ -321,7 +324,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) {
-      setError('La portada no puede superar 3MB');
+      setError(t('communityDetail.errCoverTooBig'));
       e.target.value = '';
       return;
     }
@@ -338,7 +341,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   }
 
   async function handleSubmit() {
-    if (!form.title.trim()) { setError('El título es obligatorio'); return; }
+    if (!form.title.trim()) { setError(t('communityDetail.errRaffleTitle')); return; }
     if (!form.event_date) { setError('La fecha es obligatoria'); return; }
     if (!form.ends_at) { setError('La fecha fin es obligatoria'); return; }
     if (!form.location.trim()) { setError('La ubicacion es obligatoria'); return; }
@@ -385,7 +388,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
       await onCreate(baseDraft);
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al crear el evento');
+      setError(e.message || t('communityDetail.errCreateEvent'));
     } finally {
       setSaving(false);
     }
@@ -400,18 +403,18 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">{getEventEmoji(resolvedCategories[0])}</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">Publicar evento</h2>
+            <h2 className="font-display font-bold text-surface-text text-lg">{t('communityDetail.publishEventTitle')}</h2>
             <p className="text-xs text-surface-muted">{communityName}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Título *</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.evTitleLabel')}</label>
             <input
               value={form.title}
               onChange={e => set('title', e.target.value)}
-              placeholder="Ej: Concierto en el parque, Hackathon de verano..."
+              placeholder={t('communityDetail.evTitlePh')}
               maxLength={120}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -449,7 +452,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                   type="text"
                   value={form.custom_category}
                   onChange={e => set('custom_category', e.target.value)}
-                  placeholder="Escribe la categoría"
+                  placeholder={t('communityDetail.evCategoryPh')}
                   maxLength={60}
                   className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
                 />
@@ -461,12 +464,12 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Descripción <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.evDescLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <textarea
               value={form.description}
               onChange={e => set('description', e.target.value)}
-              placeholder="¿De qué va el evento? ¿Qué pueden esperar los asistentes?"
+              placeholder={t('communityDetail.evDescPh')}
               rows={3}
               maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
@@ -474,19 +477,19 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Organización <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.evOrgLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <input
               value={form.organization}
               onChange={e => set('organization', e.target.value)}
-              placeholder="Ej: Universidad, asociación, club..."
+              placeholder={t('communityDetail.evOrgPh')}
               maxLength={120}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha y hora *</label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.evDateLabel')}</label>
               <input
                 type="datetime-local"
                 value={form.event_date}
@@ -496,7 +499,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               />
             </div>
             <div>
-              <label className="block text-xs font-mono text-surface-muted mb-1.5">Fin *</label>
+              <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.evEndLabel')}</label>
               <input
                 type="datetime-local"
                 value={form.ends_at}
@@ -525,14 +528,14 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               type="url"
               value={form.url}
               onChange={e => set('url', e.target.value)}
-              placeholder="Ej: https://eventbrite.com/mi-evento"
+              placeholder={t('communityDetail.evUrlPh')}
               maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Precio <span className="text-slate-600">(€ · vacío o 0 = gratis)</span>
+              {t('communityDetail.evPriceLabel')} <span className="text-slate-600">{t('communityDetail.priceHint')}</span>
             </label>
             <input
               type="number"
@@ -540,18 +543,18 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               step="0.01"
               value={form.price}
               onChange={e => set('price', e.target.value)}
-              placeholder="Ej: 5.00"
+              placeholder={t('communityDetail.evPricePh')}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Información adicional <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.evExtraInfoLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <textarea
               value={form.additional_info}
               onChange={e => set('additional_info', e.target.value)}
-              placeholder="Dress code, qué traer, instrucciones de acceso, requisitos..."
+              placeholder={t('communityDetail.evExtraInfoPh')}
               maxLength={1000}
               rows={3}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
@@ -559,7 +562,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Portada <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.evCoverLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             {coverPreview ? (
               <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
@@ -573,7 +576,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                     onClick={clearCover}
                     className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
                   >
-                    Quitar
+                    {t('communityDetail.photoRemove')}
                   </button>
                 </div>
               </div>
@@ -583,7 +586,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 onClick={() => setShowPhotoMenu(true)}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto
+                {t('communityDetail.photoPick')}
               </button>
             )}
             <input
@@ -612,7 +615,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           {/* Promotion Plan */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-2">
-              Promoción del evento
+              {t('communityDetail.promoLabel')}
             </label>
             <div className="grid grid-cols-1 gap-2">
               {/* Basic */}
@@ -634,7 +637,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-display font-bold text-surface-text">Basic Promotion</span>
-                    <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">Gratis</span>
+                    <span className="text-xs font-mono font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full flex-shrink-0">{t('communityDetail.freeTag')}</span>
                   </div>
                   <button
                     type="button"
@@ -754,7 +757,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
 
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
           {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || !form.categories.length || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())) && (
-            <p className="text-amber-400/80 text-xs font-mono text-center">Introduce todos los campos obligatorios primero</p>
+            <p className="text-amber-400/80 text-xs font-mono text-center">{t('communityDetail.errFillRequired')}</p>
           )}
           <button
             onClick={handleSubmit}
@@ -769,16 +772,16 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
   );
 }
 
-function formatRaffleEndLabel(dateStr) {
+function formatRaffleEndLabel(dateStr, t) {
   if (!dateStr) return '';
   const time = new Date(dateStr).getTime();
   if (Number.isNaN(time)) return '';
   const diffMs = time - Date.now();
-  if (diffMs <= 0) return 'Terminado';
+  if (diffMs <= 0) return t ? t('community.raffleEnded') : 'Terminado';
   const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return 'Termina hoy';
-  if (days === 1) return 'Termina mañana';
-  return `Termina en ${days} días`;
+  if (days <= 0) return t ? t('community.raffleEndsToday') : 'Termina hoy';
+  if (days === 1) return t ? t('community.raffleEndsTomorrow') : 'Termina mañana';
+  return t ? t('community.raffleEndsInDays', { n: days }) : `Termina en ${days} días`;
 }
 
 function RaffleAvatar({ user }) {
@@ -948,7 +951,7 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
                 onClick={handleLikeClick}
                 disabled={liking}
                 aria-pressed={liked}
-                title={liked ? 'Quitar like' : 'Dar like'}
+                title={liked ? t('communityDetail.raffleLikeRemove') : t('communityDetail.raffleLikeAdd')}
                 className={`flex items-center gap-1 px-2 h-8 rounded-lg border text-[11px] font-display font-semibold transition-colors disabled:opacity-50 ${
                   liked
                     ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
@@ -961,7 +964,7 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
             <button
               onClick={runShare}
               disabled={sharing}
-              title="Compartir sorteo"
+              title={t('communityDetail.raffleShare')}
               className="flex-shrink-0 w-8 h-8 rounded-lg border border-surface-border flex items-center justify-center text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-colors disabled:opacity-50"
             >
               {sharing ? '⏳' : '📤'}
@@ -1041,8 +1044,8 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
         {showPromoControls && (hasEnded || isDrawn) && (
           <p className="text-[11px] font-mono text-slate-400 bg-surface-bg border border-surface-border rounded-xl px-3 py-2 leading-relaxed">
             {isDrawn
-              ? '🎉 El sorteo ya se ha realizado. Los controles de publicidad se enseñan como referencia, pero ya no se pueden accionar.'
-              : '🏁 El sorteo ya ha terminado. La publicidad se cerró sola al acabar — los controles se enseñan como referencia.'}
+              ? t('communityDetail.raffleDrawnNote')
+              : t('communityDetail.raffleEndedNote')}
           </p>
         )}
 
@@ -1104,7 +1107,7 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
                         </p>
                       ) : (
                         <p className="text-[10px] font-mono text-surface-muted mt-0.5 italic">
-                          Sin adjudicar
+                          {t('communityDetail.raffleUnassigned')}
                         </p>
                       )
                     )}
@@ -1122,7 +1125,7 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
           <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 mt-1">
             <RaffleAvatar user={raffle.winner} />
             <div className="min-w-0">
-              <p className="text-[10px] font-mono text-amber-400/80">Ganador</p>
+              <p className="text-[10px] font-mono text-amber-400/80">{t('communityDetail.raffleWinner')}</p>
               <p className="text-sm font-display font-bold text-surface-text truncate">{raffle.winner?.username}</p>
             </div>
           </div>
@@ -1153,6 +1156,7 @@ function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, o
 }
 
 function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const minDate = new Date(Date.now() + 60 * 60 * 1000);
   const pad = n => String(n).padStart(2, '0');
@@ -1260,7 +1264,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      setError('La foto no puede superar 5MB');
+      setError(t('communityDetail.errRafflePhoto'));
       e.target.value = '';
       return;
     }
@@ -1294,7 +1298,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
     if (new Date(endsAt) <= new Date()) { setError('La fecha de fin debe ser en el futuro'); return; }
     // Volt: tope duro de 14 días — replica la validación del server.
     if (tier === 'volt' && new Date(endsAt) > new Date(voltMaxDate)) {
-      setError(`Los sorteos Volt pueden durar como máximo ${VOLT_MAX_DURATION_DAYS} días.`);
+      setError(t('communityDetail.errVoltMaxDuration', { n: VOLT_MAX_DURATION_DAYS }));
       return;
     }
     // Fase 120: categorías obligatorias. El backend también lo rechaza,
@@ -1304,7 +1308,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
       return;
     }
     if (categories.includes(OTHER_CATEGORY) && !customCategory.trim()) {
-      setError('Escribe la categoría personalizada');
+      setError(t('communityDetail.errSpecifyCategory'));
       return;
     }
 
@@ -1321,7 +1325,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
         return;
       }
       if (prizes[i].valueEuros && eurosToCents(prizes[i].valueEuros) == null) {
-        setError(`Premio ${i + 1}: la valoración económica no es válida (usa números, ej. 25 o 25,50)`);
+        setError(t('communityDetail.errPrizeValue', { n: i + 1 }));
         return;
       }
     }
@@ -1379,37 +1383,37 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">🎁</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">Crear sorteo</h2>
+            <h2 className="font-display font-bold text-surface-text text-lg">{t('communityDetail.createRaffleTitle')}</h2>
             <p className="text-xs text-surface-muted">{communityName}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Título *</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.evTitleLabel')}</label>
             <input
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="Ej: Sorteamos una camiseta oficial"
+              placeholder={t('communityDetail.raffleTitlePh')}
               maxLength={120}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
           </div>
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Descripción <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.evDescLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="¿En qué consiste el premio? ¿Alguna condición?"
+              placeholder={t('communityDetail.raffleDescPh')}
               rows={3}
               maxLength={1000}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
             />
           </div>
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Fecha de fin *</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.raffleEndAtLabel')}</label>
             <input
               type="datetime-local"
               value={endsAt}
@@ -1456,7 +1460,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                 type="text"
                 value={customCategory}
                 onChange={e => setCustomCategory(e.target.value)}
-                placeholder="Escribe la categoría"
+                placeholder={t('communityDetail.evCategoryPh')}
                 maxLength={60}
                 className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
@@ -1495,7 +1499,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                         onClick={() => removePrize(idx)}
                         className="text-[11px] font-mono text-red-300 hover:text-red-200"
                       >
-                        Quitar
+                        {t('communityDetail.photoRemove')}
                       </button>
                     )}
                   </div>
@@ -1503,20 +1507,20 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                     type="text"
                     value={p.title}
                     onChange={e => setPrizeField(idx, 'title', e.target.value)}
-                    placeholder="Nombre del premio"
+                    placeholder={t('communityDetail.prizeNamePh')}
                     maxLength={120}
                     className="w-full bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
                   />
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-mono text-surface-muted whitespace-nowrap">
-                      Valor
+                      {t('communityDetail.raffleValueLabel')}
                     </span>
                     <input
                       type="text"
                       inputMode="decimal"
                       value={p.valueEuros}
                       onChange={e => setPrizeField(idx, 'valueEuros', e.target.value)}
-                      placeholder="opcional (€)"
+                      placeholder={t('communityDetail.prizeValuePh')}
                       maxLength={12}
                       className="flex-1 bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
                     />
@@ -1537,7 +1541,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                           onClick={() => clearPrizeImage(idx)}
                           className="text-[11px] font-mono text-red-300 hover:text-red-200"
                         >
-                          Quitar foto
+                          {t('communityDetail.prizePhotoRemove')}
                         </button>
                       </div>
                     </div>
@@ -1578,7 +1582,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
 
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Foto <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.prizePhotoAdd')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             {imagePreview ? (
               <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
@@ -1592,7 +1596,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                     onClick={clearImage}
                     className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
                   >
-                    Quitar
+                    {t('communityDetail.photoRemove')}
                   </button>
                 </div>
               </div>
@@ -1602,7 +1606,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
                 onClick={() => setShowPhotoMenu(true)}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto
+                {t('communityDetail.photoPick')}
               </button>
             )}
             <input
@@ -1630,7 +1634,7 @@ function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-mono text-surface-muted">Tipo de sorteo *</label>
+              <label className="block text-xs font-mono text-surface-muted">{t('communityDetail.raffleTierLabel')}</label>
               <button
                 type="button"
                 onClick={() => setShowTierDetails(v => !v)}
@@ -1775,6 +1779,7 @@ function formatThreadDate(dateStr) {
 }
 
 function CommunityPostCard({ post, isCreator, onOpen, onDelete }) {
+  const { t, lang } = useTranslation();
   const [deleting, setDeleting] = useState(false);
 
   async function handleDelete(e) {
@@ -1799,7 +1804,7 @@ function CommunityPostCard({ post, isCreator, onOpen, onDelete }) {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            title="Borrar publicación"
+            title={t('communityDetail.deletePostTitle')}
             className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-surface-muted hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
           >
             {deleting ? '⏳' : '🗑️'}
@@ -1831,6 +1836,7 @@ function CommunityPostCard({ post, isCreator, onOpen, onDelete }) {
 }
 
 function CreatePostModal({ onClose, onCreate }) {
+  const { t } = useTranslation();
   const fileInputRef = useRef(null);
   const [content, setContent] = useState('');
   const [file, setFile] = useState(null);
@@ -1843,7 +1849,7 @@ function CreatePostModal({ onClose, onCreate }) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (f.size > 30 * 1024 * 1024) {
-      setError('El archivo no puede superar 30MB');
+      setError(t('communityDetail.errFileTooBig30'));
       e.target.value = '';
       return;
     }
@@ -1885,7 +1891,7 @@ function CreatePostModal({ onClose, onCreate }) {
 
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">📸</span>
-          <h2 className="font-display font-bold text-surface-text text-lg">Publicar en el hilo</h2>
+          <h2 className="font-display font-bold text-surface-text text-lg">{t('communityDetail.newPostCta')}</h2>
         </div>
 
         <div className="space-y-4">
@@ -1975,6 +1981,7 @@ function useKeyboardSafeViewport(containerRef) {
 }
 
 function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreator, onClose, onCountChange }) {
+  const { t, lang } = useTranslation();
   const { showToast } = useToast();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2018,7 +2025,7 @@ function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreato
       setComments(cs => cs.filter(c => c.id !== commentId));
       onCountChange?.(post.id, -1);
     } catch (e) {
-      showToast(e.message || 'Error al borrar comentario', 'error');
+      showToast(e.message || t('communityDetail.commentsDeleteError'), 'error');
     }
   }
 
@@ -2029,7 +2036,7 @@ function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreato
         <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3 mb-2 sm:hidden flex-shrink-0" />
 
         <div className="flex items-center justify-between px-5 py-3 border-b border-surface-border flex-shrink-0">
-          <h2 className="font-display font-bold text-surface-text text-sm">Publicación</h2>
+          <h2 className="font-display font-bold text-surface-text text-sm">{t('communityDetail.newPostTitle')}</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-surface-muted hover:text-surface-text">✕</button>
         </div>
 
@@ -2053,9 +2060,9 @@ function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreato
 
           <div className="p-4 space-y-3">
             {loading ? (
-              <p className="text-xs text-surface-muted text-center py-4">Cargando comentarios...</p>
+              <p className="text-xs text-surface-muted text-center py-4">{t('communityDetail.commentsLoading')}</p>
             ) : comments.length === 0 ? (
-              <p className="text-xs text-surface-muted text-center py-4">Sé el primero en comentar</p>
+              <p className="text-xs text-surface-muted text-center py-4">{t('communityDetail.commentsEmpty')}</p>
             ) : (
               comments.map(c => (
                 <div key={c.id} className="flex items-start gap-2.5">
@@ -2088,7 +2095,7 @@ function PostCommentsModal({ post, communityId, currentUserId, isCommunityCreato
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
-            placeholder="Escribe un comentario..."
+            placeholder={t('communityDetail.commentsPh')}
             maxLength={1000}
             className="flex-1 bg-surface-bg border border-surface-border rounded-xl px-3.5 py-2.5 text-sm text-surface-text placeholder:text-surface-muted focus:outline-none focus:border-accent-primary/50"
           />
@@ -2135,6 +2142,7 @@ function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, on
 }
 
 function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onClose, onConfirm, confirming }) {
+  const { t } = useTranslation();
   const amountLabel = (amountCents / 100).toFixed(2);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
@@ -2145,7 +2153,7 @@ function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onC
         <div className="flex items-center gap-3 mb-4">
           <span className="text-3xl">🤝</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">Colaborar</h2>
+            <h2 className="font-display font-bold text-surface-text text-lg">{t('communityDetail.collabTitle')}</h2>
             <p className="text-xs text-surface-muted">con {communityName}</p>
           </div>
         </div>
@@ -2158,7 +2166,7 @@ function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onC
         )}
 
         <div className="bg-surface-bg border border-surface-border rounded-xl p-4 text-center mb-4">
-          <p className="text-xs text-surface-muted font-mono mb-1">Importe de colaboración</p>
+          <p className="text-xs text-surface-muted font-mono mb-1">{t('communityDetail.collabAmountLabel')}</p>
           <p className="text-3xl font-display font-bold text-surface-text">{amountLabel} €</p>
         </div>
 
@@ -2171,7 +2179,7 @@ function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onC
             onClick={onClose}
             className="flex-1 py-3 rounded-xl border border-surface-border text-surface-muted text-sm font-display font-semibold transition-all"
           >
-            Cancelar
+            {t('communityDetail.cancelBtn')}
           </button>
           <button
             onClick={onConfirm}
@@ -2187,6 +2195,7 @@ function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onC
 }
 
 function EditCommunityModal({ community, onClose, onSave }) {
+  const { t } = useTranslation();
   const initialCategories = getEntityCategories(community).filter(c => COMMUNITY_CATEGORIES.includes(c));
   const initialCustom = getEntityCategories(community).find(c => !COMMUNITY_CATEGORIES.includes(c)) || '';
   const [form, setForm] = useState({
@@ -2233,7 +2242,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) {
-      setError('La foto no puede superar 3MB');
+      setError(t('communityDetail.errCommPhoto'));
       e.target.value = '';
       return;
     }
@@ -2287,7 +2296,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
       await onSave(formData);
       onClose();
     } catch (e) {
-      setError(e.message || 'Error al guardar los cambios');
+      setError(e.message || t('communityDetail.errSaveEdit'));
     } finally {
       setSaving(false);
     }
@@ -2302,20 +2311,20 @@ function EditCommunityModal({ community, onClose, onSave }) {
         <div className="flex items-center gap-3 mb-6">
           <span className="text-3xl">{emoji || '👥'}</span>
           <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">Editar comunidad</h2>
-            <p className="text-xs text-surface-muted">Cambia los datos de tu comunidad cuando quieras</p>
+            <h2 className="font-display font-bold text-surface-text text-lg">{t('communityDetail.editCommTitle')}</h2>
+            <p className="text-xs text-surface-muted">{t('communityDetail.editCommSubtitle')}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">Nombre *</label>
+            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.nameLabel')}</label>
             <input
               type="text"
               value={form.name}
               onChange={e => set('name', e.target.value)}
-              placeholder="Ej: Runners de Madrid, Amantes del Café..."
+              placeholder={t('communityDetail.namePh')}
               maxLength={80}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -2324,7 +2333,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
           {/* Category */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Categoría <span className="text-slate-600">({form.categories.length}/{MAX_CATEGORIES})</span>
+              {t('community.fieldCategoryCount', { n: form.categories.length, max: MAX_CATEGORIES })}
             </label>
             <div className="flex flex-wrap gap-2">
               {COMMUNITY_CATEGORIES.map(cat => {
@@ -2354,7 +2363,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
                 type="text"
                 value={form.custom_category}
                 onChange={e => set('custom_category', e.target.value)}
-                placeholder="Escribe la categoría"
+                placeholder={t('communityDetail.evCategoryPh')}
                 maxLength={60}
                 className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
               />
@@ -2364,13 +2373,13 @@ function EditCommunityModal({ community, onClose, onSave }) {
           {/* Organization */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Organización <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.evOrgLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <input
               type="text"
               value={form.organization}
               onChange={e => set('organization', e.target.value)}
-              placeholder="Ej: Universidad, asociación, club..."
+              placeholder={t('communityDetail.evOrgPh')}
               maxLength={120}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -2379,12 +2388,12 @@ function EditCommunityModal({ community, onClose, onSave }) {
           {/* Description */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Descripción <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.evDescLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             <textarea
               value={form.description}
               onChange={e => set('description', e.target.value)}
-              placeholder="¿De qué trata tu comunidad? ¿A quién está dirigida?"
+              placeholder={t('communityDetail.descPh')}
               maxLength={400}
               rows={3}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
@@ -2400,7 +2409,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
               type="url"
               value={form.url}
               onChange={e => set('url', e.target.value)}
-              placeholder="Ej: https://discord.gg/mi-comunidad"
+              placeholder={t('communityDetail.commUrlPh')}
               maxLength={500}
               className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
             />
@@ -2421,7 +2430,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
             </label>
             {collabEnabled && (
               <div className="mt-3 space-y-2">
-                <label className="block text-xs font-mono text-surface-muted">Importe por colaboración</label>
+                <label className="block text-xs font-mono text-surface-muted">{t('communityDetail.collabAmountPerLabel')}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -2444,7 +2453,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
           {/* Photo */}
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Foto de la comunidad <span className="text-slate-600">(opcional)</span>
+              {t('communityDetail.commPhotoLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
             </label>
             {coverPreview ? (
               <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
@@ -2458,7 +2467,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
                     onClick={clearCover}
                     className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
                   >
-                    Quitar
+                    {t('communityDetail.photoRemove')}
                   </button>
                 </div>
               </div>
@@ -2468,7 +2477,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
                 onClick={() => coverInputRef.current?.click()}
                 className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
               >
-                Elegir foto de la galería
+                {t('communityDetail.pickGallery')}
               </button>
             )}
             <input
@@ -2506,6 +2515,7 @@ export default function CommunityDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const { clearCommunityBadge, communitiesWithEvents, communitiesWithNewThreadPosts, clearThreadPostBadge } = useCommunityNotifications();
   const { isConversationMuted, setConversationMuted } = useSettings();
   const [threadMuted, setThreadMuted] = useState(() => isConversationMuted('community_thread', communityId));
@@ -2593,7 +2603,7 @@ export default function CommunityDetailPage() {
       setCurrentEvents(data.current_events || []);
       setPastEvents(data.past_events || []);
     } catch (e) {
-      showToast(e.message || 'Error cargando comunidad', 'error');
+      showToast(e.message || t('communityDetail.errLoadComm'), 'error');
     } finally {
       setLoading(false);
     }
@@ -2621,13 +2631,13 @@ export default function CommunityDetailPage() {
 
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
-    showToast('Evento publicado', 'success');
+    showToast(t('communityDetail.evPublished'), 'success');
     await load();
   }
 
   async function handleEditCommunity(formData) {
     await api.patchForm(`/community/communities/${communityId}`, formData);
-    showToast('Comunidad actualizada', 'success');
+    showToast(t('communityDetail.commUpdated'), 'success');
     await load();
   }
 
@@ -2663,7 +2673,7 @@ export default function CommunityDetailPage() {
       formData.append('prizes', JSON.stringify(meta));
     }
     await api.postForm(`/community/communities/${communityId}/raffles`, formData);
-    showToast('¡Sorteo creado! 🎁', 'success');
+    showToast(t('communityDetail.raffleCreated'), 'success');
     await loadRaffles();
   }
 
@@ -2672,7 +2682,7 @@ export default function CommunityDetailPage() {
     if (content) formData.append('content', content);
     if (file) formData.append('media', file);
     await api.postForm(`/community/communities/${communityId}/posts`, formData);
-    showToast('¡Publicado en el hilo! 📸', 'success');
+    showToast(t('communityDetail.postPublished'), 'success');
     await loadPosts();
   }
 
@@ -2681,19 +2691,19 @@ export default function CommunityDetailPage() {
       await api.delete(`/community/communities/${communityId}/posts/${postId}`);
       setPosts(ps => ps.filter(p => p.id !== postId));
       if (openPost?.id === postId) setOpenPost(null);
-      showToast('Publicación borrada', 'success');
+      showToast(t('communityDetail.postDeleted'), 'success');
     } catch (e) {
-      showToast(e.message || 'Error al borrar', 'error');
+      showToast(e.message || t('communityDetail.errDeletePost'), 'error');
     }
   }
 
   async function handleDrawRaffle(raffleId) {
     try {
       await api.post(`/community/communities/${communityId}/raffles/${raffleId}/draw`, {});
-      showToast('¡Ganador sorteado! 🎉', 'success');
+      showToast(t('communityDetail.winnerDrawn'), 'success');
       await loadRaffles();
     } catch (e) {
-      showToast(e.message || 'Error al sortear', 'error');
+      showToast(e.message || t('communityDetail.errDraw'), 'error');
     }
   }
 
@@ -2714,10 +2724,10 @@ export default function CommunityDetailPage() {
     if (raffle.tier === 'community') {
       try {
         await api.post(`/community/raffles/${raffle.id}/renew-promotion`, {});
-        showToast('Publicidad renovada — se ha vuelto a avisar a la comunidad', 'success');
+        showToast(t('communityDetail.adRenewed'), 'success');
         await loadRaffles();
       } catch (e) {
-        showToast(e.message || 'Error al renovar', 'error');
+        showToast(e.message || t('communityDetail.errRenew'), 'error');
       }
       return;
     }
@@ -2743,10 +2753,10 @@ export default function CommunityDetailPage() {
   async function handleEndRafflePromo(raffle) {
     try {
       await api.post(`/community/raffles/${raffle.id}/end-promotion`, {});
-      showToast('Publicidad finalizada', 'success');
+      showToast(t('communityDetail.adEnded'), 'success');
       await loadRaffles();
     } catch (e) {
-      showToast(e.message || 'No se pudo finalizar la publicidad', 'error');
+      showToast(e.message || t('communityDetail.errEndAd'), 'error');
     }
   }
 
@@ -2766,7 +2776,7 @@ export default function CommunityDetailPage() {
     try {
       await api.post(`/community/raffles/${raffleId}/like`, {});
     } catch (e) {
-      showToast(e.message || 'Error al cambiar el like', 'error');
+      showToast(e.message || t('communityDetail.errToggleLike'), 'error');
       loadRaffles();
     }
   }
@@ -2777,24 +2787,24 @@ export default function CommunityDetailPage() {
         const res = await fetch(raffle.image_url);
         const blob = await res.blob();
         const result = await shareOrDownloadBlob(blob, 'sorteo-sb.png', `${raffle.title} · SocialBattery`);
-        if (result.method === 'download') showToast('Imagen descargada. ¡Compártela! 📸', 'success');
+        if (result.method === 'download') showToast(t('communityDetail.imgDownloaded'), 'success');
       } else if (navigator.share) {
         await navigator.share({ title: raffle.title, text: `${raffle.title} · SocialBattery` });
       } else {
-        showToast('Este sorteo no tiene foto para compartir', 'error');
+        showToast(t('communityDetail.noPhotoToShare'), 'error');
       }
     } catch (e) {
-      if (e.name !== 'AbortError') showToast('Error al compartir', 'error');
+      if (e.name !== 'AbortError') showToast(t('communityDetail.errShare'), 'error');
     }
   }
 
   async function handleJoinCommunity() {
     try {
       await api.post(`/community/communities/${communityId}/join`, {});
-      showToast('Te has unido a la comunidad', 'success');
+      showToast(t('communityDetail.joinedComm'), 'success');
       await load();
     } catch (e) {
-      showToast(e.message || 'Error al unirse', 'error');
+      showToast(e.message || t('communityDetail.errJoin'), 'error');
     }
   }
 
@@ -2802,11 +2812,11 @@ export default function CommunityDetailPage() {
     setCollaborating(true);
     try {
       await api.post(`/community/communities/${communityId}/collaborate`, {});
-      showToast('¡Gracias por colaborar! 🤝', 'success');
+      showToast(t('communityDetail.thanksCollab'), 'success');
       setShowCollabModal(false);
       await load();
     } catch (e) {
-      showToast(e.message || 'Error al colaborar', 'error');
+      showToast(e.message || t('communityDetail.errCollab'), 'error');
     } finally {
       setCollaborating(false);
     }
@@ -2830,30 +2840,30 @@ export default function CommunityDetailPage() {
   async function handleLeaveCommunity() {
     try {
       await api.post(`/community/communities/${communityId}/leave`, {});
-      showToast('Has salido de la comunidad', 'success');
+      showToast(t('communityDetail.leftComm'), 'success');
       navigate('/community', { state: { tab: 'communities' } });
     } catch (e) {
-      showToast(e.message || 'Error al salir de la comunidad', 'error');
+      showToast(e.message || t('communityDetail.errLeaveComm'), 'error');
     }
   }
 
   async function handleJoinEvent(eventId) {
     try {
       await api.post(`/community/events/${eventId}/join`, {});
-      showToast('Te has apuntado al evento', 'success');
+      showToast(t('communityDetail.joinedEvent'), 'success');
       await load();
     } catch (e) {
-      showToast(e.message || 'Error al apuntarse', 'error');
+      showToast(e.message || t('communityDetail.errJoinEvent'), 'error');
     }
   }
 
   async function handleLeaveEvent(eventId) {
     try {
       await api.post(`/community/events/${eventId}/leave`, {});
-      showToast('Has salido del evento', 'success');
+      showToast(t('communityDetail.leftEvent'), 'success');
       await load();
     } catch (e) {
-      showToast(e.message || 'Error al salir del evento', 'error');
+      showToast(e.message || t('communityDetail.errLeaveEvent'), 'error');
     }
   }
 
@@ -2862,7 +2872,7 @@ export default function CommunityDetailPage() {
       await api.post(`/community/events/${eventId}/like`, {});
       await load();
     } catch (e) {
-      showToast(e.message || 'Error al cambiar el like', 'error');
+      showToast(e.message || t('communityDetail.errToggleLike'), 'error');
     }
   }
 
@@ -2879,9 +2889,9 @@ export default function CommunityDetailPage() {
     return (
       <div className="min-h-screen bg-surface-bg noise flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-display font-bold text-surface-text mb-3">Comunidad no encontrada</p>
+          <p className="font-display font-bold text-surface-text mb-3">{t('communityDetail.commNotFound')}</p>
           <button onClick={() => navigate('/community', { state: { tab: 'communities' } })} className="px-5 py-2 rounded-xl bg-accent-primary text-white text-sm font-display font-semibold">
-            Volver
+            {t('communityDetail.backBtn')}
           </button>
         </div>
         <BottomNav />
@@ -2914,10 +2924,10 @@ export default function CommunityDetailPage() {
           </div>
           <button
             onClick={() => navigate(`/messages/community/${communityId}`)}
-            title="Chat de la comunidad"
+            title={t('communityDetail.chatTitle')}
             className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
           >
-            <span>💬</span> Chat
+            <span>💬</span> {t('communityDetail.chat')}
           </button>
 
           {community.is_member && !community.is_admin && community.collab_amount_cents && (
@@ -2941,7 +2951,7 @@ export default function CommunityDetailPage() {
               title="Crear sorteo"
               className="relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/25 hover:bg-amber-500/25 hover:border-amber-500/40 hover:text-amber-300 transition-colors"
             >
-              <span>🎁</span> Sorteo
+              <span>🎁</span> {t('communityDetail.raffleTab')}
             </button>
           )}
 
@@ -2973,10 +2983,10 @@ export default function CommunityDetailPage() {
                 {community.creator_id === profile?.id && (
                   <button
                     onClick={() => navigate(`/community/${communityId}/dashboard`)}
-                    title="Dashboard de publicidad"
+                    title={t('communityDetail.dashboardTitle')}
                     className="flex-shrink-0 flex items-center gap-1 text-[11px] font-display font-semibold px-2 py-1 rounded-lg bg-accent-primary/15 text-accent-glow border border-accent-primary/25 hover:bg-accent-primary/25 hover:border-accent-primary/40 transition-colors"
                   >
-                    <span>📊</span> Dashboard
+                    <span>📊</span> {t('communityDetail.dashboardTab')}
                   </button>
                 )}
               </div>
@@ -3009,21 +3019,21 @@ export default function CommunityDetailPage() {
                 onClick={handleLeaveCommunity}
                 className="px-4 py-2 rounded-xl border border-red-500/25 text-red-300 hover:bg-red-500/10 text-xs font-display font-semibold transition-all"
               >
-                Salir de la comunidad
+                {t('communityDetail.leaveComm')}
               </button>
             ) : (
               <button
                 onClick={handleJoinCommunity}
                 className="px-4 py-2 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-display font-semibold transition-all"
               >
-                Unirse
+                {t('communityDetail.joinBtn')}
               </button>
             )}
 
             {community.creator_id !== profile?.id && (
               <button
                 onClick={() => setShowReport(true)}
-                title="Denunciar comunidad"
+                title={t('communityDetail.reportComm')}
                 className="px-3 py-2 rounded-xl border border-red-500/30 text-red-300 bg-red-500/5 hover:bg-red-500/15 text-xs font-display font-semibold transition-all"
               >
                 🚩
@@ -3036,7 +3046,7 @@ export default function CommunityDetailPage() {
                 title="Editar comunidad"
                 className="flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-surface-bg text-surface-muted border border-surface-border hover:border-accent-primary/40 hover:text-accent-glow transition-colors"
               >
-                <span>⚙️</span> Editar
+                <span>⚙️</span> {t('communityDetail.editBtn')}
               </button>
             )}
           </div>
@@ -3084,14 +3094,14 @@ export default function CommunityDetailPage() {
               Hilo de la comunidad
               {communitiesWithNewThreadPosts.has(communityId) && (
                 <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/40">
-                  Nuevo
+                  {t('communityDetail.newBtn')}
                 </span>
               )}
             </h2>
             <div className="flex-shrink-0 flex items-center gap-1.5">
               <button
                 onClick={toggleThreadMuted}
-                title={threadMuted ? 'Activar notificaciones del hilo' : 'Silenciar notificaciones del hilo'}
+                title={threadMuted ? t('communityDetail.threadMuteOn') : t('communityDetail.threadMuteOff')}
                 className={`w-8 h-8 rounded-xl flex items-center justify-center border transition-colors ${
                   threadMuted
                     ? 'bg-surface-bg text-surface-muted border-surface-border'
@@ -3105,7 +3115,7 @@ export default function CommunityDetailPage() {
                   onClick={() => setShowCreatePost(true)}
                   className="flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/25 hover:bg-accent-primary/25 transition-colors"
                 >
-                  <span>+</span> Publicar
+                  <span>+</span> {t('communityDetail.publishBtn')}
                 </button>
               )}
             </div>
@@ -3135,7 +3145,7 @@ export default function CommunityDetailPage() {
 
         {raffles.length > 0 && (
           <section className="space-y-3">
-            <h2 className="font-display font-bold text-surface-text text-sm px-1">Sorteos</h2>
+            <h2 className="font-display font-bold text-surface-text text-sm px-1">{t('communityDetail.rafflesTitle')}</h2>
             <div className="space-y-3">
               {raffles.map(raffle => (
                 <RaffleCard
@@ -3154,7 +3164,7 @@ export default function CommunityDetailPage() {
         )}
 
         <EventSection
-          title="Eventos actuales"
+          title={t('communityDetail.currentEventsTitle')}
           empty="No hay eventos activos en esta comunidad."
           events={currentEvents}
           currentUserId={profile?.id}
@@ -3163,7 +3173,7 @@ export default function CommunityDetailPage() {
           onLike={handleLikeEvent}
         />
         <EventSection
-          title="Eventos pasados"
+          title={t('communityDetail.pastEventsTitle')}
           empty="Todavía no hay eventos pasados."
           events={pastEvents}
           currentUserId={profile?.id}
