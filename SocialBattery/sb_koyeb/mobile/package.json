@@ -1,0 +1,38 @@
+{
+  "name": "socialbattery-mobile",
+  "version": "1.0.0",
+  "description": "SocialBattery mobile wrapper (Android + iOS via Capacitor)",
+  "private": true,
+  "author": "SocialBattery",
+  "license": "UNLICENSED",
+  "appUrl": "https://portfolio-nmc3.onrender.com",
+  "appId": "com.socialbattery.app",
+  "appName": "SocialBattery",
+  "scripts": {
+    "set-url": "node scripts/set-app-url.js",
+    "check-url": "node scripts/check-app-url.js",
+    "postinstall": "node scripts/apply-config.js",
+    "add:android": "npm run check-url && npx cap add android && npx cap sync android",
+    "add:ios": "npm run check-url && npx cap add ios && npx cap sync ios",
+    "sync": "node scripts/apply-config.js && npx cap sync",
+    "open:android": "npx cap open android",
+    "open:ios": "npx cap open ios",
+    "run:android": "npm run sync && npx cap run android",
+    "run:ios": "npm run sync && npx cap run ios",
+    "build:android": "npm run check-url && npm run sync && cd android && ./gradlew assembleRelease",
+    "build:android:debug": "npm run check-url && npm run sync && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/browser": "^6.0.3",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2",
+    "@capacitor/push-notifications": "^6.0.3",
+    "@capacitor/splash-screen": "^6.0.2",
+    "@capacitor/status-bar": "^6.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
