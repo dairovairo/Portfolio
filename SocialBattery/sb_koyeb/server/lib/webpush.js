@@ -33,7 +33,7 @@ function init() {
 
   const publicKey  = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject    = process.env.VAPID_SUBJECT || 'mailto:admin@socialbattery.app';
+  const subject    = process.env.VAPID_SUBJECT || 'mailto:socialbatterypro@gmail.com';
 
   if (!publicKey || !privateKey) {
     console.warn('[webpush] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY not set — push notifications disabled.');
