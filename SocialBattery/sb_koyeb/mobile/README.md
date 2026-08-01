@@ -142,9 +142,17 @@ Ya vienen preconfigurados los plugins mas comunes:
 | `@capacitor/splash-screen` | Pantalla de carga inicial |
 | `@capacitor/status-bar` | Color de la barra de estado |
 
-Cuando actives push notifications reales:
-- **Android**: anade `google-services.json` a `android/app/`.
-- **iOS**: activa la capability "Push Notifications" en Xcode y sube el certificado APNs a Firebase.
+Cuando actives push notifications reales (necesario para que las notificaciones lleguen con la app en 2º plano o cerrada — ver detalle tecnico en `server/lib/fcm.js`):
+
+1. Crea/reutiliza un proyecto en [Firebase Console](https://console.firebase.google.com).
+2. Anade una app Android con el package name `com.socialbattery.app` (debe coincidir con `appId` en `capacitor.config.json`).
+3. Descarga `google-services.json` y colocalo en `android/app/google-services.json` (se pierde al borrar `android/`, hay que repetir este paso si vuelves a correr `add:android` desde cero).
+4. Project settings → Service accounts → Generate new private key, y pon ese JSON en `FIREBASE_SERVICE_ACCOUNT_JSON` (o `FIREBASE_SERVICE_ACCOUNT_BASE64`) en `server/.env` — es lo que usa el backend para *enviar* las notificaciones.
+5. Corre `supabase_schema_phase133_fcm_tokens.sql` en el SQL Editor de Supabase (tabla donde se guardan los tokens de dispositivo).
+6. `npm run sync` para que Gradle recoja el `google-services.json` nuevo.
+7. **iOS**: activa la capability "Push Notifications" en Xcode y sube el certificado/clave APNs a Firebase (Project settings → Cloud Messaging → Apple app configuration).
+
+El cliente web (`client/src/lib/capacitorPush.js`) ya pide permiso y registra el token automaticamente al iniciar sesion dentro de la app nativa — no hace falta tocar nada ahi salvo que cambies el `channelId`/textos de la notificacion.
 
 ---
 

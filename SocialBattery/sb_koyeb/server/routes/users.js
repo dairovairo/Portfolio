@@ -114,6 +114,50 @@ router.post('/push-subscribe', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/users/fcm-register — store an FCM device token (Android/iOS
+// native app via Capacitor's push-notifications plugin). Separate table
+// from push_subscriptions (Web Push) since the two are different delivery
+// mechanisms — see server/lib/fcm.js / server/lib/webpush.js.
+router.post('/fcm-register', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+    return res.status(400).json({ error: 'Missing token' });
+  }
+
+  try {
+    // onConflict on 'token' (not 'user_id,token'): a device token identifies
+    // one physical device, not a user — mirrors push_subscriptions' logic
+    // for push-subscribe above, so re-login on the same device reassigns it
+    // instead of leaking notifications to whoever logged in first.
+    await supabase.from('fcm_tokens').upsert({
+      user_id: req.user.id,
+      token,
+      platform: req.body.platform || 'android',
+    }, { onConflict: 'token' });
+  } catch (err) {
+    console.error('[users] fcm-register upsert error:', err);
+  }
+
+  res.json({ success: true });
+});
+
+// DELETE /api/users/fcm-token — drop a device token on logout, so a shared
+// device doesn't keep receiving the previous account's notifications.
+router.delete('/fcm-token', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+    return res.status(400).json({ error: 'Missing token' });
+  }
+
+  try {
+    await supabase.from('fcm_tokens').delete().eq('token', token).eq('user_id', req.user.id);
+  } catch (err) {
+    console.error('[users] fcm-token delete error:', err);
+  }
+
+  res.json({ success: true });
+});
+
 // PATCH /api/users/me/seen — heartbeat for online status
 router.patch('/me/seen', requireAuth, async (req, res) => {
   await supabase

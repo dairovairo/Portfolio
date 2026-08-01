@@ -15,7 +15,14 @@
  *
  * NOTE: The default keys below are TEST-ONLY placeholders and will NOT produce
  * real push messages. Replace them with your own generated pair.
+ *
+ * Alongside Web Push, notifyUsers() also fans out to any FCM device tokens
+ * the recipients have registered (fcm_tokens table) via fcm.js — that's the
+ * path that reaches the Android app when it's backgrounded/closed. See
+ * fcm.js for the required Firebase env vars.
  */
+
+const { sendFcmToTokens } = require('./fcm');
 
 let webpush = null;
 let configured = false;
@@ -129,44 +136,90 @@ async function getMutedUserIds(supabase, conversationType, conversationId, userI
  */
 async function notifyUsers(supabase, userIds, excludeId, payload) {
   init();
-  if (!webpush) return [];
   if (!userIds?.length) return [];
 
   try {
     const targetIds = userIds.filter(id => id !== excludeId);
     if (!targetIds.length) return [];
 
-    const { data: subs, error: subsErr } = await supabase
-      .from('push_subscriptions')
-      .select('user_id, endpoint, p256dh, auth')
-      .in('user_id', targetIds);
-
-    if (subsErr || !subs?.length) return [];
-
-    const expiredEndpoints = [];
     const successfulUserIds = new Set();
-    await Promise.allSettled(
-      subs.map(async sub => {
-        const result = await sendPushToSubscription(sub, payload);
-        if (result?.expired) expiredEndpoints.push(sub.endpoint);
-        else if (result?.success) successfulUserIds.add(sub.user_id);
-      })
-    );
 
-    if (expiredEndpoints.length) {
-      supabase
-        .from('push_subscriptions')
-        .delete()
-        .in('endpoint', expiredEndpoints)
-        .then(() => {})
-        .catch(() => {});
-    }
+    const [webPushResult] = await Promise.all([
+      notifyUsersWebPush(supabase, targetIds, payload),
+      notifyUsersFcm(supabase, targetIds, payload).then(ids => ids.forEach(id => successfulUserIds.add(id))),
+    ]);
+    webPushResult.forEach(id => successfulUserIds.add(id));
 
     return [...successfulUserIds];
   } catch (err) {
     console.warn('[webpush] notifyUsers error:', err.message);
     return [];
   }
+}
+
+/**
+ * Web Push leg of notifyUsers — extracted so it can run alongside the FCM
+ * leg (notifyUsersFcm) via Promise.all instead of blocking on it.
+ */
+async function notifyUsersWebPush(supabase, targetIds, payload) {
+  if (!webpush) return [];
+
+  const { data: subs, error: subsErr } = await supabase
+    .from('push_subscriptions')
+    .select('user_id, endpoint, p256dh, auth')
+    .in('user_id', targetIds);
+
+  if (subsErr || !subs?.length) return [];
+
+  const expiredEndpoints = [];
+  const successfulUserIds = new Set();
+  await Promise.allSettled(
+    subs.map(async sub => {
+      const result = await sendPushToSubscription(sub, payload);
+      if (result?.expired) expiredEndpoints.push(sub.endpoint);
+      else if (result?.success) successfulUserIds.add(sub.user_id);
+    })
+  );
+
+  if (expiredEndpoints.length) {
+    supabase
+      .from('push_subscriptions')
+      .delete()
+      .in('endpoint', expiredEndpoints)
+      .then(() => {})
+      .catch(() => {});
+  }
+
+  return [...successfulUserIds];
+}
+
+/**
+ * FCM leg of notifyUsers — reaches the Android app (via mobile/'s Capacitor
+ * push-notifications plugin) even when it's backgrounded or fully closed,
+ * which Web Push cannot do reliably inside Android's WebView.
+ */
+async function notifyUsersFcm(supabase, targetIds, payload) {
+  const { data: rows, error } = await supabase
+    .from('fcm_tokens')
+    .select('user_id, token')
+    .in('user_id', targetIds);
+
+  if (error || !rows?.length) return [];
+
+  const { successTokens, invalidTokens } = await sendFcmToTokens(rows.map(r => r.token), payload);
+
+  if (invalidTokens.length) {
+    supabase
+      .from('fcm_tokens')
+      .delete()
+      .in('token', invalidTokens)
+      .then(() => {})
+      .catch(() => {});
+  }
+
+  const successTokenSet = new Set(successTokens);
+  const successfulUserIds = new Set(rows.filter(r => successTokenSet.has(r.token)).map(r => r.user_id));
+  return [...successfulUserIds];
 }
 
 /**
@@ -271,12 +324,13 @@ async function notifyUpToNUsers(supabase, excludeIds, limit, payload) {
     const recipients = collected.slice(0, limit);
 
     const expiredEndpoints = [];
-    await Promise.allSettled(
-      recipients.map(async sub => {
+    await Promise.allSettled([
+      ...recipients.map(async sub => {
         const result = await sendPushToSubscription(sub, payload);
         if (result?.expired) expiredEndpoints.push(sub.endpoint);
-      })
-    );
+      }),
+      notifyUsersFcm(supabase, recipients.map(r => r.user_id), payload),
+    ]);
 
     if (expiredEndpoints.length) {
       supabase
@@ -315,12 +369,13 @@ async function notifyAllUsers(supabase, excludeId, payload) {
     if (subsErr || !subs?.length) return;
 
     const expiredEndpoints = [];
-    await Promise.allSettled(
-      subs.map(async sub => {
+    await Promise.allSettled([
+      ...subs.map(async sub => {
         const result = await sendPushToSubscription(sub, payload);
         if (result?.expired) expiredEndpoints.push(sub.endpoint);
-      })
-    );
+      }),
+      notifyUsersFcm(supabase, subs.map(s => s.user_id), payload),
+    ]);
 
     if (expiredEndpoints.length) {
       supabase

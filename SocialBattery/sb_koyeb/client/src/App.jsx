@@ -45,6 +45,7 @@ import { UserLocationProvider, useUserLocation } from './context/UserLocationCon
 import { LanguageProvider } from './i18n';
 import MascotPreviewSync from './components/MascotPreviewSync';
 import TermsGate from './components/TermsGate';
+import { initCapacitorPush } from './lib/capacitorPush';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, hasAcceptedTerms, isPasswordRecovery } = useAuth();
@@ -62,21 +63,47 @@ function AppRoutes() {
     }
   }, [isAuthenticated, hasProfile, requestLocationOnce]);
 
+  // Registro de push nativo (Android/iOS vía Capacitor, ver mobile/) — no
+  // hace nada fuera de la app empaquetada. A diferencia del Web Push
+  // (usePush.js, activado a mano desde ProfilePage), este se dispara solo
+  // en cuanto hay sesión, porque en la app nativa SÍ queremos notificaciones
+  // ya desde el primer momento (es la única vía que llega con la app cerrada).
+  useEffect(() => {
+    if (isAuthenticated && hasProfile) {
+      initCapacitorPush();
+    }
+  }, [isAuthenticated, hasProfile]);
+
   // El Service Worker (sw.js → notificationclick) nos manda esta URL cuando
   // el usuario toca una notificación con la app ya abierta, en vez de hacer
   // una recarga completa (client.navigate), para no depender de que el
   // hosting estático tenga configurado un rewrite SPA para rutas profundas.
+  // capacitorPush.js dispara el mismo evento (como CustomEvent en `window`
+  // en vez de postMessage, al no haber Service Worker) cuando se toca una
+  // notificación FCM en la app nativa.
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-
-    function handleMessage(event) {
+    function handleServiceWorkerMessage(event) {
       if (event.data?.type === 'sb-notification-click' && event.data.url) {
         navigate(event.data.url);
       }
     }
+    function handleNativeNotificationClick(event) {
+      if (event.detail?.url) {
+        navigate(event.detail.url);
+      }
+    }
 
-    navigator.serviceWorker.addEventListener('message', handleMessage);
-    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    }
+    window.addEventListener('sb-notification-click', handleNativeNotificationClick);
+
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      }
+      window.removeEventListener('sb-notification-click', handleNativeNotificationClick);
+    };
   }, [navigate]);
 
   // Rutas 100% públicas — se comprueban DESPUÉS de declarar todos los
