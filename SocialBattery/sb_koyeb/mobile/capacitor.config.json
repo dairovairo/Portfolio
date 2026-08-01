@@ -4,11 +4,13 @@
   "webDir": "www",
   "backgroundColor": "#0a0a0f",
   "server": {
-    "url": "https://portfolio-nmc3.onrender.com",
+    "url": "https://socialbattery.pro",
     "cleartext": false,
     "androidScheme": "https",
     "iosScheme": "https",
     "allowNavigation": [
+      "socialbattery.pro",
+      "*.socialbattery.pro",
       "*.onrender.com",
       "*.supabase.co",
       "*.supabase.in"

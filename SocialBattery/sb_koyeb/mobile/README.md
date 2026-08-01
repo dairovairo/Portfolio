@@ -122,15 +122,11 @@ Abre Xcode con `npm run open:ios`, selecciona tu equipo firmante en "Signing & C
 
 ## Iconos y splash screen
 
-Los iconos por defecto vienen de `assets/icon.png` (256x256). Para generar automaticamente todas las resoluciones que necesita cada plataforma:
+El icono de la app es `assets/icon.png` (el mismo logo de bateria que usa la PWA, 512x512). Ya **no hace falta generarlo a mano**: `npm run sync` (y por tanto `add:android`, `add:ios` y `build:android`) ejecuta automaticamente `npm run gen:icons`, que usa `@capacitor/assets` para regenerar todas las resoluciones (`mipmap-*` en Android, `AppIcon.appiconset` en iOS) a partir de `assets/icon.png`.
 
-```bash
-npm install --save-dev @capacitor/assets
-# coloca un icon.png de 1024x1024 y opcionalmente splash.png de 2732x2732 en assets/
-npx capacitor-assets generate --iconBackgroundColor '#0a0a0f' --splashBackgroundColor '#0a0a0f'
-```
+> Si ya tenias una carpeta `android/` generada antes de este cambio, el icono viejo se quedo cacheado en `android/app/src/main/res/mipmap-*`. Corre `npm run gen:icons` (o `npm run sync`) una vez y vuelve a compilar (`npm run build:android`) para que el APK lleve el icono correcto.
 
-Esto crea los assets correctos dentro de `android/` y `ios/`.
+Para cambiar el icono en el futuro, sustituye `assets/icon.png` por uno cuadrado (idealmente 1024x1024) y vuelve a correr `npm run gen:icons`.
 
 ---
 
