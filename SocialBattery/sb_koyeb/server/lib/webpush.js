@@ -17,6 +17,8 @@
  * real push messages. Replace them with your own generated pair.
  */
 
+const { notifyUsersFcm, notifyAllUsersFcm } = require('./fcm');
+
 let webpush = null;
 let configured = false;
 
@@ -129,44 +131,59 @@ async function getMutedUserIds(supabase, conversationType, conversationId, userI
  */
 async function notifyUsers(supabase, userIds, excludeId, payload) {
   init();
-  if (!webpush) return [];
   if (!userIds?.length) return [];
 
-  try {
-    const targetIds = userIds.filter(id => id !== excludeId);
-    if (!targetIds.length) return [];
+  const targetIds = userIds.filter(id => id !== excludeId);
+  if (!targetIds.length) return [];
 
-    const { data: subs, error: subsErr } = await supabase
-      .from('push_subscriptions')
-      .select('user_id, endpoint, p256dh, auth')
-      .in('user_id', targetIds);
-
-    if (subsErr || !subs?.length) return [];
-
-    const expiredEndpoints = [];
-    const successfulUserIds = new Set();
-    await Promise.allSettled(
-      subs.map(async sub => {
-        const result = await sendPushToSubscription(sub, payload);
-        if (result?.expired) expiredEndpoints.push(sub.endpoint);
-        else if (result?.success) successfulUserIds.add(sub.user_id);
-      })
-    );
-
-    if (expiredEndpoints.length) {
-      supabase
+  // Fan-out dual: Web Push (navegador/PWA) + FCM (app nativa Android/iOS).
+  // Un usuario puede estar suscrito por ambos canales (móvil con app + PC con
+  // navegador) — mandamos por los dos en paralelo y devolvemos la UNIÓN de
+  // los que recibieron algo por al menos un canal.
+  const webPromise = (async () => {
+    if (!webpush) return [];
+    try {
+      const { data: subs, error: subsErr } = await supabase
         .from('push_subscriptions')
-        .delete()
-        .in('endpoint', expiredEndpoints)
-        .then(() => {})
-        .catch(() => {});
-    }
+        .select('user_id, endpoint, p256dh, auth')
+        .in('user_id', targetIds);
 
-    return [...successfulUserIds];
-  } catch (err) {
-    console.warn('[webpush] notifyUsers error:', err.message);
-    return [];
-  }
+      if (subsErr || !subs?.length) return [];
+
+      const expiredEndpoints = [];
+      const successfulUserIds = new Set();
+      await Promise.allSettled(
+        subs.map(async sub => {
+          const result = await sendPushToSubscription(sub, payload);
+          if (result?.expired) expiredEndpoints.push(sub.endpoint);
+          else if (result?.success) successfulUserIds.add(sub.user_id);
+        })
+      );
+
+      if (expiredEndpoints.length) {
+        supabase
+          .from('push_subscriptions')
+          .delete()
+          .in('endpoint', expiredEndpoints)
+          .then(() => {})
+          .catch(() => {});
+      }
+
+      return [...successfulUserIds];
+    } catch (err) {
+      console.warn('[webpush] notifyUsers web-push error:', err.message);
+      return [];
+    }
+  })();
+
+  const fcmPromise = notifyUsersFcm(supabase, targetIds, null, payload)
+    .catch(err => {
+      console.warn('[webpush] notifyUsers fcm error:', err.message);
+      return [];
+    });
+
+  const [webIds, fcmIds] = await Promise.all([webPromise, fcmPromise]);
+  return [...new Set([...webIds, ...fcmIds])];
 }
 
 /**
@@ -225,69 +242,74 @@ async function notifyCommunityMembers(supabase, communityId, creatorId, payload)
  */
 async function notifyUpToNUsers(supabase, excludeIds, limit, payload) {
   init();
-  if (!webpush) return;
   if (!limit || limit < 1) return;
 
   const excludeSet = new Set(Array.isArray(excludeIds) ? excludeIds : [excludeIds]);
 
+  // Recolectamos candidatos únicos combinando Web Push + FCM. Un usuario
+  // cuenta como UN "recipient" aunque tenga varios dispositivos — la cuota
+  // premium/ultra es por usuario, no por endpoint.
+  const candidateUserIds = [];
+  const seenUsers = new Set();
+
   try {
-    // Supabase does not support ORDER BY RANDOM() via the JS client, so we
-    // page through subscriptions, drop anyone in excludeSet, and shuffle
-    // client-side. Excluded users don't shrink the result — we keep pulling
-    // pages (re-sorteando candidatos nuevos) until we hit `limit` unique
-    // recipients or run out of rows.
-    const BATCH = Math.max(limit * 3, 50);
-    const collected = [];
-    const seenEndpoints = new Set();
-    let offset = 0;
-    let exhausted = false;
-
-    while (collected.length < limit && !exhausted) {
-      const { data: subs, error: subsErr } = await supabase
-        .from('push_subscriptions')
-        .select('user_id, endpoint, p256dh, auth')
-        .range(offset, offset + BATCH - 1);
-
-      if (subsErr || !subs?.length) { exhausted = true; break; }
-
-      for (const sub of subs) {
-        if (excludeSet.has(sub.user_id)) continue;
-        if (seenEndpoints.has(sub.endpoint)) continue;
-        seenEndpoints.add(sub.endpoint);
-        collected.push(sub);
+    // 1) Web push
+    if (webpush) {
+      const BATCH = Math.max(limit * 3, 50);
+      let offset = 0;
+      let exhausted = false;
+      while (candidateUserIds.length < limit * 2 && !exhausted) {
+        const { data: subs, error: subsErr } = await supabase
+          .from('push_subscriptions')
+          .select('user_id')
+          .range(offset, offset + BATCH - 1);
+        if (subsErr || !subs?.length) { exhausted = true; break; }
+        for (const sub of subs) {
+          if (excludeSet.has(sub.user_id)) continue;
+          if (seenUsers.has(sub.user_id)) continue;
+          seenUsers.add(sub.user_id);
+          candidateUserIds.push(sub.user_id);
+        }
+        if (subs.length < BATCH) exhausted = true;
+        offset += BATCH;
       }
-
-      if (subs.length < BATCH) exhausted = true; // no more rows left in table
-      offset += BATCH;
     }
 
-    if (!collected.length) return;
+    // 2) FCM tokens (app nativa)
+    {
+      const BATCH = Math.max(limit * 3, 50);
+      let offset = 0;
+      let exhausted = false;
+      while (candidateUserIds.length < limit * 2 && !exhausted) {
+        const { data: tokens, error } = await supabase
+          .from('fcm_tokens')
+          .select('user_id')
+          .range(offset, offset + BATCH - 1);
+        if (error || !tokens?.length) { exhausted = true; break; }
+        for (const t of tokens) {
+          if (excludeSet.has(t.user_id)) continue;
+          if (seenUsers.has(t.user_id)) continue;
+          seenUsers.add(t.user_id);
+          candidateUserIds.push(t.user_id);
+        }
+        if (tokens.length < BATCH) exhausted = true;
+        offset += BATCH;
+      }
+    }
 
-    // Fisher-Yates shuffle then take `limit` items
-    for (let i = collected.length - 1; i > 0; i--) {
+    if (!candidateUserIds.length) return;
+
+    // Fisher-Yates shuffle y coger `limit` recipients
+    for (let i = candidateUserIds.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [collected[i], collected[j]] = [collected[j], collected[i]];
+      [candidateUserIds[i], candidateUserIds[j]] = [candidateUserIds[j], candidateUserIds[i]];
     }
-    const recipients = collected.slice(0, limit);
+    const recipientIds = candidateUserIds.slice(0, limit);
 
-    const expiredEndpoints = [];
-    await Promise.allSettled(
-      recipients.map(async sub => {
-        const result = await sendPushToSubscription(sub, payload);
-        if (result?.expired) expiredEndpoints.push(sub.endpoint);
-      })
-    );
-
-    if (expiredEndpoints.length) {
-      supabase
-        .from('push_subscriptions')
-        .delete()
-        .in('endpoint', expiredEndpoints)
-        .then(() => {})
-        .catch(() => {});
-    }
-
-    console.log(`[webpush] notifyUpToNUsers: sent to ${recipients.length} / ${limit} requested (plan cap, ${excludeSet.size} excluded)`);
+    // Delegamos en notifyUsers para que haga el fan-out dual y limpie
+    // endpoints/tokens caducados por nosotros.
+    const notified = await notifyUsers(supabase, recipientIds, null, payload);
+    console.log(`[webpush] notifyUpToNUsers: sent to ${notified.length} / ${limit} requested (${excludeSet.size} excluded)`);
   } catch (err) {
     console.warn('[webpush] notifyUpToNUsers error:', err.message);
   }
@@ -303,36 +325,48 @@ async function notifyUpToNUsers(supabase, excludeIds, limit, payload) {
  */
 async function notifyAllUsers(supabase, excludeId, payload) {
   init();
-  if (!webpush) return;
 
-  try {
-    // Fetch all push subscriptions except the creator's
-    const { data: subs, error: subsErr } = await supabase
-      .from('push_subscriptions')
-      .select('user_id, endpoint, p256dh, auth')
-      .neq('user_id', excludeId);
-
-    if (subsErr || !subs?.length) return;
-
-    const expiredEndpoints = [];
-    await Promise.allSettled(
-      subs.map(async sub => {
-        const result = await sendPushToSubscription(sub, payload);
-        if (result?.expired) expiredEndpoints.push(sub.endpoint);
-      })
-    );
-
-    if (expiredEndpoints.length) {
-      supabase
+  // Fan-out dual (Web Push + FCM) en paralelo. Igual que notifyUsers,
+  // devolvemos silenciosamente cualquier error de un canal para no tumbar
+  // el otro.
+  const webPromise = (async () => {
+    if (!webpush) return;
+    try {
+      const { data: subs, error: subsErr } = await supabase
         .from('push_subscriptions')
-        .delete()
-        .in('endpoint', expiredEndpoints)
-        .then(() => {})
-        .catch(() => {});
+        .select('user_id, endpoint, p256dh, auth')
+        .neq('user_id', excludeId);
+
+      if (subsErr || !subs?.length) return;
+
+      const expiredEndpoints = [];
+      await Promise.allSettled(
+        subs.map(async sub => {
+          const result = await sendPushToSubscription(sub, payload);
+          if (result?.expired) expiredEndpoints.push(sub.endpoint);
+        })
+      );
+
+      if (expiredEndpoints.length) {
+        supabase
+          .from('push_subscriptions')
+          .delete()
+          .in('endpoint', expiredEndpoints)
+          .then(() => {})
+          .catch(() => {});
+      }
+    } catch (err) {
+      console.warn('[webpush] notifyAllUsers web-push error:', err.message);
     }
-  } catch (err) {
-    console.warn('[webpush] notifyAllUsers error:', err.message);
-  }
+  })();
+
+  const fcmPromise = notifyAllUsersFcm(supabase, excludeId, payload)
+    .catch(err => {
+      console.warn('[webpush] notifyAllUsers fcm error:', err.message);
+      return [];
+    });
+
+  await Promise.all([webPromise, fcmPromise]);
 }
 
 module.exports = { notifyUsers, notifyCommunityMembers, notifyAllUsers, notifyUpToNUsers, sendPushToSubscription, getMutedUserIds };

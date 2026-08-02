@@ -1,5 +1,23 @@
+# Secretos
 comentarioserrorescampo-0d675197f102.json
-".env" 
-".env.*" 
-"!.env.example" 
-".env"  ".env.*"  "!.env.example" 
+.env
+.env.*
+!.env.example
+
+# Dependencias — se recrean con npm install / pip install
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# Build outputs
+dist/
+build/
+*.zip
+
+# Herramientas locales (worktrees de Claude, etc.)
+.claude/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

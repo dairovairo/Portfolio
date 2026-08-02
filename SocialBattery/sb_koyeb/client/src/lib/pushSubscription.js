@@ -1,8 +1,13 @@
 import { api } from './api';
+import { isNativeApp, ensureNativePush } from './nativePush';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
 export async function ensurePushSubscription() {
+  // Dentro del wrapper nativo (Android/iOS con Capacitor) el Web Push del
+  // Service Worker no funciona — usamos FCM/APNs vía el plugin nativo.
+  if (isNativeApp()) return ensureNativePush();
+
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
   if (!('Notification' in window) || Notification.permission !== 'granted') return false;
 

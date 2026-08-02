@@ -114,6 +114,52 @@ router.post('/push-subscribe', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/users/fcm-register — guarda el token FCM del dispositivo nativo
+// (Android/iOS con Capacitor). El token identifica un dispositivo concreto:
+// si otro usuario inicia sesión en el mismo móvil, la fila se reasigna a él
+// (onConflict: 'token') igual que en push-subscribe con 'endpoint'.
+router.post('/fcm-register', requireAuth, async (req, res) => {
+  const { token, platform } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Missing token' });
+  }
+  if (!['android', 'ios', 'web'].includes(platform)) {
+    return res.status(400).json({ error: 'Invalid platform' });
+  }
+
+  try {
+    await supabase.from('fcm_tokens').upsert({
+      token,
+      user_id: req.user.id,
+      platform,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'token' });
+  } catch (err) {
+    console.error('[users] fcm-register upsert error:', err);
+  }
+
+  res.json({ success: true });
+});
+
+// POST /api/users/fcm-unregister — borra un token concreto (p.ej. al hacer
+// logout desde la app móvil, para no seguir recibiendo push del user anterior).
+router.post('/fcm-unregister', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+
+  try {
+    await supabase
+      .from('fcm_tokens')
+      .delete()
+      .eq('token', token)
+      .eq('user_id', req.user.id);
+  } catch (err) {
+    console.error('[users] fcm-unregister delete error:', err);
+  }
+
+  res.json({ success: true });
+});
+
 // PATCH /api/users/me/seen — heartbeat for online status
 router.patch('/me/seen', requireAuth, async (req, res) => {
   await supabase

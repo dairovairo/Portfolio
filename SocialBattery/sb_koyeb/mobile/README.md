@@ -148,6 +148,31 @@ Cuando actives push notifications reales:
 
 ---
 
+## Notificaciones push nativas (Android/iOS con app cerrada)
+
+El código ya está listo — el frontend detecta si corre dentro de Capacitor y registra el token FCM contra el backend (`POST /api/users/fcm-register`). El backend hace fan-out dual (Web Push + FCM) de forma transparente: los mismos `notifyUsers(...)` que usa la web mandan también a los móviles nativos.
+
+**Lo único que tienes que hacer TÚ:**
+
+1. **Crear proyecto Firebase** → https://console.firebase.google.com
+2. **Añadir app Android** con package `com.socialbattery.app`.
+3. **Descargar `google-services.json`** → colócalo en `mobile/android/app/google-services.json`.
+4. **Generar service account** (Firebase → Project settings → Service accounts → Generate new private key). Guarda el JSON.
+5. **Env vars en el backend** (Render/Koyeb):
+   ```
+   FIREBASE_PROJECT_ID=...
+   FIREBASE_CLIENT_EMAIL=...
+   FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+   ```
+6. **Crear tabla `fcm_tokens`** en Supabase corriendo `supabase_schema_phase133_fcm_tokens.sql` en el SQL editor.
+7. **`npm install`** en `server/` (añade `firebase-admin`) y redeploy.
+8. **Recompilar el APK** (`npm run build:android` en `mobile/`) — el `google-services.json` se compila dentro del binario, no basta con recargar la web.
+9. **Abre la app, acepta el permiso**, ciérrala (deslizar hacia arriba) y prueba desde Firebase Console → Messaging → Send test message con el token que verás en logs (`adb logcat | grep -i fcm`) o directamente en la tabla `fcm_tokens`.
+
+Si el dispositivo no tiene Google Play Services (emuladores AOSP), FCM no entrega — usa un móvil real o emulador "Google APIs".
+
+---
+
 ## Estructura
 
 ```
@@ -175,7 +200,7 @@ Necesitas un Mac para el paso final (Archive + Upload). Alternativas: pedir a al
 No. Esta carpeta es 100% independiente. El WebView carga exactamente la misma URL que abres en el navegador.
 
 **¿Y las notificaciones push del navegador?**
-La Web Push del `sw.js` funciona en Chrome/Firefox pero no dentro del WebView de una app. Para notificaciones push nativas en Android/iOS usa el plugin `@capacitor/push-notifications` (ya incluido) + Firebase Cloud Messaging.
+La Web Push del `sw.js` funciona en Chrome/Firefox pero no dentro del WebView de una app. Aquí usamos FCM automáticamente: `client/src/lib/nativePush.js` detecta que estás dentro de Capacitor y registra un token FCM en lugar del web-push. El backend (`server/lib/fcm.js`) manda a ambos canales en paralelo — no hay que llamar a nada especial. Solo necesitas seguir los pasos de la sección "Notificaciones push nativas" de arriba.
 
 **¿Como actualizo la app despues de un cambio en Render?**
 Como carga la URL en vivo, cualquier deploy en Render se ve al instante al reabrir la app. Solo necesitas recompilar si cambias plugins nativos, iconos o la URL base.
