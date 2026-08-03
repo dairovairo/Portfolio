@@ -20,6 +20,15 @@ const LOG = '[SBFCM]';
 let listenersRegistered = false;
 let cachedPlugin = null;
 
+// Guardamos el detalle del último intento para poder mostrarlo en la UI
+// (ProfilePage) sin necesidad de adb/logcat.
+let lastResult = { step: 'not-attempted', ok: false };
+function record(step, extra = {}) {
+  lastResult = { step, at: new Date().toISOString(), ...extra };
+  return lastResult;
+}
+export function getLastFcmResult() { return lastResult; }
+
 /** ¿Estamos dentro del wrapper nativo de Capacitor? */
 export function isNativeApp() {
   if (typeof window === 'undefined') return false;
@@ -59,11 +68,12 @@ async function loadPushPlugin() {
 export async function ensureNativePush() {
   console.log(LOG, 'ensureNativePush() called. isNativeApp=', isNativeApp(), 'platform=', nativePlatform());
 
-  if (!isNativeApp()) return false;
+  if (!isNativeApp()) { record('not-native'); return false; }
 
   const PushNotifications = await loadPushPlugin();
   if (!PushNotifications) {
     console.warn(LOG, 'plugin not available, aborting');
+    record('plugin-load-failed', { hint: 'Render no ha redeployado el frontend con @capacitor/push-notifications, o el WebView tiene JS cacheado. Borra caché de la app y reabre.' });
     return false;
   }
 
@@ -79,6 +89,7 @@ export async function ensureNativePush() {
 
     if (perm.receive !== 'granted') {
       console.warn(LOG, 'permission not granted, aborting. state=', perm.receive);
+      record('permission-denied', { permission: perm.receive, hint: 'Ajustes de Android → Apps → SocialBattery → Notificaciones → activa.' });
       return false;
     }
 
@@ -92,6 +103,7 @@ export async function ensureNativePush() {
 
         if (!token?.value) {
           console.warn(LOG, 'registration event with empty token, skip');
+          record('empty-token');
           return;
         }
 
@@ -102,13 +114,16 @@ export async function ensureNativePush() {
             platform: nativePlatform(),
           });
           console.log(LOG, 'fcm-register response:', JSON.stringify(res));
+          record('registered-ok', { tokenPreview: preview, backendResponse: res });
         } catch (e) {
           console.error(LOG, 'fcm-register FAILED:', e?.message || e);
+          record('backend-post-failed', { tokenPreview: preview, error: String(e?.message || e), hint: 'El móvil obtuvo el token FCM pero el POST al backend petó. Revisa VITE_API_URL en Render (debe apuntar al backend de Railway).' });
         }
       });
 
       PushNotifications.addListener('registrationError', (err) => {
         console.error(LOG, 'REGISTRATION_ERROR event:', JSON.stringify(err));
+        record('fcm-registration-error', { error: JSON.stringify(err), hint: 'Firebase no ha podido dar un token FCM. Suele ser: google-services.json corrupto, o el móvil sin Google Play Services actualizados.' });
       });
 
       PushNotifications.addListener('pushNotificationReceived', (n) => {
@@ -125,11 +140,13 @@ export async function ensureNativePush() {
     }
 
     console.log(LOG, 'calling PushNotifications.register()');
+    record('register-called', { permission: perm.receive });
     await PushNotifications.register();
     console.log(LOG, 'register() resolved OK (token will arrive via registration event)');
     return true;
   } catch (e) {
     console.error(LOG, 'ensureNativePush threw:', e?.message || e);
+    record('exception', { error: String(e?.message || e) });
     return false;
   }
 }
