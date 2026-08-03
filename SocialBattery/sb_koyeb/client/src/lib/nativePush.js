@@ -108,9 +108,13 @@ async function loadPushPlugin() {
 
 export async function ensureNativePush() {
   console.log(LOG, 'ensureNativePush() called. isNativeApp=', isNativeApp(), 'platform=', nativePlatform());
+  // Beacon inmediato — si esto no llega, es que la función ni se está
+  // llamando, y el problema está aguas arriba (el hook que la invoca).
+  record('ensure-native-push-entered');
 
   if (!isNativeApp()) { record('not-native'); return false; }
 
+  record('loading-plugin');
   const PushNotifications = await loadPushPlugin();
   if (!PushNotifications) {
     console.warn(LOG, 'plugin not available, aborting');

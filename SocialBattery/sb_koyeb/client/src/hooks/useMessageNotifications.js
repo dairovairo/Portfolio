@@ -114,6 +114,25 @@ export function useMessageNotifications(profile, settings) {
       // el gate de ensurePermission() de abajo bloqueaba el registro FCM. Aquí
       // lo lanzamos siempre en nativo para que fcm_tokens se rellene aunque
       // la Notification API web nos mienta.
+
+      // Beacon inmediato para saber si estamos ejecutando este bloque nuevo
+      // (si no llega, el WebView está corriendo useMessageNotifications
+      // cacheado de un deploy anterior y hay que forzar reload/reinstall).
+      try {
+        fetch((import.meta.env.VITE_API_URL || '/api') + '/debug/fcm-attempt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            step: 'hook-setup-reached',
+            platform: 'unknown',
+            jsBuild: 'msgnotif-v3-beacons',
+            hint: 'useMessageNotifications.setup() se está ejecutando (versión nueva).',
+            userId: profile?.id || '',
+          }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {}
+
       if (isNativeApp()) {
         ensureNativePush().catch(err => {
           console.warn('[SBFCM] ensureNativePush from useMessageNotifications failed:', err);
