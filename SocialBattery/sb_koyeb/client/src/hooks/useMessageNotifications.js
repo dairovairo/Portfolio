@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ensurePushSubscription } from '../lib/pushSubscription';
+import { isNativeApp, ensureNativePush } from '../lib/nativePush';
 
 const ICON  = '/icons/icon-192.png';
 const BADGE = '/icons/badge-72.png';
@@ -105,6 +106,20 @@ export function useMessageNotifications(profile, settings) {
     const channels = [];
 
     async function setup() {
+      // ── 0. Native FCM registration (Capacitor) ──────────────────────────────
+      // Fire-and-forget, independiente del permiso "Notification" web. Dentro
+      // del WebView de Capacitor, Notification API se comporta de forma
+      // impredecible (a veces devuelve 'denied' silenciosamente aunque el
+      // usuario haya concedido POST_NOTIFICATIONS al plugin nativo), así que
+      // el gate de ensurePermission() de abajo bloqueaba el registro FCM. Aquí
+      // lo lanzamos siempre en nativo para que fcm_tokens se rellene aunque
+      // la Notification API web nos mienta.
+      if (isNativeApp()) {
+        ensureNativePush().catch(err => {
+          console.warn('[SBFCM] ensureNativePush from useMessageNotifications failed:', err);
+        });
+      }
+
       // ── 1. Request permission ───────────────────────────────────────────────
       const permissionGranted = await ensurePermission();
       if (!permissionGranted || cancelled) return;

@@ -14,6 +14,9 @@
 
 import { api } from './api';
 
+// Prefijo consistente para grepear en adb logcat: `adb logcat | grep SBFCM`
+const LOG = '[SBFCM]';
+
 let listenersRegistered = false;
 let cachedPlugin = null;
 
@@ -22,7 +25,6 @@ export function isNativeApp() {
   if (typeof window === 'undefined') return false;
   const cap = window.Capacitor;
   if (!cap) return false;
-  // isNativePlatform() es la API pública; getPlatform() como fallback.
   if (typeof cap.isNativePlatform === 'function') return cap.isNativePlatform();
   if (typeof cap.getPlatform === 'function') return cap.getPlatform() !== 'web';
   return false;
@@ -36,96 +38,102 @@ export function nativePlatform() {
   return cap.getPlatform();
 }
 
-/**
- * Carga el plugin bajo demanda. El import dinámico dispara internamente
- * registerPlugin('PushNotifications', ...) del wrapper, que es lo que hace
- * que las llamadas a los métodos bajen al bridge nativo.
- */
 async function loadPushPlugin() {
   if (cachedPlugin) return cachedPlugin;
-  if (!isNativeApp()) return null;
+  if (!isNativeApp()) {
+    console.log(LOG, 'loadPushPlugin skipped: not a native app');
+    return null;
+  }
   try {
+    console.log(LOG, 'loading @capacitor/push-notifications module...');
     const mod = await import('@capacitor/push-notifications');
     cachedPlugin = mod.PushNotifications || null;
+    console.log(LOG, 'plugin loaded, has methods:', !!cachedPlugin?.checkPermissions);
     return cachedPlugin;
   } catch (e) {
-    console.warn('[nativePush] failed to load @capacitor/push-notifications:', e);
+    console.error(LOG, 'FAILED to load @capacitor/push-notifications:', e?.message || e);
     return null;
   }
 }
 
-/**
- * Pide permiso de notificaciones en el dispositivo nativo y arranca el
- * registro con FCM/APNs. Devuelve true si el usuario aceptó (o ya lo tenía
- * concedido) y estamos correctamente registrados.
- */
 export async function ensureNativePush() {
+  console.log(LOG, 'ensureNativePush() called. isNativeApp=', isNativeApp(), 'platform=', nativePlatform());
+
   if (!isNativeApp()) return false;
 
   const PushNotifications = await loadPushPlugin();
   if (!PushNotifications) {
-    console.warn('[nativePush] PushNotifications plugin not available.');
+    console.warn(LOG, 'plugin not available, aborting');
     return false;
   }
 
   try {
     let perm = await PushNotifications.checkPermissions();
-    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
-      perm = await PushNotifications.requestPermissions();
-    }
-    if (perm.receive !== 'granted') return false;
+    console.log(LOG, 'checkPermissions result:', JSON.stringify(perm));
 
-    // Registrar listeners una única vez por sesión de la app.
+    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
+      console.log(LOG, 'requesting permission...');
+      perm = await PushNotifications.requestPermissions();
+      console.log(LOG, 'requestPermissions result:', JSON.stringify(perm));
+    }
+
+    if (perm.receive !== 'granted') {
+      console.warn(LOG, 'permission not granted, aborting. state=', perm.receive);
+      return false;
+    }
+
     if (!listenersRegistered) {
       listenersRegistered = true;
+      console.log(LOG, 'registering event listeners');
 
-      // El token FCM (Android) / APNs (iOS) llega en 'registration'. Lo
-      // mandamos al backend para poder enviarle push a este dispositivo.
       PushNotifications.addListener('registration', async (token) => {
+        const preview = String(token?.value || '').slice(0, 20) + '...';
+        console.log(LOG, 'REGISTRATION event fired. token=', preview);
+
+        if (!token?.value) {
+          console.warn(LOG, 'registration event with empty token, skip');
+          return;
+        }
+
         try {
-          await api.post('/users/fcm-register', {
-            token: token?.value,
+          console.log(LOG, 'POST /users/fcm-register (platform=' + nativePlatform() + ')');
+          const res = await api.post('/users/fcm-register', {
+            token: token.value,
             platform: nativePlatform(),
           });
-          console.log('[nativePush] FCM token registered:', String(token?.value || '').slice(0, 12) + '...');
+          console.log(LOG, 'fcm-register response:', JSON.stringify(res));
         } catch (e) {
-          console.warn('[nativePush] fcm-register failed:', e);
+          console.error(LOG, 'fcm-register FAILED:', e?.message || e);
         }
       });
 
       PushNotifications.addListener('registrationError', (err) => {
-        console.warn('[nativePush] registration error:', err);
+        console.error(LOG, 'REGISTRATION_ERROR event:', JSON.stringify(err));
       });
 
-      // Notificación recibida con la app en foreground: navegar si trae URL.
       PushNotifications.addListener('pushNotificationReceived', (n) => {
-        // El sistema no muestra banner cuando estás dentro de la app; el
-        // hook useMessageNotifications ya se encarga de esas notificaciones
-        // vía Supabase Realtime, así que aquí no hacemos nada extra.
-        void n;
+        console.log(LOG, 'notification received (foreground):', n?.title);
       });
 
-      // El usuario tocó una notificación (llegada por FCM con app cerrada
-      // o en background). Navegamos a la URL si viene en el payload.data.
       PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
         const url = action?.notification?.data?.url;
+        console.log(LOG, 'notification tapped, url=', url);
         if (url && typeof window !== 'undefined') {
-          try {
-            window.location.assign(url);
-          } catch {}
+          try { window.location.assign(url); } catch {}
         }
       });
     }
 
+    console.log(LOG, 'calling PushNotifications.register()');
     await PushNotifications.register();
+    console.log(LOG, 'register() resolved OK (token will arrive via registration event)');
     return true;
   } catch (e) {
-    console.warn('[nativePush] ensureNativePush failed:', e);
+    console.error(LOG, 'ensureNativePush threw:', e?.message || e);
     return false;
   }
 }
 
-/** Estado del permiso nativo (para pintar el toggle en Ajustes). */
 export async function getNativePermissionStatus() {
   if (!isNativeApp()) return 'default';
   const PushNotifications = await loadPushPlugin();
