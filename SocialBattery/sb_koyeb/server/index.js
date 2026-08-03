@@ -333,6 +333,59 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.11.0', phase: 11, build: 'notif-cap-fase72-captest', timestamp: new Date().toISOString() });
 });
 
+// Diagnóstico FCM sin auth — para poder ver desde el navegador si el backend
+// está bien configurado sin necesidad de adb/logs. NO devuelve valores
+// sensibles (solo booleanos y counts agregados), sí puede exponer si el
+// backend está o no listo para mandar push nativas.
+app.get('/api/health/fcm', async (req, res) => {
+  const { isFcmReady } = require('./lib/fcm');
+  const envSet = {
+    FIREBASE_PROJECT_ID:   !!process.env.FIREBASE_PROJECT_ID,
+    FIREBASE_CLIENT_EMAIL: !!process.env.FIREBASE_CLIENT_EMAIL,
+    FIREBASE_PRIVATE_KEY:  !!process.env.FIREBASE_PRIVATE_KEY,
+  };
+  const missingEnv = Object.entries(envSet).filter(([, v]) => !v).map(([k]) => k);
+
+  let firebaseAdminInstalled = false;
+  try { require.resolve('firebase-admin'); firebaseAdminInstalled = true; } catch {}
+
+  let fcmTokenCount = null;
+  let fcmTokensSample = null;
+  try {
+    const { count } = await supabase
+      .from('fcm_tokens')
+      .select('*', { count: 'exact', head: true });
+    fcmTokenCount = count;
+    const { data } = await supabase
+      .from('fcm_tokens')
+      .select('platform, created_at')
+      .order('created_at', { ascending: false })
+      .limit(3);
+    fcmTokensSample = data;
+  } catch (err) {
+    fcmTokenCount = 'error: ' + err.message;
+  }
+
+  let webPushSubCount = null;
+  try {
+    const { count } = await supabase
+      .from('push_subscriptions')
+      .select('*', { count: 'exact', head: true });
+    webPushSubCount = count;
+  } catch {}
+
+  res.json({
+    firebaseAdminInstalled,
+    firebaseInitialized: isFcmReady(),
+    envVars: envSet,
+    missingEnv,
+    fcmTokenCount,
+    fcmTokensSample,
+    webPushSubCount,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // ── Cron Jobs ──────────────────────────────────────────────────────────────
 cron.schedule('0 * * * *', () => {
   console.log('[CRON] Expiring stale batteries...');
