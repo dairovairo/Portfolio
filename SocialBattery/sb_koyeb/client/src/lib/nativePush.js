@@ -17,17 +17,58 @@ import { api } from './api';
 // Prefijo consistente para grepear en adb logcat: `adb logcat | grep SBFCM`
 const LOG = '[SBFCM]';
 
+// Marcador de versión — lo pinchamos en cada beacon para saber si el JS
+// corriendo en el móvil es el nuevo o cacheado del anterior deploy.
+const JS_BUILD = 'fcm-v3-beacons';
+
 let listenersRegistered = false;
 let cachedPlugin = null;
 
-// Guardamos el detalle del último intento para poder mostrarlo en la UI
-// (ProfilePage) sin necesidad de adb/logcat.
+// Guardamos el detalle del último intento para poder mostrarlo en la UI.
 let lastResult = { step: 'not-attempted', ok: false };
 function record(step, extra = {}) {
   lastResult = { step, at: new Date().toISOString(), ...extra };
+  // Fire-and-forget beacon al backend para diagnóstico sin adb.
+  try {
+    fetch((import.meta.env.VITE_API_URL || '/api') + '/debug/fcm-attempt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        step,
+        platform: nativePlatform(),
+        jsBuild: JS_BUILD,
+        ...extra,
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
   return lastResult;
 }
 export function getLastFcmResult() { return lastResult; }
+
+// Boot beacon: en cuanto se importa este módulo desde dentro del wrapper
+// nativo, avisa al backend "estoy vivo, este JS está corriendo". Nos dice
+// si el móvil ya tiene el bundle nuevo. NO depende de que se ejecute
+// ensureNativePush(), así descartamos "el hook no me llama" de las causas.
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    try {
+      const isNative = isNativeApp();
+      if (!isNative) return; // solo desde móvil
+      fetch((import.meta.env.VITE_API_URL || '/api') + '/debug/fcm-attempt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'module-loaded',
+          platform: nativePlatform(),
+          jsBuild: JS_BUILD,
+          hint: 'nativePush.js se ha cargado en el WebView — el bundle es el nuevo.',
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  }, 500);
+}
 
 /** ¿Estamos dentro del wrapper nativo de Capacitor? */
 export function isNativeApp() {

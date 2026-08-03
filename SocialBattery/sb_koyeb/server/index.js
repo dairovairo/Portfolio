@@ -333,6 +333,32 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.11.0', phase: 11, build: 'notif-cap-fase72-captest', timestamp: new Date().toISOString() });
 });
 
+// Ring buffer en memoria para recibir "beacons" de intentos FCM desde los
+// móviles. Nos permite ver desde /api/health/fcm en un navegador exactamente
+// qué está pasando en cada dispositivo sin necesidad de adb ni consola del
+// WebView. Se resetea al reiniciar el proceso — es solo debug.
+const FCM_BEACONS = [];
+const FCM_BEACONS_MAX = 100;
+
+app.post('/api/debug/fcm-attempt', express.json({ limit: '4kb' }), (req, res) => {
+  const b = req.body || {};
+  FCM_BEACONS.unshift({
+    at: new Date().toISOString(),
+    ip: req.ip,
+    userAgent: (req.headers['user-agent'] || '').slice(0, 120),
+    step: String(b.step || 'unknown').slice(0, 40),
+    platform: String(b.platform || '').slice(0, 20),
+    permission: String(b.permission || '').slice(0, 20),
+    tokenPreview: String(b.tokenPreview || '').slice(0, 40),
+    error: String(b.error || '').slice(0, 300),
+    hint: String(b.hint || '').slice(0, 300),
+    userId: String(b.userId || '').slice(0, 40),
+    jsBuild: String(b.jsBuild || '').slice(0, 40),
+  });
+  if (FCM_BEACONS.length > FCM_BEACONS_MAX) FCM_BEACONS.length = FCM_BEACONS_MAX;
+  res.json({ ok: true, received: FCM_BEACONS[0].step });
+});
+
 // Diagnóstico FCM sin auth — para poder ver desde el navegador si el backend
 // está bien configurado sin necesidad de adb/logs. NO devuelve valores
 // sensibles (solo booleanos y counts agregados), sí puede exponer si el
@@ -382,6 +408,8 @@ app.get('/api/health/fcm', async (req, res) => {
     fcmTokenCount,
     fcmTokensSample,
     webPushSubCount,
+    beaconsReceived: FCM_BEACONS.length,
+    recentBeacons: FCM_BEACONS.slice(0, 20),
     timestamp: new Date().toISOString(),
   });
 });
