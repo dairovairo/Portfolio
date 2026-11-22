@@ -127,15 +127,18 @@ router.post('/fcm-register', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid platform' });
   }
 
-  try {
-    await supabase.from('fcm_tokens').upsert({
-      token,
-      user_id: req.user.id,
-      platform,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'token' });
-  } catch (err) {
-    console.error('[users] fcm-register upsert error:', err);
+  // supabase-js no lanza excepciones: devuelve { error }. Antes se ignoraba y
+  // respondíamos success:true aunque la tabla no existiera o fallara el upsert.
+  const { error } = await supabase.from('fcm_tokens').upsert({
+    token,
+    user_id: req.user.id,
+    platform,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'token' });
+
+  if (error) {
+    console.error('[users] fcm-register upsert error:', error);
+    return res.status(500).json({ error: 'fcm-register failed: ' + error.message });
   }
 
   res.json({ success: true });

@@ -19,7 +19,7 @@ const LOG = '[SBFCM]';
 
 // Marcador de versión — lo pinchamos en cada beacon para saber si el JS
 // corriendo en el móvil es el nuevo o cacheado del anterior deploy.
-const JS_BUILD = 'fcm-v3-beacons';
+const JS_BUILD = 'fcm-v4-thenable-fix';
 
 let listenersRegistered = false;
 let cachedPlugin = null;
@@ -88,8 +88,18 @@ export function nativePlatform() {
   return cap.getPlatform();
 }
 
+/**
+ * Devuelve `{ PushNotifications }` (o null) — NUNCA el plugin a pelo.
+ *
+ * Los plugins de Capacitor son Proxies que responden a cualquier propiedad,
+ * incluida `then`. Si una función async hace `return plugin`, la Promise lo
+ * trata como "thenable", llama a `plugin.then(...)` como si fuera un método
+ * nativo y se queda colgada para siempre, sin error. Era exactamente el
+ * cuelgue tras el beacon 'loading-plugin': el registro FCM no llegaba nunca a
+ * checkPermissions(). Envolviéndolo en un objeto plano se evita.
+ */
 async function loadPushPlugin() {
-  if (cachedPlugin) return cachedPlugin;
+  if (cachedPlugin) return { PushNotifications: cachedPlugin };
   if (!isNativeApp()) {
     console.log(LOG, 'loadPushPlugin skipped: not a native app');
     return null;
@@ -99,7 +109,7 @@ async function loadPushPlugin() {
     const mod = await import('@capacitor/push-notifications');
     cachedPlugin = mod.PushNotifications || null;
     console.log(LOG, 'plugin loaded, has methods:', !!cachedPlugin?.checkPermissions);
-    return cachedPlugin;
+    return cachedPlugin ? { PushNotifications: cachedPlugin } : null;
   } catch (e) {
     console.error(LOG, 'FAILED to load @capacitor/push-notifications:', e?.message || e);
     return null;
@@ -115,12 +125,14 @@ export async function ensureNativePush() {
   if (!isNativeApp()) { record('not-native'); return false; }
 
   record('loading-plugin');
-  const PushNotifications = await loadPushPlugin();
+  const { PushNotifications } = (await loadPushPlugin()) || {};
   if (!PushNotifications) {
     console.warn(LOG, 'plugin not available, aborting');
     record('plugin-load-failed', { hint: 'Render no ha redeployado el frontend con @capacitor/push-notifications, o el WebView tiene JS cacheado. Borra caché de la app y reabre.' });
     return false;
   }
+
+  record('plugin-loaded');
 
   try {
     let perm = await PushNotifications.checkPermissions();
@@ -198,7 +210,7 @@ export async function ensureNativePush() {
 
 export async function getNativePermissionStatus() {
   if (!isNativeApp()) return 'default';
-  const PushNotifications = await loadPushPlugin();
+  const { PushNotifications } = (await loadPushPlugin()) || {};
   if (!PushNotifications) return 'default';
   try {
     const perm = await PushNotifications.checkPermissions();

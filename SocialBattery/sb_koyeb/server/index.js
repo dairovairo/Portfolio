@@ -378,10 +378,10 @@ app.get('/api/health/fcm', async (req, res) => {
   let fcmTokenCount = null;
   let fcmTokensSample = null;
   try {
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from('fcm_tokens')
       .select('*', { count: 'exact', head: true });
-    fcmTokenCount = count;
+    fcmTokenCount = error ? 'error: ' + (error.message || error.code || JSON.stringify(error)) : count;
     const { data } = await supabase
       .from('fcm_tokens')
       .select('platform, created_at')
@@ -394,10 +394,10 @@ app.get('/api/health/fcm', async (req, res) => {
 
   let webPushSubCount = null;
   try {
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from('push_subscriptions')
       .select('*', { count: 'exact', head: true });
-    webPushSubCount = count;
+    webPushSubCount = error ? 'error: ' + (error.message || error.code || JSON.stringify(error)) : count;
   } catch {}
 
   res.json({
