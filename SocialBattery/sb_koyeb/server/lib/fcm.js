@@ -24,6 +24,8 @@
  *   create index fcm_tokens_user_id_idx on fcm_tokens(user_id);
  */
 
+const { normalizePrivateKey, isUsablePrivateKey } = require('./serviceAccountKey');
+
 let admin = null;
 let messaging = null;
 let configured = false;
@@ -35,18 +37,21 @@ function init() {
 
   const projectId   = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  let privateKey    = process.env.FIREBASE_PRIVATE_KEY;
+  const rawKey      = process.env.FIREBASE_PRIVATE_KEY;
 
-  if (!projectId || !clientEmail || !privateKey) {
+  if (!projectId || !clientEmail || !rawKey) {
     console.warn('[fcm] FIREBASE_* env vars not set — native push disabled.');
     disabled = true;
     return;
   }
 
-  // Render/Koyeb suelen guardar la clave con \n literales. Convertimos a
-  // saltos reales — sin esto firebase-admin lanza "invalid PEM formatted
-  // message" al arrancar.
-  privateKey = privateKey.replace(/\\n/g, '\n');
+  const privateKey = normalizePrivateKey(rawKey);
+  // firebase-admin no detecta una clave inservible hasta el primer envío.
+  if (!isUsablePrivateKey(privateKey)) {
+    console.error('[fcm] FIREBASE_PRIVATE_KEY no es una clave RSA válida — push nativo desactivado.');
+    disabled = true;
+    return;
+  }
 
   try {
     admin = require('firebase-admin');
@@ -94,9 +99,10 @@ async function sendToTokens(supabase, tokenRows, payload) {
   for (const rows of chunks) {
     const message = {
       tokens: rows.map(r => r.token),
-      // Usamos data-only en Android para que la app pueda personalizar la
-      // navegación al tocar la notificación. Añadimos también `notification`
-      // para que Android muestre el banner cuando la app está cerrada.
+      // `notification` para que Android pinte el banner con la app cerrada y
+      // `data.url` para navegar al tocarla. Sin clickAction: el valor de
+      // Cordova (FCM_PLUGIN_ACTIVITY) no lo declara ninguna Activity y el
+      // toque no abría nada; por defecto abre el launcher con los datos.
       notification: {
         title: payload.title || 'SocialBattery',
         body:  payload.body  || '',
@@ -110,7 +116,6 @@ async function sendToTokens(supabase, tokenRows, payload) {
         notification: {
           channelId: 'sb_default',
           tag: String(payload.tag || 'sb-notif'),
-          clickAction: 'FCM_PLUGIN_ACTIVITY', // Capacitor push plugin bridge
         },
       },
       apns: {

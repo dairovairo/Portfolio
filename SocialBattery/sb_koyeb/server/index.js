@@ -17,6 +17,9 @@ const communityRoutes = require('./routes/community');
 const discoverRoutes  = require('./routes/discover');
 const reportsRoutes   = require('./routes/reports');
 const adminRoutes     = require('./routes/admin');
+const paymentsRoutes  = require('./routes/payments');
+const { runSettleAdHoldsTick } = require('./jobs/settleAdHolds');
+const { refreshPlaySubscriptions, expireLapsedSubscriptions } = require('./lib/billing');
 const { expireStaleBatteries } = require('./lib/batteryExpiry');
 const { notifyPoolsStartingSoon, notifyEventsStartingSoon } = require('./jobs/reminders');
 const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
@@ -66,6 +69,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+// Webhook de Stripe: necesita el body CRUDO para verificar la firma, así que
+// va antes de express.json() (que lo consumiría y lo convertiría a objeto).
+app.post('/api/payments/stripe/webhook', express.raw({ type: 'application/json' }), paymentsRoutes.stripeWebhookHandler);
 app.use(express.json({ limit: '1mb' }));
 
 const uploadLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
@@ -141,6 +147,7 @@ app.use('/api/community', communityRoutes);
 app.use('/api/discover',  discoverRoutes);
 app.use('/api/reports',   reportsRoutes);
 app.use('/api/admin',     adminRoutes);
+app.use('/api/payments',  paymentsRoutes);
 
 // ── Debug endpoints (solo en dev o con header secreto) ────────────────────────
 app.get('/api/debug/reminders', async (req, res) => {
@@ -333,85 +340,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.11.0', phase: 11, build: 'notif-cap-fase72-captest', timestamp: new Date().toISOString() });
 });
 
-// Ring buffer en memoria para recibir "beacons" de intentos FCM desde los
-// móviles. Nos permite ver desde /api/health/fcm en un navegador exactamente
-// qué está pasando en cada dispositivo sin necesidad de adb ni consola del
-// WebView. Se resetea al reiniciar el proceso — es solo debug.
-const FCM_BEACONS = [];
-const FCM_BEACONS_MAX = 100;
-
-app.post('/api/debug/fcm-attempt', express.json({ limit: '4kb' }), (req, res) => {
-  const b = req.body || {};
-  FCM_BEACONS.unshift({
-    at: new Date().toISOString(),
-    ip: req.ip,
-    userAgent: (req.headers['user-agent'] || '').slice(0, 120),
-    step: String(b.step || 'unknown').slice(0, 40),
-    platform: String(b.platform || '').slice(0, 20),
-    permission: String(b.permission || '').slice(0, 20),
-    tokenPreview: String(b.tokenPreview || '').slice(0, 40),
-    error: String(b.error || '').slice(0, 300),
-    hint: String(b.hint || '').slice(0, 300),
-    userId: String(b.userId || '').slice(0, 40),
-    jsBuild: String(b.jsBuild || '').slice(0, 40),
-  });
-  if (FCM_BEACONS.length > FCM_BEACONS_MAX) FCM_BEACONS.length = FCM_BEACONS_MAX;
-  res.json({ ok: true, received: FCM_BEACONS[0].step });
-});
-
-// Diagnóstico FCM sin auth — para poder ver desde el navegador si el backend
-// está bien configurado sin necesidad de adb/logs. NO devuelve valores
-// sensibles (solo booleanos y counts agregados), sí puede exponer si el
-// backend está o no listo para mandar push nativas.
-app.get('/api/health/fcm', async (req, res) => {
+// ¿Está el push nativo operativo? Solo un booleano: sin auth y sin datos.
+app.get('/api/health/fcm', (req, res) => {
   const { isFcmReady } = require('./lib/fcm');
-  const envSet = {
-    FIREBASE_PROJECT_ID:   !!process.env.FIREBASE_PROJECT_ID,
-    FIREBASE_CLIENT_EMAIL: !!process.env.FIREBASE_CLIENT_EMAIL,
-    FIREBASE_PRIVATE_KEY:  !!process.env.FIREBASE_PRIVATE_KEY,
-  };
-  const missingEnv = Object.entries(envSet).filter(([, v]) => !v).map(([k]) => k);
-
-  let firebaseAdminInstalled = false;
-  try { require.resolve('firebase-admin'); firebaseAdminInstalled = true; } catch {}
-
-  let fcmTokenCount = null;
-  let fcmTokensSample = null;
-  try {
-    const { count, error } = await supabase
-      .from('fcm_tokens')
-      .select('*', { count: 'exact', head: true });
-    fcmTokenCount = error ? 'error: ' + (error.message || error.code || JSON.stringify(error)) : count;
-    const { data } = await supabase
-      .from('fcm_tokens')
-      .select('platform, created_at')
-      .order('created_at', { ascending: false })
-      .limit(3);
-    fcmTokensSample = data;
-  } catch (err) {
-    fcmTokenCount = 'error: ' + err.message;
-  }
-
-  let webPushSubCount = null;
-  try {
-    const { count, error } = await supabase
-      .from('push_subscriptions')
-      .select('*', { count: 'exact', head: true });
-    webPushSubCount = error ? 'error: ' + (error.message || error.code || JSON.stringify(error)) : count;
-  } catch {}
-
-  res.json({
-    firebaseAdminInstalled,
-    firebaseInitialized: isFcmReady(),
-    envVars: envSet,
-    missingEnv,
-    fcmTokenCount,
-    fcmTokensSample,
-    webPushSubCount,
-    beaconsReceived: FCM_BEACONS.length,
-    recentBeacons: FCM_BEACONS.slice(0, 20),
-    timestamp: new Date().toISOString(),
-  });
+  res.json({ ready: isFcmReady() });
 });
 
 // ── Cron Jobs ──────────────────────────────────────────────────────────────
@@ -490,6 +422,21 @@ cron.schedule('* * * * *', () => {
   runAutoDrawTick().catch(err => {
     console.error('[CRON] Auto-draw raffles failed:', err);
   });
+});
+
+// Liquidación de reservas de saldo de campañas que han terminado (evento
+// empezado, sorteo sorteado/vencido...). Ver jobs/settleAdHolds.js.
+cron.schedule('*/10 * * * *', () => {
+  runSettleAdHoldsTick().catch(err => {
+    console.error('[CRON] Settle ad holds failed:', err);
+  });
+});
+
+// Suscripciones: re-consulta a Google Play las que vencen pronto y recalcula
+// las de Stripe vencidas (por si se perdió algún webhook).
+cron.schedule('20 * * * *', () => {
+  refreshPlaySubscriptions().catch(err => console.error('[CRON] Play subs refresh failed:', err));
+  expireLapsedSubscriptions().catch(err => console.error('[CRON] Expire subs failed:', err));
 });
 
 // ── Red de seguridad a nivel de proceso ────────────────────────────────────

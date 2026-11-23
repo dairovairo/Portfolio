@@ -1,8 +1,13 @@
 # Dependencias
 node_modules/
 
-# Plataformas nativas generadas por Capacitor
-android/
+# Proyectos nativos: android/ SÍ se versiona (recomendación de Capacitor; lleva
+# manifest, iconos y config de firma). Fuera quedan secretos y builds.
+android/app/google-services.json
+android/keystore.properties
+*.jks
+*.keystore
+# ios/ aún no generado (requiere Mac)
 ios/
 
 # Builds

@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { RAFFLE_AD_PRICING, computeRaffleAdPriceCents, formatEurFromCents } from '../lib/adPricing';
 import { useTranslation } from '../i18n';
+import WalletInline from '../components/WalletInline';
 
 // ── Configuración de publicidad de un sorteo Light ──────────────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -87,6 +88,7 @@ export default function RaffleAdAudiencePage() {
   );
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [insufficientFunds, setInsufficientFunds] = useState(false);
 
   // Prerrellenar el toggle de intereses con el estado del ciclo actual —
   // así renovar "tal cual" no cambia nada por accidente.
@@ -253,6 +255,7 @@ export default function RaffleAdAudiencePage() {
       showToast(t('adConfig.raffleCreated'), 'success');
       navigate(`/community/${communityId}`, { replace: true });
     } catch (e) {
+      setInsufficientFunds(e?.code === 'INSUFFICIENT_FUNDS');
       setCreateError(e.message || (isRenew ? t('adConfig.errRaffleRenew') : t('adConfig.errRaffleCreate')));
     } finally {
       setCreating(false);
@@ -497,6 +500,8 @@ export default function RaffleAdAudiencePage() {
             {t('adConfig.raffleNote4')}
           </p>
         </div>
+
+        <WalletInline neededCents={maxPriceCents} warn={!isRenew} forceInsufficient={insufficientFunds} />
 
         {createError && (
           <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{createError}</p>

@@ -35,6 +35,7 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsPage from './pages/TermsPage';
 import LandingPage from './pages/LandingPage';
 import ShopPage from './pages/ShopPage';
+import WalletPage from './pages/WalletPage';
 import CalendarPage from './pages/CalendarPage';
 import { CommunityNotificationsProvider } from './context/CommunityNotificationsContext';
 import { PoolChatNotificationsProvider } from './context/PoolChatNotificationsContext';
@@ -205,6 +206,7 @@ function AppRoutes() {
       <Route path="/settings"                 element={<SettingsPage />} />
       <Route path="/admin/reports"            element={<AdminReportsPage />} />
       <Route path="/shop"                     element={<ShopPage />} />
+      <Route path="/wallet"                   element={<WalletPage />} />
       <Route path="/calendar"                 element={<CalendarPage />} />
       <Route path="/community"               element={<CommunityPage />} />
       <Route path="/community/event-publicidad" element={<EventAdConfigPage />} />

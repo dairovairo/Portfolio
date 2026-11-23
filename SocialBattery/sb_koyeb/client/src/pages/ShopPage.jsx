@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from '../components/BottomNav';
@@ -10,6 +10,12 @@ import { MASCOT_ACTIVITIES, MASCOT_ACCESSORIES, MASCOT_OUTFITS, MASCOT_FEET, MAS
 import { getEffectiveBatteryLevel } from '../lib/battery';
 import { loadVolts, saveVolts, CURRENCY_SYMBOL, DAILY_BATTERY_REWARD } from '../lib/currency';
 import { useTranslation } from '../i18n';
+import { api } from '../lib/api';
+import { isNativeApp } from '../lib/nativePush';
+import {
+  startPurchase, getStorePrices, recoverPendingPlayPurchases, handleStripeReturn,
+  manageSubscriptions, fetchServerVolts, spendServerVolts,
+} from '../lib/billing';
 
 function getMascotTier(level) {
   if (level <= 33) return 'low';
@@ -846,9 +852,10 @@ function CarouselPersonalizeButton({ family, unlockedSet, onOpen, onLocked }) {
 }
 
 // ── App Store — paquetes de Volts y suscripciones ────────────────────────────
-// Nada de esto procesa pagos de verdad: son tarjetas informativas con precio
-// orientativo. Al pulsar "Comprar"/"Suscribirse" solo se muestra un toast —
-// la pasarela de pago se conectará en una fase posterior.
+// Cobro real: Stripe Checkout en la web, Google Play Billing en la app (ver
+// lib/billing.js). Los ids deben coincidir con server/lib/billingCatalog.js
+// y con los productos creados en Play Console. priceLabel es el precio en
+// euros de referencia; en la app se muestra el precio local de Play.
 const VOLT_PACKS = [
   { id: 'volts_200',   volts: 200,   priceLabel: '0,99 €', emoji: '⚡' },
   { id: 'volts_500',   volts: 500,   priceLabel: '1,99 €', emoji: '⚡' },
@@ -896,7 +903,7 @@ function VoltPackCard({ pack, onBuy }) {
       <span className="text-2xl" style={{ fontVariantEmoji: 'emoji' }}>{pack.emoji}</span>
       <span className="font-display font-bold text-surface-text text-base">{pack.volts.toLocaleString(localeTag)}</span>
       <span className="text-[10px] text-surface-muted -mt-1">{t('shop.voltsUnit')}</span>
-      <span className="mt-1 font-display font-semibold text-accent-glow text-sm">{pack.priceLabel}</span>
+      <span className="mt-1 font-display font-semibold text-accent-glow text-sm">{pack.storePrice || pack.priceLabel}</span>
     </button>
   );
 }
@@ -940,15 +947,61 @@ function SubscriptionCard({ plan, onSubscribe }) {
   );
 }
 
-function AppStoreSection({ coins, showToast }) {
+function AppStoreSection({ coins, showToast, userId, onVoltsChanged }) {
   const { t, lang } = useTranslation();
+  const navigate = useNavigate();
   const localeTag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
-  function handleBuyVolts(pack) {
-    showToast(t('shop.soonBuyVolts', { n: pack.volts.toLocaleString(localeTag), price: pack.priceLabel }));
+  const [busy, setBusy] = useState(null);
+  const [storePrices, setStorePrices] = useState({});
+  const [subsState, setSubsState] = useState({ subscriptions: [] });
+  const [providers, setProviders] = useState(null);
+
+  const loadSubs = useCallback(() => {
+    api.get('/payments/me').then(setSubsState).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api.get('/payments/catalog').then(c => setProviders(c.providers || {})).catch(() => setProviders({}));
+    getStorePrices([...VOLT_PACKS.map(p => p.id), ...SUBSCRIPTION_PLANS.map(p => p.id)]).then(setStorePrices);
+    loadSubs();
+  }, [loadSubs]);
+
+  const providerReady = providers && (isNativeApp() ? providers.google_play : providers.stripe);
+
+  function purchaseErrorToast(err) {
+    const msg = String(err?.message || '');
+    if (!/cancel/i.test(msg)) showToast(msg || t('shop.buyError'));
   }
-  function handleSubscribe(plan) {
-    showToast(t('shop.soonSubscribe', { name: t('shop.' + plan.nameKey), price: plan.priceLabel, period: t('shop.' + plan.periodKey) }));
+
+  async function handleBuyVolts(pack) {
+    if (!providerReady) { showToast(t('shop.paymentsOff')); return; }
+    setBusy(pack.id);
+    try {
+      const res = await startPurchase(pack.id, { userId, returnPath: '/shop' });
+      if (res && Number.isFinite(Number(res.volts))) onVoltsChanged(Number(res.volts));
+      showToast(t('shop.buyOk', { n: pack.volts.toLocaleString(localeTag) }));
+    } catch (err) {
+      purchaseErrorToast(err);
+    } finally {
+      setBusy(null);
+    }
   }
+
+  async function handleSubscribe(plan) {
+    if (!providerReady) { showToast(t('shop.paymentsOff')); return; }
+    setBusy(plan.id);
+    try {
+      await startPurchase(plan.id, { userId, returnPath: '/shop' });
+      showToast(t('shop.subOk'));
+      loadSubs();
+    } catch (err) {
+      purchaseErrorToast(err);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const activeIds = new Set((subsState.subscriptions || []).filter(s => s.active).map(s => s.product_id));
 
   return (
     <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-10 space-y-8">
@@ -963,13 +1016,28 @@ function AppStoreSection({ coins, showToast }) {
         </div>
       </div>
 
+      {/* Acceso al saldo publicitario */}
+      <button
+        onClick={() => navigate('/wallet')}
+        className="w-full bg-surface-card border border-surface-border hover:border-accent-primary/40 rounded-2xl p-4 flex items-center gap-4 text-left transition-all"
+      >
+        <div className="w-14 h-14 rounded-2xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-2xl flex-shrink-0">
+          💶
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display font-bold text-surface-text text-sm">{t('shop.adBalance')}</div>
+          <div className="text-xs text-surface-muted">{t('shop.adBalanceHint')}</div>
+        </div>
+        <span className="text-surface-muted">›</span>
+      </button>
+
       {/* Paquetes de Volts */}
       <div>
         <h2 className="font-display font-bold text-surface-text text-base mb-1">{t('shop.buyVolts')}</h2>
         <p className="text-xs text-surface-muted mb-3">{t('shop.buyVoltsSubtitle')}</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid grid-cols-2 gap-3 ${busy ? 'opacity-60 pointer-events-none' : ''}`}>
           {VOLT_PACKS.map(pack => (
-            <VoltPackCard key={pack.id} pack={pack} onBuy={handleBuyVolts} />
+            <VoltPackCard key={pack.id} pack={{ ...pack, storePrice: storePrices[pack.id] }} onBuy={handleBuyVolts} />
           ))}
         </div>
       </div>
@@ -978,15 +1046,27 @@ function AppStoreSection({ coins, showToast }) {
       <div>
         <h2 className="font-display font-bold text-surface-text text-base mb-1">{t('shop.subscriptions')}</h2>
         <p className="text-xs text-surface-muted mb-3">{t('shop.subsSubtitle')}</p>
-        <div className="space-y-3">
+        <div className={`space-y-3 ${busy ? 'opacity-60 pointer-events-none' : ''}`}>
           {SUBSCRIPTION_PLANS.map(plan => (
-            <SubscriptionCard key={plan.id} plan={plan} onSubscribe={handleSubscribe} />
+            activeIds.has(plan.id) ? (
+              <div key={plan.id} className="bg-surface-card border border-accent-primary/40 rounded-2xl p-4 flex items-center justify-between gap-3">
+                <span className="font-display font-bold text-surface-text text-sm">{plan.emoji} {t('shop.' + plan.nameKey)}</span>
+                <span className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold uppercase text-white bg-accent-primary rounded-full px-2 py-0.5">{t('shop.active')}</span>
+                  <button onClick={() => manageSubscriptions().catch(purchaseErrorToast)} className="text-xs text-accent-glow underline">
+                    {t('shop.manageSubs')}
+                  </button>
+                </span>
+              </div>
+            ) : (
+              <SubscriptionCard key={plan.id} plan={{ ...plan, priceLabel: storePrices[plan.id] || plan.priceLabel }} onSubscribe={handleSubscribe} />
+            )
           ))}
         </div>
       </div>
 
       <p className="text-[10px] text-surface-muted/60 text-center leading-relaxed">
-        {t('shop.subsSoonNote')}
+        {t('shop.subsLegal')}
       </p>
     </div>
   );
@@ -1021,9 +1101,39 @@ export default function ShopPage() {
   // Supabase), y guardarlo en cada cambio posterior. Mismo patrón que el
   // "skin" persistente en MascotContext.
   useEffect(() => {
-    if (profile?.id) setCoins(loadVolts(profile.id));
+    if (!profile?.id) return;
+    const local = loadVolts(profile.id);
+    setCoins(local);
+    // El saldo de verdad vive en el servidor (se pueden comprar Volts con
+    // dinero). La primera vez se siembra con lo que había en localStorage.
+    // Si el servidor aún no tiene la migración, se sigue en modo local.
+    let cancelled = false;
+    (async () => {
+      const ret = await handleStripeReturn();
+      if (ret === 'success') showToast(t('wallet.paymentOk'));
+      await recoverPendingPlayPurchases();
+      try {
+        const res = await fetchServerVolts(local);
+        if (!cancelled && Number.isFinite(Number(res.volts))) setCoins(Number(res.volts));
+      } catch { /* modo local */ }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
+
+  // Gasta Volts: actualización optimista + servidor. Si el servidor lo
+  // rechaza (no llega el saldo real) se resincroniza.
+  function spendVolts(amount) {
+    setCoins(c => c - Number(amount));
+    spendServerVolts(amount).then(
+      res => { if (Number.isFinite(Number(res?.volts))) setCoins(Number(res.volts)); },
+      err => {
+        if (err?.code === 'INSUFFICIENT_VOLTS') {
+          fetchServerVolts().then(r => setCoins(Number(r.volts))).catch(() => {});
+        }
+      },
+    );
+  }
 
   useEffect(() => {
     if (profile?.id) saveVolts(profile.id, coins);
@@ -1202,7 +1312,7 @@ export default function ShopPage() {
     const labels = outfitCustomizationLabels(editingOutfitItem?.subcategory);
     const newId = saveOutfitCustomization(editingOutfitItem, zones, editingOutfitCustomId);
     if (newId) {
-      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      spendVolts(CUSTOMIZATION_SAVE_COST);
       { const _base = editingOutfitItem?.baseId ? { id: editingOutfitItem.baseId, name: editingOutfitItem.baseName } : editingOutfitItem; const _name = getMascotItemName(_base, t); showToast(editingOutfitItem?.subcategory === 'camisa' ? t('shop.savedToShirtsLongCustom', { name: _name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL }) : t('shop.savedToShirtsCustom', { name: _name, n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingOutfitItem(null);
@@ -1250,7 +1360,7 @@ export default function ShopPage() {
     }
     const newId = saveAccessoryCustomization(editingAccessoryItem, zones, editingAccessoryCustomId);
     if (newId) {
-      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      spendVolts(CUSTOMIZATION_SAVE_COST);
       { const _base = editingAccessoryItem?.baseId ? { id: editingAccessoryItem.baseId, name: editingAccessoryItem.baseName } : editingAccessoryItem; showToast(t('shop.savedToAccCustom', { name: getMascotItemName(_base, t), n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingAccessoryItem(null);
@@ -1281,7 +1391,7 @@ export default function ShopPage() {
     }
     const newId = saveHeadCustomization(editingHeadItem, zones, editingHeadCustomId);
     if (newId) {
-      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      spendVolts(CUSTOMIZATION_SAVE_COST);
       { const _base = editingHeadItem?.baseId ? { id: editingHeadItem.baseId, name: editingHeadItem.baseName } : editingHeadItem; showToast(t('shop.savedToHeadCustom', { name: getMascotItemName(_base, t), n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingHeadItem(null);
@@ -1312,7 +1422,7 @@ export default function ShopPage() {
     }
     const newId = saveFeetCustomization(editingFeetItem, zones, editingCustomId);
     if (newId) {
-      setCoins(c => c - CUSTOMIZATION_SAVE_COST);
+      spendVolts(CUSTOMIZATION_SAVE_COST);
       { const _base = editingFeetItem?.baseId ? { id: editingFeetItem.baseId, name: editingFeetItem.baseName } : editingFeetItem; showToast(t('shop.savedToFeetCustom', { name: getMascotItemName(_base, t), n: CUSTOMIZATION_SAVE_COST, sym: CURRENCY_SYMBOL })); }
     }
     setEditingFeetItem(null);
@@ -1335,7 +1445,7 @@ export default function ShopPage() {
   // ── Actividades ─────────────────────────────────────────────────────────────
   function handleBuyActivity(activity) {
     if (coins < activity.price) return;
-    setCoins(c => c - activity.price);
+    spendVolts(activity.price);
     unlockActivity(activity.id);
     equipActivity(activity.id);
     showToast(t('shop.activityUnlocked', { name: getMascotItemName(activity, t) }));
@@ -1350,7 +1460,7 @@ export default function ShopPage() {
   // afectar a los demás (varios accesorios pueden estar activos a la vez).
   function handleBuyAccessory(accessory) {
     if (coins < accessory.price) return;
-    setCoins(c => c - accessory.price);
+    spendVolts(accessory.price);
     unlockAccessory(accessory.id);
     toggleAccessory(accessory.id);
     showToast(t('shop.accessoryUnlocked', { name: getMascotItemName(accessory, t) }));
@@ -1364,7 +1474,7 @@ export default function ShopPage() {
   // ── Outfits — Torso ──────────────────────────────────────────────────────────
   function handleBuyOutfit(outfit) {
     if (coins < outfit.price) return;
-    setCoins(c => c - outfit.price);
+    spendVolts(outfit.price);
     unlockOutfit(outfit.id);
     equipOutfit(outfit.id);
     showToast(t('shop.outfitUnlocked', { name: getMascotItemName(outfit, t) }));
@@ -1378,7 +1488,7 @@ export default function ShopPage() {
   // ── Outfits — Pies ───────────────────────────────────────────────────────────
   function handleBuyFeet(feet) {
     if (coins < feet.price) return;
-    setCoins(c => c - feet.price);
+    spendVolts(feet.price);
     unlockFeet(feet.id);
     equipFeet(feet.id);
     showToast(t('shop.feetUnlocked', { name: getMascotItemName(feet, t) }));
@@ -1400,7 +1510,7 @@ export default function ShopPage() {
   // ── Outfits — Cabeza ─────────────────────────────────────────────────────────
   function handleBuyHead(head) {
     if (coins < head.price) return;
-    setCoins(c => c - head.price);
+    spendVolts(head.price);
     unlockHead(head.id);
     equipHead(head.id);
     showToast(t('shop.headUnlocked', { name: getMascotItemName(head, t) }));
@@ -1710,7 +1820,7 @@ export default function ShopPage() {
       </nav>
 
       {shopSection === 'app' ? (
-        <AppStoreSection coins={coins} showToast={showToast} />
+        <AppStoreSection coins={coins} showToast={showToast} userId={profile?.id} onVoltsChanged={setCoins} />
       ) : (
       <>
       {/* Preview mascota activa con las 6 capas — se le pasan explícitamente

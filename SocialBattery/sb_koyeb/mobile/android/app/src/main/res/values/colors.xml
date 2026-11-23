@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Color de acento de las notificaciones FCM (ver AndroidManifest.xml) -->
+    <color name="notification_color">#FFCC66</color>
+    <!-- Fondo de la ventana: se ve detrás de las barras de estado y navegación -->
+    <color name="app_background">#0A0A0F</color>
+</resources>

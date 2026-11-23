@@ -7,9 +7,8 @@ import { mascotPreviewOverlayHtml } from './MascotPreviewOverlay';
  * GlobeLocationView — mapa de ubicación para EventLocatorPage y
  * PoolSnifferPage.
  *
- * Mapa 2D detallado (Leaflet) con teselas oscuras o claras según el tema
- * de la app (CARTO dark_all / light_all — sin API key), con precisión y
- * zoom reales (hasta nivel calle).
+ * Mapa 2D detallado (Leaflet + OpenStreetMap) oscuro o claro según el tema
+ * de la app, con precisión y zoom reales (hasta nivel calle).
  *
  * Props:
  *   lat, lng {number}
@@ -134,10 +133,16 @@ function FlatMapView({ lat, lng, label, isDark, friends, radiusCircleMeters }) {
         doubleClickZoom: true,
       });
 
-      const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-      L.tileLayer(tileUrl, { maxZoom: 19, subdomains: 'abcd' }).addTo(map);
+      // OpenStreetMap, como el resto de mapas de la app. CARTO (dark_all /
+      // light_all) pasó a exigir API key y pintaba "API KEY REQUIRED". El
+      // tema oscuro se consigue invirtiendo las teselas (ver index.css).
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        className: isDark ? 'sb-tiles-dark' : '',
+      }).addTo(map);
+      L.control.attribution({ prefix: false })
+        .addAttribution('© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>')
+        .addTo(map);
 
       const icon = L.divIcon({
         html: '<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.8))">📍</div>',
