@@ -154,21 +154,23 @@ desconocidos, ubicación y pagos. Marca que **no** está dirigida a niños.
 
 - **Aplicación gubernamental / financiera / salud:** no.
 - **Noticias:** no.
-- **Permisos sensibles:** notificaciones. La app no pide ubicación en segundo plano.
+- **Permisos sensibles:** notificaciones y ubicación (aproximada y precisa, solo con la
+  app en uso). La app no pide ubicación en segundo plano.
 
 ---
 
 ## ⚠️ Antes de enviar a revisión: sorteos
 
-La política de Google Play sobre concursos y sorteos (y la ley española de juego) no
-permite que **para participar haya que pagar**. Ahora mismo:
+Un sorteo en el que **para participar hay que pagar** puede considerarse juego, tanto
+para Google Play como para la ley española. Es un riesgo que conviene confirmar (política
+de Play y asesoría legal) antes de publicar. Ahora mismo:
 
 - **Sorteo Volt:** solo participan los suscriptores de pago. Es pago para participar.
 - **Sorteo Community:** solo participan quienes han hecho una "colaboración" económica
   con la comunidad. Es pago para participar.
 - **Sorteo Light:** participan todos los miembros. Correcto.
 
-Es un motivo típico de rechazo, o de retirada posterior de la app. Lo hablamos en la
+Puede ser motivo de rechazo, o de retirada posterior de la app. Lo hablamos en la
 revisión del sistema de sorteos. La opción más simple es que cualquier miembro pueda
 participar gratis en todos (la suscripción solo daría, por ejemplo, alguna
 participación extra) y publicar unas bases legales de cada sorteo.

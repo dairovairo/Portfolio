@@ -6,7 +6,7 @@ import { useToast } from '../context/ToastContext';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import { useSettings } from '../context/SettingsContext';
 import { usePush } from '../hooks/usePush';
-import { isNativeApp, ensureNativePush, getLastFcmResult } from '../lib/nativePush';
+import { isNativeApp, ensureNativePush } from '../lib/nativePush';
 import { api } from '../lib/api';
 import { getBatteryColor, formatRelativeTime } from '../lib/battery';
 import { BatteryLineChart, BatteryHeatmap } from '../components/BatteryChart';
@@ -219,28 +219,10 @@ export default function ProfilePage() {
   }
 
   async function handlePushToggle() {
-    // En la app móvil nativa, mostramos siempre el diagnóstico FCM detallado
-    // por pantalla (alert). Así no hace falta adb/logcat para ver por qué el
-    // registro de FCM falla.
     if (isNativeApp()) {
-      addToast('Probando notificaciones nativas...', 'info');
-      await ensureNativePush();
-      // Esperamos brevemente a que el evento 'registration' llegue del bridge
-      // nativo (si va a llegar). Es asíncrono, típicamente <2 segundos.
-      await new Promise(r => setTimeout(r, 2500));
-      const result = getLastFcmResult();
-      const msg = [
-        'DEBUG FCM',
-        '',
-        'Paso: ' + result.step,
-        result.tokenPreview ? 'Token: ' + result.tokenPreview : null,
-        result.backendResponse ? 'Backend: ' + JSON.stringify(result.backendResponse) : null,
-        result.permission ? 'Permiso: ' + result.permission : null,
-        result.error ? 'Error: ' + result.error : null,
-        result.hint ? '\n➔ ' + result.hint : null,
-      ].filter(Boolean).join('\n');
-      // eslint-disable-next-line no-alert
-      window.alert(msg);
+      const ok = await ensureNativePush();
+      if (ok) addToast(t('profile.pushEnabled'), 'success');
+      else addToast(t('profile.pushDenied'), 'warning');
       return;
     }
 

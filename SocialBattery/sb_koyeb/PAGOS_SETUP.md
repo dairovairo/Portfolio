@@ -133,7 +133,8 @@ campañas Premium/Ultra/Light reservan saldo.
 
 - **Colaboraciones P2P a comunidades.** El dinero va a otra persona, no a
   SocialBattery. Para hacerlo bien hace falta Stripe Connect, con verificación de
-  identidad de cada administrador, y Google Play no permite cobrarlo dentro de la app.
+  identidad de cada administrador. Antes de cobrarlo dentro de la app hay que comprobar
+  qué dice la política de pagos de Google Play sobre este caso (no está comprobado).
   De momento siguen registrándose sin cobro real, igual que antes.
 - **Ventajas de las suscripciones.** Ya están conectadas: *participación en sorteos
   Volt* (`is_volt_subscriber`) y *150 Volts semanales*. Las demás ventajas que anuncia

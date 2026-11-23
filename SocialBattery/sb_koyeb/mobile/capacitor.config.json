@@ -48,8 +48,8 @@
       ]
     },
     "SystemBars": {
-      "insetsHandling": "css",
-      "initialViewportFitValueHint": "cover"
+      "insetsHandling": "disable",
+      "style": "DARK"
     }
   }
 }

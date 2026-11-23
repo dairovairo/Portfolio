@@ -137,6 +137,9 @@ select {
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
 
+/* ── Teselas de mapa en tema oscuro (GlobeLocationView) ─────── */
+.sb-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.6); }
+
 /* ── Battery glow ──────────────────────────────────────────── */
 .battery-glow {
   filter: drop-shadow(0 0 8px currentColor);

@@ -17,58 +17,13 @@ import { api } from './api';
 // Prefijo consistente para grepear en adb logcat: `adb logcat | grep SBFCM`
 const LOG = '[SBFCM]';
 
-// Marcador de versión — lo pinchamos en cada beacon para saber si el JS
-// corriendo en el móvil es el nuevo o cacheado del anterior deploy.
-const JS_BUILD = 'fcm-v4-thenable-fix';
+// Canal de Android por el que el servidor envía los push (server/lib/fcm.js y
+// AndroidManifest.xml usan este mismo id). Si no existe, Android cae al canal
+// genérico, sin banner emergente.
+const CHANNEL_ID = 'sb_default';
 
 let listenersRegistered = false;
 let cachedPlugin = null;
-
-// Guardamos el detalle del último intento para poder mostrarlo en la UI.
-let lastResult = { step: 'not-attempted', ok: false };
-function record(step, extra = {}) {
-  lastResult = { step, at: new Date().toISOString(), ...extra };
-  // Fire-and-forget beacon al backend para diagnóstico sin adb.
-  try {
-    fetch((import.meta.env.VITE_API_URL || '/api') + '/debug/fcm-attempt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        step,
-        platform: nativePlatform(),
-        jsBuild: JS_BUILD,
-        ...extra,
-      }),
-      keepalive: true,
-    }).catch(() => {});
-  } catch {}
-  return lastResult;
-}
-export function getLastFcmResult() { return lastResult; }
-
-// Boot beacon: en cuanto se importa este módulo desde dentro del wrapper
-// nativo, avisa al backend "estoy vivo, este JS está corriendo". Nos dice
-// si el móvil ya tiene el bundle nuevo. NO depende de que se ejecute
-// ensureNativePush(), así descartamos "el hook no me llama" de las causas.
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    try {
-      const isNative = isNativeApp();
-      if (!isNative) return; // solo desde móvil
-      fetch((import.meta.env.VITE_API_URL || '/api') + '/debug/fcm-attempt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          step: 'module-loaded',
-          platform: nativePlatform(),
-          jsBuild: JS_BUILD,
-          hint: 'nativePush.js se ha cargado en el WebView — el bundle es el nuevo.',
-        }),
-        keepalive: true,
-      }).catch(() => {});
-    } catch {}
-  }, 500);
-}
 
 /** ¿Estamos dentro del wrapper nativo de Capacitor? */
 export function isNativeApp() {
@@ -94,21 +49,17 @@ export function nativePlatform() {
  * Los plugins de Capacitor son Proxies que responden a cualquier propiedad,
  * incluida `then`. Si una función async hace `return plugin`, la Promise lo
  * trata como "thenable", llama a `plugin.then(...)` como si fuera un método
- * nativo y se queda colgada para siempre, sin error. Era exactamente el
- * cuelgue tras el beacon 'loading-plugin': el registro FCM no llegaba nunca a
- * checkPermissions(). Envolviéndolo en un objeto plano se evita.
+ * nativo y se queda colgada para siempre, sin error. Envolviéndolo en un
+ * objeto plano se evita.
  */
 async function loadPushPlugin() {
   if (cachedPlugin) return { PushNotifications: cachedPlugin };
   if (!isNativeApp()) {
-    console.log(LOG, 'loadPushPlugin skipped: not a native app');
     return null;
   }
   try {
-    console.log(LOG, 'loading @capacitor/push-notifications module...');
     const mod = await import('@capacitor/push-notifications');
     cachedPlugin = mod.PushNotifications || null;
-    console.log(LOG, 'plugin loaded, has methods:', !!cachedPlugin?.checkPermissions);
     return cachedPlugin ? { PushNotifications: cachedPlugin } : null;
   } catch (e) {
     console.error(LOG, 'FAILED to load @capacitor/push-notifications:', e?.message || e);
@@ -116,94 +67,67 @@ async function loadPushPlugin() {
   }
 }
 
+/**
+ * Pide permiso, crea el canal y registra el token FCM en el backend.
+ * @returns {Promise<boolean>} true si hay permiso y se ha lanzado el registro
+ */
 export async function ensureNativePush() {
-  console.log(LOG, 'ensureNativePush() called. isNativeApp=', isNativeApp(), 'platform=', nativePlatform());
-  // Beacon inmediato — si esto no llega, es que la función ni se está
-  // llamando, y el problema está aguas arriba (el hook que la invoca).
-  record('ensure-native-push-entered');
+  if (!isNativeApp()) return false;
 
-  if (!isNativeApp()) { record('not-native'); return false; }
-
-  record('loading-plugin');
   const { PushNotifications } = (await loadPushPlugin()) || {};
-  if (!PushNotifications) {
-    console.warn(LOG, 'plugin not available, aborting');
-    record('plugin-load-failed', { hint: 'Render no ha redeployado el frontend con @capacitor/push-notifications, o el WebView tiene JS cacheado. Borra caché de la app y reabre.' });
-    return false;
-  }
-
-  record('plugin-loaded');
+  if (!PushNotifications) return false;
 
   try {
     let perm = await PushNotifications.checkPermissions();
-    console.log(LOG, 'checkPermissions result:', JSON.stringify(perm));
-
     if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
-      console.log(LOG, 'requesting permission...');
       perm = await PushNotifications.requestPermissions();
-      console.log(LOG, 'requestPermissions result:', JSON.stringify(perm));
+    }
+    if (perm.receive !== 'granted') {
+      console.warn(LOG, 'permission not granted:', perm.receive);
+      return false;
     }
 
-    if (perm.receive !== 'granted') {
-      console.warn(LOG, 'permission not granted, aborting. state=', perm.receive);
-      record('permission-denied', { permission: perm.receive, hint: 'Ajustes de Android → Apps → SocialBattery → Notificaciones → activa.' });
-      return false;
+    if (nativePlatform() === 'android') {
+      await PushNotifications.createChannel({
+        id: CHANNEL_ID,
+        name: 'SocialBattery',
+        importance: 4, // HIGH: banner emergente + sonido
+        visibility: 0, // PRIVATE: oculta el contenido en la pantalla de bloqueo
+        vibration: true,
+      }).catch(e => console.warn(LOG, 'createChannel failed:', e?.message || e));
     }
 
     if (!listenersRegistered) {
       listenersRegistered = true;
-      console.log(LOG, 'registering event listeners');
 
       PushNotifications.addListener('registration', async (token) => {
-        const preview = String(token?.value || '').slice(0, 20) + '...';
-        console.log(LOG, 'REGISTRATION event fired. token=', preview);
-
-        if (!token?.value) {
-          console.warn(LOG, 'registration event with empty token, skip');
-          record('empty-token');
-          return;
-        }
-
+        if (!token?.value) return;
         try {
-          console.log(LOG, 'POST /users/fcm-register (platform=' + nativePlatform() + ')');
-          const res = await api.post('/users/fcm-register', {
+          await api.post('/users/fcm-register', {
             token: token.value,
             platform: nativePlatform(),
           });
-          console.log(LOG, 'fcm-register response:', JSON.stringify(res));
-          record('registered-ok', { tokenPreview: preview, backendResponse: res });
         } catch (e) {
-          console.error(LOG, 'fcm-register FAILED:', e?.message || e);
-          record('backend-post-failed', { tokenPreview: preview, error: String(e?.message || e), hint: 'El móvil obtuvo el token FCM pero el POST al backend petó. Revisa VITE_API_URL en Render (debe apuntar al backend de Railway).' });
+          console.error(LOG, 'fcm-register failed:', e?.message || e);
         }
       });
 
       PushNotifications.addListener('registrationError', (err) => {
-        console.error(LOG, 'REGISTRATION_ERROR event:', JSON.stringify(err));
-        record('fcm-registration-error', { error: JSON.stringify(err), hint: 'Firebase no ha podido dar un token FCM. Suele ser: google-services.json corrupto, o el móvil sin Google Play Services actualizados.' });
-      });
-
-      PushNotifications.addListener('pushNotificationReceived', (n) => {
-        console.log(LOG, 'notification received (foreground):', n?.title);
+        console.error(LOG, 'registration error:', JSON.stringify(err));
       });
 
       PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
         const url = action?.notification?.data?.url;
-        console.log(LOG, 'notification tapped, url=', url);
         if (url && typeof window !== 'undefined') {
           try { window.location.assign(url); } catch {}
         }
       });
     }
 
-    console.log(LOG, 'calling PushNotifications.register()');
-    record('register-called', { permission: perm.receive });
     await PushNotifications.register();
-    console.log(LOG, 'register() resolved OK (token will arrive via registration event)');
     return true;
   } catch (e) {
-    console.error(LOG, 'ensureNativePush threw:', e?.message || e);
-    record('exception', { error: String(e?.message || e) });
+    console.error(LOG, 'ensureNativePush failed:', e?.message || e);
     return false;
   }
 }

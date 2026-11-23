@@ -14,6 +14,7 @@
 //   GOOGLE_PLAY_PACKAGE_NAME (por defecto com.socialbattery.app)
 
 const { GoogleAuth } = require('google-auth-library');
+const { normalizePrivateKey } = require('./serviceAccountKey');
 
 const PACKAGE_NAME = process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.socialbattery.app';
 const BASE = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications';
@@ -30,8 +31,7 @@ function isConfigured() {
 function getClient() {
   if (!authClientPromise) {
     const clientEmail = process.env.GOOGLE_PLAY_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = (process.env.GOOGLE_PLAY_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY || '')
-      .replace(/\\n/g, '\n');
+    const privateKey = normalizePrivateKey(process.env.GOOGLE_PLAY_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY);
     const auth = new GoogleAuth({
       credentials: { client_email: clientEmail, private_key: privateKey },
       scopes: ['https://www.googleapis.com/auth/androidpublisher'],
