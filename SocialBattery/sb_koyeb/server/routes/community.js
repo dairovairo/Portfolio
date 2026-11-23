@@ -13,6 +13,9 @@ const { addYears, addMonths } = require('../lib/dateRangeLimits');
 const { BOOST_GROUP_SIZE } = require('../lib/adaptiveBoost');
 const { drawRaffleWinners, notifyRaffleDrawn } = require('../lib/raffleDraw');
 const { pickRaffleFromRatioGroups } = require('../lib/promoDistribution');
+const wallet = require('../lib/wallet');
+const { EVENT_AD_PRICING, RAFFLE_AD_PRICING } = require('../lib/adPricing');
+const { COMMUNITY_RAFFLE_FEE_CENTS } = require('../lib/billingCatalog');
 
 const eventCoverUpload = createImageUpload({ maxSizeMb: 3 });
 const communityCoverUpload = createImageUpload({ maxSizeMb: 3 });
@@ -808,6 +811,17 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
       }
     }
 
+    // Saldo prepago: premium/ultra reservan notificaciones × precio unitario.
+    // Se comprueba aquí (antes de subir la portada) para fallar rápido; la
+    // reserva real se hace justo después de insertar el evento.
+    const eventUnitPriceCents = resolvedNotificationCount ? (EVENT_AD_PRICING[resolvedPlan]?.unitPriceCents || 0) : 0;
+    try {
+      await wallet.assertCanAfford(userId, eventUnitPriceCents * (resolvedNotificationCount || 0));
+    } catch (walletErr) {
+      if (walletErr.code === 'INSUFFICIENT_FUNDS') return wallet.sendInsufficientFunds(res, walletErr);
+      throw walletErr;
+    }
+
     let coverImageUrl = req.body.cover_image_url?.trim() || null;
     if (req.file) {
       coverImageUrl = await storeImage({
@@ -848,6 +862,20 @@ router.post('/events', requireAuth, uploadEventCover, async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    if (eventUnitPriceCents > 0) {
+      try {
+        await wallet.holdCampaign({
+          userId, kind: 'event', targetId: event.id, plan: resolvedPlan,
+          unitPriceCents: eventUnitPriceCents, units: resolvedNotificationCount,
+        });
+      } catch (walletErr) {
+        // Sin reserva no hay campaña: se deshace el evento recién creado.
+        await supabase.from('community_events').delete().eq('id', event.id);
+        if (walletErr.code === 'INSUFFICIENT_FUNDS') return wallet.sendInsufficientFunds(res, walletErr);
+        throw walletErr;
+      }
+    }
 
     const { error: attendeeError } = await supabase
       .from('community_event_attendees')
@@ -1058,6 +1086,26 @@ router.post('/events/:id/renew-promotion', requireAuth, async (req, res) => {
       });
     }
 
+    // Saldo prepago: se liquida el ciclo que acaba (se cobra lo entregado,
+    // vuelve el resto) y se reserva el nuevo. Antes de tocar nada se
+    // comprueba que saldo + lo que va a volver alcanza para la nueva reserva.
+    const renewUnitPriceCents = resolvedNotificationCount ? (EVENT_AD_PRICING[resolvedPlan]?.unitPriceCents || 0) : 0;
+    const renewNeededCents = renewUnitPriceCents * (resolvedNotificationCount || 0);
+    try {
+      const openHold = wallet.paymentsEnabled() ? await wallet.getOpenHold('event', id) : null;
+      await wallet.assertCanAfford(userId, renewNeededCents, wallet.previewRefundCents(openHold, sentCount, FREE_THRESHOLD));
+      await wallet.settleCampaign({ kind: 'event', targetId: id, unitsDelivered: sentCount, threshold: FREE_THRESHOLD, reason: 'renewed' });
+      if (renewNeededCents > 0) {
+        await wallet.holdCampaign({
+          userId, kind: 'event', targetId: id, plan: resolvedPlan,
+          unitPriceCents: renewUnitPriceCents, units: resolvedNotificationCount,
+        });
+      }
+    } catch (walletErr) {
+      if (walletErr.code === 'INSUFFICIENT_FUNDS') return wallet.sendInsufficientFunds(res, walletErr);
+      throw walletErr;
+    }
+
     const { data: updated, error: updateError } = await supabase
       .from('community_events')
       .update({
@@ -1213,6 +1261,8 @@ router.post('/events/:id/end-promotion', requireAuth, async (req, res) => {
       .single();
 
     if (updateError) throw updateError;
+
+    await wallet.settleCampaign({ kind: 'event', targetId: id, unitsDelivered: sentCount, threshold: FREE_THRESHOLD, reason: 'ended_by_owner' });
 
     res.json({ event: updated });
   } catch (err) {
@@ -4777,6 +4827,18 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleAssets, async (
     // Fase 122 — con multer.fields() la portada llega como
     // req.files.image[0] en vez de req.file. Se mantiene el mismo path
     // de almacenamiento y opciones.
+    // Saldo prepago: Light reserva banners × precio unitario (se cobra lo
+    // enseñado al terminar); Community es una tarifa fija por sorteo.
+    const raffleUnitPriceCents = raffleTier === 'light' ? (RAFFLE_AD_PRICING.light?.unitPriceCents || 0) : 0;
+    const raffleHoldCents = raffleUnitPriceCents * (resolvedBannerViews || 0);
+    const raffleFeeCents = raffleTier === 'community' ? COMMUNITY_RAFFLE_FEE_CENTS : 0;
+    try {
+      await wallet.assertCanAfford(userId, raffleHoldCents + raffleFeeCents);
+    } catch (walletErr) {
+      if (walletErr.code === 'INSUFFICIENT_FUNDS') return wallet.sendInsufficientFunds(res, walletErr);
+      throw walletErr;
+    }
+
     const coverFile = req.files && Array.isArray(req.files.image) ? req.files.image[0] : null;
     let imageUrl = null;
     if (coverFile) {
@@ -4805,6 +4867,29 @@ router.post('/communities/:id/raffles', requireAuth, uploadRaffleAssets, async (
       .single();
 
     if (error) throw error;
+
+    try {
+      if (raffleHoldCents > 0) {
+        await wallet.holdCampaign({
+          userId, kind: 'raffle', targetId: data.id, plan: raffleTier,
+          unitPriceCents: raffleUnitPriceCents, units: resolvedBannerViews,
+        });
+      }
+      if (raffleFeeCents > 0) {
+        try {
+          await wallet.chargeFee({ userId, amountCents: raffleFeeCents, description: `Sorteo Community: ${data.title}` });
+        } catch (feeErr) {
+          // Deshacer también la reserva Light si la hubiera (aquí no aplica
+          // porque cada sorteo es de un solo tier, pero por si cambia).
+          await wallet.settleCampaign({ kind: 'raffle', targetId: data.id, unitsDelivered: 0, threshold: 1, reason: 'creation_failed' }).catch(() => {});
+          throw feeErr;
+        }
+      }
+    } catch (walletErr) {
+      await supabase.from('community_raffles').delete().eq('id', data.id);
+      if (walletErr.code === 'INSUFFICIENT_FUNDS') return wallet.sendInsufficientFunds(res, walletErr);
+      throw walletErr;
+    }
 
     // Fase 122 — subir imágenes de premios (secuencial para no saturar
     // Supabase Storage con N uploads simultáneos y para preservar el
@@ -5437,6 +5522,8 @@ router.post('/raffles/:raffleId/end-promotion', requireAuth, async (req, res) =>
       .single();
     if (updateErr) throw updateErr;
 
+    await wallet.settleCampaign({ kind: 'raffle', targetId: raffleId, unitsDelivered: shownCount, threshold: RAFFLE_FREE_THRESHOLD, reason: 'ended_by_owner' });
+
     res.json({ raffle: updated });
   } catch (err) {
     console.error('[community] POST /raffles/:raffleId/end-promotion error:', err);
@@ -5527,6 +5614,25 @@ router.post('/raffles/:raffleId/renew-promotion', requireAuth, async (req, res) 
       .eq('id', raffle.community_id)
       .single();
     if (commErr || !community) return res.status(404).json({ error: 'Comunidad no encontrada' });
+
+    // Saldo prepago: liquidar el ciclo que acaba y reservar el nuevo (solo
+    // Light; Community ya pagó su tarifa fija al crearse).
+    const renewUnitCents = tier === 'light' ? (RAFFLE_AD_PRICING.light?.unitPriceCents || 0) : 0;
+    const renewHoldCents = renewUnitCents * (resolvedBannerViews || 0);
+    try {
+      const openHold = wallet.paymentsEnabled() ? await wallet.getOpenHold('raffle', raffleId) : null;
+      await wallet.assertCanAfford(userId, renewHoldCents, wallet.previewRefundCents(openHold, shownCount, RAFFLE_FREE_THRESHOLD));
+      await wallet.settleCampaign({ kind: 'raffle', targetId: raffleId, unitsDelivered: shownCount, threshold: RAFFLE_FREE_THRESHOLD, reason: 'renewed' });
+      if (renewHoldCents > 0) {
+        await wallet.holdCampaign({
+          userId, kind: 'raffle', targetId: raffleId, plan: tier,
+          unitPriceCents: renewUnitCents, units: resolvedBannerViews,
+        });
+      }
+    } catch (walletErr) {
+      if (walletErr.code === 'INSUFFICIENT_FUNDS') return wallet.sendInsufficientFunds(res, walletErr);
+      throw walletErr;
+    }
 
     // Ciclo limpio: se borran los targets del ciclo anterior (clicks,
     // visualizaciones e historial). Los datos históricos del dashboard se

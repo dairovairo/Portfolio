@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import AudienceCircleMap from '../components/AudienceCircleMap';
 import { EVENT_AD_PRICING, computeEventAdPriceCents, formatEurFromCents } from '../lib/adPricing';
 import { useTranslation } from '../i18n';
+import WalletInline from '../components/WalletInline';
 
 // ── Configuración de publicidad de un evento Premium / Ultra ──────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -151,6 +152,7 @@ export default function EventAdConfigPage() {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [insufficientFunds, setInsufficientFunds] = useState(false);
 
   // ── Audiencia (usuarios notificables) ─────────────────────────────────
   // Mismo patrón que RaffleAdAudiencePage: al montar la pantalla se pide
@@ -388,6 +390,7 @@ export default function EventAdConfigPage() {
       }
       navigate(backTarget, { replace: true });
     } catch (e) {
+      setInsufficientFunds(e?.code === 'INSUFFICIENT_FUNDS');
       setError(e.message || (isRenew ? t('adConfig.errRenew') : t('adConfig.errCreate')));
     } finally {
       setSaving(false);
@@ -787,6 +790,10 @@ export default function EventAdConfigPage() {
             {t('adConfig.note5')}
           </p>
         </div>
+
+        {(plan === 'premium' || plan === 'ultra') && (
+          <WalletInline neededCents={maxPriceCents} warn={!isRenew} forceInsufficient={insufficientFunds} />
+        )}
 
         {error && (
           <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">

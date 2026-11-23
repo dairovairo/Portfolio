@@ -21,7 +21,8 @@ import { useMascot } from '../context/MascotContext';
 import MascotDisplay from '../components/MascotDisplay';
 import LogoWordmark from '../components/LogoWordmark';
 import { useTranslation } from '../i18n';
-import { claimDailyBatteryReward, DAILY_BATTERY_REWARD, CURRENCY_NAME_PLURAL } from '../lib/currency';
+import { claimDailyBatteryReward, loadVolts, DAILY_BATTERY_REWARD, CURRENCY_NAME_PLURAL } from '../lib/currency';
+import { claimServerDailyVolts } from '../lib/billing';
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
 function getMascotTier(level) {
@@ -563,7 +564,14 @@ export default function HomePage() {
         addToast(t('home.batteryUpdatedToast'), 'success');
       }
 
-      const reward = claimDailyBatteryReward(profile?.id);
+      // La recompensa la apunta el servidor (saldo de Volts real, ver
+      // lib/billing.js); si aún no está disponible, se cae al modo local.
+      let reward;
+      try {
+        reward = await claimServerDailyVolts(loadVolts(profile?.id));
+      } catch {
+        reward = claimDailyBatteryReward(profile?.id);
+      }
       if (reward.claimed) {
         addToast(`⚡ +${DAILY_BATTERY_REWARD} ${CURRENCY_NAME_PLURAL} · ${t('home.dailyReward')}`, 'success');
       }

@@ -17,6 +17,9 @@ const communityRoutes = require('./routes/community');
 const discoverRoutes  = require('./routes/discover');
 const reportsRoutes   = require('./routes/reports');
 const adminRoutes     = require('./routes/admin');
+const paymentsRoutes  = require('./routes/payments');
+const { runSettleAdHoldsTick } = require('./jobs/settleAdHolds');
+const { refreshPlaySubscriptions, expireLapsedSubscriptions } = require('./lib/billing');
 const { expireStaleBatteries } = require('./lib/batteryExpiry');
 const { notifyPoolsStartingSoon, notifyEventsStartingSoon } = require('./jobs/reminders');
 const { runEventPromoPacingTick } = require('./jobs/eventPromoPacing');
@@ -66,6 +69,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+// Webhook de Stripe: necesita el body CRUDO para verificar la firma, así que
+// va antes de express.json() (que lo consumiría y lo convertiría a objeto).
+app.post('/api/payments/stripe/webhook', express.raw({ type: 'application/json' }), paymentsRoutes.stripeWebhookHandler);
 app.use(express.json({ limit: '1mb' }));
 
 const uploadLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
@@ -141,6 +147,7 @@ app.use('/api/community', communityRoutes);
 app.use('/api/discover',  discoverRoutes);
 app.use('/api/reports',   reportsRoutes);
 app.use('/api/admin',     adminRoutes);
+app.use('/api/payments',  paymentsRoutes);
 
 // ── Debug endpoints (solo en dev o con header secreto) ────────────────────────
 app.get('/api/debug/reminders', async (req, res) => {
@@ -490,6 +497,21 @@ cron.schedule('* * * * *', () => {
   runAutoDrawTick().catch(err => {
     console.error('[CRON] Auto-draw raffles failed:', err);
   });
+});
+
+// Liquidación de reservas de saldo de campañas que han terminado (evento
+// empezado, sorteo sorteado/vencido...). Ver jobs/settleAdHolds.js.
+cron.schedule('*/10 * * * *', () => {
+  runSettleAdHoldsTick().catch(err => {
+    console.error('[CRON] Settle ad holds failed:', err);
+  });
+});
+
+// Suscripciones: re-consulta a Google Play las que vencen pronto y recalcula
+// las de Stripe vencidas (por si se perdió algún webhook).
+cron.schedule('20 * * * *', () => {
+  refreshPlaySubscriptions().catch(err => console.error('[CRON] Play subs refresh failed:', err));
+  expireLapsedSubscriptions().catch(err => console.error('[CRON] Expire subs failed:', err));
 });
 
 // ── Red de seguridad a nivel de proceso ────────────────────────────────────
