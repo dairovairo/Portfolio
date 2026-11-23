@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SocialBattery</string>
+    <string name="title_activity_main">SocialBattery</string>
+    <string name="package_name">com.socialbattery.app</string>
+    <string name="custom_url_scheme">com.socialbattery.app</string>
+</resources>

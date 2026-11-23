@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Color de acento de las notificaciones FCM (ver AndroidManifest.xml) -->
+    <color name="notification_color">#FFCC66</color>
+</resources>

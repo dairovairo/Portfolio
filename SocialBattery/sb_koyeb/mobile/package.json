@@ -13,29 +13,30 @@
     "check-url": "node scripts/check-app-url.js",
     "postinstall": "node scripts/apply-config.js",
     "gen:icons": "node scripts/gen-icons.js",
-    "add:android": "npm run check-url && npx cap add android && npx cap sync android && npm run patch:android && npm run gen:icons",
+    "add:android": "npm run check-url && npx cap add android && npx cap sync android && npm run gen:icons",
     "add:ios": "npm run check-url && npx cap add ios && npx cap sync ios && npm run gen:icons",
-    "sync": "node scripts/apply-config.js && npx cap sync && npm run patch:android && npm run gen:icons",
+    "sync": "node scripts/apply-config.js && npx cap sync && npm run gen:icons",
     "open:android": "npx cap open android",
     "open:ios": "npx cap open ios",
     "run:android": "npm run sync && npx cap run android",
     "run:ios": "npm run sync && npx cap run ios",
     "build:android": "npm run check-url && npm run sync && node scripts/run-gradle.js assembleRelease",
     "build:android:debug": "npm run check-url && npm run sync && node scripts/run-gradle.js assembleDebug",
-    "patch:android": "node scripts/patch-android-manifest.js"
+    "build:android:bundle": "npm run check-url && npm run sync && node scripts/run-gradle.js bundleRelease"
   },
   "dependencies": {
-    "@capacitor/android": "^6.1.2",
-    "@capacitor/app": "^6.0.1",
-    "@capacitor/browser": "^6.0.3",
-    "@capacitor/core": "^6.1.2",
-    "@capacitor/ios": "^6.1.2",
-    "@capacitor/push-notifications": "^6.0.3",
-    "@capacitor/splash-screen": "^6.0.2",
-    "@capacitor/status-bar": "^6.0.1"
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/push-notifications": "^8.1.3",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
+    "@capgo/native-purchases": "^8.9.17"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^6.1.2"
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.2"
   }
 }
