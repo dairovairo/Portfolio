@@ -22,6 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  isMissingProfileError,
   interpretSignUpResult,
   isAlreadyConfirmedError,
   isEmailUnconfirmed,
@@ -331,4 +332,16 @@ test('flujo signIn: signInWithPassword devuelve error → propaga sin tocar sign
     (err) => /Invalid login credentials/.test(err.message),
   );
   assert.equal(signOutCalls, 0, 'no debe llamar signOut si el login falló antes');
+});
+
+test('isMissingProfileError: solo el 404 es "sin perfil"', () => {
+  assert.equal(isMissingProfileError({ status: 404 }), true);
+});
+
+test('isMissingProfileError: red caída, 401, 429 y 5xx no lo son', () => {
+  assert.equal(isMissingProfileError(new Error('No se pudo conectar')), false);
+  assert.equal(isMissingProfileError(undefined), false);
+  for (const status of [401, 403, 429, 500, 503]) {
+    assert.equal(isMissingProfileError({ status }), false);
+  }
 });

@@ -5,6 +5,7 @@ import {
   interpretSignUpResult,
   isAlreadyConfirmedError,
   isEmailUnconfirmed,
+  isMissingProfileError,
 } from '../lib/authFlow';
 import { usePresenceBroadcast } from '../hooks/usePresence';
 import { useMessageNotifications } from '../hooks/useMessageNotifications';
@@ -86,6 +87,11 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = loading
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  // ¿Sabemos ya si esta sesión tiene perfil? Hasta entonces la app espera: si
+  // no, el hueco entre "hay sesión" y "llegó el perfil" se confunde con un
+  // usuario nuevo, App.jsx redirige a /setup y se pierde la ruta a la que se
+  // iba (recarga, enlace o notificación).
+  const [profileResolved, setProfileResolved] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
@@ -111,33 +117,45 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!session) {
       setProfile(null);
+      setProfileResolved(false);
       return;
     }
-    setLoadingProfile(true);
-    api.get('/auth/me')
-      .then(({ user }) => setProfile(user))
-      .catch((err) => {
-        // Distinguir "usuario no existe/token inválido" (401/404) — donde
-        // TIENE sentido limpiar el perfil y que App.jsx redirija al login
-        // o al onboarding — de errores transitorios (429 rate limit, 5xx,
-        // red caída) donde NO queremos tocar el perfil porque no significa
-        // que el usuario haya perdido acceso.
-        //
-        // Antes cualquier error hacía setProfile(null) y en pareja de
-        // hermanos compartiendo IP el 429 nos "sacaba" al onboarding y
-        // luego a la landing.
-        const status = err?.status;
-        if (status === 401 || status === 404) {
-          setProfile(null);
-        } else {
-          // Error transitorio — mantenemos lo que hubiera (o null si es
-          // el primer intento) y confiamos en el reintento automático
-          // que hace api.js sobre 429 GETs. Si el usuario recarga o el
-          // session cambia, este useEffect vuelve a correr.
-          console.warn('[auth/me] error transitorio, manteniendo perfil:', status || err?.message);
-        }
-      })
-      .finally(() => setLoadingProfile(false));
+    let cancelled = false;
+    let retryTimer = null;
+
+    const loadProfile = () => {
+      setLoadingProfile(true);
+      api.get('/auth/me')
+        .then(({ user }) => {
+          if (cancelled) return;
+          setProfile(user);
+          setProfileResolved(true);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          if (isMissingProfileError(err)) {
+            setProfile(null);
+            setProfileResolved(true);
+            return;
+          }
+          // Cualquier otro fallo no significa que el usuario haya perdido el
+          // acceso: no tocamos el perfil y reintentamos.
+          console.warn('[auth/me] error, reintentando:', err?.status || err?.message);
+          retryTimer = setTimeout(async () => {
+            // 401: si la sesión ya no existe en Supabase, esto la cierra y se
+            // vuelve a la landing; si solo caducó el token, lo renueva.
+            if (err?.status === 401) await supabase.auth.refreshSession().catch(() => {});
+            if (!cancelled) loadProfile();
+          }, 4000);
+        })
+        .finally(() => { if (!cancelled) setLoadingProfile(false); });
+    };
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+    };
   }, [session]);
 
   const signUp = async (email, password) => {
@@ -310,7 +328,7 @@ export function AuthProvider({ children }) {
       session,
       profile,
       loadingProfile,
-      isLoading: session === undefined,
+      isLoading: session === undefined || (!!session && !profile && !profileResolved),
       isAuthenticated: !!session,
       hasProfile: !!profile,
       // Términos aceptados. Ver phase 130 y client/App.jsx: mientras esto

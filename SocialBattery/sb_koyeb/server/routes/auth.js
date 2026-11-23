@@ -90,9 +90,15 @@ router.get('/me', requireAuth, async (req, res) => {
     .from('users')
     .select('*, user_badges(badge_id, earned_at, badges(*))')
     .eq('id', req.user.id)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
+  // Un fallo de la base de datos no es "sin perfil": con 404 el cliente
+  // mandaría al onboarding a un usuario que ya existe.
+  if (error) {
+    console.error('[AUTH] GET /me', error);
+    return res.status(500).json({ error: 'Failed to load profile' });
+  }
+  if (!data) {
     return res.status(404).json({ error: 'Profile not found. Please complete setup.' });
   }
 

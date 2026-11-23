@@ -62,3 +62,12 @@ export function isEmailUnconfirmed(user) {
   if (!user) return false;
   return !user.email_confirmed_at && !user.confirmed_at;
 }
+
+/**
+ * ¿El fallo de GET /auth/me significa que el usuario aún no tiene perfil?
+ * Solo el 404. Con cualquier otro (red caída, 401, 429, 5xx) no lo sabemos, y
+ * mandarlo al onboarding sería echar a alguien que ya tiene cuenta.
+ */
+export function isMissingProfileError(err) {
+  return err?.status === 404;
+}
