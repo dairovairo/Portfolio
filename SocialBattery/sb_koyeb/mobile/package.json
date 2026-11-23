@@ -13,15 +13,16 @@
     "check-url": "node scripts/check-app-url.js",
     "postinstall": "node scripts/apply-config.js",
     "gen:icons": "node scripts/gen-icons.js",
-    "add:android": "npm run check-url && npx cap add android && npx cap sync android && npm run gen:icons",
+    "add:android": "npm run check-url && npx cap add android && npx cap sync android && npm run patch:android && npm run gen:icons",
     "add:ios": "npm run check-url && npx cap add ios && npx cap sync ios && npm run gen:icons",
-    "sync": "node scripts/apply-config.js && npx cap sync && npm run gen:icons",
+    "sync": "node scripts/apply-config.js && npx cap sync && npm run patch:android && npm run gen:icons",
     "open:android": "npx cap open android",
     "open:ios": "npx cap open ios",
     "run:android": "npm run sync && npx cap run android",
     "run:ios": "npm run sync && npx cap run ios",
     "build:android": "npm run check-url && npm run sync && node scripts/run-gradle.js assembleRelease",
-    "build:android:debug": "npm run check-url && npm run sync && node scripts/run-gradle.js assembleDebug"
+    "build:android:debug": "npm run check-url && npm run sync && node scripts/run-gradle.js assembleDebug",
+    "patch:android": "node scripts/patch-android-manifest.js"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",
