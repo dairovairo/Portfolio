@@ -44,6 +44,10 @@ export default function AuthPage() {
       // aquí si Supabase responde con error antes de redirigir (provider
       // no configurado, URL no permitida, etc.).
       await signInWithGoogle();
+      // En la app nativa sí resuelve: se abre una Custom Tab y la sesión
+      // llega luego por deep link. Liberamos el botón por si el usuario
+      // cierra la pestaña sin terminar.
+      setLoading(false);
     } catch (err) {
       setError(err.message || t('auth.errGoogle'));
       setLoading(false);
@@ -65,6 +69,7 @@ export default function AuthPage() {
       // redirect (Apple provider no configurado, JWT secret caducado,
       // Services ID mal, etc.).
       await signInWithApple();
+      setLoading(false); // ver handleGoogleSignIn (app nativa)
     } catch (err) {
       setError(err.message || t('auth.errApple'));
       setLoading(false);

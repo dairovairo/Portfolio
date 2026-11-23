@@ -9,6 +9,8 @@
     "test": "node --test src/lib/*.test.js"
   },
   "dependencies": {
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/browser": "^6.0.6",
     "@capacitor/core": "^6.1.2",
     "@capacitor/push-notifications": "^6.0.3",
     "@supabase/supabase-js": "^2.39.0",

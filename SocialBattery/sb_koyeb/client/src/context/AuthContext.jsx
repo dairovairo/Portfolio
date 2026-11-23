@@ -10,6 +10,8 @@ import { usePresenceBroadcast } from '../hooks/usePresence';
 import { useMessageNotifications } from '../hooks/useMessageNotifications';
 import { useSettings } from './SettingsContext';
 import { useTranslation } from '../i18n';
+import { isNativeApp } from '../lib/nativePush';
+import { initNativeAuth, signInWithOAuthNative } from '../lib/nativeAuth';
 
 const AuthContext = createContext(null);
 
@@ -87,6 +89,9 @@ export function AuthProvider({ children }) {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
+    // App nativa: escucha el deep link de vuelta del login con Google/Apple.
+    initNativeAuth();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
@@ -213,6 +218,13 @@ export function AuthProvider({ children }) {
     // redirectTo = window.location.origin para que, igual que en el signUp,
     // el callback vuelva al mismo dominio desde el que se inició el login
     // (protege ante cambios de dominio en la Site URL).
+    //
+    // En la app nativa (Capacitor) esto NO sirve: Google no deja loguearse
+    // dentro del WebView, se abre en Chrome y la sesión se queda en Chrome.
+    // Ahí usamos Custom Tab + deep link (ver lib/nativeAuth.js).
+    if (isNativeApp()) {
+      return signInWithOAuthNative('google', { queryParams: { prompt: 'select_account' } });
+    }
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -253,6 +265,9 @@ export function AuthProvider({ children }) {
     // Igual que con Google, signInWithOAuth redirige la ventana entera;
     // al volver, Supabase dispara SIGNED_IN sobre onAuthStateChange que
     // ya está escuchando en el useEffect de arriba.
+    if (isNativeApp()) {
+      return signInWithOAuthNative('apple');
+    }
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'apple',
       options: {

@@ -6,7 +6,9 @@ const gradleCommand = isWindows ? 'gradlew.bat' : './gradlew';
 const androidDir = path.join(__dirname, '..', 'android');
 const args = process.argv.slice(2);
 
-const result = spawnSync(gradleCommand, args, {
+// Ruta absoluta: con un nombre relativo, cmd.exe lanzado desde Git Bash no
+// encuentra gradlew.bat ("no se reconoce como un comando...").
+const result = spawnSync(`"${path.join(androidDir, gradleCommand)}"`, args, {
   cwd: androidDir,
   stdio: 'inherit',
   shell: true,
