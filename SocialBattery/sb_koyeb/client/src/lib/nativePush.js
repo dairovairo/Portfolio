@@ -118,7 +118,13 @@ export async function ensureNativePush() {
 
       PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
         const url = action?.notification?.data?.url;
-        if (url && typeof window !== 'undefined') {
+        if (!url || typeof window === 'undefined') return;
+        // App.jsx navega sin recargar; si nadie recoge el evento, recarga.
+        const unhandled = window.dispatchEvent(new CustomEvent('sb-notification-click', {
+          detail: { url },
+          cancelable: true,
+        }));
+        if (unhandled) {
           try { window.location.assign(url); } catch {}
         }
       });

@@ -80,6 +80,20 @@ function AppRoutes() {
     return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
   }, [navigate]);
 
+  // Lo mismo para la app nativa: nativePush.js lanza este evento al tocar una
+  // notificación. preventDefault() le dice que ya nos encargamos nosotros.
+  useEffect(() => {
+    function handleNativeClick(event) {
+      const url = event.detail?.url;
+      if (typeof url !== 'string' || !url.startsWith('/')) return;
+      event.preventDefault();
+      navigate(url);
+    }
+
+    window.addEventListener('sb-notification-click', handleNativeClick);
+    return () => window.removeEventListener('sb-notification-click', handleNativeClick);
+  }, [navigate]);
+
   // Rutas 100% públicas — se comprueban DESPUÉS de declarar todos los
   // hooks de arriba (para no romper las reglas de hooks si el pathname
   // cambia sin desmontar AppRoutes) pero ANTES que cualquier chequeo de
@@ -121,6 +135,15 @@ function AppRoutes() {
     );
   }
 
+  // PASSWORD_RECOVERY: highest priority — always show reset page regardless of profile state
+  if (isPasswordRecovery) {
+    return (
+      <Routes>
+        <Route path="*" element={<ResetPasswordPage />} />
+      </Routes>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-surface-bg flex items-center justify-center">
@@ -129,15 +152,6 @@ function AppRoutes() {
           <div className="text-surface-muted font-mono text-sm">Cargando...</div>
         </div>
       </div>
-    );
-  }
-
-  // PASSWORD_RECOVERY: highest priority — always show reset page regardless of profile state
-  if (isPasswordRecovery) {
-    return (
-      <Routes>
-        <Route path="*" element={<ResetPasswordPage />} />
-      </Routes>
     );
   }
 

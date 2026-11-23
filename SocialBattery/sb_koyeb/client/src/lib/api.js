@@ -127,12 +127,12 @@ async function apiFetch(path, options = {}, retries = 3) {
     try {
       data = JSON.parse(text);
     } catch (_e) {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
     }
   }
 
   if (!res.ok) {
-    throw Object.assign(new Error(data.error || `HTTP ${res.status}`), data);
+    throw Object.assign(new Error(data.error || `HTTP ${res.status}`), data, { status: res.status });
   }
 
   return data;
