@@ -15,6 +15,9 @@ import { resolveMascotLayers } from '../lib/mascotRenderer';
 import { getBatteryColor, getEffectiveBatteryLevel } from '../lib/battery';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import ReportModal from '../components/ReportModal';
+import { CancelEventModal, EditEventModal } from '../components/EventManage';
+import { formatEurFromCents } from '../lib/adPricing';
+import { PAYMENTS_ENABLED } from '../lib/features';
 import { supabase } from '../lib/supabase';
 
 function getMascotTier(level) {
@@ -86,11 +89,6 @@ function getDaysLabel(dateStr, t) {
   const days = Math.ceil(diffMs / DAY_MS);
   return days === 1 ? t('eventDetail.tomorrow') : t('eventDetail.inDaysMany', { n: days });
 }
-
-// Mínimo de notificaciones enviadas para que una promoción premium/ultra
-// pueda cobrarse (y, por tanto, para poder renovarla) — debe coincidir con
-// FREE_THRESHOLD en server/jobs/eventPromoPacing.js.
-const PROMO_FREE_THRESHOLD = 200;
 
 function getEventEmoji(category = '') {
   const c = (category ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -350,17 +348,8 @@ function CreatePollModal({ onClose, onCreate }) {
   );
 }
 
-// Fase 112 — se retiró el RenewPromotionModal integrado. El botón
-// "Renovar" del cabecero ahora navega a EventAdConfigPage (state
-// renewEvent), que reutiliza la misma UI que la contratación inicial
-// — slider de cuota, toggle Premium/Ultra, previsualización de
-// audiencia — en lugar de mantener dos implementaciones divergentes.
-
 // ── End promotion modal ──────────────────────────────────────────────────────
-// Confirmación para finalizar antes de tiempo una promoción premium/ultra:
-// el evento vuelve a listado Basic y deja de recibir envíos nuevos del job
-// de pacing. El contador de notificaciones enviadas no se toca (sigue
-// siendo la base del cobro, igual que si el evento hubiera empezado).
+// Al finalizar se cobra lo entregado y vuelve el resto al saldo.
 function EndPromotionModal({ event, onClose, onEnded }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
@@ -373,7 +362,9 @@ function EndPromotionModal({ event, onClose, onEnded }) {
     setSaving(true);
     try {
       const data = await api.post(`/community/events/${event.id}/end-promotion`, {});
-      showToast(t('eventDetail.endedToast'), 'success');
+      showToast(data.charged_cents || data.refunded_cents
+        ? t('raffle.promoSettled', { charged: formatEurFromCents(data.charged_cents), refunded: formatEurFromCents(data.refunded_cents) })
+        : t('eventDetail.endedToast'), 'success');
       onEnded?.(data.event);
       onClose();
     } catch (e) {
@@ -401,9 +392,11 @@ function EndPromotionModal({ event, onClose, onEnded }) {
           <p className="text-sm text-surface-text/90 leading-relaxed">
             {t('eventDetail.endModalBody')}
           </p>
-          <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-            {t('eventDetail.endModalPayHint', { n: event?.notification_sent_count || 0 })}
-          </p>
+          {PAYMENTS_ENABLED && (
+            <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
+              {t('eventDetail.endModalPayHint', { n: event?.notification_sent_count || 0 })}
+            </p>
+          )}
           <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
             {t('eventDetail.endModalRenewHint')}
           </p>
@@ -428,6 +421,9 @@ function EndPromotionModal({ event, onClose, onEnded }) {
   );
 }
 
+const MANAGE_BTN = 'px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all disabled:opacity-50 border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20';
+const MANAGE_DANGER_BTN = 'px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20';
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function EventDetailPage() {
   const { eventId } = useParams();
@@ -450,6 +446,7 @@ export default function EventDetailPage() {
   const [sharingStory, setSharingStory] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [renewingBasic, setRenewingBasic] = useState(false);
+  const [manageModal, setManageModal] = useState(null); // 'edit' | 'cancel'
   const [showEndPromoModal, setShowEndPromoModal] = useState(false);
 
   // Silenciar avisos/actualizaciones de este evento (asistente, no organizador)
@@ -601,11 +598,40 @@ export default function EventDetailPage() {
   const isPast    = event ? new Date(event.ends_at || event.event_date) < new Date() : false;
   const isFree    = !event?.price || parseFloat(event?.price) === 0;
   const daysLabel = event ? getDaysLabel(event.event_date, t) : null;
-  const promoSentCount = event?.notification_sent_count || 0;
   const isPaidPromotion = event?.promotion_plan === 'premium' || event?.promotion_plan === 'ultra';
-  const belowRenewThreshold = isPaidPromotion && promoSentCount < PROMO_FREE_THRESHOLD;
+  const isCancelled = Boolean(event?.cancelled_at);
+  const canManage = isCreator && !isPast && !isCancelled;
 
   // ── Actions ────────────────────────────────────────────────────────────────
+  function openPromotion() {
+    navigate('/community/event-publicidad', {
+      state: {
+        renewEvent: {
+          id: event.id,
+          title: event.title,
+          promotion_plan: event.promotion_plan,
+          notification_count: event.notification_count,
+          community_id: event.community_id,
+          communityName: event.community?.name || event.community_name || '',
+        },
+      },
+    });
+  }
+
+  // En Basic no hay nada que contratar: solo se repite el aviso a la comunidad.
+  async function notifyCommunityAgain() {
+    if (renewingBasic) return;
+    setRenewingBasic(true);
+    try {
+      await api.post(`/community/events/${event.id}/renew-promotion`, { promotion_plan: 'basic' });
+      showToast(t('eventDetail.renewedBasic'), 'success');
+      await fetchEvent();
+    } catch (e) {
+      showToast(e.message || t('eventDetail.renewError'), 'error');
+    } finally {
+      setRenewingBasic(false);
+    }
+  }
   async function handleShareStory() {
     if (sharingStory || !event) return;
     setSharingStory(true);
@@ -882,6 +908,11 @@ export default function EventDetailPage() {
                     💳 {parseFloat(event.price).toFixed(2)}€
                   </span>
                 )}
+                {isCancelled && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30">
+                    {t('eventManage.cancelledTag')}
+                  </span>
+                )}
                 {isPast && (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-slate-500 border border-surface-border">
                     {t('eventDetail.pastTag')}
@@ -889,124 +920,32 @@ export default function EventDetailPage() {
                 )}
               </div>
             </div>
-            {/* Botones de gestión de la promoción. Antes se ocultaban por
-                completo si el evento ya había pasado (`!isPast`); ahora
-                se enseñan siempre para el creador cuando haya contrato
-                de promoción (paid) o cuando aún se pueda contratar
-                (evento futuro), pero deshabilitados con un tooltip
-                explicativo si no se pueden usar. Reglas de habilitación:
-                – Renovar: bloqueado si el evento ya pasó (no tiene
-                  sentido renovar una promo de algo terminado) o si aún
-                  no se ha llegado al mínimo cobrable.
-                – Finalizar: solo aparece si hay contrato de pago
-                  (premium/ultra) y se bloquea si el evento ya pasó
-                  (la promo se ha agotado sola) o si aún no se ha
-                  llegado al mínimo cobrable. */}
-            {isCreator && (isPaidPromotion || !isPast) && (
-              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                {(() => {
-                  const renewDisabled = belowRenewThreshold || isPast || renewingBasic;
-                  const renewTitle = isPast
-                    ? t('eventDetail.renewDisabledPast')
-                    : belowRenewThreshold
-                      ? t('eventDetail.renewDisabledLow', { threshold: PROMO_FREE_THRESHOLD, sent: promoSentCount })
-                      : t('eventDetail.renewTitle');
-                  return (
-                    <button
-                      onClick={async () => {
-                        if (renewDisabled) return;
-                        // Fase 132 — Basic es un caso aparte: no tiene
-                        // alcance contratado (solo el aviso automático a
-                        // la comunidad, que ya se dispara igual desde el
-                        // servidor), así que no hay nada que configurar.
-                        // Se renueva directo contra el endpoint, sin
-                        // pasar por EventAdConfigPage. Premium/Ultra sí
-                        // tienen plan+cuota+filtros que reconfigurar, así
-                        // que siguen navegando a la pantalla completa.
-                        if (!isPaidPromotion) {
-                          setRenewingBasic(true);
-                          try {
-                            await api.post(`/community/events/${event.id}/renew-promotion`, {
-                              promotion_plan: 'basic',
-                            });
-                            showToast(t('eventDetail.renewedBasic'), 'success');
-                            await fetchEvent();
-                          } catch (e) {
-                            showToast(e.message || t('eventDetail.renewError'), 'error');
-                          } finally {
-                            setRenewingBasic(false);
-                          }
-                          return;
-                        }
-                        // Fase 112 — el flujo unificado es: renovar SIEMPRE
-                        // pasa por la página de configuración de publicidad
-                        // (EventAdConfigPage), tanto desde aquí como desde el
-                        // dashboard. Se detecta como renovación por el state
-                        // `renewEvent`. Antes se abría un modal inline; se
-                        // sustituyó por la página completa para tener slider
-                        // de audiencia, toggle Ultra/Premium y el mismo
-                        // contexto que al crear.
-                        navigate('/community/event-publicidad', {
-                          state: {
-                            renewEvent: {
-                              id: event.id,
-                              title: event.title,
-                              promotion_plan: event.promotion_plan,
-                              notification_count: event.notification_count,
-                              communityId: event.community_id,
-                              communityName: event.community?.name || event.community_name || '',
-                            },
-                          },
-                        });
-                      }}
-                      disabled={renewDisabled}
-                      title={renewTitle}
-                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
-                        renewDisabled
-                          ? 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
-                          : 'border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20'
-                      }`}
-                    >
-                      {t('eventDetail.renewBtn')}
-                    </button>
-                  );
-                })()}
-                {isPaidPromotion && (() => {
-                  const endDisabled = belowRenewThreshold || isPast;
-                  const endTitle = isPast
-                    ? t('eventDetail.endDisabledPast')
-                    : belowRenewThreshold
-                      ? t('eventDetail.endDisabledLow', { threshold: PROMO_FREE_THRESHOLD, sent: promoSentCount })
-                      : t('eventDetail.endTitle');
-                  return (
-                    <button
-                      onClick={() => { if (!endDisabled) setShowEndPromoModal(true); }}
-                      disabled={endDisabled}
-                      title={endTitle}
-                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
-                        endDisabled
-                          ? 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
-                          : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
-                      }`}
-                    >
-                      {t('eventDetail.endBtn')}
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
           </div>
 
-          {isCreator && !isPast && belowRenewThreshold && (
-            <p className="mt-3 text-[11px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-              {t('eventDetail.belowThresholdWarn', { threshold: PROMO_FREE_THRESHOLD, sent: promoSentCount })}
+          {isCancelled && (
+            <p className="mt-3 text-xs text-red-300 bg-red-500/10 border border-red-500/25 rounded-xl px-3 py-2 leading-relaxed">
+              {event.cancel_reason ? t('eventManage.cancelledReason', { reason: event.cancel_reason }) : t('eventManage.cancelledInfo')}
             </p>
           )}
 
-          {isCreator && isPast && isPaidPromotion && (
-            <p className="mt-3 text-[11px] font-mono text-slate-400 bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-              {t('eventDetail.pastPromoInfo')}
-            </p>
+          {canManage && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              <button type="button" onClick={() => setManageModal('edit')} className={MANAGE_BTN}>✏️ {t('eventManage.editBtn')}</button>
+              {isPaidPromotion ? (
+                <>
+                  <button type="button" onClick={openPromotion} className={MANAGE_BTN}>{t('eventDetail.renewBtn')}</button>
+                  <button type="button" onClick={() => setShowEndPromoModal(true)} className={MANAGE_DANGER_BTN}>{t('eventDetail.endBtn')}</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={openPromotion} className={MANAGE_BTN}>🚀 {t('eventManage.promoteBtn')}</button>
+                  {event.community_id && (
+                    <button type="button" onClick={notifyCommunityAgain} disabled={renewingBasic} className={MANAGE_BTN}>📣 {t('eventManage.notifyBtn')}</button>
+                  )}
+                </>
+              )}
+              <button type="button" onClick={() => setManageModal('cancel')} className={MANAGE_DANGER_BTN}>✕ {t('eventManage.cancelBtn')}</button>
+            </div>
           )}
 
           {/* Stats */}
@@ -1066,7 +1005,11 @@ export default function EventDetailPage() {
           </button>
 
           <div className="flex-1">
-            {isPast ? (
+            {isCancelled ? (
+              <div className="w-full py-2.5 rounded-xl bg-red-500/10 border border-red-500/25 text-center text-sm font-mono text-red-300">
+                {t('eventManage.cancelledTag')}
+              </div>
+            ) : isPast ? (
               <div className="w-full py-2.5 rounded-xl bg-surface-card border border-surface-border text-center text-sm font-mono text-slate-500">
                 {t('eventDetail.pastFinished')}
               </div>
@@ -1111,7 +1054,7 @@ export default function EventDetailPage() {
           )}
 
           <InfoRow icon="📅" label={t('eventDetail.labelStart')}>
-            <span>{formatDateTime(event.event_date)}</span>
+            <span>{formatDateTime(event.event_date, lang)}</span>
           </InfoRow>
 
           {event.ends_at && (
@@ -1296,6 +1239,13 @@ export default function EventDetailPage() {
         </div>
       </main>
 
+
+      {manageModal === 'edit' && (
+        <EditEventModal event={event} onClose={() => setManageModal(null)} onSaved={fetchEvent} />
+      )}
+      {manageModal === 'cancel' && (
+        <CancelEventModal event={event} onClose={() => setManageModal(null)} onCancelled={fetchEvent} />
+      )}
 
       {showEndPromoModal && event && (
         <EndPromotionModal

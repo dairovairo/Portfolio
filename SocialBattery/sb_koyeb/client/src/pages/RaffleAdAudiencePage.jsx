@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
-import { RAFFLE_AD_PRICING, computeRaffleAdPriceCents, formatEurFromCents } from '../lib/adPricing';
+import { RAFFLE_AD_PRICING, FREE_UNITS, MIN_UNITS, UNITS_STEP, computeRaffleAdPriceCents, formatEurFromCents } from '../lib/adPricing';
+import { buildRaffleFormData } from '../lib/raffleForm';
 import { useTranslation } from '../i18n';
 import WalletInline from '../components/WalletInline';
+import { FreePromoNote } from '../components/FreePromo';
+import { PAYMENTS_ENABLED } from '../lib/features';
 
 // ── Configuración de publicidad de un sorteo Light ──────────────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -16,26 +19,12 @@ import WalletInline from '../components/WalletInline';
 // interesados, y se elige cuántas visualizaciones de banner contratar. El
 // sorteo se crea de verdad al confirmar aquí abajo.
 //
-// La audiencia (tanto el total notificable como los interesados) NUNCA
-// incluye a los miembros de la propia comunidad que organiza el sorteo — el
-// Light es publicidad de pago pensada para llegar a gente NUEVA, no a quien
-// ya está dentro (ver getRaffleLightAudienceIds en el servidor). El total y
-// el filtro que se ven aquí son exactamente el pool del que luego se
-// sortean los targets reales del banner.
-//
-// Slider: siempre 1.000–100.000 y siempre operativo. Si la audiencia (con o
-// sin filtro) queda por debajo del número contratado, el sistema entregará
-// como mucho ese número de banners y no se cobrará por el resto — no se
-// bloquea la contratación (ver info tras el slider).
-//
-// CHARGE_MIN es el mínimo de banners realmente ENSEÑADOS por debajo del
-// cual no se cobra nada (ver mensaje bajo el slider) — es un umbral de
-// facturación independiente de VIEWS_MIN (mínimo contratable en el
-// slider), no tiene por qué coincidir con él.
-const VIEWS_MIN = 1000;
+// La audiencia nunca incluye a los miembros de la comunidad que organiza el
+// sorteo: el Light es publicidad para llegar a gente nueva. El slider llega
+// como mucho a la audiencia que existe, se paga por lo enseñado y las primeras
+// unidades de la campaña son gratis (lib/adPricing.js).
 const VIEWS_MAX = 100000;
-const VIEWS_STEP = 500;
-const CHARGE_MIN = 500;
+const DEFAULT_VIEWS = 500;
 
 const LIGHT_META = {
   emoji: '🎫',
@@ -76,26 +65,21 @@ export default function RaffleAdAudiencePage() {
   const [total, setTotal] = useState(null);
   const [loadError, setLoadError] = useState('');
 
-  const [filterInterested, setFilterInterested] = useState(false);
-  const [loadingInterested, setLoadingInterested] = useState(false);
+  const [freeUnits, setFreeUnits] = useState(FREE_UNITS);
+  const [freePromo, setFreePromo] = useState(null); // cupo de promociones gratis
+  // Al renovar se parte del filtro del ciclo actual.
+  const [filterInterested, setFilterInterested] = useState(Boolean(renewRaffle?.banner_interested_only));
   const [interested, setInterested] = useState(null);
   const [categoriesDefined, setCategoriesDefined] = useState(null);
 
   const [bannerViews, setBannerViews] = useState(
     isRenew && renewRaffle?.banner_views_contracted
-      ? Math.min(Math.max(Number(renewRaffle.banner_views_contracted), VIEWS_MIN), VIEWS_MAX)
-      : VIEWS_MIN
+      ? Math.min(Math.max(Number(renewRaffle.banner_views_contracted), MIN_UNITS), VIEWS_MAX)
+      : DEFAULT_VIEWS
   );
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [insufficientFunds, setInsufficientFunds] = useState(false);
-
-  // Prerrellenar el toggle de intereses con el estado del ciclo actual —
-  // así renovar "tal cual" no cambia nada por accidente.
-  useEffect(() => {
-    if (isRenew && renewRaffle?.banner_interested_only) setFilterInterested(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRenew]);
 
   // Sin borrador (creación) ni renewRaffle (renovación): recarga directa
   // o navegación manual — volvemos al menú de la comunidad.
@@ -116,97 +100,51 @@ export default function RaffleAdAudiencePage() {
     return Array.isArray(src) ? src.filter(Boolean) : [];
   }, [isRenew, renewRaffle, draft]);
 
-  const categoriesQuery = raffleCategories.length
-    ? `categories=${encodeURIComponent(JSON.stringify(raffleCategories))}`
-    : '';
-
   const loadTotal = useCallback(async () => {
     setLoadingTotal(true);
     setLoadError('');
     try {
-      // El total notificable no depende de categorías, pero se manda igual
-      // el parámetro por consistencia con la llamada de "interesados" — el
-      // backend lo ignora salvo con ?filter=interested.
-      const url = categoriesQuery
-        ? `/community/communities/${communityId}/raffle-audience?${categoriesQuery}`
-        : `/community/communities/${communityId}/raffle-audience`;
-      const data = await api.get(url);
+      const params = new URLSearchParams();
+      if (raffleCategories.length) params.set('categories', JSON.stringify(raffleCategories));
+      if (renewRaffle?.id) params.set('raffle_id', renewRaffle.id);
+      const data = await api.get(`/community/communities/${communityId}/raffle-audience?${params}`);
       setTotal(data?.total ?? 0);
+      setInterested(data?.interested ?? null);
+      setCategoriesDefined(Boolean(data?.categories_defined));
+      setFreeUnits(data?.free_units ?? FREE_UNITS);
+      setFreePromo(data?.free_promo ?? null);
     } catch (e) {
       setLoadError(e.message || t('adConfig.audienceCalcError'));
     } finally {
       setLoadingTotal(false);
     }
-  }, [communityId, categoriesQuery]);
+  }, [communityId, raffleCategories, renewRaffle, t]);
 
   useEffect(() => {
     if (draft || isRenew) loadTotal();
   }, [draft, isRenew, loadTotal]);
 
-  // Audiencia efectiva: si el filtro de intereses está activo (y hay
-  // categorías con las que cruzar), pasa a ser el nº de interesados; si no,
-  // el total notificable. Se usa SOLO para informar (banner amarillo /
-  // rojo bajo el slider); NO se usa para topar el máximo del slider — la
-  // empresa puede contratar hasta VIEWS_MAX aunque el pool sea menor
-  // (solo se entregarán los banners que quepan y no se cobrará por el
-  // resto, ver notas del slider).
   const audienceCap = filterInterested
     ? (categoriesDefined === false ? 0 : interested)
     : total;
-  const audienceReady = audienceCap != null && !loadingInterested;
-  const contractedExceedsAudience = audienceReady && bannerViews > audienceCap;
+  const audienceReady = audienceCap != null;
+  // No se puede contratar más de lo que existe (mínimo MIN_UNITS).
+  const viewsMax = freePromo?.max_units ?? VIEWS_MAX;
+  const sliderMax = audienceCap == null
+    ? viewsMax
+    : Math.min(viewsMax, Math.max(MIN_UNITS, Math.ceil(audienceCap / UNITS_STEP) * UNITS_STEP));
+  const units = Math.min(bannerViews, sliderMax);
+  const contractedExceedsAudience = audienceReady && units > audienceCap;
+  const nobodyMatches = filterInterested && audienceReady && audienceCap === 0;
 
-  // Con el filtro de intereses activado, si el pool resultante no llega al
-  // mínimo contratable (VIEWS_MIN) bloqueamos la contratación y ocultamos
-  // el slider — no tiene sentido dejar elegir un número por debajo del
-  // mínimo. SIN filtro, en cambio, dejamos crear el sorteo igualmente
-  // aunque el total de usuarios de la app todavía no llegue a VIEWS_MIN
-  // (fase de crecimiento con pocos usuarios): el slider sigue apareciendo
-  // y no se bloquea, para no frenar la adopción temprana de la app.
-  const blockedByFilterShortfall = filterInterested && audienceReady && audienceCap < VIEWS_MIN;
-
-  // ── Precio dinámico ────────────────────────────────────────────────────
-  // `maxPriceCents`: importe si TODAS las visualizaciones contratadas se
-  //   entregan (techo). Se muestra siempre.
-  // `estPriceCents`: importe realista teniendo en cuenta que solo se
-  //   cobran los banners realmente ENSEÑADOS — si la audiencia efectiva
-  //   (con o sin filtro) es menor que lo contratado, esto es lo que se
-  //   facturaría en la práctica. Solo se enseña cuando aporta info
-  //   distinta (contractedExceedsAudience), para no ensuciar la UI.
-  const maxPriceCents = computeRaffleAdPriceCents('light', bannerViews);
-  const effectiveUnits = audienceReady && audienceCap != null
-    ? Math.min(bannerViews, audienceCap)
-    : bannerViews;
-  const estPriceCents = computeRaffleAdPriceCents('light', effectiveUnits);
-
-  async function handleToggleInterested() {
-    const next = !filterInterested;
-    if (!next) {
-      setFilterInterested(false);
-      return;
-    }
-    // Activando el filtro: si aún no tenemos el recuento de interesados,
-    // lo pedimos ahora (una sola vez, se cachea en el estado).
-    setFilterInterested(true);
-    if (interested != null || categoriesDefined === false) return;
-    setLoadingInterested(true);
-    try {
-      const url = categoriesQuery
-        ? `/community/communities/${communityId}/raffle-audience?filter=interested&${categoriesQuery}`
-        : `/community/communities/${communityId}/raffle-audience?filter=interested`;
-      const data = await api.get(url);
-      setInterested(data?.interested ?? null);
-      setCategoriesDefined(Boolean(data?.categories_defined));
-    } catch (e) {
-      showToast(e.message || t('adConfig.errRaffleInterestFilter'), 'error');
-      setFilterInterested(false);
-    } finally {
-      setLoadingInterested(false);
-    }
-  }
+  // Importe máximo (lo que se reserva) y lo que se cobraría como mucho de
+  // verdad si hay menos audiencia que unidades.
+  const maxPriceCents = computeRaffleAdPriceCents('light', units, freeUnits);
+  const estPriceCents = computeRaffleAdPriceCents(
+    'light', audienceReady ? Math.min(units, audienceCap) : units, freeUnits);
 
   async function handleCreate() {
-    if (!audienceReady || blockedByFilterShortfall) return;
+    if (!audienceReady || nobodyMatches) return;
     setCreating(true);
     setCreateError('');
     try {
@@ -216,7 +154,7 @@ export default function RaffleAdAudiencePage() {
         // anterior, resetea promo_ended_at y reasigna un ciclo nuevo con los
         // parámetros que llegan aquí (ver renew-promotion en community.js).
         await api.post(`/community/raffles/${renewRaffle.id}/renew-promotion`, {
-          banner_views_contracted: bannerViews,
+          banner_views_contracted: units,
           banner_interested_only: filterInterested,
         });
         showToast(t('adConfig.raffleRenewed'), 'success');
@@ -224,33 +162,9 @@ export default function RaffleAdAudiencePage() {
         return;
       }
       if (!draft) return;
-      const formData = new FormData();
-      formData.append('title', draft.title);
-      if (draft.description?.trim()) formData.append('description', draft.description.trim());
-      formData.append('ends_at', draft.ends_at);
-      formData.append('tier', 'light');
-      if (draft.categories?.length) formData.append('categories', JSON.stringify(draft.categories));
-      formData.append('banner_views_contracted', bannerViews);
-      formData.append('banner_interested_only', filterInterested ? 'true' : 'false');
-      if (draft.image_file) formData.append('image', draft.image_file);
-      // Fase 122 — premios. Mismo patrón que handleCreateRaffle en
-      // CommunityDetailPage: JSON con metadatos + un `prize_image`
-      // appendeado por cada premio con foto, casados por image_index.
-      if (draft.prizes && draft.prizes.length) {
-        let fileIdx = 0;
-        const meta = draft.prizes.map(p => {
-          const entry = { title: p.title, value_cents: p.value_cents };
-          if (p.image_file) {
-            formData.append('prize_image', p.image_file);
-            entry.has_image = true;
-            entry.image_index = fileIdx++;
-          } else {
-            entry.has_image = false;
-          }
-          return entry;
-        });
-        formData.append('prizes', JSON.stringify(meta));
-      }
+      const formData = buildRaffleFormData({
+        ...draft, tier: 'light', banner_views_contracted: units, banner_interested_only: filterInterested,
+      });
       await api.postForm(`/community/communities/${communityId}/raffles`, formData);
       showToast(t('adConfig.raffleCreated'), 'success');
       navigate(`/community/${communityId}`, { replace: true });
@@ -317,7 +231,9 @@ export default function RaffleAdAudiencePage() {
               {t('adConfig.' + LIGHT_META.labelKey)}
             </span>
             <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${LIGHT_META.pill}`}>
-              {t('adConfig.perUnit', { price: formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents), unit: RAFFLE_AD_PRICING.light.unitLabel })}
+              {PAYMENTS_ENABLED
+                ? t('adConfig.perUnit', { price: formatEurFromCents(RAFFLE_AD_PRICING.light.unitPriceCents), unit: t('adConfig.unitView') })
+                : t('free.tag')}
             </span>
           </div>
           <ul className="space-y-1.5 text-[12px] font-mono text-surface-muted leading-relaxed">
@@ -331,7 +247,7 @@ export default function RaffleAdAudiencePage() {
         </div>
 
         {/* Audiencia total notificable — usuarios fuera de la comunidad
-            del sorteo (misma lógica que getRaffleLightAudienceIds). */}
+            del sorteo (los miembros no cuentan). */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-2">
           <p className="text-xs font-mono text-surface-muted uppercase tracking-wide">{t('adConfig.raffleReachable')}</p>
           {loadingTotal ? (
@@ -373,18 +289,14 @@ export default function RaffleAdAudiencePage() {
             </div>
             <InterestToggle
               checked={filterInterested}
-              onChange={handleToggleInterested}
+              onChange={() => setFilterInterested(v => !v)}
               disabled={loadingTotal || !!loadError}
               activeBg={LIGHT_META.toggleOn}
             />
           </div>
 
           {filterInterested && (
-            loadingInterested ? (
-              <div className="text-center py-2">
-                <span className={`w-5 h-5 border-2 ${LIGHT_META.spinnerBorder} border-t-transparent rounded-full animate-spin inline-block`} />
-              </div>
-            ) : categoriesDefined === false ? (
+            categoriesDefined === false ? (
               <div className="text-center py-1 space-y-2 border-t border-surface-border/60 pt-3">
                 <p className="text-xs text-surface-muted leading-relaxed">
                   {t('adConfig.raffleNoCatsCommunity')}
@@ -410,17 +322,9 @@ export default function RaffleAdAudiencePage() {
           )}
         </div>
 
-        {/* Visualizaciones contratadas — siempre operativo 500–50.000.
-            Si la audiencia efectiva queda por debajo, avisamos abajo;
-            solo se entregarán los banners que quepan (ver assignRaffleBannerTargets).
-            Excepción: con el filtro de intereses activo y por debajo del
-            mínimo contratable, ocultamos el slider y bloqueamos la
-            creación (ver blockedByFilterShortfall). */}
-        {blockedByFilterShortfall ? (
+        {nobodyMatches ? (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-1">
-            <p className="text-sm text-surface-muted leading-relaxed">
-              {t('adConfig.raffleBelowMinL', { n: Number(audienceCap).toLocaleString(localeTag), min: VIEWS_MIN.toLocaleString(localeTag) })}
-            </p>
+            <p className="text-sm text-surface-muted leading-relaxed">{t('adConfig.nobodyMatches')}</p>
             <p className="text-xs text-surface-muted">{t('adConfig.raffleBelowMinLHint')}</p>
           </div>
         ) : (
@@ -430,22 +334,23 @@ export default function RaffleAdAudiencePage() {
               {t('adConfig.raffleContractSlots')}
             </label>
             <span className="text-xs font-mono font-semibold text-surface-text">
-              {Number(bannerViews).toLocaleString(localeTag)}
+              {units.toLocaleString(localeTag)}
             </span>
           </div>
 
           <input
             type="range"
-            min={VIEWS_MIN}
-            max={VIEWS_MAX}
-            step={VIEWS_STEP}
-            value={bannerViews}
+            min={MIN_UNITS}
+            max={sliderMax}
+            step={UNITS_STEP}
+            value={units}
+            disabled={sliderMax === MIN_UNITS}
             onChange={e => setBannerViews(Number(e.target.value))}
             className={`w-full ${LIGHT_META.slider} cursor-pointer`}
           />
           <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-            <span>{t('adConfig.minLbl', { n: VIEWS_MIN.toLocaleString(localeTag) })}</span>
-            <span>{t('adConfig.maxLbl', { n: VIEWS_MAX.toLocaleString(localeTag) })}</span>
+            <span>{t('adConfig.minLbl', { n: MIN_UNITS.toLocaleString(localeTag) })}</span>
+            <span>{t('adConfig.maxLbl', { n: sliderMax.toLocaleString(localeTag) })}</span>
           </div>
 
           {contractedExceedsAudience && (
@@ -454,11 +359,8 @@ export default function RaffleAdAudiencePage() {
             </p>
           )}
 
-          {/* Desglose de precio dinámico. Sustituye a la píldora estática
-              '20 €' que había antes en el detalle del plan. Se
-              recalcula en directo con el slider; si la audiencia
-              efectiva queda por debajo, mostramos el importe estimado
-              real (solo se cobra lo entregado). */}
+          {PAYMENTS_ENABLED && (
+          <>
           <div className="border-t border-surface-border/60 pt-2 mt-1 space-y-1">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-mono text-surface-muted">{t('adConfig.priceContracted')}</span>
@@ -480,8 +382,10 @@ export default function RaffleAdAudiencePage() {
           </div>
 
           <p className="text-[10px] font-mono text-surface-muted">
-            {t('adConfig.raffleMinChargeNote', { n: CHARGE_MIN })}
+            {freeUnits > 0 ? t('adConfig.raffleFreeUnitsNote', { n: freeUnits }) : t('adConfig.noFreeUnitsNote')}
           </p>
+          </>
+          )}
         </div>
         )}
 
@@ -501,7 +405,8 @@ export default function RaffleAdAudiencePage() {
           </p>
         </div>
 
-        <WalletInline neededCents={maxPriceCents} warn={!isRenew} forceInsufficient={insufficientFunds} />
+        <WalletInline neededCents={estPriceCents} warn={!isRenew} forceInsufficient={insufficientFunds} />
+        <FreePromoNote status={freePromo} />
 
         {createError && (
           <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{createError}</p>
@@ -509,7 +414,7 @@ export default function RaffleAdAudiencePage() {
 
         <button
           onClick={handleCreate}
-          disabled={creating || !audienceReady || blockedByFilterShortfall}
+          disabled={creating || !audienceReady || nobodyMatches || Boolean(freePromo?.blocked)}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${LIGHT_META.button}`}
         >
           {creating

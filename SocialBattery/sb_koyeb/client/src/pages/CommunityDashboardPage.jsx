@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import TimeseriesChart from '../components/TimeseriesChart';
 import { api } from '../lib/api';
+import { formatEurFromCents } from '../lib/adPricing';
+import { PAYMENTS_ENABLED } from '../lib/features';
 import { useTranslation } from '../i18n';
 
 // ── Acciones sobre una promoción (fase 112) ────────────────────────────────
@@ -49,6 +51,15 @@ export const PLAN_STYLE = {
   premium: { emoji: '⚡', labelKey: 'planPremium', pill: 'bg-accent-primary/10 text-accent-glow border-accent-primary/25' },
   basic:   { emoji: '·',  labelKey: 'planBasic',   pill: 'bg-surface-bg text-surface-muted border-surface-border' },
 };
+
+// Sin pagos no hay tipos de sorteo: solo se marca el que está promocionado.
+function RafflePill({ raffle }) {
+  const { t } = useTranslation();
+  const style = TIER_STYLE[raffle.tier] || TIER_STYLE.light;
+  if (PAYMENTS_ENABLED) return <Pill className={style.pill}>{style.emoji} {raffle.tier_label}</Pill>;
+  if (raffle.contracted == null) return null;
+  return <Pill className={style.pill}>🚀 {t('free.promoted')}</Pill>;
+}
 
 export function fmt(n, lang = 'es') {
   const tag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
@@ -128,79 +139,61 @@ export function ConfirmEndModal({ open, kind, title, onCancel, onConfirm, busy }
   );
 }
 
-// Renderiza los dos botones de acción (Renovar / Finalizar) al pie de la
-// tarjeta. Los flags can_end y can_renew los calcula el servidor: si un
-// botón está deshabilitado es porque falta el mínimo de cobro o el
-// evento/sorteo ya está fuera de ventana; el hint lo explica en corto.
-//
-// `hasContract` (lo calcula quien llama: event.promoted / tier light|
-// community) decide si el bloque se enseña EN ABSOLUTO — solo se oculta
-// del todo cuando nunca hubo contrato de pago (evento basic, sorteo Volt),
-// que es el único caso en que no hay nada que renovar o finalizar. Antes
-// se ocultaba también cuando SÍ había contrato pero no se podía actuar
-// ahora mismo (ya terminado, o por debajo del mínimo de cobro) — eso
-// escondía la opción justo cuando el usuario más la necesitaba ver
-// (aunque fuese deshabilitada, con el motivo). Ahora en ese caso los
-// botones se enseñan igual, deshabilitados y con el motivo explicado.
-export function PromotionActions({ row, kind, onRenew, onEnd, freeThreshold, hasContract }) {
+// Botones Renovar / Finalizar al pie de la tarjeta. can_end y can_renew los
+// calcula el servidor. Sin contrato de pago (evento Basic, sorteo Volt) no hay
+// nada que gestionar.
+export function PromotionActions({ row, kind, onRenew, onEnd, hasContract, neverPromoted = false }) {
   const { t } = useTranslation();
   if (!hasContract) return null;
 
-  const canRenew = row.can_renew;
-  const canEnd = row.can_end;
-  const sent = kind === 'event' ? row.sent_official : row.shown;
-  const belowThreshold = sent < freeThreshold;
-  const unitLabel = kind === 'event' ? t('dashboardDetail.unitSends') : t('dashboardDetail.unitBanners');
-  const isOver = kind === 'event' ? row.started : row.ended;
-  const isDrawn = kind === 'raffle' && !!row.drawn_at;
+  const isOver = kind === 'event' ? row.started || row.cancelled : row.ended;
   const overLabel = kind === 'event'
-    ? t('dashboardDetail.overEvent')
-    : isDrawn ? t('dashboardDetail.overRaffleDrawn') : t('dashboardDetail.overRaffleEnded');
-
-  const renewTitle = isOver
-    ? overLabel + t('dashboardDetail.renewOverSuffix')
-    : belowThreshold
-      ? t('dashboardDetail.renewNeeded', { threshold: freeThreshold, unit: unitLabel, sent })
-      : kind === 'event' ? t('dashboardDetail.renewEventTitle') : t('dashboardDetail.renewRaffleTitle');
-
-  const endTitle = isOver
-    ? overLabel + t('dashboardDetail.endOverSuffix')
-    : kind === 'raffle' && row.promo_ended_at
-      ? t('dashboardDetail.endAlreadyDone')
-      : belowThreshold
-        ? t('dashboardDetail.endNeeded', { threshold: freeThreshold, unit: unitLabel, sent })
-        : kind === 'event' ? t('dashboardDetail.endEventTitle') : t('dashboardDetail.endRaffleTitle');
+    ? t(row.cancelled ? 'eventManage.cancelledTag' : 'dashboardDetail.overEvent')
+    : t(row.drawn_at ? 'dashboardDetail.overRaffleDrawn' : 'dashboardDetail.overRaffleEnded');
 
   return (
     <div className="border-t border-surface-border/60 pt-3 space-y-2">
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onRenew}
-          disabled={!canRenew}
-          title={renewTitle}
-          className="flex-1 py-2 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/30 hover:bg-accent-primary/25 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {t('dashboardDetail.renewBtn')}
-        </button>
-        <button
-          onClick={onEnd}
-          disabled={!canEnd}
-          title={endTitle}
-          className="flex-1 py-2 rounded-xl bg-surface-bg border border-red-500/25 text-red-300 hover:bg-red-500/10 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {t('dashboardDetail.endBtn')}
-        </button>
-      </div>
       {isOver ? (
-        <p className="text-[10px] text-surface-muted leading-relaxed">
-          {t('dashboardDetail.overExplain', { overLabel })}
-        </p>
-      ) : belowThreshold ? (
-        <p className="text-[10px] text-surface-muted leading-relaxed">
-          {t('dashboardDetail.belowExplain', { threshold: freeThreshold, unit: unitLabel, sent })}
-        </p>
-      ) : null}
+        <p className="text-[10px] text-surface-muted leading-relaxed">{overLabel}.</p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRenew}
+            disabled={!row.can_renew}
+            title={kind === 'event' ? t('dashboardDetail.renewEventTitle') : t('dashboardDetail.renewRaffleTitle')}
+            className="flex-1 py-2 rounded-xl bg-accent-primary/15 text-accent-glow border border-accent-primary/30 hover:bg-accent-primary/25 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {neverPromoted ? `🚀 ${t('free.promoteTitle')}` : t('dashboardDetail.renewBtn')}
+          </button>
+          {!neverPromoted && <button
+            onClick={onEnd}
+            disabled={!row.can_end}
+            title={kind === 'event' ? t('dashboardDetail.endEventTitle') : t('dashboardDetail.endRaffleTitle')}
+            className="flex-1 py-2 rounded-xl bg-surface-bg border border-red-500/25 text-red-300 hover:bg-red-500/10 text-xs font-display font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {t('dashboardDetail.endBtn')}
+          </button>}
+        </div>
+      )}
+      {!isOver && kind === 'raffle' && row.tier === 'community' && !row.can_renew && (
+        <p className="text-[10px] text-surface-muted leading-relaxed">{t('dashboardDetail.noticeCooldown')}</p>
+      )}
     </div>
+  );
+}
+
+// El desglose por intereses, la evolución y el historial son de Enterprise.
+export function EnterpriseUpsell() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  return (
+    <section className="bg-surface-card border border-amber-500/30 rounded-2xl p-4 space-y-2">
+      <p className="font-display font-bold text-surface-text text-sm">📊 {t('dashboardDetail.upsellTitle')}</p>
+      <p className="text-[11px] text-surface-muted leading-relaxed">{t('dashboardDetail.upsellText')}</p>
+      <button onClick={() => navigate('/shop')} className="text-xs font-display font-semibold text-accent-glow underline">
+        {t('raffle.goShop')}
+      </button>
+    </section>
   );
 }
 
@@ -250,6 +243,7 @@ export function ProgressBar({ value, barClass = 'bg-accent-primary' }) {
 // comunidad, no una muestra con la que comparar nada.
 export function InterestBreakdown({ data, filtered, unit, filteredNote }) {
   const { t, lang } = useTranslation();
+  if (!data.interest) return null; // sin Enterprise
   const { interested, not_interested: notInterested, unknown } = data.interest;
   const classified = interested + notInterested;
 
@@ -375,7 +369,7 @@ export function EventCardCompact({ event, onOpen }) {
           <Pill className={plan.pill}>{plan.emoji} {t('dashboardDetail.' + plan.labelKey)}</Pill>
         </div>
         <p className="text-[10px] font-mono text-surface-muted">
-          {fmtDate(event.event_date, lang)}{event.started ? t('dashboardDetail.startedSuffix') : t('dashboardDetail.upcomingSuffix')}
+          {fmtDate(event.event_date, lang)}{event.cancelled ? ` · ${t('eventManage.cancelledTag')}` : event.started ? t('dashboardDetail.startedSuffix') : t('dashboardDetail.upcomingSuffix')}
         </p>
         <div className="flex items-center gap-3 text-[11px] font-mono">
           <span className="text-surface-muted">
@@ -393,7 +387,7 @@ export function EventCardCompact({ event, onOpen }) {
   );
 }
 
-export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
+export function EventCard({ event, onOpen, onRenew, onEnd }) {
   const { t, lang } = useTranslation();
   const plan = PLAN_STYLE[event.promotion_plan] || PLAN_STYLE.basic;
 
@@ -408,7 +402,7 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
             {event.title}
           </button>
           <p className="text-[10px] font-mono text-surface-muted mt-0.5">
-            {fmtDate(event.event_date, lang)}{event.started ? t('dashboardDetail.startedSuffix') : t('dashboardDetail.upcomingSuffix')}
+            {fmtDate(event.event_date, lang)}{event.cancelled ? ` · ${t('eventManage.cancelledTag')}` : event.started ? t('dashboardDetail.startedSuffix') : t('dashboardDetail.upcomingSuffix')}
           </p>
         </div>
         <Pill className={plan.pill}>{plan.emoji} {t('dashboardDetail.' + plan.labelKey)}</Pill>
@@ -516,13 +510,6 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
             {event.audience_radius_km != null && (
               <Pill className="bg-surface-bg text-surface-muted border-surface-border">{t('dashboardDetail.radiusPill', { n: event.audience_radius_km })}</Pill>
             )}
-            <Pill className={event.billable
-              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25'
-              : 'bg-surface-bg text-surface-muted border-surface-border'}>
-              {event.billable
-                ? t('dashboardDetail.billablePill')
-                : t('dashboardDetail.freeUntilPill', { threshold: fmt(freeThreshold, lang), sent: fmt(event.sent_official, lang) })}
-            </Pill>
           </div>
 
           <InterestBreakdown
@@ -544,7 +531,6 @@ export function EventCard({ event, freeThreshold, onOpen, onRenew, onEnd }) {
         kind="event"
         onRenew={() => onRenew(event)}
         onEnd={() => onEnd(event)}
-        freeThreshold={freeThreshold}
         hasContract={event.promoted}
       />
     </div>
@@ -577,7 +563,7 @@ export function RaffleCardCompact({ raffle, onOpen }) {
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2 min-w-0">
           <p className="font-display font-bold text-surface-text text-sm truncate">{raffle.title}</p>
-          <Pill className={style.pill}>{style.emoji} {raffle.tier_label}</Pill>
+          <RafflePill raffle={raffle} />
         </div>
         <p className="text-[10px] font-mono text-surface-muted">{statusLabel}</p>
         <div className="flex items-center gap-3 text-[11px] font-mono">
@@ -594,9 +580,10 @@ export function RaffleCardCompact({ raffle, onOpen }) {
   );
 }
 
-export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
+export function RaffleCard({ raffle, onOpen, onRenew, onEnd }) {
   const { t, lang } = useTranslation();
   const style = TIER_STYLE[raffle.tier] || TIER_STYLE.light;
+  const neverPromoted = raffle.tier === 'light' && raffle.contracted == null;
 
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-3">
@@ -614,7 +601,7 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
               : raffle.ended ? t('dashboardDetail.raffleEndedDate', { date: fmtDate(raffle.ends_at, lang) }) : t('dashboardDetail.raffleEndsDate', { date: fmtDate(raffle.ends_at, lang) })}
           </p>
         </div>
-        <Pill className={style.pill}>{style.emoji} {raffle.tier_label}</Pill>
+        <RafflePill raffle={raffle} />
       </div>
 
       {raffle.contracted != null && (
@@ -627,6 +614,10 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
         </div>
       )}
 
+      {neverPromoted ? (
+        <p className="text-[11px] text-surface-muted leading-relaxed">{t('free.raffleNotPromoted')}</p>
+      ) : (
+      <>
       <div className="grid grid-cols-3 gap-2">
         <StatTile
           label={t('dashboardDetail.bannersShown')}
@@ -637,14 +628,10 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
         <StatTile label={t('dashboardDetail.ctrCol')} value={pct(raffle.ctr, lang)} accent="text-accent-glow" />
       </div>
 
-      {/* Asignados vs enseñados: la avioneta se sirve diferida (la próxima
-          vez que cada persona entre al menú principal) y como mucho una cada
-          15 min por usuario, así que la cola es normal y no un error. */}
+      {/* La avioneta sale la próxima vez que cada persona abre el menú
+          principal, como mucho una cada 15 min: tener pendientes es normal. */}
       <p className="text-[11px] text-surface-muted leading-relaxed">
-        {t('dashboardDetail.targetsExplain', { n: fmt(raffle.targets, lang) })}
-        {raffle.pending > 0
-          ? t('dashboardDetail.targetsPending', { n: fmt(raffle.pending, lang) })
-          : t('dashboardDetail.targetsAll')}
+        {raffle.pending > 0 ? t('dashboardDetail.targetsPending', { n: fmt(raffle.pending, lang) }) : t('dashboardDetail.targetsAll')}
       </p>
 
       <InterestBreakdown
@@ -653,14 +640,17 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
         unit={t('dashboardDetail.unitBanners')}
         filteredNote={t('dashboardDetail.filterNoteRaf')}
       />
+      </>
+      )}
 
-      {raffle.eligible_participants != null && (
+      {raffle.participants != null && (
         <div className="border-t border-surface-border/60 pt-3 text-[11px] font-mono text-surface-muted">
-          {t('dashboardDetail.eligibleCount', { n: fmt(raffle.eligible_participants, lang) })}
+          {t('dashboardDetail.participantsCount', { n: fmt(raffle.participants, lang) })}
+          {PAYMENTS_ENABLED && raffle.goal_cents > 0 && ` · 🎯 ${formatEurFromCents(raffle.raised_cents)} / ${formatEurFromCents(raffle.goal_cents)}`}
         </div>
       )}
 
-      {raffle.promo_ended_at && !raffle.ended && (
+      {raffle.promo_ended_at && !raffle.ended && (PAYMENTS_ENABLED || raffle.contracted != null) && (
         <div className="border-t border-surface-border/60 pt-3">
           <Pill className="bg-red-500/10 text-red-300 border-red-500/25">{t('dashboardDetail.promoEndedTag')}</Pill>
           <p className="text-[11px] text-surface-muted mt-2 leading-relaxed">
@@ -674,8 +664,8 @@ export function RaffleCard({ raffle, freeThreshold, onOpen, onRenew, onEnd }) {
         kind="raffle"
         onRenew={() => onRenew(raffle)}
         onEnd={() => onEnd(raffle)}
-        freeThreshold={freeThreshold}
         hasContract={raffle.tier === 'light' || raffle.tier === 'community'}
+        neverPromoted={neverPromoted}
       />
     </div>
   );
@@ -868,12 +858,14 @@ export default function CommunityDashboardPage() {
             totales de sorteos. Por eso el bloque ya no está condicionado
             a que la comunidad tenga URL — con actividad publicitaria
             (aunque no haya enlace propio) el gráfico ya aporta datos. */}
-        <TimeseriesChart
-          communityId={communityId}
-          entityType="community"
-          entityId={communityId}
-          entity={data.community}
-        />
+        {s.advanced ? (
+          <TimeseriesChart
+            communityId={communityId}
+            entityType="community"
+            entityId={communityId}
+            entity={data.community}
+          />
+        ) : <EnterpriseUpsell />}
 
         {/* Fase 121 — tope de actividades vivas por comunidad. Se
             enseña con un badge X/4 en ámbar cuando queda hueco y en
@@ -948,6 +940,30 @@ export default function CommunityDashboardPage() {
                   />
                 ))}
           </div>
+        )}
+
+        {data.history?.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="font-display font-bold text-surface-text text-sm">{t('dashboardDetail.historyTitle')}</h2>
+            {data.history.map(h => (
+              <div key={h.id} className="bg-surface-card border border-surface-border rounded-2xl p-3.5 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-display font-semibold text-surface-text text-xs truncate">
+                    {h.kind === 'event' ? '📅' : '🎁'} {h.title}
+                  </p>
+                  {PAYMENTS_ENABLED && (
+                    <span className="text-[11px] font-mono text-surface-text whitespace-nowrap">{formatEurFromCents(h.charged_cents || 0)}</span>
+                  )}
+                </div>
+                <p className="text-[10px] font-mono text-surface-muted">
+                  {fmtDate(h.ended_at, lang)} · {PAYMENTS_ENABLED && `${h.plan} · `}{t('dashboardDetail.historyRow', {
+                    delivered: fmt(h.delivered, lang) + (h.contracted ? ` / ${fmt(h.contracted, lang)}` : ''),
+                    clicks: fmt(h.clicks, lang),
+                  })}
+                </p>
+              </div>
+            ))}
+          </section>
         )}
       </main>
 

@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
-import { EventCard, ConfirmEndModal } from './CommunityDashboardPage';
+import { formatEurFromCents } from '../lib/adPricing';
+import { EventCard, ConfirmEndModal, EnterpriseUpsell } from './CommunityDashboardPage';
 import TimeseriesChart from '../components/TimeseriesChart';
 import { useTranslation } from '../i18n';
 
@@ -19,7 +20,7 @@ import { useTranslation } from '../i18n';
 //   · Un endpoint específico "detalle de un evento" duplicaría toda la
 //     lógica de agregación que ya hay en la ruta general (RPC de
 //     stats, join con community_event_attendees/likes, cálculo de
-//     billable/can_end/can_renew...).
+//     can_end/can_renew...).
 //   · La respuesta del dashboard entero pesa poco: es JSON crudo con
 //     N eventos + M sorteos. Un fetch más al mes por parte del
 //     creador de la comunidad no es problema, y hace la subpágina
@@ -87,7 +88,7 @@ export default function CommunityDashboardEventPage() {
           title: ev.title,
           promotion_plan: ev.promotion_plan,
           notification_count: ev.contracted,
-          communityId,
+          community_id: communityId,
           communityName: data?.community?.name || '',
         },
       },
@@ -103,8 +104,10 @@ export default function CommunityDashboardEventPage() {
     const path = `/community/events/${ending.row.id}/end-promotion`;
     setEndingBusy(true);
     try {
-      await api.post(path, {});
-      showToast(t('dashboardDetail.endedToast'), 'success');
+      const result = await api.post(path, {});
+      showToast(result.charged_cents || result.refunded_cents
+        ? t('raffle.promoSettled', { charged: formatEurFromCents(result.charged_cents), refunded: formatEurFromCents(result.refunded_cents) })
+        : t('dashboardDetail.endedToast'), 'success');
       setEnding(null);
       await load();
     } catch (e) {
@@ -195,7 +198,6 @@ export default function CommunityDashboardEventPage() {
       <main className="max-w-lg mx-auto px-4 pb-28 pt-4 space-y-4">
         <EventCard
           event={event}
-          freeThreshold={data.summary.free_threshold}
           onOpen={id => navigate(`/community/event/${id}`)}
           onRenew={handleRenewEvent}
           onEnd={row => askEnd('event', row)}
@@ -204,12 +206,14 @@ export default function CommunityDashboardEventPage() {
             El componente se encarga de: elegir métricas aplicables
             según el plan (Premium/Ultra), permitir cambiar intervalo
             (5m..1w) y alternar entre barras y línea. */}
-        <TimeseriesChart
-          communityId={communityId}
-          entityType="event"
-          entityId={event.id}
-          entity={event}
-        />
+        {data.summary.advanced ? (
+          <TimeseriesChart
+            communityId={communityId}
+            entityType="event"
+            entityId={event.id}
+            entity={event}
+          />
+        ) : <EnterpriseUpsell />}
       </main>
 
       <ConfirmEndModal

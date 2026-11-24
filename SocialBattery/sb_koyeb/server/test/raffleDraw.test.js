@@ -1,275 +1,174 @@
-// Tests unitarios de server/lib/raffleDraw.js — ejecución del sorteo
-// (adjudicar premios a ganadores). Correr con:
-//
-//   node --test server/test/raffleDraw.test.js
-//
-// Como purgeUserStorage.test.js, este mockea el cliente Supabase por
-// require.cache antes de cargar el módulo. La adjudicación no es puramente
-// pura (usa Math.random), pero controlamos ese punto reemplazando Math.random
-// por una función determinista durante los tests. Con eso, verificamos:
-//
-//   - Sorteo legacy (sin premios en tabla): un único ganador aleatorio va
-//     a community_raffles.winner_id.
-//   - Sorteo con premios (fase 122): Fisher-Yates parcial + adjudicación
-//     por posición.
-//   - Sin elegibles: se cierra el sorteo (drawn_at seteado) sin ganadores.
-//   - Más premios que elegibles: sobran premios sin winner_id.
-//
-// Y de paso: verificamos que notifyRaffleDrawn nunca lanza aunque el
-// notifyUsers inyectado falle — un fallo del push no debe revertir el
-// sorteo.
+// Tests del sorteo: elección de ganadores (pura) y drawRaffle con un Supabase
+// simulado. Correr con: node --test server/test/raffleDraw.test.js
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 
-// ─── Mock de Supabase ─────────────────────────────────────────────────
-// Este mock captura las llamadas encadenadas del estilo:
-//   supabase.from('t').select('*').eq('col', v).order('c').maybeSingle()
-// y devuelve datos preparados por test. Cada test setea `state.tables` para
-// simular los datos.
+// ─── Mocks (antes de cargar el módulo) ────────────────────────────────
+const db = {};
+const failOn = new Set();
 
-const state = {
-  tables: {},          // { tableName: [row, ...] }
-  updates: [],         // registro de UPDATEs para verificar
-  errorOnUpdate: null, // 'tableName' → fuerza error en su update
-};
-
-function reset() {
-  state.tables = {};
-  state.updates = [];
-  state.errorOnUpdate = null;
-}
-
-// Chainable "query" que colecciona el estado y ejecuta al final.
-function makeQuery(tableName) {
-  const q = {
-    _op: 'select',
-    _filters: [],
-    _order: null,
-    _select: '*',
-    _updateData: null,
-    select(cols) { this._op = this._op === 'update' ? 'update-select' : 'select'; this._select = cols; return this; },
-    update(data) { this._op = 'update'; this._updateData = data; return this; },
-    delete() { this._op = 'delete'; return this; },
-    eq(col, val) { this._filters.push({ col, val }); return this; },
-    order(col) { this._order = col; return this; },
-    // Terminales: single, maybeSingle, o then implícito.
-    async single() {
-      const rows = this._exec();
-      return { data: rows[0] ?? null, error: rows.length ? null : { message: 'not found' } };
-    },
-    async maybeSingle() {
-      const rows = this._exec();
-      return { data: rows[0] ?? null, error: null };
-    },
-    then(resolve, reject) {
-      try {
-        const rows = this._exec();
-        resolve({ data: rows, error: null });
-      } catch (e) { reject(e); }
-    },
-    _exec() {
-      const t = state.tables[tableName] || [];
-      let rows = t.filter(row =>
-        this._filters.every(f => row[f.col] === f.val)
-      );
-      if (this._op === 'update') {
-        if (state.errorOnUpdate === tableName) throw new Error('update failed');
-        for (const row of rows) Object.assign(row, this._updateData);
-        state.updates.push({ table: tableName, data: this._updateData, filters: this._filters });
-      }
-      if (this._order) rows = rows.slice().sort((a, b) => a[this._order] - b[this._order]);
-      return rows;
-    },
+function query(table) {
+  let op = 'select';
+  let patch = null;
+  const filters = [];
+  const run = () => {
+    if (failOn.has(`${op}:${table}`)) return { data: null, error: new Error('fallo forzado') };
+    const rows = db[table].filter(r => filters.every(f => f(r)));
+    if (op === 'update') rows.forEach(r => Object.assign(r, patch));
+    if (op === 'upsert') db[table].push({ ...patch });
+    return { data: rows.map(r => ({ ...r })), error: null };
   };
-  return q;
-}
-
-const mockSupabase = {
-  from(table) { return makeQuery(table); },
-};
-
-// Inyecta el mock en require.cache antes de cargar raffleDraw.
-process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'http://stub.local';
-process.env.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'stub-key';
-const supabasePath = require.resolve('../lib/supabase');
-require.cache[supabasePath] = {
-  id: supabasePath, filename: supabasePath, loaded: true, exports: mockSupabase,
-};
-const { drawRaffleWinners, notifyRaffleDrawn } = require('../lib/raffleDraw');
-
-// Aleatoriedad controlada durante los tests — devuelve valores predecibles.
-const originalRandom = Math.random;
-let randomSeed = 0;
-function setRandom(values) {
-  randomSeed = 0;
-  Math.random = () => values[(randomSeed++) % values.length];
-}
-const restoreRandom = () => { Math.random = originalRandom; };
-
-const originalWarn = console.warn;
-test.beforeEach(() => { reset(); console.warn = () => {}; });
-test.afterEach(() => { restoreRandom(); console.warn = originalWarn; });
-
-// ─── Tests: drawRaffleWinners — camino legacy (sin premios) ───────────
-
-test('legacy: 5 elegibles → elige uno con Math.random y setea winner_id + drawn_at', async () => {
-  state.tables['community_raffle_prizes'] = []; // sin premios
-  state.tables['community_raffles'] = [{ id: 'r1', winner_id: null, drawn_at: null }];
-  setRandom([0.5]); // 0.5 * 5 = 2.5 → índice 2
-
-  const result = await drawRaffleWinners({ raffleId: 'r1', eligibleIds: ['a', 'b', 'c', 'd', 'e'] });
-  assert.equal(result.prizesDrawn, 1);
-  assert.equal(result.totalPrizes, 0);
-  const raffle = state.tables['community_raffles'][0];
-  assert.equal(raffle.winner_id, 'c'); // índice 2
-  assert.ok(raffle.drawn_at, 'drawn_at debe estar seteado');
-});
-
-test('legacy: sin elegibles → drawn_at seteado, winner_id sigue null, prizesDrawn=0', async () => {
-  state.tables['community_raffle_prizes'] = [];
-  state.tables['community_raffles'] = [{ id: 'r1', winner_id: null, drawn_at: null }];
-
-  const result = await drawRaffleWinners({ raffleId: 'r1', eligibleIds: [] });
-  assert.equal(result.prizesDrawn, 0);
-  const raffle = state.tables['community_raffles'][0];
-  assert.equal(raffle.winner_id, null);
-  assert.ok(raffle.drawn_at);
-});
-
-// ─── Tests: drawRaffleWinners — camino con premios (fase 122) ─────────
-
-test('premios: 3 premios y 5 elegibles → 3 ganadores adjudicados por posición', async () => {
-  state.tables['community_raffle_prizes'] = [
-    { raffle_id: 'r1', id: 'p1', position: 1, winner_id: null },
-    { raffle_id: 'r1', id: 'p2', position: 2, winner_id: null },
-    { raffle_id: 'r1', id: 'p3', position: 3, winner_id: null },
-  ];
-  state.tables['community_raffles'] = [{ id: 'r1', drawn_at: null }];
-  // Fisher-Yates parcial: 3 pasadas, cada una elige un índice de los
-  // que quedan por barajar. Con valores 0, 0, 0 → siempre elige el
-  // primero del "resto sin barajar", que va rotando.
-  setRandom([0, 0, 0]);
-
-  const result = await drawRaffleWinners({ raffleId: 'r1', eligibleIds: ['a', 'b', 'c', 'd', 'e'] });
-  assert.equal(result.prizesDrawn, 3);
-  assert.equal(result.totalPrizes, 3);
-  // Los tres primeros premios tienen winner_id asignado; el sorteo cerrado.
-  const prizes = state.tables['community_raffle_prizes'];
-  assert.ok(prizes.every(p => p.winner_id !== null));
-  assert.ok(state.tables['community_raffles'][0].drawn_at);
-});
-
-test('premios: sin elegibles → prizesDrawn=0 pero drawn_at igualmente seteado', async () => {
-  state.tables['community_raffle_prizes'] = [
-    { raffle_id: 'r1', id: 'p1', position: 1, winner_id: null },
-  ];
-  state.tables['community_raffles'] = [{ id: 'r1', drawn_at: null }];
-
-  const result = await drawRaffleWinners({ raffleId: 'r1', eligibleIds: [] });
-  assert.equal(result.prizesDrawn, 0);
-  assert.equal(result.totalPrizes, 1);
-  // El premio queda sin winner_id — permitido por schema.
-  assert.equal(state.tables['community_raffle_prizes'][0].winner_id, null);
-  // Pero el sorteo queda cerrado igual (idempotencia).
-  assert.ok(state.tables['community_raffles'][0].drawn_at);
-});
-
-test('premios: más premios que elegibles → solo se adjudican tantos como elegibles', async () => {
-  state.tables['community_raffle_prizes'] = [
-    { raffle_id: 'r1', id: 'p1', position: 1, winner_id: null },
-    { raffle_id: 'r1', id: 'p2', position: 2, winner_id: null },
-    { raffle_id: 'r1', id: 'p3', position: 3, winner_id: null },
-  ];
-  state.tables['community_raffles'] = [{ id: 'r1', drawn_at: null }];
-  setRandom([0, 0]);
-
-  const result = await drawRaffleWinners({ raffleId: 'r1', eligibleIds: ['a', 'b'] });
-  assert.equal(result.prizesDrawn, 2);
-  assert.equal(result.totalPrizes, 3);
-  // El tercer premio queda sin adjudicar (winner_id null).
-  const p3 = state.tables['community_raffle_prizes'].find(p => p.position === 3);
-  assert.equal(p3.winner_id, null);
-});
-
-test('premios: no adjudica el mismo elegible dos veces (sin reemplazo)', async () => {
-  state.tables['community_raffle_prizes'] = [
-    { raffle_id: 'r1', id: 'p1', position: 1, winner_id: null },
-    { raffle_id: 'r1', id: 'p2', position: 2, winner_id: null },
-    { raffle_id: 'r1', id: 'p3', position: 3, winner_id: null },
-  ];
-  state.tables['community_raffles'] = [{ id: 'r1', drawn_at: null }];
-  setRandom([0.1, 0.2, 0.3]);
-
-  await drawRaffleWinners({ raffleId: 'r1', eligibleIds: ['a', 'b', 'c'] });
-  const winners = state.tables['community_raffle_prizes'].map(p => p.winner_id);
-  assert.equal(new Set(winners).size, winners.length,
-    `hay duplicados en ganadores: ${winners.join(', ')}`);
-});
-
-test('premios: el orden de posición se respeta — el i-ésimo extraído va al premio i-ésimo', async () => {
-  state.tables['community_raffle_prizes'] = [
-    { raffle_id: 'r1', id: 'pA', position: 2, winner_id: null }, // orden desordenado a propósito
-    { raffle_id: 'r1', id: 'pB', position: 1, winner_id: null },
-  ];
-  state.tables['community_raffles'] = [{ id: 'r1', drawn_at: null }];
-  setRandom([0, 0]);
-
-  await drawRaffleWinners({ raffleId: 'r1', eligibleIds: ['ganador1', 'ganador2'] });
-  // El código pide prizes ordenados por position ascending, y adjudica
-  // el i-ésimo extraído al i-ésimo por position. Position 1 gana primero.
-  const p1 = state.tables['community_raffle_prizes'].find(p => p.position === 1);
-  const p2 = state.tables['community_raffle_prizes'].find(p => p.position === 2);
-  assert.equal(p1.winner_id, 'ganador1', 'position 1 recibe el primer extraído');
-  assert.equal(p2.winner_id, 'ganador2', 'position 2 recibe el segundo extraído');
-});
-
-// ─── Tests: notifyRaffleDrawn — no debe lanzar nunca ──────────────────
-
-test('notify: si notifyUsers lanza, el error se traga (no revierte el sorteo)', async () => {
-  state.tables['community_raffles'] = [{ id: 'r1', title: 'X', community_id: 'c1', community: { name: 'Comunidad' } }];
-  const notifyUsersThatFails = async () => { throw new Error('push broken'); };
-  await assert.doesNotReject(
-    notifyRaffleDrawn(mockSupabase, notifyUsersThatFails, {
-      raffleId: 'r1', eligibleIds: ['a'], creatorId: 'creator',
-    })
-  );
-});
-
-test('notify: sin elegibles → sale sin llamar a notifyUsers', async () => {
-  let calls = 0;
-  const notifyUsers = async () => { calls++; };
-  await notifyRaffleDrawn(mockSupabase, notifyUsers, {
-    raffleId: 'r1', eligibleIds: [], creatorId: 'creator',
-  });
-  assert.equal(calls, 0);
-});
-
-test('notify: si el sorteo no existe → sale sin llamar a notifyUsers', async () => {
-  state.tables['community_raffles'] = []; // ninguno
-  let calls = 0;
-  const notifyUsers = async () => { calls++; };
-  await notifyRaffleDrawn(mockSupabase, notifyUsers, {
-    raffleId: 'no-existe', eligibleIds: ['a'], creatorId: 'creator',
-  });
-  assert.equal(calls, 0);
-});
-
-test('notify: pasa creatorId como "sender" y usa el nombre de la comunidad', async () => {
-  state.tables['community_raffles'] = [{
-    id: 'r1', title: 'Sorteo X', community_id: 'c1',
-    community: { name: 'Mi Comu' },
-  }];
-  let capturedArgs = null;
-  const notifyUsers = async (supabase, ids, sender, payload) => {
-    capturedArgs = { ids, sender, payload };
+  const b = {
+    select: () => b,
+    update: (p) => { op = 'update'; patch = p; return b; },
+    upsert: (p) => { op = 'upsert'; patch = p; return b; },
+    eq: (c, v) => { filters.push(r => r[c] === v); return b; },
+    is: (c, v) => { filters.push(r => (r[c] ?? null) === v); return b; },
+    order: () => b,
+    maybeSingle: async () => { const r = run(); return { data: r.data?.[0] ?? null, error: r.error }; },
+    then: (a, c) => Promise.resolve(run()).then(a, c),
   };
-  await notifyRaffleDrawn(mockSupabase, notifyUsers, {
-    raffleId: 'r1', eligibleIds: ['u1', 'u2'], creatorId: 'creator',
+  return b;
+}
+
+function mock(path, exports) {
+  const id = require.resolve(path);
+  require.cache[id] = { id, filename: id, loaded: true, exports };
+}
+
+let participants = [];
+let raised = 0;
+mock('../lib/supabase', { from: query });
+mock('../lib/raffles', {
+  getRaffleParticipants: async () => participants,
+  getRaisedCents: async () => raised,
+});
+
+const { createDrawSecret, entryKey, pickWinners, drawRaffle, redrawPrize, getVerification } = require('../lib/raffleDraw');
+
+function reset({ prizes = [], goal = null, people = [], raisedCents = 0 } = {}) {
+  const secret = createDrawSecret();
+  participants = people.map(p => (typeof p === 'string' ? { userId: p, tickets: 1 } : p));
+  raised = raisedCents;
+  failOn.clear();
+  db.community_raffles = [{ id: 'r1', community_id: 'c1', creator_id: 'boss', title: 'S', drawn_at: null, goal_cents: goal, draw_commit: secret.commit, winner_id: null }];
+  db.raffle_draw_secrets = [{ raffle_id: 'r1', seed: secret.seed }];
+  db.community_raffle_prizes = prizes.map((p, i) => ({
+    id: `p${i + 1}`, raffle_id: 'r1', position: i + 1, requires_goal: false, winner_id: null, previous_winners: [], ...p,
+  }));
+  return secret;
+}
+
+// ─── pickWinners ──────────────────────────────────────────────────────
+test('createDrawSecret: el compromiso publicado es el sha256 de la semilla', () => {
+  const { seed, commit } = createDrawSecret();
+  assert.equal(commit, crypto.createHash('sha256').update(seed).digest('hex'));
+});
+
+test('pickWinners: mismos datos, mismo resultado, sin depender del orden', () => {
+  const entries = Array.from({ length: 20 }, (_, i) => ({ key: `k${i}`, tickets: 1 }));
+  const a = pickWinners({ seed: 'ab', raffleId: 'r', entries, count: 5 });
+  const b = pickWinners({ seed: 'ab', raffleId: 'r', entries: [...entries].reverse(), count: 5 });
+  assert.deepEqual(a, b);
+  assert.equal(new Set(a).size, 5);
+});
+
+test('pickWinners: nunca más ganadores que participantes', () => {
+  assert.equal(pickWinners({ seed: 'x', raffleId: 'r', entries: [{ key: 'a', tickets: 3 }], count: 4 }).length, 1);
+  assert.deepEqual(pickWinners({ seed: 'x', raffleId: 'r', entries: [], count: 2 }), []);
+});
+
+test('pickWinners: 3 papeletas ganan unas 3 veces más', () => {
+  const entries = [{ key: 'a', tickets: 3 }, { key: 'b', tickets: 1 }];
+  let a = 0;
+  for (let i = 0; i < 4000; i += 1) {
+    if (pickWinners({ seed: `s${i}`, raffleId: 'r', entries, count: 1 })[0] === 'a') a += 1;
+  }
+  assert.ok(a > 2850 && a < 3150, `esperado ~3000, salió ${a}`);
+});
+
+// ─── drawRaffle ───────────────────────────────────────────────────────
+test('drawRaffle: adjudica premios distintos, revela la semilla y abre el plazo', async () => {
+  const secret = reset({ prizes: [{}, {}], people: ['a', 'b', 'c'] });
+  const result = await drawRaffle('r1');
+  assert.equal(result.winners.length, 2);
+  const [p1, p2] = db.community_raffle_prizes;
+  assert.notEqual(p1.winner_id, p2.winner_id);
+  assert.equal(p1.claim_status, 'pending');
+  assert.ok(new Date(p1.claim_deadline) > new Date());
+  const raffle = db.community_raffles[0];
+  assert.equal(raffle.draw_seed, secret.seed);
+  assert.equal(raffle.draw_entries, 3);
+});
+
+test('drawRaffle: el resultado se puede comprobar con los datos públicos', async () => {
+  reset({ prizes: [{}, {}], people: ['a', 'b', 'c', 'd'] });
+  await drawRaffle('r1');
+  const winners = pickWinners({
+    seed: db.community_raffles[0].draw_seed, raffleId: 'r1',
+    entries: await getVerification('r1'), count: 2,
   });
-  assert.deepEqual(capturedArgs.ids, ['u1', 'u2']);
-  assert.equal(capturedArgs.sender, 'creator');
-  assert.ok(capturedArgs.payload.body.includes('Sorteo X'));
-  assert.ok(capturedArgs.payload.body.includes('Mi Comu'));
-  assert.equal(capturedArgs.payload.tag, 'raffle-drawn-r1');
+  assert.deepEqual(winners, db.community_raffle_prizes.map(p => entryKey('r1', p.winner_id)));
+});
+
+test('drawRaffle: la segunda vez no hace nada', async () => {
+  reset({ prizes: [{}], people: ['a'] });
+  assert.ok(await drawRaffle('r1'));
+  assert.equal(await drawRaffle('r1'), null);
+});
+
+test('drawRaffle: sin participantes se cierra sin ganadores', async () => {
+  reset({ prizes: [{}] });
+  const result = await drawRaffle('r1');
+  assert.deepEqual(result.winners, []);
+  assert.ok(db.community_raffles[0].drawn_at);
+  assert.equal(db.community_raffle_prizes[0].winner_id, null);
+});
+
+test('drawRaffle: los premios extra solo se sortean si se alcanza la meta', async () => {
+  const prizes = [{}, { requires_goal: true }];
+  reset({ prizes, goal: 1000, people: ['a', 'b', 'c'], raisedCents: 999 });
+  assert.equal((await drawRaffle('r1')).goalReached, false);
+  assert.ok(db.community_raffle_prizes[0].winner_id);
+  assert.equal(db.community_raffle_prizes[1].winner_id, null);
+
+  reset({ prizes, goal: 1000, people: ['a', 'b', 'c'], raisedCents: 1000 });
+  assert.equal((await drawRaffle('r1')).goalReached, true);
+  assert.ok(db.community_raffle_prizes[1].winner_id);
+});
+
+test('drawRaffle: si algo falla se deshace para poder reintentarlo', async () => {
+  reset({ prizes: [{}], people: ['a', 'b'] });
+  failOn.add('update:raffle_draw_secrets');
+  await assert.rejects(drawRaffle('r1'));
+  assert.equal(db.community_raffles[0].drawn_at, null);
+  failOn.clear();
+  assert.ok(await drawRaffle('r1'));
+});
+
+test('drawRaffle: sorteo antiguo sin premios → ganador único', async () => {
+  reset({ people: ['a', 'b'] });
+  await drawRaffle('r1');
+  assert.ok(['a', 'b'].includes(db.community_raffles[0].winner_id));
+});
+
+// ─── redrawPrize ──────────────────────────────────────────────────────
+test('redrawPrize: elige a otra persona que no haya ganado ya', async () => {
+  reset({ prizes: [{}, {}], people: ['a', 'b', 'c'] });
+  await drawRaffle('r1');
+  const [p1, p2] = db.community_raffle_prizes.map(p => ({ ...p }));
+  const result = await redrawPrize(p2);
+  assert.ok(result.winnerId);
+  assert.ok(![p1.winner_id, p2.winner_id].includes(result.winnerId));
+  assert.deepEqual(db.community_raffle_prizes[1].previous_winners, [p2.winner_id]);
+});
+
+test('redrawPrize: sin más participantes el premio queda desierto', async () => {
+  reset({ prizes: [{}], people: ['a'] });
+  await drawRaffle('r1');
+  const result = await redrawPrize({ ...db.community_raffle_prizes[0] });
+  assert.equal(result.winnerId, null);
+  assert.equal(db.community_raffle_prizes[0].claim_status, null);
 });

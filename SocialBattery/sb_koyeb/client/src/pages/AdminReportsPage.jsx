@@ -10,6 +10,56 @@ import { useTranslation } from '../i18n';
 // sistema de roles completo ni tiene ruta en el menú de navegación a
 // propósito: se llega tecleando /admin/reports directamente.
 
+// Premios de sorteo que quien ganó dice no haber recibido. Mientras haya uno,
+// su organizador no puede crear más sorteos.
+function PrizeDisputes() {
+  const { t } = useTranslation();
+  const { showToast } = useToast();
+  const [prizes, setPrizes] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    api.get('/admin/prize-disputes').then(d => setPrizes(d.prizes || [])).catch(() => {});
+  }, []);
+
+  async function resolve(prize) {
+    if (!window.confirm(t('adminReports.disputeResolveConfirm'))) return;
+    setBusyId(prize.id);
+    try {
+      await api.post(`/community/raffles/prizes/${prize.id}/resolve`, {});
+      setPrizes(prev => prev.filter(p => p.id !== prize.id));
+      showToast(t('adminReports.updatedToast'));
+    } catch (err) {
+      showToast(err?.message || t('adminReports.updateError'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (!prizes.length) return null;
+  return (
+    <section className="mb-6 space-y-2">
+      <h2 className="font-display font-bold text-base">{t('adminReports.disputesTitle')}</h2>
+      {prizes.map(p => (
+        <div key={p.id} className="bg-surface-card border border-amber-500/30 rounded-2xl p-4 text-sm space-y-1">
+          <p><strong>{p.title}</strong> · {p.raffle?.title} ({p.raffle?.community?.name})</p>
+          <p className="text-xs text-surface-muted">{t('adminReports.disputeWinner', { name: p.winner?.username || '—' })}</p>
+          <p className="text-xs text-surface-muted break-words">
+            {t('adminReports.disputeOrganizer', { name: p.raffle?.organizer_name || '—', contact: p.raffle?.organizer_contact || '—' })}
+          </p>
+          <button
+            onClick={() => resolve(p)}
+            disabled={busyId === p.id}
+            className="mt-2 px-3 py-1.5 rounded-xl border border-surface-border text-xs font-display font-semibold disabled:opacity-50"
+          >
+            {t('adminReports.disputeResolve')}
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 export default function AdminReportsPage() {
   const { profile } = useAuth();
   const { showToast } = useToast();
@@ -108,6 +158,8 @@ export default function AdminReportsPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <h1 className="font-display text-2xl font-bold mb-1">{t('adminReports.title')}</h1>
         <p className="text-sm text-surface-muted mb-5">{t('adminReports.subtitle')}</p>
+
+        <PrizeDisputes />
 
         <div className="flex gap-1.5 mb-5 overflow-x-auto">
           {STATUS_TABS.map((tab) => (

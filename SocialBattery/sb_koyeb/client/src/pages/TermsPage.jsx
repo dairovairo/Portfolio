@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import LogoWordmark from '../components/LogoWordmark';
+import { PAYMENTS_ENABLED } from '../lib/features';
 import { useTranslation } from '../i18n';
 
 // Página pública de Términos y Condiciones. Como la de Privacidad, va
@@ -111,27 +112,49 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-surface-text font-display font-semibold text-lg mb-2">7. Moneda virtual "Volts" y compras</h2>
+            <h2 className="text-surface-text font-display font-semibold text-lg mb-2">{PAYMENTS_ENABLED ? '7. Volts, saldo publicitario y suscripciones' : '7. Volts y promoción'}</h2>
             <ul className="list-disc pl-5 space-y-1.5">
               <li>Los <strong className="text-surface-text">Volts</strong> son una moneda virtual sin valor monetario real fuera de la app. No son convertibles a dinero, no son transferibles a otros usuarios (salvo mediante las funciones que la app ofrezca expresamente) y no se pueden reembolsar salvo cuando la ley lo exija.</li>
               <li>Los accesorios de la mascota y otros bienes virtuales son licencias de uso dentro de la app. No los "posees" fuera del servicio.</li>
-              <li>Si compras Volts, la compra es final. Los importes indicados incluyen IVA cuando corresponda.</li>
-              <li>Podemos ajustar precios, eliminar o añadir ítems al catálogo. Los ítems ya comprados no pierden acceso salvo suspensión de la cuenta por incumplimiento.</li>
+              {PAYMENTS_ENABLED && (
+                <li>El <strong className="text-surface-text">saldo publicitario</strong> es prepago y solo sirve para promocionar eventos y sorteos en la app. Al lanzar una campaña se reserva el importe máximo y solo se cobra lo que se entrega de verdad; lo que no se usa vuelve a tu saldo. No garantizamos un número de entregas, clics o asistentes. El saldo no se puede retirar como dinero, salvo cuando la ley lo exija.</li>
+              )}
+              {PAYMENTS_ENABLED && (
+                <li>Las <strong className="text-surface-text">suscripciones</strong> Volt y Enterprise se renuevan solas cada mes hasta que las canceles. Puedes cancelarlas en cualquier momento desde Google Play o desde el portal de pago (según dónde las contrataste) y conservas las ventajas hasta el final del periodo pagado.</li>
+              )}
+              {PAYMENTS_ENABLED && (
+                <li>Los pagos los procesan Google Play (en la app de Android) y Stripe (en la web). Los importes indicados incluyen IVA cuando corresponda. Si la ley te da derecho de desistimiento o reembolso, se aplica; fuera de esos casos, las compras de Volts, saldo y periodos de suscripción ya empezados no se reembolsan.</li>
+              )}
+              {!PAYMENTS_ENABLED && (
+                <>
+                  <li>SocialBattery es gratis: no hay compras con dinero real, ni suscripciones, ni pagos entre usuarios dentro de la app.</li>
+                  <li>Promocionar eventos y sorteos es gratis y tiene un máximo por cuenta, que podemos ajustar para que el reparto sea justo. No garantizamos un número de entregas, clics o asistentes.</li>
+                </>
+              )}
+              <li>Podemos ajustar {PAYMENTS_ENABLED ? 'precios' : 'los precios en Volts'}, eliminar o añadir ítems al catálogo. Los ítems ya comprados no pierden acceso salvo suspensión de la cuenta por incumplimiento.</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-surface-text font-display font-semibold text-lg mb-2">8. Sorteos y actividades</h2>
-            <p>
-              SocialBattery permite a comunidades organizar sorteos con premios. La
-              participación es <strong className="text-surface-text">gratuita</strong>: no
-              se paga con Volts ni con dinero para participar. Los premios los proporciona
-              el organizador de la comunidad, no SocialBattery, y las condiciones de
-              entrega son responsabilidad de cada comunidad. Consulta las bases de cada
-              sorteo antes de participar. Si eres el organizador, cumples las leyes
-              aplicables sobre sorteos promocionales de tu país (en España, Ley 13/2011
-              y normativa autonómica correspondiente).
+            <h2 className="text-surface-text font-display font-semibold text-lg mb-2">{PAYMENTS_ENABLED ? '8. Sorteos, eventos y aportaciones' : '8. Sorteos y eventos'}</h2>
+            <p className="mb-2">
+              Las comunidades pueden organizar sorteos con premios usando las herramientas de
+              SocialBattery. <strong className="text-surface-text">Participar es siempre gratis</strong>: no se paga con dinero ni con
+              Volts, ni hace falta {PAYMENTS_ENABLED ? 'suscribirse, comprar o aportar' : 'comprar'} nada.
             </p>
+            <ul className="list-disc pl-5 space-y-1.5">
+              <li><strong className="text-surface-text">Quién organiza.</strong> El organizador es la persona o entidad que figura en las bases de cada sorteo. Es responsable del sorteo, de los premios, de su entrega y de cumplir la ley y los impuestos que le correspondan. SocialBattery, Google y Apple no organizan, patrocinan ni avalan los sorteos.</li>
+              <li><strong className="text-surface-text">Quién participa.</strong> Mayores de 18 años que sean miembros de la comunidad y acepten las bases. El organizador y los administradores no participan.{PAYMENTS_ENABLED && ' En los sorteos Volt, quien tiene suscripción Volt lleva 3 papeletas y el resto de participantes 1, sin coste.'}</li>
+              <li><strong className="text-surface-text">Cómo se elige.</strong> El sorteo lo hace el sistema al azar en la fecha publicada, y cualquiera puede comprobar el cálculo desde la app. Ni el organizador ni SocialBattery eligen a los ganadores.</li>
+              <li><strong className="text-surface-text">Premios.</strong> Quien gana tiene 14 días para aceptar el premio; si no lo hace, se puede volver a sortear. Si el premio no llega, se puede reclamar desde la app; mientras haya una reclamación abierta, el organizador no puede crear más sorteos. SocialBattery puede mediar o sancionar, pero no entrega ni sustituye los premios.</li>
+              {PAYMENTS_ENABLED && (
+                <li><strong className="text-surface-text">Meta colectiva.</strong> En los sorteos Community el organizador puede fijar una meta de aportaciones. El sorteo se celebra siempre en su fecha; si se alcanza la meta, además se sortean los premios extra entre todos los participantes, hayan aportado o no.</li>
+              )}
+              {PAYMENTS_ENABLED && (
+                <li><strong className="text-surface-text">Aportaciones.</strong> Apoyar económicamente a una comunidad es voluntario y no da papeletas, premios ni más opciones de ganar. El dinero lo recibe directamente el creador de la comunidad en su propia cuenta de Stripe, sin comisión de SocialBattery; las dudas y devoluciones se tratan con esa persona.</li>
+              )}
+              <li><strong className="text-surface-text">Eventos.</strong> Los eventos los organiza quien los publica, que puede modificarlos o cancelarlos. Si lo hace, se avisa a quienes se apuntaron. Las entradas o pagos externos se gestionan con el organizador.</li>
+            </ul>
           </section>
 
           <section>

@@ -12,6 +12,7 @@ import TutorialOverlay from '../components/TutorialOverlay';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
 import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
 import { useTranslation } from '../i18n';
+import { PAYMENTS_ENABLED } from '../lib/features';
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -591,8 +592,10 @@ function EventCard({ event, rank, onJoin, onLeave, onLike, onOpen, currentUserId
   // su propio glow para no chocar con los colores oro/plata/bronce del podio.
   const activeGlow = rank <= 3 ? rankStyle.glow : null;
 
-  // Pill de plan: visible para los 3 planes (basic incluido)
-  const PILL_META = {
+  // Pill de plan: visible para los 3 planes (basic incluido). Sin pagos no hay
+  // planes: solo se marca lo promocionado.
+  const FREE_PILL = { pill: `🚀 ${t('free.promoted')}`, pillClass: 'text-accent-glow bg-accent-primary/10 border border-accent-primary/25' };
+  const PILL_META = !PAYMENTS_ENABLED ? { ultra: FREE_PILL, premium: FREE_PILL } : {
     ultra:   { pill: '🚀 Ultra',   pillClass: 'text-accent-glow bg-accent-primary/10 border border-accent-primary/25' },
     premium: { pill: '⚡ Premium', pillClass: 'text-purple-300 bg-purple-500/10 border border-purple-500/25' },
     basic:   { pill: '📋 Basic',   pillClass: 'text-slate-300 bg-slate-500/10 border border-slate-500/25' },
@@ -1191,6 +1194,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
           </div>
 
           {/* Colaboración económica */}
+          {PAYMENTS_ENABLED && (
           <div className="rounded-xl border border-surface-border bg-surface-bg p-3.5">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <span className="text-xs font-mono text-surface-muted">
@@ -1223,6 +1227,7 @@ function CreateCommunityModal({ onClose, onCreate }) {
               </div>
             )}
           </div>
+          )}
 
           {/* Photo */}
           <div>
@@ -1749,7 +1754,7 @@ function RaffleDiscoveryCard({ raffle, onOpen, onLike, currentUserId }) {
 
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
-            {tierEmoji} {raffle.tier_label}
+            {PAYMENTS_ENABLED ? `${tierEmoji} ${raffle.tier_label}` : t('raffle.freeEntry')}
           </span>
           {raffle.community?.name && (
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border">

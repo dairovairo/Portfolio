@@ -16,74 +16,53 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  FREE_UNITS,
+  MIN_UNITS,
   EVENT_AD_PRICING,
   RAFFLE_AD_PRICING,
   computeEventAdPriceCents,
   computeRaffleAdPriceCents,
+  computeEventChargeCents,
 } = require('../lib/adPricing');
 
-// ─── computeEventAdPriceCents ─────────────────────────────────────────
-test('event pricing: premium a 2c/notif × 500 = 1000c (10€)', () => {
-  assert.equal(computeEventAdPriceCents('premium', 500), 1000);
+// ─── Eventos ──────────────────────────────────────────────────────────
+test('premium: 2 cts por notificación, las 50 primeras gratis', () => {
+  assert.equal(computeEventAdPriceCents('premium', 500), 900);
+  assert.equal(computeEventAdPriceCents('premium', 500, 0), 1000);
+  assert.equal(computeEventAdPriceCents('premium', 50), 0);
 });
 
-test('event pricing: ultra a 4c/notif × 500 = 2000c (20€)', () => {
-  assert.equal(computeEventAdPriceCents('ultra', 500), 2000);
+test('ultra: 2 cts por notificación + 1 ct por banner visto (máximo)', () => {
+  assert.equal(computeEventAdPriceCents('ultra', 500), 1350);
+  assert.equal(computeEventAdPriceCents('ultra', 50000, 0), 150000);
 });
 
-test('event pricing: ultra × 50000 (tope máximo) = 200000c (2000€)', () => {
-  assert.equal(computeEventAdPriceCents('ultra', 50000), 200000);
+test('computeEventChargeCents: cobra lo entregado de cada cosa', () => {
+  assert.equal(computeEventChargeCents('ultra', 250, 150), 200 * 2 + 100);
+  assert.equal(computeEventChargeCents('ultra', 250, 0), 400);
+  assert.equal(computeEventChargeCents('premium', 250, 999), 400);
 });
 
-test('event pricing: basic no tiene tarifa → siempre 0', () => {
-  assert.equal(computeEventAdPriceCents('basic', 500), 0);
-  assert.equal(computeEventAdPriceCents('basic', 999999), 0);
+test('planes sin tarifa, unidades inválidas y decimales', () => {
+  for (const plan of ['basic', 'inexistente', null, undefined]) {
+    assert.equal(computeEventAdPriceCents(plan, 500), 0);
+    assert.equal(computeEventChargeCents(plan, 500, 500), 0);
+  }
+  for (const units of [0, -100, 'muchas', null, undefined]) {
+    assert.equal(computeEventAdPriceCents('premium', units), 0);
+  }
+  assert.equal(computeEventAdPriceCents('premium', 100.9, 0), 200);
 });
 
-test('event pricing: plan desconocido → 0 (no lanza)', () => {
-  assert.equal(computeEventAdPriceCents('inexistente', 500), 0);
-  assert.equal(computeEventAdPriceCents(null, 500), 0);
-  assert.equal(computeEventAdPriceCents(undefined, 500), 0);
+// ─── Sorteos ──────────────────────────────────────────────────────────
+test('light: 2 cts por visualización, las 50 primeras gratis', () => {
+  assert.equal(computeRaffleAdPriceCents('light', 100), 100);
+  assert.equal(computeRaffleAdPriceCents('light', 500, 0), 1000);
 });
 
-test('event pricing: unidades <=0 → 0', () => {
-  assert.equal(computeEventAdPriceCents('premium', 0), 0);
-  assert.equal(computeEventAdPriceCents('premium', -100), 0);
-});
-
-test('event pricing: unidades no-numéricas → 0 (defensa)', () => {
-  assert.equal(computeEventAdPriceCents('premium', 'muchas'), 0);
-  assert.equal(computeEventAdPriceCents('premium', null), 0);
-  assert.equal(computeEventAdPriceCents('premium', undefined), 0);
-});
-
-test('event pricing: unidades decimales → floor (no cobrar por medias notificaciones)', () => {
-  // Solo se factura por entregas reales; una notificación medio-entregada
-  // no existe. Math.floor evita ambigüedad.
-  assert.equal(computeEventAdPriceCents('premium', 500.9), 1000);
-  assert.equal(computeEventAdPriceCents('premium', 499.99), 998);
-});
-
-// ─── computeRaffleAdPriceCents ────────────────────────────────────────
-test('raffle pricing: light a 2c/vista × 500 = 1000c', () => {
-  assert.equal(computeRaffleAdPriceCents('light', 500), 1000);
-});
-
-test('raffle pricing: community/volt no tienen tarifa on-demand → 0', () => {
-  // Community es gratis por diseño (aviso a la propia comunidad); Volt
-  // es la modalidad "todos los usuarios" sin aforo contratado. Solo
-  // Light se cobra.
+test('community y volt no tienen tarifa por visualización', () => {
   assert.equal(computeRaffleAdPriceCents('community', 500), 0);
   assert.equal(computeRaffleAdPriceCents('volt', 500), 0);
-});
-
-test('raffle pricing: unidades <=0 → 0', () => {
-  assert.equal(computeRaffleAdPriceCents('light', 0), 0);
-  assert.equal(computeRaffleAdPriceCents('light', -1), 0);
-});
-
-test('raffle pricing: floor de decimales (mismo criterio que eventos)', () => {
-  assert.equal(computeRaffleAdPriceCents('light', 500.75), 1000);
 });
 
 // ─── Verificación del mirror cliente ↔ servidor ───────────────────────
@@ -108,4 +87,13 @@ test('mirror: las tarifas de cliente y servidor coinciden número a número', as
     RAFFLE_AD_PRICING,
     'RAFFLE_AD_PRICING ha divergido entre cliente y servidor — pueden cobrar precios distintos',
   );
+  for (const units of [0, 50, 100, 1234, 50000]) {
+    for (const plan of ['basic', 'premium', 'ultra']) {
+      assert.equal(clientMod.computeEventAdPriceCents(plan, units), computeEventAdPriceCents(plan, units));
+      assert.equal(clientMod.computeEventAdPriceCents(plan, units, 0), computeEventAdPriceCents(plan, units, 0));
+    }
+    assert.equal(clientMod.computeRaffleAdPriceCents('light', units), computeRaffleAdPriceCents('light', units));
+  }
+  assert.equal(clientMod.MIN_UNITS, MIN_UNITS);
+  assert.equal(clientMod.FREE_UNITS, FREE_UNITS);
 });

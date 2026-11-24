@@ -9,8 +9,10 @@ const {
 } = require('../lib/billingCatalog');
 const billing = require('../lib/billing');
 const wallet = require('../lib/wallet');
+const entitlements = require('../lib/entitlements');
 const stripeClient = require('../lib/stripeClient');
 const play = require('../lib/googlePlay');
+const connect = require('../lib/connect');
 
 const router = express.Router();
 
@@ -149,6 +151,7 @@ async function ensureStripeCustomer(stripe, user) {
 }
 
 router.post('/stripe/checkout', requireAuth, async (req, res) => {
+  if (!wallet.paymentsEnabled()) return res.status(503).json({ error: 'Los pagos todavía no están disponibles' });
   const product = findProduct(req.body?.product_id);
   if (!product) return res.status(400).json({ error: 'Producto desconocido' });
   const returnPath = RETURN_PATHS.has(req.body?.return_path) ? req.body.return_path : '/wallet';
@@ -218,20 +221,49 @@ router.post('/stripe/portal', requireAuth, async (req, res) => {
   }
 });
 
-// Montado en index.js ANTES de express.json() (necesita el body crudo para
-// verificar la firma).
-async function stripeWebhookHandler(req, res) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret || !stripeClient.isConfigured()) return res.status(503).send('stripe not configured');
-  let event;
+// ── Stripe Connect: cobrar aportaciones a tu comunidad ─────────────────────
+router.get('/connect/status', requireAuth, async (req, res) => {
   try {
-    event = stripeClient.getStripe().webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+    res.json(await connect.getStatus(req.user.id));
   } catch (err) {
-    console.warn('[payments] stripe webhook signature failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    sendError(res, err, 'No se pudo consultar tu cuenta de cobros');
+  }
+});
+
+router.post('/connect/start', requireAuth, async (req, res) => {
+  try {
+    await entitlements.assertEnterprise(req.user.id, 'collaborations', 'Recibir aportaciones está incluido en Enterprise.');
+    res.json({ url: await connect.startOnboarding(req.user.id, `${appBaseUrl()}/wallet`) });
+  } catch (err) {
+    if (entitlements.handleEntitlementError(res, err)) return;
+    sendError(res, err, 'No se pudo abrir el alta de cobros');
+  }
+});
+
+// Montado en index.js ANTES de express.json() (necesita el body crudo para
+// verificar la firma). Los eventos de las cuentas conectadas llegan a la
+// misma URL con otro secreto (STRIPE_CONNECT_WEBHOOK_SECRET).
+async function stripeWebhookHandler(req, res) {
+  const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET].filter(Boolean);
+  if (!secrets.length || !stripeClient.isConfigured()) return res.status(503).send('stripe not configured');
+  let event = null;
+  let signatureError = null;
+  for (const secret of secrets) {
+    try {
+      event = stripeClient.getStripe().webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+      break;
+    } catch (err) {
+      signatureError = err;
+    }
+  }
+  if (!event) {
+    console.warn('[payments] stripe webhook signature failed:', signatureError.message);
+    return res.status(400).send(`Webhook Error: ${signatureError.message}`);
   }
   try {
-    await billing.handleStripeEvent(event);
+    // event.account: lo ha hecho una cuenta conectada, que controla su dueño.
+    // Nunca debe llegar a billing (acreditaría saldo con sus propios pagos).
+    await (event.account ? connect.handleConnectEvent(event) : billing.handleStripeEvent(event));
     res.json({ received: true });
   } catch (err) {
     console.error('[payments] stripe webhook handler error:', event.type, err);

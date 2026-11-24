@@ -305,6 +305,8 @@ export default function EventLocatorPage() {
     })
     .filter(m => m.lat != null && m.lng != null);
 
+  const [needsVolt, setNeedsVolt] = useState(false);
+
   async function handleOpenPicker() {
     if (!canCreateLocatorGroup) return;
     setShowPicker(true);
@@ -336,6 +338,10 @@ export default function EventLocatorPage() {
       setSelectedIds(new Set());
       await fetchGroup();
     } catch (e) {
+      if (e.code === 'volt_required') {
+        setShowPicker(false);
+        setNeedsVolt(true);
+      }
       showToast(e.message || t('locator.createError'), 'error');
     } finally {
       setCreatingGroup(false);
@@ -421,6 +427,12 @@ export default function EventLocatorPage() {
               <p className="text-[11px] text-surface-muted mt-1.5 px-1">
                 {t('locator.createGroupTooEarly')}
               </p>
+            )}
+            {needsVolt && (
+              <div className="mt-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+                {t('locator.voltNeeded')}{' '}
+                <button type="button" onClick={() => navigate('/shop')} className="text-accent-glow underline">{t('raffle.goShop')}</button>
+              </div>
             )}
           </div>
         )}

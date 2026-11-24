@@ -25,6 +25,7 @@
  */
 
 const { normalizePrivateKey, isUsablePrivateKey } = require('./serviceAccountKey');
+const { selectInChunks } = require('./paginate');
 
 let admin = null;
 let messaging = null;
@@ -190,12 +191,13 @@ async function notifyUsersFcm(supabase, userIds, excludeId, payload) {
   if (!targetIds.length) return [];
 
   try {
-    const { data: tokens, error } = await supabase
+    const tokens = await selectInChunks(targetIds, ids => supabase
       .from('fcm_tokens')
       .select('token, user_id')
-      .in('user_id', targetIds);
+      .in('user_id', ids)
+      .order('token'));
 
-    if (error || !tokens?.length) return [];
+    if (!tokens.length) return [];
     return await sendToTokens(supabase, tokens, payload);
   } catch (err) {
     console.warn('[fcm] notifyUsersFcm error:', err.message);

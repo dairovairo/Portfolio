@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatEuros } from '../lib/billing';
+import { PAYMENTS_ENABLED } from '../lib/features';
 import { useTranslation } from '../i18n';
 
 // Saldo publicitario en línea para las pantallas de contratar campaña
@@ -14,6 +15,7 @@ export default function WalletInline({ neededCents = 0, warn = true, forceInsuff
   const [state, setState] = useState(null);
 
   useEffect(() => {
+    if (!PAYMENTS_ENABLED) return undefined;
     let cancelled = false;
     api.get('/payments/me')
       .then(me => { if (!cancelled) setState(me); })

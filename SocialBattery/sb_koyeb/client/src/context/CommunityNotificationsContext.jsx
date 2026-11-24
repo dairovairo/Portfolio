@@ -312,7 +312,7 @@ export function CommunityNotificationsProvider({ children }) {
           } else if (plan === 'premium') {
             claimLocalNotifToday();
             fireLocalNotification({
-              title: `⚡ Nuevo evento Premium: ${newEvent.title || 'Nuevo evento'}`,
+              title: `⚡ Evento destacado: ${newEvent.title || 'Nuevo evento'}`,
               body:  `${newEvent.location ? newEvent.location + ' · ' : ''}¡Échale un vistazo!`,
               tag:   `premium-event-${newEvent.id}`,
               url:   `/community/event/${newEvent.id}`,

@@ -37,8 +37,8 @@ const VOLT_SUB_WEEKLY_VOLTS = 150;
 // Recompensa diaria por actualizar la batería (espejo de client/src/lib/currency.js).
 const DAILY_BATTERY_REWARD = 25;
 
-// Tarifa fija del sorteo Community (antes solo "informativa" en RAFFLE_TIERS).
-const COMMUNITY_RAFFLE_FEE_CENTS = 500;
+// Tarifa fija del sorteo Community (además, requiere Enterprise).
+const COMMUNITY_RAFFLE_FEE_CENTS = 1000;
 
 function findProduct(productId) {
   if (WALLET_PACKS[productId]) return { id: productId, ...WALLET_PACKS[productId] };

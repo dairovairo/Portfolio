@@ -106,6 +106,7 @@ async function notifyEventsStartingSoon() {
         id, title, location, event_date, community_id,
         community_event_attendees(user_id, joined_at, reminder_minutes_before)
       `)
+      .is('cancelled_at', null)
       .gte('event_date', start.toISOString())
       .lte('event_date', end.toISOString());
 

@@ -90,7 +90,7 @@ async function notifyRaffleDrawn({
     await Promise.allSettled(winnerIds.map(uid => {
       const prizeName = winnerToPrize.get(uid);
       const body = prizeName
-        ? `Has ganado "${prizeName}" en ${displayTitle}`
+        ? `Has ganado "${prizeName}" en ${displayTitle}. Acéptalo en los próximos 14 días.`
         : `¡Enhorabuena! Has ganado ${displayTitle}`;
       return notifyUsers(supabase, [uid], null, {
         title: '🎉 ¡Has ganado el sorteo!',

@@ -3,6 +3,9 @@ import { useNavigate, useParams, useLocation, useSearchParams } from 'react-rout
 import BottomNav from '../components/BottomNav';
 import LocationPicker from '../components/LocationPicker';
 import PhotoSourceMenu from '../components/PhotoSourceMenu';
+import CreateRaffleModal from '../components/CreateRaffleModal';
+import RaffleAvatar from '../components/RaffleAvatar';
+import RaffleCard from '../components/RaffleCard';
 import ReportModal from '../components/ReportModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -10,6 +13,9 @@ import { useCommunityNotifications } from '../context/CommunityNotificationsCont
 import { useSettings } from '../context/SettingsContext';
 import { api } from '../lib/api';
 import { formatEurFromCents } from '../lib/adPricing';
+import { PAYMENTS_ENABLED } from '../lib/features';
+import FreePromoToggle from '../components/FreePromo';
+import { buildRaffleFormData } from '../lib/raffleForm';
 import { shareOrDownloadBlob } from '../lib/instagramStory';
 import { CATEGORIES, OTHER_CATEGORY, getCategoryEmoji } from '../constants/categories';
 import { useTranslation } from '../i18n';
@@ -106,7 +112,6 @@ const MAX_CATEGORIES = 3;
 // Mismo listado que en CommunityPage (ver src/constants/categories.js).
 const EVENT_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 const COMMUNITY_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
-const RAFFLE_CATEGORIES = [...CATEGORIES.map(c => c.id), OTHER_CATEGORY];
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -147,7 +152,8 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
   const [busy, setBusy] = useState(false);
   const [liking, setLiking] = useState(false);
   const isJoined = event.attendee_ids?.includes(currentUserId);
-  const isPast = new Date(event.ends_at || event.event_date) < new Date();
+  const isCancelled = Boolean(event.cancelled_at);
+  const isPast = isCancelled || new Date(event.ends_at || event.event_date) < new Date();
   const isLiked = Boolean(event.liked_by_current_user);
   const eventCategories = getEntityCategories(event);
   const emoji = getEventEmoji(eventCategories[0]);
@@ -217,7 +223,9 @@ function EventCard({ event, currentUserId, onJoin, onLeave, onLike }) {
           )}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-xs text-slate-500 font-mono">📅 {formatEventDateRange(event)}</span>
-            {daysLabel && <span className="text-xs text-amber-300/90 font-mono">⏳ {daysLabel}</span>}
+            {isCancelled
+              ? <span className="text-xs text-red-300 font-mono">✕ {t('eventManage.cancelledTag')}</span>
+              : daysLabel && <span className="text-xs text-amber-300/90 font-mono">⏳ {daysLabel}</span>}
             {event.location && <span className="text-xs text-slate-500 font-mono">📍 {event.location}</span>}
           </div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -614,6 +622,13 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
           </div>
 
           {/* Promotion Plan */}
+          {!PAYMENTS_ENABLED ? (
+            <FreePromoToggle
+              hint={t('free.promoteEventHint')}
+              checked={form.promotion_plan === 'ultra'}
+              onChange={on => set('promotion_plan', on ? 'ultra' : 'basic')}
+            />
+          ) : (
           <div>
             <label className="block text-xs font-mono text-surface-muted mb-2">
               {t('communityDetail.promoLabel')}
@@ -755,6 +770,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
               </p>
             )}
           </div>
+          )}
 
           {error && <p className="text-red-400 text-sm font-mono bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
           {!error && (!form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || !form.categories.length || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())) && (
@@ -765,985 +781,7 @@ function CreateCommunityEventModal({ onClose, onCreate, communityName, community
             disabled={saving || !form.title.trim() || !form.event_date || !form.ends_at || !form.location.trim() || !form.categories.length || (form.categories.includes(OTHER_CATEGORY) && !form.custom_category.trim())}
             className="w-full py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
           >
-            {saving ? 'Creando...' : (form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') ? 'Configurar publicidad' : 'Publicar evento'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function formatRaffleEndLabel(dateStr, t) {
-  if (!dateStr) return '';
-  const time = new Date(dateStr).getTime();
-  if (Number.isNaN(time)) return '';
-  const diffMs = time - Date.now();
-  if (diffMs <= 0) return t ? t('community.raffleEnded') : 'Terminado';
-  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return t ? t('community.raffleEndsToday') : 'Termina hoy';
-  if (days === 1) return t ? t('community.raffleEndsTomorrow') : 'Termina mañana';
-  return t ? t('community.raffleEndsInDays', { n: days }) : `Termina en ${days} días`;
-}
-
-function RaffleAvatar({ user }) {
-  if (user?.avatar_url) {
-    return <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-surface-border" />;
-  }
-  return (
-    <div className="w-8 h-8 rounded-full bg-accent-primary/20 border border-accent-primary/30 flex items-center justify-center text-xs font-display font-bold text-accent-glow">
-      {(user?.username || '?').charAt(0).toUpperCase()}
-    </div>
-  );
-}
-
-// Debe coincidir con RAFFLE_TIERS en server/routes/community.js
-const RAFFLE_TIER_OPTIONS = [
-  {
-    key: 'volt',
-    label: 'Sorteo Volt',
-    priceLabel: 'Gratis',
-    rules: 'Participan los miembros de la comunidad con suscripción Volt de la app.',
-    includes: [
-      'Notificaciones a toda la comunidad',
-      'Apariciones de banner esporádico a número de usuarios disponibles (sin límite)',
-      'Duración máxima 2 semanas',
-    ],
-    emoji: '⚡',
-  },
-  {
-    key: 'light',
-    label: 'Sorteo Light',
-    // El precio de Light depende del número de visualizaciones contratadas
-    // en el siguiente paso (Configurar publicidad), así que aquí ya no se
-    // muestra un precio fijo — antes decía "20 €" y no era real.
-    priceLabel: null,
-    rules: 'Participan todos los miembros de la comunidad.',
-    includes: [
-      'Notificaciones a toda la comunidad',
-      'Apariciones de banner esporádico al número de usuarios contratado',
-    ],
-    emoji: '🎫',
-  },
-  {
-    key: 'community',
-    label: 'Sorteo Community',
-    priceLabel: '5 €',
-    rules: 'Participan los miembros que han colaborado con la comunidad.',
-    includes: [
-      'Notificaciones a toda la comunidad',
-      'Apariciones de banner esporádico a todos los miembros de la comunidad',
-    ],
-    emoji: '🤝',
-  },
-];
-
-function raffleTierMeta(tierKey) {
-  return RAFFLE_TIER_OPTIONS.find(t => t.key === tierKey) || RAFFLE_TIER_OPTIONS[0];
-}
-
-// Color del panel al seleccionar cada tipo de sorteo en el modal de creación
-// (mismo azul clarito que usa el botón "Chat" de la comunidad).
-const RAFFLE_TIER_SELECTED_STYLES = {
-  volt: 'border-blue-400/60 bg-blue-400/10',
-  community: 'border-red-400/60 bg-red-400/10',
-  light: 'border-amber-400/60 bg-amber-400/10',
-};
-
-// Borde de la RaffleCard según el tier — mismo criterio de color que
-// RAFFLE_TIER_SELECTED_STYLES (volt=azul, community=rojo, light=ámbar)
-// pero solo el borde, sin el tinte de fondo (el panel ya usa
-// bg-surface-card, igual que EventCard usa activeRing solo para el
-// borde). Así se distingue de un vistazo el tipo de sorteo, igual que
-// EventCard distingue el plan de promoción (ultra/premium) con su ring.
-const RAFFLE_TIER_BORDER_STYLES = {
-  volt: 'border-blue-400/50',
-  community: 'border-red-400/50',
-  light: 'border-amber-400/50',
-};
-
-function RaffleCard({ raffle, isCreator, onDraw, onShare, onRenew, onEndPromo, onLike }) {
-  const { t } = useTranslation();
-  const [drawing, setDrawing] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [endingPromo, setEndingPromo] = useState(false);
-  const [liking, setLiking] = useState(false);
-  const hasEnded = new Date(raffle.ends_at) <= new Date();
-  const isDrawn = Boolean(raffle.winner);
-  const liked = !!raffle.liked_by_current_user;
-  const likeCount = raffle.like_count || 0;
-
-  async function handleLikeClick() {
-    if (liking || !onLike || isCreator) return;
-    setLiking(true);
-    try { await onLike(raffle.id); } finally { setLiking(false); }
-  }
-
-  // Fase 112 — condiciones para pintar los botones de gestión de
-  // publicidad. Coinciden con las del servidor (POST /raffles/:raffleId/
-  // {end,renew}-promotion) para evitar peticiones que se sabe que van a
-  // rebotar: solo el creador, solo Light/Community (Volt no tiene
-  // publicidad de pago), y por encima del umbral de cobro. La lógica
-  // del umbral se hace en el servidor y llega ya resuelta
-  // indirectamente (banner_views_sent); aquí solo se filtra el caso
-  // obvio de "todavía no ha alcanzado el mínimo".
-  //
-  // Los botones se enseñan SIEMPRE (para el creador y en un tier de pago)
-  // aunque el sorteo ya haya terminado o se haya sorteado — así el
-  // creador ve el histórico de la promoción. Se deshabilitan con un
-  // tooltip explicativo si no se puede accionar. En particular no se
-  // puede renovar la publicidad de un sorteo ya acabado (el sorteo ha
-  // terminado y ya no hay a quién enseñar el banner); pensado para
-  // cuando se llena el cupo antes de que acabe.
-  const RAFFLE_FREE_THRESHOLD = 200;
-  const lifecycleTier = raffle.tier === 'light' || raffle.tier === 'community';
-  const shown = raffle.banner_views_sent ?? 0;
-  const meetsThreshold = shown >= RAFFLE_FREE_THRESHOLD;
-  const showPromoControls = isCreator && lifecycleTier;
-  const canRenewPromo = showPromoControls && meetsThreshold && !isDrawn && !hasEnded;
-  const canEndPromo   = showPromoControls && meetsThreshold && !raffle.promo_ended_at && !isDrawn && !hasEnded;
-
-  const renewDisabledReason =
-    hasEnded ? 'El sorteo ya ha terminado — no se puede renovar la publicidad'
-    : isDrawn ? 'El sorteo ya se ha realizado — no se puede renovar la publicidad'
-    : !meetsThreshold ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para renovar (${shown}/${RAFFLE_FREE_THRESHOLD})`
-    : 'Renovar publicidad del sorteo';
-
-  const endDisabledReason =
-    hasEnded ? 'El sorteo ya ha terminado — la publicidad se cerró sola'
-    : isDrawn ? 'El sorteo ya se ha realizado'
-    : raffle.promo_ended_at ? 'La publicidad ya está finalizada'
-    : !meetsThreshold ? `Necesitas alcanzar ${RAFFLE_FREE_THRESHOLD} banners enseñados para finalizar (${shown}/${RAFFLE_FREE_THRESHOLD})`
-    : 'Finalizar publicidad del sorteo';
-
-  async function runDraw() {
-    setDrawing(true);
-    try { await onDraw(raffle.id); } finally { setDrawing(false); }
-  }
-
-  async function runShare() {
-    setSharing(true);
-    try { await onShare(raffle); } finally { setSharing(false); }
-  }
-
-  async function runEndPromo() {
-    if (!window.confirm(`¿Finalizar la publicidad de "${raffle.title}"? Los banners pendientes dejarán de mostrarse. El sorteo en sí se mantiene y podrás renovar la publicidad si te arrepientes.`)) return;
-    setEndingPromo(true);
-    try { await onEndPromo(raffle); } finally { setEndingPromo(false); }
-  }
-
-  return (
-    <div
-      id={`raffle-${raffle.id}`}
-      className={`bg-surface-card border ${RAFFLE_TIER_BORDER_STYLES[raffle.tier] || 'border-surface-border'} rounded-2xl overflow-hidden transition-shadow`}
-    >
-      {raffle.image_url && (
-        <div className="aspect-[16/9] bg-surface-bg">
-          <img src={raffle.image_url} alt={raffle.title} className="w-full h-full object-cover" />
-        </div>
-      )}
-      <div className="p-4 space-y-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-lg flex-shrink-0">🎁</span>
-            <h3 className="font-display font-bold text-surface-text text-sm truncate">{raffle.title}</h3>
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {!isCreator && onLike && (
-              <button
-                onClick={handleLikeClick}
-                disabled={liking}
-                aria-pressed={liked}
-                title={liked ? t('communityDetail.raffleLikeRemove') : t('communityDetail.raffleLikeAdd')}
-                className={`flex items-center gap-1 px-2 h-8 rounded-lg border text-[11px] font-display font-semibold transition-colors disabled:opacity-50 ${
-                  liked
-                    ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
-                    : 'border-surface-border text-surface-muted hover:border-amber-500/30'
-                }`}
-              >
-                {liked ? '♥' : '♡'} {likeCount}
-              </button>
-            )}
-            <button
-              onClick={runShare}
-              disabled={sharing}
-              title={t('communityDetail.raffleShare')}
-              className="flex-shrink-0 w-8 h-8 rounded-lg border border-surface-border flex items-center justify-center text-surface-muted hover:text-surface-text hover:border-accent-primary/40 transition-colors disabled:opacity-50"
-            >
-              {sharing ? '⏳' : '📤'}
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-glow border border-accent-primary/20">
-            {raffleTierMeta(raffle.tier).emoji} {raffle.tier_label || raffleTierMeta(raffle.tier).label}
-          </span>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border">
-            {raffle.price_cents ? `${(raffle.price_cents / 100).toFixed(2)} €` : 'Gratis'}
-          </span>
-          {getEntityCategories(raffle).map(cat => (
-            <span
-              key={cat}
-              className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-bg text-surface-muted border border-surface-border"
-            >
-              {getEventEmoji(cat)} {cat}
-            </span>
-          ))}
-        </div>
-
-        {raffle.tier_rules && (
-          <p className="text-[11px] text-surface-muted/80 italic leading-relaxed">{raffle.tier_rules}</p>
-        )}
-
-        {isCreator && ['light', 'volt', 'community'].includes(raffle.tier) && raffle.banner_views_sent != null && (
-          <p className="text-[11px] text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-1.5">
-            📣 {Number(raffle.banner_views_sent).toLocaleString('es-ES')}
-            {raffle.banner_views_contracted ? ` / ${Number(raffle.banner_views_contracted).toLocaleString('es-ES')}` : ''} usuarios notificados
-          </p>
-        )}
-
-        {showPromoControls && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={() => { if (canRenewPromo) onRenew(raffle); }}
-              disabled={!canRenewPromo}
-              title={renewDisabledReason}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
-                canRenewPromo
-                  ? 'border-accent-primary/30 bg-accent-primary/10 text-accent-glow hover:bg-accent-primary/20'
-                  : 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
-              }`}
-            >
-              🔄 Renovar publicidad
-            </button>
-            <button
-              onClick={() => { if (canEndPromo && !endingPromo) runEndPromo(); }}
-              disabled={!canEndPromo || endingPromo}
-              title={endDisabledReason}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-display font-semibold transition-all ${
-                canEndPromo && !endingPromo
-                  ? 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
-                  : 'border-surface-border bg-surface-bg text-slate-500 cursor-not-allowed opacity-60'
-              }`}
-            >
-              {endingPromo ? '…' : '⏹ Finalizar'}
-            </button>
-          </div>
-        )}
-
-        {isCreator && raffle.promo_ended_at && !isDrawn && !hasEnded && (
-          <p className="text-[11px] font-mono text-red-300/80 bg-red-500/10 border border-red-500/25 rounded-xl px-3 py-2 leading-relaxed">
-            ⏹ Publicidad finalizada. Los banners pendientes ya no se enseñan. Puedes reabrirla con "Renovar publicidad".
-          </p>
-        )}
-
-        {isCreator && lifecycleTier && !isDrawn && !hasEnded && !meetsThreshold && (
-          <p className="text-[11px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 leading-relaxed">
-            🔒 Aún no puedes gestionar la publicidad: hace falta alcanzar el mínimo de {RAFFLE_FREE_THRESHOLD} banners enseñados para que se pueda cobrar ({shown}/{RAFFLE_FREE_THRESHOLD}).
-          </p>
-        )}
-
-        {showPromoControls && (hasEnded || isDrawn) && (
-          <p className="text-[11px] font-mono text-slate-400 bg-surface-bg border border-surface-border rounded-xl px-3 py-2 leading-relaxed">
-            {isDrawn
-              ? t('communityDetail.raffleDrawnNote')
-              : t('communityDetail.raffleEndedNote')}
-          </p>
-        )}
-
-        {raffle.description && (
-          <p className="text-xs text-surface-muted leading-relaxed">{raffle.description}</p>
-        )}
-
-        <div className="flex items-center gap-3 text-[11px] font-mono text-surface-muted">
-          <span className={isDrawn ? 'text-surface-muted' : hasEnded ? 'text-amber-400' : 'text-accent-glow'}>
-            {isDrawn ? `Terminó el ${new Date(raffle.ends_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : formatRaffleEndLabel(raffle.ends_at)}
-          </span>
-          <span>·</span>
-          <span>{raffle.participant_count ?? 0} participantes</span>
-        </div>
-
-        {/* Fase 122 — listado de premios. Si el sorteo tiene premios en
-            la tabla nueva (todo sorteo creado a partir de fase 122), se
-            enseñan siempre: antes de sortear como catálogo ("esto es lo
-            que se rifa"), después de sortear con el ganador junto a
-            cada premio. Un premio sin ganador tras el sorteo significa
-            que no había elegibles suficientes — se pinta como "Sin
-            adjudicar" para dejarlo claro sin ocultarlo.
-            Sorteos legacy (prizes ausente/vacío) siguen viendo el
-            bloque del ganador único de siempre, más abajo. */}
-        {Array.isArray(raffle.prizes) && raffle.prizes.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-mono text-surface-muted uppercase tracking-wide">
-              {raffle.prizes.length > 1 ? `${raffle.prizes.length} premios` : 'Premio'}
-            </p>
-            <div className="space-y-1.5">
-              {raffle.prizes.map(prize => (
-                <div
-                  key={prize.id}
-                  className="flex items-center gap-2 bg-surface-bg border border-surface-border rounded-lg p-2"
-                >
-                  <div className="w-10 h-10 rounded-md bg-surface-card border border-surface-border overflow-hidden flex-shrink-0 flex items-center justify-center text-lg">
-                    {prize.image_url
-                      ? <img src={prize.image_url} alt="" className="w-full h-full object-cover" />
-                      : <span>🎁</span>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-[12px] font-display font-semibold text-surface-text truncate">
-                        {raffle.prizes.length > 1 && (
-                          <span className="text-surface-muted font-mono mr-1">#{prize.position}</span>
-                        )}
-                        {prize.title}
-                      </p>
-                      {prize.value_cents != null && (
-                        <p className="text-[10px] font-mono text-amber-300/80 whitespace-nowrap">
-                          {formatEurFromCents(prize.value_cents)}
-                        </p>
-                      )}
-                    </div>
-                    {isDrawn && (
-                      prize.winner ? (
-                        <p className="text-[10px] font-mono text-amber-300 mt-0.5 truncate">
-                          🏆 {prize.winner.username}
-                        </p>
-                      ) : (
-                        <p className="text-[10px] font-mono text-surface-muted mt-0.5 italic">
-                          {t('communityDetail.raffleUnassigned')}
-                        </p>
-                      )
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Bloque legacy — solo se enseña en sorteos anteriores a la
-            fase 122 (sin array de premios). Los nuevos ya llevan la
-            lista de arriba, con ganadores integrados. */}
-        {isDrawn && (!raffle.prizes || raffle.prizes.length === 0) ? (
-          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 mt-1">
-            <RaffleAvatar user={raffle.winner} />
-            <div className="min-w-0">
-              <p className="text-[10px] font-mono text-amber-400/80">{t('communityDetail.raffleWinner')}</p>
-              <p className="text-sm font-display font-bold text-surface-text truncate">{raffle.winner?.username}</p>
-            </div>
-          </div>
-        ) : isCreator && hasEnded && !isDrawn ? (
-          <button
-            onClick={runDraw}
-            disabled={drawing}
-            className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-surface-bg font-display font-bold text-xs transition-all disabled:opacity-50"
-          >
-            {drawing
-              ? 'Sorteando...'
-              : (raffle.prizes && raffle.prizes.length > 1
-                  ? `🎉 Sortear ${raffle.prizes.length} ganadores`
-                  : '🎉 Sortear ganador')}
-          </button>
-        ) : !hasEnded ? (
-          <p className="text-[11px] text-surface-muted italic">
-            {isCreator
-              ? 'Podrás sortear al ganador cuando termine el plazo.'
-              : raffle.can_participate === false
-                ? 'No cumples los requisitos de participación de este sorteo.'
-                : 'Participas automáticamente por cumplir los requisitos de este sorteo.'}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function CreateRaffleModal({ onClose, onCreate, communityName, communityId }) {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const minDate = new Date(Date.now() + 60 * 60 * 1000);
-  const pad = n => String(n).padStart(2, '0');
-  const fmtDatetimeLocal = d =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const defaultDate = fmtDatetimeLocal(minDate);
-  // Sorteos Volt: tope duro de 14 días — debe coincidir con
-  // VOLT_MAX_DURATION_DAYS del server (POST /communities/:id/raffles).
-  // Volt no puede finalizarse ni renovarse manualmente (los tiers de
-  // ciclo de vida solo cubren light/community, ver RAFFLE_LIFECYCLE_TIERS
-  // en routes/community.js), así que ends_at es su único freno — sin
-  // este tope un Volt puede quedarse repartiendo banners meses.
-  const VOLT_MAX_DURATION_DAYS = 14;
-  const voltMaxDate = fmtDatetimeLocal(new Date(Date.now() + VOLT_MAX_DURATION_DAYS * 24 * 60 * 60 * 1000));
-  const imageInputRef = useRef(null);
-  const imageCameraRef = useRef(null);
-  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [endsAt, setEndsAt] = useState(defaultDate);
-  const [categories, setCategories] = useState([]);
-  const [customCategory, setCustomCategory] = useState('');
-  const [tier, setTier] = useState(RAFFLE_TIER_OPTIONS[0].key);
-  const [showTierDetails, setShowTierDetails] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState('');
-  // Fase 122 — premios del sorteo. Como mínimo uno; el backend valida
-  // 1..PRIZE_MAX_PER_RAFFLE (=10). Cada item mantiene:
-  //   · title           — obligatorio, no vacío
-  //   · valueEuros      — string editable en euros (con coma o punto),
-  //                       se convierte a céntimos al enviar
-  //   · imageFile       — File nativo o null
-  //   · imagePreview    — data URL para el thumbnail o ''
-  //   · showPhotoMenu   — abre el sheet de cámara/galería solo para
-  //                       este premio (cada uno tiene el suyo)
-  //   · imageInputRef / imageCameraRef — refs al <input type="file">
-  //     ocultos que dispara PhotoSourceMenu; se crean al vuelo para no
-  //     compartir el DOM con la portada del sorteo.
-  // Un solo blanco al arrancar — el organizador siempre tiene que
-  // rellenar mínimo uno.
-  const PRIZE_MAX = 10;
-  const emptyPrize = () => ({
-    title: '',
-    valueEuros: '',
-    imageFile: null,
-    imagePreview: '',
-    showPhotoMenu: false,
-  });
-  const [prizes, setPrizes] = useState([emptyPrize()]);
-  // Refs indexadas por posición. Se re-crean si añades/quitas premios,
-  // así que se guardan en un solo objeto y se accede con la key numérica.
-  const prizeInputRefs = useRef({});
-  const prizeCameraRefs = useRef({});
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  function setPrizeField(idx, field, value) {
-    setPrizes(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
-  }
-
-  async function handlePrizeImageChange(idx, e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError(`Premio ${idx + 1}: la foto no puede superar 5MB`);
-      e.target.value = '';
-      return;
-    }
-    const preview = await readFileAsDataUrl(file);
-    setPrizes(prev => prev.map((p, i) => i === idx ? { ...p, imageFile: file, imagePreview: preview } : p));
-    setError('');
-  }
-
-  function clearPrizeImage(idx) {
-    setPrizes(prev => prev.map((p, i) => i === idx ? { ...p, imageFile: null, imagePreview: '' } : p));
-    if (prizeInputRefs.current[idx]) prizeInputRefs.current[idx].value = '';
-    if (prizeCameraRefs.current[idx]) prizeCameraRefs.current[idx].value = '';
-  }
-
-  function addPrize() {
-    setPrizes(prev => prev.length >= PRIZE_MAX ? prev : [...prev, emptyPrize()]);
-  }
-
-  function removePrize(idx) {
-    setPrizes(prev => {
-      if (prev.length <= 1) return prev;
-      // Limpia refs del premio que se va para no dejar handlers colgados.
-      delete prizeInputRefs.current[idx];
-      delete prizeCameraRefs.current[idx];
-      return prev.filter((_, i) => i !== idx);
-    });
-  }
-
-  // Convierte el string euros→céntimos. "12", "12.50", "12,50" → 1250.
-  // Vacío / no parseable → null (valor opcional, no obligatorio).
-  function eurosToCents(str) {
-    const s = String(str ?? '').trim().replace(',', '.');
-    if (!s) return null;
-    const v = Number.parseFloat(s);
-    if (!Number.isFinite(v) || v < 0) return null;
-    return Math.round(v * 100);
-  }
-
-  async function handleImageChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError(t('communityDetail.errRafflePhoto'));
-      e.target.value = '';
-      return;
-    }
-    setImageFile(file);
-    setImagePreview(await readFileAsDataUrl(file));
-    setError('');
-  }
-
-  function clearImage() {
-    setImageFile(null);
-    setImagePreview('');
-    if (imageInputRef.current) imageInputRef.current.value = '';
-    if (imageCameraRef.current) imageCameraRef.current.value = '';
-  }
-
-  function selectCategory(cat) {
-    setCategories(prev => {
-      const isSelected = prev.includes(cat);
-      if (isSelected) {
-        if (cat === OTHER_CATEGORY) setCustomCategory('');
-        return prev.filter(c => c !== cat);
-      }
-      if (prev.length >= MAX_CATEGORIES) return prev;
-      return [...prev, cat];
-    });
-  }
-
-  async function handleSubmit() {
-    if (!title.trim()) { setError('El título es obligatorio'); return; }
-    if (!endsAt) { setError('La fecha de fin es obligatoria'); return; }
-    if (new Date(endsAt) <= new Date()) { setError('La fecha de fin debe ser en el futuro'); return; }
-    // Volt: tope duro de 14 días — replica la validación del server.
-    if (tier === 'volt' && new Date(endsAt) > new Date(voltMaxDate)) {
-      setError(t('communityDetail.errVoltMaxDuration', { n: VOLT_MAX_DURATION_DAYS }));
-      return;
-    }
-    // Fase 120: categorías obligatorias. El backend también lo rechaza,
-    // pero validamos aquí para no gastar la subida de imagen.
-    if (categories.length < 1) {
-      setError('Elige al menos una categoría para el sorteo');
-      return;
-    }
-    if (categories.includes(OTHER_CATEGORY) && !customCategory.trim()) {
-      setError(t('communityDetail.errSpecifyCategory'));
-      return;
-    }
-
-    const resolvedCategories = categories
-      .map(cat => (cat === OTHER_CATEGORY ? customCategory.trim() : cat))
-      .filter(Boolean);
-
-    // Fase 122 — validación de premios. Título obligatorio; el valor
-    // (€) es opcional y se acepta vacío. Se corta pronto para no
-    // llegar al servidor con datos que sabemos que rebotan.
-    for (let i = 0; i < prizes.length; i++) {
-      if (!prizes[i].title.trim()) {
-        setError(`Premio ${i + 1}: pon un nombre al premio`);
-        return;
-      }
-      if (prizes[i].valueEuros && eurosToCents(prizes[i].valueEuros) == null) {
-        setError(t('communityDetail.errPrizeValue', { n: i + 1 }));
-        return;
-      }
-    }
-
-    // El draft carga los premios EN ORDEN de la UI. La `position` la
-    // asigna el server según ese orden (nunca la manda el cliente) —
-    // ver POST /communities/:id/raffles en routes/community.js. Así el
-    // organizador ordena moviendo elementos en la lista, no editando
-    // números.
-    const resolvedPrizes = prizes.map(p => ({
-      title: p.title.trim(),
-      value_cents: eurosToCents(p.valueEuros),
-      image_file: p.imageFile || null,
-    }));
-
-    const draft = {
-      title: title.trim(),
-      description: description.trim(),
-      ends_at: new Date(endsAt).toISOString(),
-      categories: resolvedCategories,
-      tier,
-      image_file: imageFile,
-      image_preview: imagePreview,
-      prizes: resolvedPrizes,
-    };
-
-    // Los sorteos Light llevan publicidad de pago: antes de crearlo, se
-    // configura la audiencia (usuarios notificables / interesados) en una
-    // pantalla propia. El sorteo no se crea todavía aquí — se crea al
-    // confirmar en RaffleAdAudiencePage con estos mismos datos.
-    if (tier === 'light') {
-      onClose();
-      navigate(`/community/${communityId}/raffle-publicidad`, { state: { draft, communityName } });
-      return;
-    }
-
-    setSaving(true);
-    setError('');
-    try {
-      await onCreate(draft);
-      onClose();
-    } catch (e) {
-      setError(e.message || 'Error al crear el sorteo');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
-        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-6 sm:hidden" />
-
-        <div className="flex items-center gap-3 mb-6">
-          <span className="text-3xl">🎁</span>
-          <div>
-            <h2 className="font-display font-bold text-surface-text text-lg">{t('communityDetail.createRaffleTitle')}</h2>
-            <p className="text-xs text-surface-muted">{communityName}</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.evTitleLabel')}</label>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder={t('communityDetail.raffleTitlePh')}
-              maxLength={120}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              {t('communityDetail.evDescLabel')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
-            </label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder={t('communityDetail.raffleDescPh')}
-              rows={3}
-              maxLength={1000}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors resize-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">{t('communityDetail.raffleEndAtLabel')}</label>
-            <input
-              type="datetime-local"
-              value={endsAt}
-              onChange={e => setEndsAt(e.target.value)}
-              min={defaultDate}
-              max={tier === 'volt' ? voltMaxDate : undefined}
-              className="w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-            />
-            {tier === 'volt' && (
-              <p className="text-[10px] font-mono text-surface-muted mt-1">
-                Los sorteos Volt duran como máximo {VOLT_MAX_DURATION_DAYS} días.
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              Categorías * <span className="text-slate-600">({categories.length}/{MAX_CATEGORIES})</span>
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {RAFFLE_CATEGORIES.map(cat => {
-                const selected = categories.includes(cat);
-                const disabled = !selected && categories.length >= MAX_CATEGORIES;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => selectCategory(cat)}
-                    disabled={disabled}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-                      selected
-                        ? 'border-accent-primary bg-accent-primary/20 text-accent-glow'
-                        : disabled
-                          ? 'border-surface-border text-slate-700 opacity-40 cursor-not-allowed'
-                          : 'border-surface-border text-surface-muted hover:border-accent-primary/30'
-                    }`}
-                  >
-                    {getEventEmoji(cat)} {cat}
-                  </button>
-                );
-              })}
-            </div>
-            {categories.includes(OTHER_CATEGORY) && (
-              <input
-                type="text"
-                value={customCategory}
-                onChange={e => setCustomCategory(e.target.value)}
-                placeholder={t('communityDetail.evCategoryPh')}
-                maxLength={60}
-                className="mt-3 w-full bg-surface-bg border border-surface-border rounded-xl px-4 py-3 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
-            )}
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-mono text-surface-muted">
-                Premios * <span className="text-slate-600">({prizes.length}/{PRIZE_MAX})</span>
-              </label>
-              <button
-                type="button"
-                onClick={addPrize}
-                disabled={prizes.length >= PRIZE_MAX}
-                className="text-[11px] font-mono text-accent-glow hover:text-accent-primary transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
-              >
-                + añadir premio
-              </button>
-            </div>
-            <p className="text-[11px] text-surface-muted italic mb-2 leading-relaxed">
-              Habrá tantos ganadores como premios. El orden manda: el 1º extraído se lleva el premio 1, el 2º el premio 2, etc. Muévelos como quieras que se repartan.
-            </p>
-            <div className="space-y-2">
-              {prizes.map((p, idx) => (
-                <div
-                  key={idx}
-                  className="bg-surface-bg border border-surface-border rounded-xl p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-mono text-surface-muted">
-                      Premio {idx + 1}
-                    </span>
-                    {prizes.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removePrize(idx)}
-                        className="text-[11px] font-mono text-red-300 hover:text-red-200"
-                      >
-                        {t('communityDetail.photoRemove')}
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    value={p.title}
-                    onChange={e => setPrizeField(idx, 'title', e.target.value)}
-                    placeholder={t('communityDetail.prizeNamePh')}
-                    maxLength={120}
-                    className="w-full bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono text-surface-muted whitespace-nowrap">
-                      {t('communityDetail.raffleValueLabel')}
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={p.valueEuros}
-                      onChange={e => setPrizeField(idx, 'valueEuros', e.target.value)}
-                      placeholder={t('communityDetail.prizeValuePh')}
-                      maxLength={12}
-                      className="flex-1 bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-surface-text placeholder-slate-600 text-sm focus:outline-none focus:border-accent-primary/50 transition-colors"
-                    />
-                    <span className="text-[11px] font-mono text-surface-muted">€</span>
-                  </div>
-                  {/* Foto opcional. Cada premio tiene su propio menú de
-                      cámara/galería — el sheet global de la portada
-                      (showPhotoMenu) es aparte. */}
-                  {p.imagePreview ? (
-                    <div className="overflow-hidden rounded-lg border border-surface-border bg-surface-card">
-                      <div className="aspect-[16/9]">
-                        <img src={p.imagePreview} alt="" className="h-full w-full object-cover" />
-                      </div>
-                      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-                        <span className="truncate text-[11px] text-surface-muted">{p.imageFile?.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => clearPrizeImage(idx)}
-                          className="text-[11px] font-mono text-red-300 hover:text-red-200"
-                        >
-                          {t('communityDetail.prizePhotoRemove')}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPrizeField(idx, 'showPhotoMenu', true)}
-                      className="w-full rounded-lg border border-dashed border-accent-primary/30 bg-accent-primary/5 px-3 py-2 text-[12px] font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
-                    >
-                      📷 Foto del premio (opcional)
-                    </button>
-                  )}
-                  <input
-                    ref={el => { prizeInputRefs.current[idx] = el; }}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => handlePrizeImageChange(idx, e)}
-                  />
-                  <input
-                    ref={el => { prizeCameraRefs.current[idx] = el; }}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={e => handlePrizeImageChange(idx, e)}
-                  />
-                  <PhotoSourceMenu
-                    open={p.showPhotoMenu}
-                    onClose={() => setPrizeField(idx, 'showPhotoMenu', false)}
-                    onCamera={() => prizeCameraRefs.current[idx]?.click()}
-                    onGallery={() => prizeInputRefs.current[idx]?.click()}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-surface-muted mb-1.5">
-              {t('communityDetail.prizePhotoAdd')} <span className="text-slate-600">{t('community.fieldOptional')}</span>
-            </label>
-            {imagePreview ? (
-              <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-bg">
-                <div className="aspect-[16/9]">
-                  <img src={imagePreview} alt="" className="h-full w-full object-cover" />
-                </div>
-                <div className="flex items-center justify-between gap-2 px-3 py-2">
-                  <span className="truncate text-xs text-surface-muted">{imageFile?.name}</span>
-                  <button
-                    type="button"
-                    onClick={clearImage}
-                    className="text-xs font-display font-semibold text-red-300 hover:text-red-200"
-                  >
-                    {t('communityDetail.photoRemove')}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowPhotoMenu(true)}
-                className="w-full rounded-xl border border-dashed border-accent-primary/35 bg-accent-primary/5 px-4 py-4 text-sm font-display font-semibold text-accent-glow hover:bg-accent-primary/10 transition-all"
-              >
-                {t('communityDetail.photoPick')}
-              </button>
-            )}
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageChange}
-            />
-            <input
-              ref={imageCameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleImageChange}
-            />
-            <PhotoSourceMenu
-              open={showPhotoMenu}
-              onClose={() => setShowPhotoMenu(false)}
-              onCamera={() => imageCameraRef.current?.click()}
-              onGallery={() => imageInputRef.current?.click()}
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-mono text-surface-muted">{t('communityDetail.raffleTierLabel')}</label>
-              <button
-                type="button"
-                onClick={() => setShowTierDetails(v => !v)}
-                className="text-[11px] font-mono text-accent-glow hover:text-accent-primary transition-colors"
-              >
-                {showTierDetails ? '− ocultar qué incluye' : '+ ver qué incluye en cada una'}
-              </button>
-            </div>
-            <div className="space-y-2">
-              {RAFFLE_TIER_OPTIONS.map(opt => {
-                const selected = tier === opt.key;
-                const selectedStyle = RAFFLE_TIER_SELECTED_STYLES[opt.key] || 'border-accent-primary/60 bg-accent-primary/10';
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => {
-                      setTier(opt.key);
-                      // Cambiar a Volt con una fecha más allá del tope
-                      // dejaría el input en estado inválido silencioso
-                      // (el `max` no reajusta el value). Se clampea
-                      // aquí al máximo permitido.
-                      if (opt.key === 'volt' && endsAt && new Date(endsAt) > new Date(voltMaxDate)) {
-                        setEndsAt(voltMaxDate);
-                      }
-                    }}
-                    className={`w-full text-left rounded-xl border px-3.5 py-3 transition-all ${
-                      selected
-                        ? selectedStyle
-                        : 'border-surface-border bg-surface-bg hover:border-accent-primary/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5 text-sm font-display font-bold text-surface-text">
-                        <span>{opt.emoji}</span> {opt.label}
-                      </span>
-                      {opt.priceLabel && (
-                        <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${
-                          opt.priceLabel === 'Gratis'
-                            ? 'bg-emerald-500/15 text-emerald-400'
-                            : 'bg-surface-card text-surface-muted border border-surface-border'
-                        }`}>
-                          {opt.priceLabel}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-surface-muted leading-relaxed mt-1">{opt.rules}</p>
-                    {showTierDetails && (
-                      <ul className="mt-2 space-y-1 border-t border-surface-border/60 pt-2">
-                        {opt.includes.map((item, i) => (
-                          <li key={i} className="text-[11px] text-surface-muted/90 flex items-start gap-1.5">
-                            <span className="text-accent-glow flex-shrink-0">✓</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Fase 113 — el bloque de especificaciones técnicas del tier
-                Light (retención, preferencia de banners, límite de un
-                banner por usuario, envío conforme disponibilidad) vivía
-                duplicado aquí y en RaffleAdAudiencePage.jsx (paso
-                "Configurar publicidad"). Se deja solo en ese segundo paso,
-                que es donde de verdad se contrata la publicidad. */}
-
-            {tier === 'volt' && (
-              <div className="mt-2 space-y-2">
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  🎯 Cada persona recibirá como máximo 3 banners esporádicos del sorteo.
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  📶 Las apariciones de banners publicitarios tienen preferencia en sorteos Light frente a sorteos Volt.
-                </p>
-              </div>
-            )}
-
-            {tier === 'community' && (
-              <div className="mt-2 space-y-2">
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  ℹ️ Este tipo de sorteos tiene como objetivo la afiliación a la comunidad, no incluye publicidad fuera de la comunidad.
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  ✈️ Se mostrará una avioneta con el banner del sorteo a todos los miembros de la comunidad, como máximo una vez a cada uno.
-                </p>
-                <p className="text-xs text-surface-muted font-mono bg-surface-bg border border-surface-border rounded-xl px-3 py-2">
-                  📶 Las apariciones de banners publicitarios tienen preferencia en sorteos Light y Volt frente a sorteos Community.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <p className="text-[11px] text-surface-muted italic">
-            {raffleTierMeta(tier).rules} Los admins nunca participan.
-          </p>
-
-          {error && <p className="text-xs text-red-400">{error}</p>}
-
-          <button
-            onClick={handleSubmit}
-            disabled={saving || !title.trim() || !endsAt}
-            className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-surface-bg font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
-          >
-            {saving ? 'Creando...' : tier === 'light' ? 'Configurar publicidad' : 'Crear sorteo'}
+            {saving ? 'Creando...' : (form.promotion_plan === 'premium' || form.promotion_plan === 'ultra') ? t('raffle.setupAds') : 'Publicar evento'}
           </button>
         </div>
       </div>
@@ -2145,7 +1183,6 @@ function EventSection({ title, empty, events, currentUserId, onJoin, onLeave, on
 
 function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onClose, onConfirm, confirming }) {
   const { t } = useTranslation();
-  const amountLabel = (amountCents / 100).toFixed(2);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -2156,24 +1193,24 @@ function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onC
           <span className="text-3xl">🤝</span>
           <div>
             <h2 className="font-display font-bold text-surface-text text-lg">{t('communityDetail.collabTitle')}</h2>
-            <p className="text-xs text-surface-muted">con {communityName}</p>
+            <p className="text-xs text-surface-muted">{communityName}</p>
           </div>
         </div>
 
         {alreadyCollaborator && (
           <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2 mb-4">
             <span className="text-emerald-400">✓</span>
-            <p className="text-xs text-emerald-400 font-mono">Ya eres colaborador de esta comunidad. Puedes volver a colaborar si quieres.</p>
+            <p className="text-xs text-emerald-400 font-mono">{t('communityDetail.alreadyCollabNote')}</p>
           </div>
         )}
 
         <div className="bg-surface-bg border border-surface-border rounded-xl p-4 text-center mb-4">
           <p className="text-xs text-surface-muted font-mono mb-1">{t('communityDetail.collabAmountLabel')}</p>
-          <p className="text-3xl font-display font-bold text-surface-text">{amountLabel} €</p>
+          <p className="text-3xl font-display font-bold text-surface-text">{formatEurFromCents(amountCents)}</p>
         </div>
 
         <p className="text-xs text-surface-muted leading-relaxed mb-5">
-          Este importe va destinado a la comunidad. <strong className="text-surface-text">SocialBattery no obtiene nada por este pago.</strong> Puedes colaborar tantas veces como quieras.
+          {t('raffle.collabExplain')}
         </p>
 
         <div className="flex gap-2">
@@ -2188,7 +1225,7 @@ function CollaborateModal({ communityName, amountCents, alreadyCollaborator, onC
             disabled={confirming}
             className="flex-1 py-3 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-display font-bold transition-all disabled:opacity-50 active:scale-[0.98]"
           >
-            {confirming ? 'Confirmando...' : `Colaborar ${amountLabel} €`}
+            {confirming ? '…' : t('raffle.collabPayBtn', { amount: formatEurFromCents(amountCents) })}
           </button>
         </div>
       </div>
@@ -2290,10 +1327,10 @@ function EditCommunityModal({ community, onClose, onSave }) {
       } else if (removeCover) {
         formData.append('remove_cover', 'true');
       }
-      if (collabEnabled) {
-        formData.append('collab_amount_cents', String(collabAmountCents));
-      } else {
+      if (!collabEnabled) {
         formData.append('remove_collab', 'true');
+      } else if (collabAmountCents !== community.collab_amount_cents) {
+        formData.append('collab_amount_cents', String(collabAmountCents));
       }
       await onSave(formData);
       onClose();
@@ -2418,6 +1455,7 @@ function EditCommunityModal({ community, onClose, onSave }) {
           </div>
 
           {/* Colaboración económica */}
+          {PAYMENTS_ENABLED && (
           <div className="rounded-xl border border-surface-border bg-surface-bg p-3.5">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <span className="text-xs font-mono text-surface-muted">
@@ -2445,12 +1483,12 @@ function EditCommunityModal({ community, onClose, onSave }) {
                   <span className="text-sm text-surface-muted font-mono">€ (mínimo 0,99 €)</span>
                 </div>
                 <p className="text-[11px] text-surface-muted leading-relaxed">
-                  Los miembros de la comunidad (no admins) verán un botón "Colaborar" con este importe.
-                  SocialBattery no obtiene nada por este pago.
+                  {t('raffle.collabSettingsHint')}
                 </p>
               </div>
             )}
           </div>
+          )}
 
           {/* Photo */}
           <div>
@@ -2631,6 +1669,26 @@ export default function CommunityDetailPage() {
     }
   }, [loading, community, communityId, clearCommunityBadge, clearThreadPostBadge]);
 
+  // Vuelta de Stripe tras una aportación. El webhook la registra igualmente;
+  // esto solo evita esperar a que llegue.
+  useEffect(() => {
+    const result = searchParams.get('collab');
+    if (!result) return;
+    const sessionId = searchParams.get('session_id');
+    const next = new URLSearchParams(searchParams);
+    next.delete('collab');
+    next.delete('session_id');
+    setSearchParams(next, { replace: true });
+    if (result !== 'success' || !sessionId) return;
+    api.post(`/community/communities/${communityId}/collaborate/confirm`, { session_id: sessionId })
+      .then(() => {
+        showToast(t('communityDetail.thanksCollab'), 'success');
+        load();
+        loadRaffles();
+      })
+      .catch(e => showToast(e.message || t('communityDetail.errCollab'), 'error'));
+  }, [searchParams, setSearchParams, communityId, load, loadRaffles, showToast, t]);
+
   async function handleCreateEvent(form) {
     await api.postForm('/community/events', buildEventFormData(form, { community_id: communityId }));
     showToast(t('communityDetail.evPublished'), 'success');
@@ -2644,37 +1702,7 @@ export default function CommunityDetailPage() {
   }
 
   async function handleCreateRaffle(form) {
-    const formData = new FormData();
-    formData.append('title', form.title);
-    if (form.description?.trim()) formData.append('description', form.description.trim());
-    formData.append('ends_at', form.ends_at);
-    formData.append('tier', form.tier || 'light');
-    if (form.categories?.length) formData.append('categories', JSON.stringify(form.categories));
-    if (form.banner_views_contracted != null) formData.append('banner_views_contracted', form.banner_views_contracted);
-    if (form.image_file) formData.append('image', form.image_file);
-    // Fase 122 — premios. El JSON del meta va en `prizes` y cada foto
-    // (opcional) se appendea como `prize_image`. Se lleva un contador
-    // `fileIdx` para poder decirle al server con qué fichero se
-    // corresponde cada premio dentro del array recibido, sin arrastrar
-    // el "el i-ésimo premio es el i-ésimo fichero" (que se rompe en
-    // cuanto un premio no lleva foto). Ver la validación de prizes en
-    // server/routes/community.js.
-    if (form.prizes && form.prizes.length) {
-      let fileIdx = 0;
-      const meta = form.prizes.map(p => {
-        const entry = { title: p.title, value_cents: p.value_cents };
-        if (p.image_file) {
-          formData.append('prize_image', p.image_file);
-          entry.has_image = true;
-          entry.image_index = fileIdx++;
-        } else {
-          entry.has_image = false;
-        }
-        return entry;
-      });
-      formData.append('prizes', JSON.stringify(meta));
-    }
-    await api.postForm(`/community/communities/${communityId}/raffles`, formData);
+    await api.postForm(`/community/communities/${communityId}/raffles`, buildRaffleFormData(form));
     showToast(t('communityDetail.raffleCreated'), 'success');
     await loadRaffles();
   }
@@ -2709,24 +1737,13 @@ export default function CommunityDetailPage() {
     }
   }
 
-  // Fase 112 — desde la tarjeta del sorteo, el creador puede saltar a la
-  // página de configuración de publicidad en modo renovación (ver
-  // RaffleAdAudiencePage y su rama isRenew) o cerrar el ciclo actual de
-  // golpe. Renovar necesita elegir aforo/filtro SOLO en Light; en cambio
-  // finalizar no tiene parámetros y se envía directamente. El
-  // window.confirm ya vive en el propio botón del RaffleCard (runEndPromo).
-  //
-  // Community es un caso aparte (fase 132): su audiencia SIEMPRE es "todos
-  // los miembros de la comunidad" — getCommunityMemberIdsForBanner no
-  // admite aforo ni filtro de interesados, así que no hay nada que
-  // configurar. Renovar aquí solo tiene sentido como "vuelve a avisar a
-  // la comunidad, con un ciclo de métricas limpio" — se llama directo al
-  // endpoint sin pasar por la pantalla de configuración.
+  // Light se renueva en la pantalla de publicidad (hay que elegir aforo).
+  // Community no tiene nada que configurar: vuelve a avisar a los miembros.
   async function handleRenewRafflePromo(raffle) {
     if (raffle.tier === 'community') {
       try {
         await api.post(`/community/raffles/${raffle.id}/renew-promotion`, {});
-        showToast(t('communityDetail.adRenewed'), 'success');
+        showToast(t('raffle.notifiedAgain'), 'success');
         await loadRaffles();
       } catch (e) {
         showToast(e.message || t('communityDetail.errRenew'), 'error');
@@ -2754,8 +1771,10 @@ export default function CommunityDetailPage() {
 
   async function handleEndRafflePromo(raffle) {
     try {
-      await api.post(`/community/raffles/${raffle.id}/end-promotion`, {});
-      showToast(t('communityDetail.adEnded'), 'success');
+      const result = await api.post(`/community/raffles/${raffle.id}/end-promotion`, {});
+      showToast(result.charged_cents || result.refunded_cents
+        ? t('raffle.promoSettled', { charged: formatEurFromCents(result.charged_cents), refunded: formatEurFromCents(result.refunded_cents) })
+        : t('communityDetail.adEnded'), 'success');
       await loadRaffles();
     } catch (e) {
       showToast(e.message || t('communityDetail.errEndAd'), 'error');
@@ -2813,13 +1832,10 @@ export default function CommunityDetailPage() {
   async function handleConfirmCollaborate() {
     setCollaborating(true);
     try {
-      await api.post(`/community/communities/${communityId}/collaborate`, {});
-      showToast(t('communityDetail.thanksCollab'), 'success');
-      setShowCollabModal(false);
-      await load();
+      const { url } = await api.post(`/community/communities/${communityId}/collaborate`, {});
+      window.location.assign(url); // Stripe Checkout; al volver, ?collab=success
     } catch (e) {
       showToast(e.message || t('communityDetail.errCollab'), 'error');
-    } finally {
       setCollaborating(false);
     }
   }
@@ -2834,7 +1850,7 @@ export default function CommunityDetailPage() {
   }, [communityId]);
 
   useEffect(() => {
-    if (community?.is_admin && community?.collab_amount_cents) {
+    if (PAYMENTS_ENABLED && community?.is_admin && community?.collab_amount_cents) {
       loadCollabStats();
     }
   }, [community?.is_admin, community?.collab_amount_cents, loadCollabStats]);
@@ -2903,6 +1919,7 @@ export default function CommunityDetailPage() {
 
   const communityCategories = getEntityCategories(community);
   const emoji = getCommunityEmoji(communityCategories[0]);
+  const canCollaborate = Boolean(PAYMENTS_ENABLED && community.is_member && !community.is_admin && community.collab_available);
 
   return (
     <div className="min-h-screen bg-surface-bg noise">
@@ -2932,10 +1949,10 @@ export default function CommunityDetailPage() {
             <span>💬</span> {t('communityDetail.chat')}
           </button>
 
-          {community.is_member && !community.is_admin && community.collab_amount_cents && (
+          {canCollaborate && (
             <button
               onClick={() => setShowCollabModal(true)}
-              title={community.has_collaborated ? 'Ya eres colaborador · colaborar de nuevo' : 'Colaborar con la comunidad'}
+              title={community.has_collaborated ? t('communityDetail.alreadyCollabPill') : t('communityDetail.collabWithComm')}
               className={`relative flex-shrink-0 flex items-center gap-1 text-xs font-display font-semibold px-2.5 py-1.5 rounded-xl border transition-colors ${
                 community.has_collaborated
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20 hover:border-emerald-500/40'
@@ -2943,7 +1960,7 @@ export default function CommunityDetailPage() {
               }`}
             >
               <span>{community.has_collaborated ? '✓' : '🤝'}</span>
-              {community.has_collaborated ? 'Colaborador' : 'Colaborar'}
+              {community.has_collaborated ? t('raffle.collaborator') : t('communityDetail.collabTitle')}
             </button>
           )}
 
@@ -3054,13 +2071,13 @@ export default function CommunityDetailPage() {
           </div>
         </section>
 
-        {community.is_admin && community.collab_amount_cents && (
+        {PAYMENTS_ENABLED && community.is_admin && community.collab_amount_cents && (
           <section className="bg-surface-card border border-surface-border rounded-2xl p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="font-display font-bold text-surface-text text-sm">🤝 Colaboraciones</h2>
+                <h2 className="font-display font-bold text-surface-text text-sm">🤝 {t('raffle.collabsTitle')}</h2>
                 <p className="text-xs text-surface-muted font-mono mt-1">
-                  {collabStats ? `${collabStats.count} colaboración${collabStats.count === 1 ? '' : 'es'} · ${(collabStats.total_cents / 100).toFixed(2)} €` : 'Cargando...'}
+                  {collabStats ? t('raffle.collabsStats', { n: collabStats.count, amount: formatEurFromCents(collabStats.total_cents) }) : '…'}
                 </p>
               </div>
               {collabStats?.count > 0 && (
@@ -3073,8 +2090,14 @@ export default function CommunityDetailPage() {
               )}
             </div>
             <p className="text-[11px] text-surface-muted leading-relaxed mt-2">
-              Colaboración fijada: {(community.collab_amount_cents / 100).toFixed(2)} €. SocialBattery no obtiene nada por estos pagos.
+              {t('raffle.collabFixed', { amount: formatEurFromCents(community.collab_amount_cents) })}
             </p>
+            {community.creator_id === profile?.id && !community.collab_available && (
+              <p className="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 mt-2">
+                {t('raffle.collabNotReady')}{' '}
+                <button type="button" onClick={() => navigate('/wallet')} className="text-accent-glow underline">{t('raffle.goWallet')}</button>
+              </p>
+            )}
             {showCollabList && collabStats?.collaborations?.length > 0 && (
               <div className="mt-3 space-y-1.5 max-h-56 overflow-y-auto">
                 {collabStats.collaborations.map(c => (
@@ -3153,12 +2176,13 @@ export default function CommunityDetailPage() {
                 <RaffleCard
                   key={raffle.id}
                   raffle={raffle}
-                  isCreator={community.creator_id === profile?.id}
+                  onChanged={loadRaffles}
                   onDraw={handleDrawRaffle}
                   onShare={handleShareRaffle}
                   onRenew={handleRenewRafflePromo}
                   onEndPromo={handleEndRafflePromo}
                   onLike={handleLikeRaffle}
+                  onCollaborate={canCollaborate ? () => setShowCollabModal(true) : null}
                 />
               ))}
             </div>
@@ -3225,8 +2249,7 @@ export default function CommunityDetailPage() {
 
       {showCreateRaffle && (
         <CreateRaffleModal
-          communityName={community.name}
-          communityId={communityId}
+          community={community}
           onClose={() => setShowCreateRaffle(false)}
           onCreate={handleCreateRaffle}
         />
