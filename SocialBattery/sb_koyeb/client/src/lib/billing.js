@@ -12,6 +12,7 @@
 
 import { api } from './api';
 import { isNativeApp } from './nativePush';
+import { PAYMENTS_ENABLED } from './features';
 
 export const PLAY_BASE_PLAN_ID = 'monthly';
 const SUBSCRIPTION_IDS = new Set(['sub_volt', 'sub_enterprise']);
@@ -37,7 +38,7 @@ export function formatEuros(cents, lang = 'es') {
 // Precios locales de Play (p.ej. "9,99 €" o "$10.99"). Devuelve {} en web o
 // si Play no responde — la UI cae entonces al precio en euros del catálogo.
 export async function getStorePrices(productIds) {
-  if (!isNativeApp() || !productIds?.length) return {};
+  if (!PAYMENTS_ENABLED || !isNativeApp() || !productIds?.length) return {};
   try {
     const { NativePurchases, PURCHASE_TYPE } = await loadPlugin();
     const subs = productIds.filter((id) => SUBSCRIPTION_IDS.has(id));
@@ -92,7 +93,7 @@ export async function startPurchase(productId, { userId, returnPath = '/wallet' 
 // a mitad, sin red...). Play las sigue listando hasta que se consumen, así
 // que al abrir el monedero/tienda se reenvían al servidor (idempotente).
 export async function recoverPendingPlayPurchases() {
-  if (!isNativeApp()) return 0;
+  if (!PAYMENTS_ENABLED || !isNativeApp()) return 0;
   try {
     const { NativePurchases, PURCHASE_TYPE } = await loadPlugin();
     let recovered = 0;

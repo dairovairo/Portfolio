@@ -27,8 +27,20 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import es from './locales/es';
 import en from './locales/en';
 import fr from './locales/fr';
+import free from './locales/free';
+import { PAYMENTS_ENABLED } from '../lib/features';
 
-const DICTS = { es, en, fr };
+// Con los pagos apagados, los textos de locales/free.js sustituyen a los que
+// hablan de dinero.
+function withFreeTexts(dict, overrides) {
+  const merged = { ...dict };
+  Object.entries(overrides).forEach(([ns, texts]) => { merged[ns] = { ...dict[ns], ...texts }; });
+  return merged;
+}
+
+const DICTS = PAYMENTS_ENABLED
+  ? { es, en, fr }
+  : { es: withFreeTexts(es, free.es), en: withFreeTexts(en, free.en), fr: withFreeTexts(fr, free.fr) };
 const DEFAULT_LANG = 'es';
 const AVAILABLE = /** @type {const} */ (['es', 'en', 'fr']);
 const STORAGE_KEY = 'sb-lang';

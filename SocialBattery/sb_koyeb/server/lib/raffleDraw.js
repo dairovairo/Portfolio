@@ -1,142 +1,192 @@
+// ─────────────────────────────────────────────────────────────────────────
+// Ejecución del sorteo
+// ─────────────────────────────────────────────────────────────────────────
+// Lo usan el botón "Sortear" y el cron (jobs/autoDrawRaffles.js).
+//
+// Verificable: al crear el sorteo se genera una semilla secreta y se publica
+// su sha256 (draw_commit). Al sortear se revela la semilla y con ella y la
+// lista de participantes (claves anónimas, ver entryKey) cualquiera puede
+// repetir el cálculo. El organizador no puede elegir el resultado.
+
+const crypto = require('crypto');
 const supabase = require('./supabase');
+const { getRaffleParticipants, getRaisedCents } = require('./raffles');
 
-// ─────────────────────────────────────────────────────────────────────────
-// Ejecución del sorteo — extraído del endpoint manual para poder
-// reutilizarlo desde el cron de auto-sorteo (jobs/autoDrawRaffles.js).
-// ─────────────────────────────────────────────────────────────────────────
-// Contrato: recibe raffle + elegibles YA cargados por el caller (así
-// tanto el endpoint como el cron reutilizan sus propios fetches sin
-// repetir consultas). Aplica una de estas dos ramas:
-//
-//   · Con premios en la tabla community_raffle_prizes (fase 122):
-//     Fisher-Yates parcial para min(N premios, N elegibles) ganadores
-//     sin reemplazo; premio i-ésimo por posición para el i-ésimo
-//     extraído. Actualiza cada premio con su winner_id, y luego
-//     community_raffles.drawn_at.
-//
-//   · Sin premios (raffle legacy pre-fase-122):
-//     Un único ganador aleatorio guardado en community_raffles.winner_id
-//     junto con drawn_at, para no romper sorteos antiguos que aún viven
-//     en la base de datos.
-//
-// El caller decide si permitir "sortear sin elegibles suficientes"
-// (el endpoint manual devuelve 400 si eligibles.length === 0; el cron
-// también lo salta) porque son decisiones de política, no del sorteo
-// en sí. Aquí simplemente si no hay ninguno se marca drawn_at igual
-// (sorteo cerrado sin adjudicaciones) — el caller decide si llegar
-// aquí o no.
-//
-// Devuelve el nuevo estado del sorteo (misma fila con drawn_at seteado)
-// para que el caller pueda reserializar la respuesta sin re-fetch.
-async function drawRaffleWinners({ raffleId, eligibleIds }) {
-  const { data: prizeRows, error: prizesFetchErr } = await supabase
-    .from('community_raffle_prizes')
-    .select('id, position')
-    .eq('raffle_id', raffleId)
-    .order('position', { ascending: true });
-  if (prizesFetchErr) throw prizesFetchErr;
+const CLAIM_DAYS = 14;
 
-  const nowIso = new Date().toISOString();
+const sha256 = (text) => crypto.createHash('sha256').update(text).digest('hex');
 
-  if (!prizeRows || prizeRows.length === 0) {
-    // ── Camino legacy (raffle sin premios en la tabla nueva) ──
-    // Con lista vacía de elegibles se marca drawn_at sin winner —
-    // impide que se vuelva a intentar y deja claro que "hubo intento
-    // pero no había a quién asignar".
-    const patch = { drawn_at: nowIso };
-    if (eligibleIds.length) {
-      patch.winner_id = eligibleIds[Math.floor(Math.random() * eligibleIds.length)];
-    }
-    const { error: updateErr } = await supabase
-      .from('community_raffles')
-      .update(patch)
-      .eq('id', raffleId);
-    if (updateErr) throw updateErr;
-    return { prizesDrawn: eligibleIds.length ? 1 : 0, totalPrizes: 0 };
+function createDrawSecret() {
+  const seed = crypto.randomBytes(32).toString('hex');
+  return { seed, commit: sha256(seed) };
+}
+
+/** Identificador anónimo de un participante en un sorteo concreto. */
+const entryKey = (raffleId, userId) => sha256(`${raffleId}:${userId}`);
+
+/** Número pseudoaleatorio en [0, total) derivado de la semilla. */
+function drawNumber(seed, label, total) {
+  const hex = crypto.createHmac('sha256', seed).update(label).digest('hex');
+  return Number(BigInt(`0x${hex}`) % BigInt(total));
+}
+
+/**
+ * Elige ganadores distintos, con peso por papeletas. Determinista: mismos
+ * datos → mismo resultado.
+ * @param {Array<{ key: string, tickets: number }>} entries
+ * @returns {string[]} claves ganadoras, en orden de premio
+ */
+function pickWinners({ seed, raffleId, entries, count, label = '' }) {
+  const pool = [...entries].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const winners = [];
+  for (let i = 0; i < count && pool.length; i += 1) {
+    const total = pool.reduce((sum, e) => sum + e.tickets, 0);
+    let n = drawNumber(seed, `${raffleId}:${label}${i}`, total);
+    const index = pool.findIndex(e => { n -= e.tickets; return n < 0; });
+    winners.push(pool[index].key);
+    pool.splice(index, 1);
   }
+  return winners;
+}
 
-  // ── Camino de premios (fase 122) ──
-  // Fisher-Yates parcial: baraja los primeros K = min(nº premios,
-  // nº elegibles) elementos y toma esos K como ganadores en orden. El
-  // primer extraído se lleva el premio position=1, el segundo el 2,
-  // etc. Si sobran premios respecto a elegibles, quedan sin winner
-  // (permitido por schema: winner_id NULL). No se re-sortea ni se rota:
-  // drawn_at queda seteado y este flujo no debe llamarse de nuevo
-  // (idempotencia recae en el caller vía "drawn_at IS NULL" al filtrar).
-  const shuffled = eligibleIds.slice();
-  const draws = Math.min(prizeRows.length, shuffled.length);
-  for (let i = 0; i < draws; i++) {
-    const j = i + Math.floor(Math.random() * (shuffled.length - i));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  // Actualiza cada premio con su ganador en secuencia (batch upsert no
-  // encaja bien con el schema "una fila por id" con gen_random_uuid).
-  // Son pocas rows en cualquier caso (PRIZE_MAX_PER_RAFFLE = 10).
-  for (let i = 0; i < draws; i++) {
-    const { error: prizeUpdateErr } = await supabase
-      .from('community_raffle_prizes')
-      .update({ winner_id: shuffled[i] })
-      .eq('id', prizeRows[i].id);
-    if (prizeUpdateErr) throw prizeUpdateErr;
-  }
-  const { error: raffleUpdateErr } = await supabase
+async function getOrCreateSecret(raffle) {
+  const { data, error } = await supabase
+    .from('raffle_draw_secrets').select('seed').eq('raffle_id', raffle.id).maybeSingle();
+  if (error) throw error;
+  if (data?.seed) return { seed: data.seed, commit: raffle.draw_commit || sha256(data.seed) };
+  const secret = createDrawSecret(); // sorteos anteriores a la phase 135
+  const { error: insertError } = await supabase
+    .from('raffle_draw_secrets').upsert({ raffle_id: raffle.id, seed: secret.seed });
+  if (insertError) throw insertError;
+  return secret;
+}
+
+const RAFFLE_COLUMNS = 'id, community_id, creator_id, title, tier, created_at, ends_at, drawn_at, requires_entry, goal_cents, draw_commit';
+
+function claimDeadline(now = new Date()) {
+  return new Date(now.getTime() + CLAIM_DAYS * 24 * 3600 * 1000).toISOString();
+}
+
+/**
+ * Sortea. Devuelve null si ya estaba sorteado (o lo está sorteando otra
+ * instancia): el UPDATE con drawn_at IS NULL solo lo gana uno.
+ */
+async function drawRaffle(raffleId) {
+  const now = new Date();
+  const { data: raffle, error: claimError } = await supabase
     .from('community_raffles')
-    .update({ drawn_at: nowIso })
-    .eq('id', raffleId);
-  if (raffleUpdateErr) throw raffleUpdateErr;
+    .update({ drawn_at: now.toISOString() })
+    .eq('id', raffleId).is('drawn_at', null)
+    .select(RAFFLE_COLUMNS)
+    .maybeSingle();
+  if (claimError) throw claimError;
+  if (!raffle) return null;
 
-  return { prizesDrawn: draws, totalPrizes: prizeRows.length };
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Notificación push de "sorteo terminado" (fase de auto-draw)
-// ─────────────────────────────────────────────────────────────────────────
-// Se manda a todos los usuarios que eran ELEGIBLES para participar
-// (mismo criterio que usa el propio sorteo), excluyendo al creador —
-// que ya sabe que se ha sorteado y quiere que su push no le llegue a sí
-// mismo. Se dispara tanto desde POST /raffles/:id/draw como desde el
-// cron autoDrawRaffles.js, para que la única forma de que alguien no la
-// reciba sea que sencillamente no tenga push activo en el navegador.
-// Deliberadamente NO se consulta ninguna tabla de mute (mute_new_events,
-// mute_new_recommendations, muted_conversations…): es una notificación
-// transaccional de "algo en lo que participabas ya tiene resultado",
-// y silenciarla dejaría a un ganador sin enterarse de su premio. No hay
-// toggle en ajustes para esto — decisión de producto.
-//
-// La lib de webpush (notifyUsers) llega inyectada por el caller para no
-// forzar acoplamiento desde este fichero, que era puro hasta ahora.
-// `tag` en el payload garantiza que si por algún race el mismo push
-// entra dos veces al navegador, solo se pinte una notificación.
-//
-// URL destino: se aprovecha el patrón `/community/:id#raffle-:id` que ya
-// usan las tarjetas compactas del dashboard (CommunityDashboardPage →
-// RaffleCardCompact → onOpen). Al aterrizar en la comunidad, el sorteo
-// aparece en la lista con sus ganadores adjudicados por premio (los
-// ganadores ven su nombre destacado como 🏆).
-async function notifyRaffleDrawn(supabase, notifyUsers, { raffleId, eligibleIds, creatorId }) {
-  if (!eligibleIds || !eligibleIds.length) return;
   try {
-    const { data: raffle, error } = await supabase
+    const [participants, prizesRes, secret, raised] = await Promise.all([
+      getRaffleParticipants(raffle),
+      supabase.from('community_raffle_prizes')
+        .select('id, position, requires_goal').eq('raffle_id', raffleId).order('position'),
+      getOrCreateSecret(raffle),
+      raffle.goal_cents ? getRaisedCents(raffle) : 0,
+    ]);
+    if (prizesRes.error) throw prizesRes.error;
+
+    const goalReached = !raffle.goal_cents || raised >= raffle.goal_cents;
+    const prizes = (prizesRes.data || []).filter(p => goalReached || !p.requires_goal);
+    const userByKey = new Map(participants.map(p => [entryKey(raffleId, p.userId), p.userId]));
+    const entries = participants.map(p => ({ key: entryKey(raffleId, p.userId), tickets: p.tickets }));
+    const isLegacy = !(prizesRes.data || []).length;
+    const winners = pickWinners({
+      seed: secret.seed, raffleId, entries, count: isLegacy ? 1 : prizes.length,
+    }).map(key => userByKey.get(key));
+
+    const { error: snapshotError } = await supabase
+      .from('raffle_draw_secrets')
+      .update({ entries: participants.map(p => ({ u: p.userId, t: p.tickets })) })
+      .eq('raffle_id', raffleId);
+    if (snapshotError) throw snapshotError;
+
+    for (let i = 0; !isLegacy && i < winners.length; i += 1) {
+      const { error } = await supabase
+        .from('community_raffle_prizes')
+        .update({ winner_id: winners[i], claim_status: 'pending', claim_deadline: claimDeadline(now) })
+        .eq('id', prizes[i].id);
+      if (error) throw error;
+    }
+
+    const { error: finishError } = await supabase
       .from('community_raffles')
-      .select('id, title, community_id, community:communities!community_raffles_community_id_fkey(name)')
-      .eq('id', raffleId)
-      .maybeSingle();
-    if (error) throw error;
-    if (!raffle) return;
-    const commName = raffle.community?.name;
-    await notifyUsers(supabase, eligibleIds, creatorId, {
-      title: '🎁 Sorteo terminado',
-      body: commName
-        ? `Ya se han sorteado los premios de "${raffle.title}" en ${commName}.`
-        : `Ya se han sorteado los premios de "${raffle.title}".`,
-      url: `/community/${raffle.community_id}#raffle-${raffleId}`,
-      tag: `raffle-drawn-${raffleId}`,
-    });
+      .update({
+        draw_commit: secret.commit,
+        draw_seed: secret.seed,
+        draw_entries: participants.length,
+        ...(isLegacy && winners[0] ? { winner_id: winners[0] } : {}),
+      })
+      .eq('id', raffleId);
+    if (finishError) throw finishError;
+
+    return { raffle, participantIds: participants.map(p => p.userId), winners, goalReached, raised };
   } catch (err) {
-    // Un fallo del push NUNCA debe revertir el sorteo — los premios ya
-    // están adjudicados. Se loguea y se sigue.
-    console.warn('[raffleDraw] notifyRaffleDrawn failed:', err.message);
+    // Se deshace para que el siguiente intento empiece de cero.
+    await supabase.from('community_raffle_prizes')
+      .update({ winner_id: null, claim_status: null, claim_deadline: null }).eq('raffle_id', raffleId);
+    await supabase.from('community_raffles').update({ drawn_at: null }).eq('id', raffleId);
+    throw err;
   }
 }
 
-module.exports = { drawRaffleWinners, notifyRaffleDrawn };
+/** Vuelve a sortear un premio que su ganador no ha reclamado a tiempo. */
+async function redrawPrize(prize) {
+  const [{ data: secret, error }, { data: siblings, error: sibError }] = await Promise.all([
+    supabase.from('raffle_draw_secrets').select('seed, entries').eq('raffle_id', prize.raffle_id).maybeSingle(),
+    supabase.from('community_raffle_prizes').select('winner_id').eq('raffle_id', prize.raffle_id),
+  ]);
+  if (error || sibError) throw (error || sibError);
+
+  const previous = [...(prize.previous_winners || []), prize.winner_id].filter(Boolean);
+  const excluded = new Set([...previous, ...(siblings || []).map(s => s.winner_id)]);
+  const candidates = (secret?.entries || []).filter(e => !excluded.has(e.u));
+  const userByKey = new Map(candidates.map(e => [entryKey(prize.raffle_id, e.u), e.u]));
+  const [winnerKey] = secret ? pickWinners({
+    seed: secret.seed,
+    raffleId: prize.raffle_id,
+    entries: candidates.map(e => ({ key: entryKey(prize.raffle_id, e.u), tickets: e.t })),
+    count: 1,
+    label: `redraw:${prize.position}:${previous.length}:`,
+  }) : [];
+  const winnerId = userByKey.get(winnerKey) || null;
+
+  const { data: updated, error: updateError } = await supabase
+    .from('community_raffle_prizes')
+    .update({
+      winner_id: winnerId,
+      previous_winners: previous,
+      claim_status: winnerId ? 'pending' : null,
+      claim_deadline: winnerId ? claimDeadline() : null,
+    })
+    .eq('id', prize.id).eq('claim_status', 'pending').eq('winner_id', prize.winner_id)
+    .select('id').maybeSingle();
+  if (updateError) throw updateError;
+  return updated ? { winnerId } : null;
+}
+
+/** Datos públicos para comprobar el sorteo (claves anónimas, no usuarios). */
+async function getVerification(raffleId) {
+  const { data, error } = await supabase
+    .from('raffle_draw_secrets').select('entries').eq('raffle_id', raffleId).maybeSingle();
+  if (error) throw error;
+  return (data?.entries || [])
+    .map(e => ({ key: entryKey(raffleId, e.u), tickets: e.t }))
+    .sort((a, b) => (a.key < b.key ? -1 : 1));
+}
+
+module.exports = {
+  CLAIM_DAYS,
+  createDrawSecret,
+  entryKey,
+  pickWinners,
+  drawRaffle,
+  redrawPrize,
+  getVerification,
+};

@@ -18,6 +18,7 @@
  */
 
 const { notifyUsersFcm, notifyAllUsersFcm } = require('./fcm');
+const { fetchAll, selectInChunks } = require('./paginate');
 
 let webpush = null;
 let configured = false;
@@ -103,14 +104,13 @@ async function sendPushToSubscription(sub, payload) {
 async function getMutedUserIds(supabase, conversationType, conversationId, userIds) {
   if (!conversationType || !conversationId || !userIds?.length) return new Set();
   try {
-    const { data, error } = await supabase
+    const data = await selectInChunks(userIds, ids => supabase
       .from('muted_conversations')
       .select('user_id')
       .eq('conversation_type', conversationType)
       .eq('conversation_id', conversationId)
-      .in('user_id', userIds);
-
-    if (error || !data) return new Set();
+      .in('user_id', ids)
+      .order('user_id'));
     return new Set(data.map(r => r.user_id));
   } catch (err) {
     console.warn('[webpush] getMutedUserIds error:', err.message);
@@ -143,12 +143,13 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
   const webPromise = (async () => {
     if (!webpush) return [];
     try {
-      const { data: subs, error: subsErr } = await supabase
+      const subs = await selectInChunks(targetIds, ids => supabase
         .from('push_subscriptions')
         .select('user_id, endpoint, p256dh, auth')
-        .in('user_id', targetIds);
+        .in('user_id', ids)
+        .order('endpoint'));
 
-      if (subsErr || !subs?.length) return [];
+      if (!subs.length) return [];
 
       const expiredEndpoints = [];
       const successfulUserIds = new Set();
@@ -197,17 +198,15 @@ async function notifyUsers(supabase, userIds, excludeId, payload) {
  * @param {{ title: string, body: string, url?: string, tag?: string }} payload
  */
 async function notifyCommunityMembers(supabase, communityId, creatorId, payload) {
-  init();
-  if (!webpush) return;
-
   try {
-    const { data: members, error: membersErr } = await supabase
+    const members = await fetchAll(() => supabase
       .from('community_members')
       .select('user_id')
       .eq('community_id', communityId)
-      .neq('user_id', creatorId);
+      .neq('user_id', creatorId)
+      .order('user_id'));
 
-    if (membersErr || !members?.length) return;
+    if (!members.length) return;
 
     const memberIds = members.map(m => m.user_id);
     await notifyUsers(supabase, memberIds, creatorId, payload);

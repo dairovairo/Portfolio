@@ -90,23 +90,17 @@ test('addYears/addMonths/addDays: acepta string ISO tanto como Date', () => {
 
 // ─── getNotificationDayKey ────────────────────────────────────────────
 
-test('notifDay: devuelve YYYY-MM-DD en UTC', () => {
-  const key = getNotificationDayKey(new Date('2026-07-01T12:00:00Z'));
-  assert.equal(key, '2026-07-01');
+test('notifDay: devuelve YYYY-MM-DD', () => {
+  assert.equal(getNotificationDayKey(new Date('2026-07-01T12:00:00Z')), '2026-07-01');
 });
 
-test('notifDay: usa UTC, no la zona local del proceso', () => {
-  // Un instante a las 23:30 UTC del 30/jun sigue siendo "30 de junio"
-  // por UTC, aunque en zonas horarias positivas ya sea 1 de julio.
-  const late = new Date('2026-06-30T23:30:00Z');
-  assert.equal(getNotificationDayKey(late), '2026-06-30');
+test('notifDay: usa la hora peninsular, no la del proceso ni UTC', () => {
+  assert.equal(getNotificationDayKey(new Date('2026-06-30T23:30:00Z')), '2026-07-01');
 });
 
-test('notifDay: cruce de medianoche UTC cambia la clave', () => {
-  const before = new Date('2026-06-30T23:59:59Z');
-  const after = new Date('2026-07-01T00:00:01Z');
-  assert.equal(getNotificationDayKey(before), '2026-06-30');
-  assert.equal(getNotificationDayKey(after), '2026-07-01');
+test('notifDay: la clave cambia a medianoche peninsular', () => {
+  assert.equal(getNotificationDayKey(new Date('2026-06-30T21:59:59Z')), '2026-06-30');
+  assert.equal(getNotificationDayKey(new Date('2026-06-30T22:00:01Z')), '2026-07-01');
 });
 
 test('notifDay: sin argumento usa "ahora" y devuelve un string YYYY-MM-DD', () => {

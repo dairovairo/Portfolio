@@ -423,8 +423,8 @@ export default function TimeseriesChart({
       )}
       <p className="text-[10px] text-surface-muted leading-relaxed">
         Los gráficos de <span className="text-surface-text">envíos</span> y <span className="text-surface-text">clicks push</span> arrancan
-        desde la primera notificación del evento. Los de <span className="text-surface-text">banner Ultra</span> y <span className="text-surface-text">clicks a enlaces</span> solo
-        cubren desde que se activó el registro detallado (fase 126 en adelante), aunque el total acumulado del contador principal puede incluir datos anteriores.
+        desde la primera notificación del evento. Los de <span className="text-surface-text">banner</span> y <span className="text-surface-text">clicks a enlaces</span> solo
+        cubren desde que se activó el registro detallado, aunque el total acumulado del contador principal puede incluir datos anteriores.
       </p>
     </section>
   );

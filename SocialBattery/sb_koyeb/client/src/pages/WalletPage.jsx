@@ -10,6 +10,63 @@ import {
 } from '../lib/billing';
 import { isNativeApp } from '../lib/nativePush';
 
+// Cuenta de Stripe del creador: las aportaciones de los miembros van directas
+// a ella, SocialBattery no las toca (server/lib/connect.js).
+function ConnectSection({ isEnterprise }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [status, setStatus] = useState(null);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/payments/connect/status')
+      .then(s => { if (!cancelled) setStatus(s); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  async function start() {
+    setStarting(true);
+    setError('');
+    try {
+      const { url } = await api.post('/payments/connect/start', {});
+      window.location.assign(url);
+    } catch (e) {
+      setError(e.message);
+      setStarting(false);
+    }
+  }
+
+  if (!status?.available || (!isEnterprise && !status.connected)) return null;
+
+  return (
+    <section className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-2">
+      <h2 className="font-display font-bold text-surface-text text-base">🤝 {t('wallet.connectTitle')}</h2>
+      <p className="text-xs text-surface-muted leading-relaxed">{t('wallet.connectExplain')}</p>
+      {status.charges_enabled ? (
+        <p className="text-sm text-emerald-300">✓ {t('wallet.connectReady')}</p>
+      ) : isEnterprise ? (
+        <>
+          {status.connected && <p className="text-xs text-amber-300">{t('wallet.connectPending')}</p>}
+          <button
+            type="button"
+            onClick={start}
+            disabled={starting}
+            className="w-full py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary/80 text-white font-display font-bold text-sm transition-all disabled:opacity-50"
+          >
+            {starting ? '…' : t(status.connected ? 'wallet.connectContinue' : 'wallet.connectStart')}
+          </button>
+        </>
+      ) : (
+        <button type="button" onClick={() => navigate('/shop')} className="text-xs text-accent-glow underline">{t('raffle.goShop')}</button>
+      )}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </section>
+  );
+}
+
 // Monedero prepago de publicidad: recargas, reservas de campañas en curso
 // e historial. Ver server/routes/payments.js y la migración phase134.
 export default function WalletPage() {
@@ -149,6 +206,8 @@ export default function WalletPage() {
           </section>
         )}
 
+        {me?.payments_enabled && <ConnectSection isEnterprise={Boolean(me.is_enterprise)} />}
+
         {/* Suscripciones */}
         {activeSubs.length > 0 && (
           <section className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-2">
@@ -179,7 +238,7 @@ export default function WalletPage() {
               <li key={tx.id} className="py-2 flex items-start justify-between gap-3 text-sm">
                 <div className="min-w-0">
                   <div className="text-surface-text truncate">{t(`wallet.tx_${tx.type}`)}</div>
-                  <div className="text-[11px] text-surface-muted truncate">{tx.description}</div>
+                  {tx.type !== 'topup' && <div className="text-[11px] text-surface-muted truncate">{tx.description}</div>}
                   <div className="text-[10px] text-surface-muted/70">{new Date(tx.created_at).toLocaleString()}</div>
                 </div>
                 <span className={`font-mono flex-shrink-0 ${tx.amount_cents >= 0 ? 'text-emerald-400' : 'text-surface-muted'}`}>

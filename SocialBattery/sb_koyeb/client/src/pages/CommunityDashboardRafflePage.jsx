@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
-import { RaffleCard, ConfirmEndModal } from './CommunityDashboardPage';
+import { formatEurFromCents } from '../lib/adPricing';
+import { RaffleCard, ConfirmEndModal, EnterpriseUpsell } from './CommunityDashboardPage';
 import TimeseriesChart from '../components/TimeseriesChart';
 import { useTranslation } from '../i18n';
 
@@ -64,7 +65,7 @@ export default function CommunityDashboardRafflePage() {
     if (r.tier === 'community') {
       try {
         await api.post(`/community/raffles/${r.id}/renew-promotion`, {});
-        showToast('Publicidad renovada — se ha vuelto a avisar a la comunidad', 'success');
+        showToast(t('raffle.notifiedAgain'), 'success');
         await load();
       } catch (e) {
         showToast(e.message || t('dashboardDetail.renewError'), 'error');
@@ -95,8 +96,10 @@ export default function CommunityDashboardRafflePage() {
     const path = `/community/raffles/${ending.row.id}/end-promotion`;
     setEndingBusy(true);
     try {
-      await api.post(path, {});
-      showToast(t('dashboardDetail.endedToast'), 'success');
+      const result = await api.post(path, {});
+      showToast(result.charged_cents || result.refunded_cents
+        ? t('raffle.promoSettled', { charged: formatEurFromCents(result.charged_cents), refunded: formatEurFromCents(result.refunded_cents) })
+        : t('dashboardDetail.endedToast'), 'success');
       setEnding(null);
       await load();
     } catch (e) {
@@ -185,19 +188,20 @@ export default function CommunityDashboardRafflePage() {
       <main className="max-w-lg mx-auto px-4 pb-28 pt-4 space-y-4">
         <RaffleCard
           raffle={raffle}
-          freeThreshold={data.summary.free_threshold}
           onOpen={id => navigate(`/community/${communityId}#raffle-${id}`)}
           onRenew={handleRenewRaffle}
           onEnd={row => askEnd('raffle', row)}
         />
         {/* Fase 126 — gráfico temporal de todas las métricas del sorteo:
             targets asignados, banners mostrados y clicks al banner. */}
-        <TimeseriesChart
-          communityId={communityId}
-          entityType="raffle"
-          entityId={raffle.id}
-          entity={raffle}
-        />
+        {data.summary.advanced ? (
+          <TimeseriesChart
+            communityId={communityId}
+            entityType="raffle"
+            entityId={raffle.id}
+            entity={raffle}
+          />
+        ) : <EnterpriseUpsell />}
       </main>
 
       <ConfirmEndModal

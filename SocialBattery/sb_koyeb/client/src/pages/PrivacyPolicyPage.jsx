@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import LogoWordmark from '../components/LogoWordmark';
+import { PAYMENTS_ENABLED } from '../lib/features';
 import { useTranslation } from '../i18n';
 
 // Página pública de política de privacidad. Montada en App.jsx FUERA de
@@ -59,6 +60,10 @@ export default function PrivacyPolicyPage() {
               <li><strong className="text-surface-text">Perfil:</strong> nombre de usuario, biografía, foto de perfil, intereses y nivel de batería social.</li>
               <li><strong className="text-surface-text">Contenido que generas:</strong> mensajes, imágenes que envías en chats, publicaciones en comunidades, participación en pools y eventos.</li>
               <li><strong className="text-surface-text">Ubicación:</strong> sólo si nos das permiso explícito, para mostrarte eventos cercanos o funciones de localización en pools activos.</li>
+              <li><strong className="text-surface-text">Sorteos:</strong> en cuáles participas, si ganas y el estado del premio. Si organizas uno, el nombre y el contacto que indiques se publican en sus bases.</li>
+              {PAYMENTS_ENABLED && (
+                <li><strong className="text-surface-text">Pagos:</strong> tus compras, suscripciones, movimientos de saldo y aportaciones (importe, fecha y referencia). Los datos de tu tarjeta los gestionan Google Play o Stripe: nosotros no los vemos ni los guardamos.</li>
+              )}
               <li><strong className="text-surface-text">Notificaciones push:</strong> el token de tu dispositivo, si activas las notificaciones.</li>
               <li><strong className="text-surface-text">Datos técnicos:</strong> información básica de uso de la app para mantenimiento y prevención de abusos.</li>
             </ul>
@@ -82,6 +87,7 @@ export default function PrivacyPolicyPage() {
               <li>Mostrarte contenido relevante (eventos, sorteos, comunidades) según tus intereses y ubicación aproximada.</li>
               <li>Permitir la mensajería y funciones sociales entre usuarios.</li>
               <li>Enviarte notificaciones que hayas activado.</li>
+              <li>{PAYMENTS_ENABLED ? 'Gestionar sorteos, pagos y suscripciones, y cumplir las obligaciones fiscales.' : 'Gestionar sorteos y cumplir las obligaciones legales.'}</li>
               <li>Mantener la seguridad de la plataforma y prevenir el uso indebido.</li>
             </ul>
           </section>
@@ -90,9 +96,14 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-surface-text font-display font-semibold text-lg mb-2">5. Con quién compartimos datos</h2>
             <p>
               No vendemos tus datos a terceros. Usamos proveedores de infraestructura para
-              operar la app — Supabase (base de datos, autenticación y almacenamiento) y
-              Koyeb (hosting del servidor) — que procesan datos en nuestro nombre bajo sus
-              propias políticas de seguridad. Tu nombre de usuario, foto y contenido que
+              operar la app — Supabase (base de datos, autenticación y almacenamiento),
+              Railway y Render (alojamiento) y Firebase (notificaciones push) — que procesan
+              datos en nuestro nombre bajo sus propias políticas de seguridad.{' '}
+              {PAYMENTS_ENABLED && `Los pagos los procesan Google Play y Stripe; si aportas a una
+                comunidad, quien la creó recibe los datos de ese pago que Stripe le muestre. `}
+              Si ganas un sorteo, tu nombre de
+              usuario se publica en él y, para comprobar el resultado, los participantes se
+              publican solo con un identificador anónimo. Tu nombre de usuario, foto y contenido que
               publiques en espacios sociales (comunidades, eventos, chats de grupo) son
               visibles para otros usuarios según la configuración de privacidad que elijas.
             </p>

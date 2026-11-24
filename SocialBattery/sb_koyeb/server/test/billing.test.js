@@ -7,19 +7,17 @@ const { previewRefundCents } = require('../lib/wallet');
 const { isSubscriptionActive } = require('../lib/billing');
 const { findProduct } = require('../lib/billingCatalog');
 
-const hold = { amount_cents: 2000, unit_price_cents: 2, units_contracted: 1000 };
+const hold = { amount_cents: 1900, unit_price_cents: 2, units_contracted: 1000, free_units: 50 };
 
-test('refund: por debajo del umbral se devuelve todo', () => {
-  assert.strictEqual(previewRefundCents(hold, 150, 200), 2000);
-});
-test('refund: por encima del umbral se cobra lo entregado', () => {
-  assert.strictEqual(previewRefundCents(hold, 400, 200), 2000 - 800);
+test('refund: las unidades gratis no se cobran', () => {
+  assert.strictEqual(previewRefundCents(hold, 50), 1900);
+  assert.strictEqual(previewRefundCents(hold, 150), 1900 - 200);
 });
 test('refund: nunca se cobra más de lo contratado', () => {
-  assert.strictEqual(previewRefundCents(hold, 5000, 200), 0);
+  assert.strictEqual(previewRefundCents(hold, 5000), 0);
 });
 test('refund: sin reserva => 0', () => {
-  assert.strictEqual(previewRefundCents(null, 400, 200), 0);
+  assert.strictEqual(previewRefundCents(null, 400), 0);
 });
 
 const future = new Date(Date.now() + 86400000).toISOString();

@@ -1,8 +1,55 @@
 # Pagos en SocialBattery: puesta en marcha
 
-El código ya está hecho. Este documento recoge **lo que tienes que hacer tú** en
-Supabase, Stripe, Google Play Console y Railway, en este orden. Hasta que
-pongas `PAYMENTS_ENABLED=true` todo sigue funcionando gratis, como hasta ahora.
+> **El lanzamiento es gratuito.** Ahora mismo no hay que hacer nada de Stripe ni de Google
+> Play Billing. Lo único obligatorio de este documento son las migraciones de Supabase
+> (sección 1). El resto es para cuando decidas cobrar.
+
+## Lanzamiento gratuito: cómo está ahora
+
+Los pagos están ocultos con dos interruptores, los dos apagados por defecto:
+
+| Dónde | Variable | Qué hace apagada |
+|---|---|---|
+| Railway (servidor) | `PAYMENTS_ENABLED` | Nada se cobra y el servidor rechaza cualquier intento de pago |
+| Render (web) | `VITE_PAYMENTS_ENABLED` | No se ve ningún precio, saldo, compra, suscripción ni aportación |
+
+**No las pongas.** Si no existen, la app es gratis.
+
+Límites de la versión gratuita, para que nadie acapare la publicidad:
+
+| Límite | Valor | Dónde se cambia |
+|---|---|---|
+| Promociones por cuenta cada 30 días (las renovaciones cuentan) | 4 | `server/lib/freePromo.js` |
+| Promociones en marcha a la vez por cuenta | 2 | `server/lib/freePromo.js` |
+| Personas por promoción | 500 | `server/lib/freePromo.js` |
+| Actividades activas por cuenta | 8 | `server/lib/entitlements.js` |
+| Actividades activas por comunidad | 4 | `server/lib/entitlements.js` |
+
+### Para empezar a cobrar más adelante
+
+1. Habla antes con una gestoría (sección 5).
+2. Haz las secciones 2, 3 y 4 de este documento.
+3. Vuelve a meter las compras en la app Android. Para el lanzamiento se quitó el plugin, así
+   que el AAB actual no pide el permiso de facturación:
+
+   ```
+   cd mobile
+   npm i @capgo/native-purchases
+   npx cap sync android
+   npm run build:android:bundle
+   ```
+
+   Sube `versionCode` en `mobile/android/app/build.gradle` antes de compilar.
+4. En Render, añade `VITE_PAYMENTS_ENABLED=true` y vuelve a desplegar. En Railway, añade
+   `PAYMENTS_ENABLED=true`. Haz las dos cosas a la vez.
+5. Actualiza en Play Console lo que cambió para el lanzamiento gratuito: compras digitales
+   (sí), historial de compras en Seguridad de los datos, los proveedores Stripe y Google Play,
+   y la descripción para organizadores.
+
+---
+
+El código de los pagos ya está hecho. Lo que sigue recoge **lo que tienes que hacer tú** en
+Supabase, Stripe, Google Play Console y Railway, en este orden.
 
 ## Cómo funciona
 
@@ -17,12 +64,25 @@ pongas `PAYMENTS_ENABLED=true` todo sigue funcionando gratis, como hasta ahora.
    máximo: unidades contratadas × precio unitario. Si no hay saldo suficiente, la API
    responde 402 y la app ofrece recargar.
 2. Al terminar la campaña (la finalizas tú, la renuevas, empieza el evento, se sortea
-   o vence el sorteo, o se entrega todo lo contratado) se **liquida**. Se cobra solo lo
-   entregado si se alcanzó el umbral de 200 unidades; si no, se cobra 0. El resto
-   vuelve al saldo. Lo hace el cron `jobs/settleAdHolds.js` cada 10 minutos, y las
-   rutas de finalizar y renovar lo hacen al momento.
-3. El sorteo Community cuesta una tarifa fija de 5 € al crearlo.
-4. El sorteo Volt es gratis.
+   o vence el sorteo, se cancela, o se entrega todo lo contratado) se **liquida**. Se
+   cobra solo lo entregado y el resto vuelve al saldo. Lo hace el cron
+   `jobs/settleAdHolds.js` cada 10 minutos, y las rutas de finalizar, renovar y cancelar
+   lo hacen al momento.
+3. **Las 50 primeras entregas de cada campaña son gratis** (y en Ultra, también los 50
+   primeros banners). No hay mínimo de cobro.
+
+**Precios** (`server/lib/adPricing.js` y `server/lib/billingCatalog.js`):
+
+| Qué | Precio |
+|---|---|
+| Evento Premium | 2 cts por notificación entregada |
+| Evento Ultra | 2 cts por notificación + 1 ct por banner visto |
+| Sorteo Light | 2 cts por banner visto |
+| Sorteo Community | 10 € fijos al crearlo, y requiere Enterprise |
+| Sorteo Volt | Gratis; la comunidad necesita 10 miembros con suscripción Volt |
+
+**Aportaciones a comunidades:** van directas a la cuenta de Stripe del creador (Stripe
+Connect), sin comisión y sin dar ventaja en los sorteos. Requieren Enterprise.
 
 El servidor **nunca** acredita nada por lo que diga la app. Cada pago se verifica con
 Stripe o con la API de Google Play. Además, es idempotente: un webhook repetido no
@@ -30,10 +90,15 @@ acredita dos veces.
 
 ---
 
-## 1. Supabase: migración
+## 1. Supabase: migraciones
 
-En el SQL Editor, ejecuta `supabase_schema_phase134_wallet_payments.sql`. Se puede
-volver a ejecutar sin problemas.
+En el SQL Editor, ejecuta **en este orden y antes de desplegar el código**:
+
+1. `supabase_schema_phase134_wallet_payments.sql`
+2. `supabase_schema_phase135_ads_raffles_overhaul.sql`
+3. `supabase_schema_phase136_free_launch.sql`
+
+Las tres se pueden volver a ejecutar sin problemas.
 
 ## 2. Stripe (cobros en la web)
 
@@ -58,6 +123,20 @@ volver a ejecutar sin problemas.
 5. No hace falta crear productos en Stripe: el servidor los genera al vuelo con el
    precio del catálogo (`server/lib/billingCatalog.js`).
 
+6. **Stripe Connect** (aportaciones a comunidades):
+   1. Ve a **Connect** y actívalo, con cuentas de tipo *Standard*. Stripe te pedirá
+      rellenar el perfil de la plataforma.
+   2. En **Developers → Webhooks**, añade un **segundo** endpoint con la misma URL, pero
+      marcando que escuche los eventos de las **cuentas conectadas**:
+      - `checkout.session.completed`
+      - `checkout.session.async_payment_succeeded`
+      - `charge.refunded`
+      - `account.updated`
+      - `account.application.deauthorized`
+   3. Su *Signing secret* es la variable `STRIPE_CONNECT_WEBHOOK_SECRET`.
+
+   Cada creador conecta su cuenta desde **Saldo → Recibir aportaciones**.
+
 Para probar en modo test, usa la tarjeta `4242 4242 4242 4242` con cualquier fecha
 futura y cualquier CVC.
 
@@ -67,7 +146,8 @@ futura y cualquier CVC.
    Sin él no se pueden crear productos de pago.
 2. **Sube el AAB** (`mobile/android/app/build/outputs/bundle/release/app-release.aab`)
    a una pista de prueba interna. Play no deja crear productos hasta que haya un AAB
-   con el permiso de facturación, y el AAB nuevo ya lo incluye.
+   con el permiso de facturación. El AAB del lanzamiento gratuito **no** lo lleva: antes
+   reinstala el plugin de compras (ver "Para empezar a cobrar más adelante").
 3. **Productos únicos** (Monetizar → Productos → Productos de compra única). Créalos
    con **exactamente** estos IDs:
 
@@ -111,11 +191,13 @@ PAYMENTS_ENABLED=true
 PUBLIC_APP_URL=https://socialbattery.pro
 STRIPE_SECRET_KEY=sk_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_CONNECT_WEBHOOK_SECRET=whsec_...
 GOOGLE_PLAY_PACKAGE_NAME=com.socialbattery.app
 ```
 
 `PAYMENTS_ENABLED=true` es lo último que se activa: a partir de ese momento las
-campañas Premium/Ultra/Light reservan saldo.
+campañas Premium/Ultra/Light reservan saldo, el sorteo Community cuesta 10 € y se aplican
+las ventajas de Volt y Enterprise. Mientras esté apagado, todo es gratis para todos.
 
 ## 5. Impuestos y comisiones
 
@@ -131,19 +213,14 @@ campañas Premium/Ultra/Light reservan saldo.
 
 ## Pendiente o fuera de alcance
 
-- **Colaboraciones P2P a comunidades.** El dinero va a otra persona, no a
-  SocialBattery. Para hacerlo bien hace falta Stripe Connect, con verificación de
-  identidad de cada administrador. Antes de cobrarlo dentro de la app hay que comprobar
-  qué dice la política de pagos de Google Play sobre este caso (no está comprobado).
-  De momento siguen registrándose sin cobro real, igual que antes.
-- **Ventajas de las suscripciones.** Ya están conectadas: *participación en sorteos
-  Volt* (`is_volt_subscriber`) y *150 Volts semanales*. Las demás ventajas que anuncia
-  la tienda no se aplican todavía, porque no hay nada que bloquear sin suscripción:
-  - "sin anuncios"
-  - "modo localizador"
-  - "creación de eventos y sorteos" para Enterprise
-
-  Hay que decidir si se restringen esas funciones o se cambian los textos.
+- **Aportaciones dentro de la app Android.** Se pagan con Stripe en el navegador, porque
+  el dinero va a otra persona y SocialBattery no cobra nada. Antes de activarlo, comprueba
+  que encaja con la política de pagos de Google Play (no está confirmado). Si no encajara,
+  se puede dejar solo en la web.
+- **Papeletas ×3 de Volt.** Participar es gratis para todos, pero una suscripción de pago
+  da más papeletas. Es el punto más delicado de los sorteos: confírmalo con un abogado.
+  Para quitarlo, pon `VOLT_TICKETS = 1` en `server/lib/raffles.js` y en
+  `client/src/lib/raffleTiers.js`, y cambia los textos que lo mencionan.
 - **Reembolsos de Google Play.** Se gestionan desde Play Console. El saldo no se
   descuenta automáticamente; para eso haría falta la API de *voided purchases*. Los
   reembolsos de Stripe sí se descuentan solos.

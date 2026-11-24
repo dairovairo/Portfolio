@@ -46,6 +46,7 @@ import { UserLocationProvider, useUserLocation } from './context/UserLocationCon
 import { LanguageProvider } from './i18n';
 import MascotPreviewSync from './components/MascotPreviewSync';
 import TermsGate from './components/TermsGate';
+import { PAYMENTS_ENABLED } from './lib/features';
 
 function AppRoutes() {
   const { isLoading, isAuthenticated, hasProfile, hasAcceptedTerms, isPasswordRecovery } = useAuth();
@@ -220,7 +221,7 @@ function AppRoutes() {
       <Route path="/settings"                 element={<SettingsPage />} />
       <Route path="/admin/reports"            element={<AdminReportsPage />} />
       <Route path="/shop"                     element={<ShopPage />} />
-      <Route path="/wallet"                   element={<WalletPage />} />
+      <Route path="/wallet"                   element={PAYMENTS_ENABLED ? <WalletPage /> : <Navigate to="/shop" replace />} />
       <Route path="/calendar"                 element={<CalendarPage />} />
       <Route path="/community"               element={<CommunityPage />} />
       <Route path="/community/event-publicidad" element={<EventAdConfigPage />} />

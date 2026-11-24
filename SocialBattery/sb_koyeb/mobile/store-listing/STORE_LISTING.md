@@ -61,9 +61,8 @@ ES:
 > 🏅 Ganar insignias y personalizar tu propia mascota
 >
 > **Para organizadores**
-> Crea tu comunidad, publica eventos y sorteos, y promociónalos entre usuarios
-> interesados de tu zona. Pagas solo por las notificaciones y visualizaciones que de
-> verdad se entregan, y desde el panel de control ves el alcance y los clics de cada
+> Crea tu comunidad, publica eventos y sorteos, y promociónalos gratis entre usuarios
+> interesados de tu zona. Desde el panel de control ves el alcance y los clics de cada
 > campaña.
 >
 > **Tu privacidad, primero**
@@ -86,9 +85,8 @@ EN:
 > 🏅 Earn badges and customize your own mascot
 >
 > **For organizers**
-> Create your community, publish events and giveaways, and promote them to interested
-> users nearby. You only pay for the notifications and views actually delivered, and
-> the dashboard shows each campaign's reach and clicks.
+> Create your community, publish events and giveaways, and promote them for free to
+> interested users nearby. The dashboard shows each campaign's reach and clicks.
 >
 > **Privacy first**
 > You choose who sees your battery and location. Block and report other users, and
@@ -116,7 +114,7 @@ y sorteos son contenido propio de la app, no una red publicitaria.
 - **Interacción entre usuarios:** sí (chat, mensajes, contenido generado por usuarios).
 - **Comparte la ubicación del usuario con otros usuarios:** sí (localizador de eventos,
   ubicación de quedadas).
-- **Compras digitales:** sí.
+- **Compras digitales:** no. La app no vende nada: los Volts se ganan usándola.
 - **Violencia, sexo, drogas, lenguaje soez:** no (más allá de lo que escriban los
   usuarios, que se puede denunciar).
 - **Apuestas o simulación de apuestas:** no. Ver la nota sobre los sorteos más abajo.
@@ -124,14 +122,14 @@ y sorteos son contenido propio de la app, no una red publicitaria.
 ### Público objetivo
 
 Mayores de 18 años. Es lo más sencillo para una red social con chats entre
-desconocidos, ubicación y pagos. Marca que **no** está dirigida a niños.
+desconocidos y ubicación. Marca que **no** está dirigida a niños.
 
 ### Seguridad de los datos
 
 - ¿Recoge o comparte datos? **Sí, los recoge.** **No** se venden ni se comparten con
   terceros para sus propios fines.
 - Los proveedores que procesan datos por cuenta de la app no cuentan como "compartir"
-  en el formulario: Supabase, Railway, Firebase, Stripe y Google Play.
+  en el formulario: Supabase, Railway, Render y Firebase.
 - ¿Cifrado en tránsito? **Sí** (HTTPS).
 - ¿El usuario puede pedir que se borren sus datos? **Sí**, desde Ajustes → Eliminar
   cuenta. Añade también la URL https://socialbattery.pro/privacidad.
@@ -146,7 +144,6 @@ desconocidos, ubicación y pagos. Marca que **no** está dirigida a niños.
 | Fotos | Sí | Funcionalidad (avatar, portadas, chat) | Sí |
 | Mensajes in-app | Sí | Funcionalidad (chat) | No |
 | Otro contenido de usuario | Sí | Funcionalidad (eventos, encuestas, denuncias) | Sí |
-| Historial de compras | Sí | Funcionalidad (saldo, suscripciones) | Sí |
 | Interacciones con la app | Sí | Analítica de campañas (clics, visualizaciones) | No |
 | ID de dispositivo / push token | Sí | Funcionalidad (notificaciones) | Sí |
 
@@ -161,19 +158,17 @@ desconocidos, ubicación y pagos. Marca que **no** está dirigida a niños.
 
 ## ⚠️ Antes de enviar a revisión: sorteos
 
-Un sorteo en el que **para participar hay que pagar** puede considerarse juego, tanto
-para Google Play como para la ley española. Es un riesgo que conviene confirmar (política
-de Play y asesoría legal) antes de publicar. Ahora mismo:
+Participar es **gratis en todos los sorteos**: cada persona acepta unas bases (+18) y pulsa
+"Participar". Las bases indican quién organiza y que Google no patrocina el sorteo.
 
-- **Sorteo Volt:** solo participan los suscriptores de pago. Es pago para participar.
-- **Sorteo Community:** solo participan quienes han hecho una "colaboración" económica
-  con la comunidad. Es pago para participar.
-- **Sorteo Light:** participan todos los miembros. Correcto.
+En el lanzamiento gratuito solo hay un tipo de sorteo: todo el mundo participa con las
+mismas opciones y nadie puede pagar para tener más. Los sorteos Volt y Community (los que
+dependen de suscripciones y aportaciones) están ocultos y no se pueden crear.
 
-Puede ser motivo de rechazo, o de retirada posterior de la app. Lo hablamos en la
-revisión del sistema de sorteos. La opción más simple es que cualquier miembro pueda
-participar gratis en todos (la suscripción solo daría, por ejemplo, alguna
-participación extra) y publicar unas bases legales de cada sorteo.
+- Los premios los pone y los entrega quien organiza, así que conviene que alguien con
+  conocimientos legales revise las bases y los Términos.
+- Los puntos delicados (papeletas extra de Volt, aportaciones) vuelven cuando se activen los
+  pagos. Están apuntados al final de `PAGOS_SETUP.md`.
 
 ---
 

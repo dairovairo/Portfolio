@@ -34,6 +34,28 @@ router.get('/reports', async (req, res) => {
   }
 });
 
+// ── GET /api/admin/prize-disputes — premios que el ganador dice no haber
+// recibido. Se resuelven con POST /api/community/raffles/prizes/:id/resolve.
+router.get('/prize-disputes', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('community_raffle_prizes')
+      .select(`
+        id, title, claimed_at, delivered_at,
+        winner:winner_id(id, username),
+        raffle:raffle_id(id, title, organizer_name, organizer_contact, community:community_id(id, name))
+      `)
+      .eq('claim_status', 'disputed')
+      .order('claimed_at')
+      .limit(100);
+    if (error) throw error;
+    res.json({ prizes: data || [] });
+  } catch (err) {
+    console.error('[admin] GET /prize-disputes error:', err);
+    res.status(500).json({ error: 'Error al cargar los premios reclamados' });
+  }
+});
+
 // ── PATCH /api/admin/reports/:id — triaje (cambiar estado + nota) ───────────
 router.patch('/reports/:id', async (req, res) => {
   const { id } = req.params;

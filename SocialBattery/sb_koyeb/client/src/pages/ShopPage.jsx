@@ -16,6 +16,7 @@ import {
   startPurchase, getStorePrices, recoverPendingPlayPurchases, handleStripeReturn,
   manageSubscriptions, fetchServerVolts, spendServerVolts,
 } from '../lib/billing';
+import { PAYMENTS_ENABLED } from '../lib/features';
 
 function getMascotTier(level) {
   if (level <= 33) return 'low';
@@ -870,7 +871,7 @@ const SUBSCRIPTION_PLANS = [
     priceLabel: '1,99 €',
     periodKey: 'perMonth',
     emoji: '⚡',
-    perkKeys: ['subVoltPerk1', 'subVoltPerk2', 'subVoltPerk3', 'subVoltPerk4', 'subVoltPerk5'],
+    perkKeys: ['subVoltPerk1', 'subVoltPerk2', 'subVoltPerk3', 'subVoltPerk4'],
   },
   {
     id: 'sub_enterprise',
@@ -1788,6 +1789,7 @@ export default function ShopPage() {
           >
             ←
           </button>
+          {PAYMENTS_ENABLED ? (
           <div className="flex-1 min-w-0 flex items-center bg-surface-card border border-surface-border rounded-xl p-1 gap-1">
             <button
               onClick={() => setShopSection('mascota')}
@@ -1812,6 +1814,9 @@ export default function ShopPage() {
               {t('shop.tabApp')}
             </button>
           </div>
+          ) : (
+            <h1 className="flex-1 min-w-0 font-display font-bold text-surface-text text-base">🛒 {t('free.shopTitle')}</h1>
+          )}
           <div className="flex items-center gap-1.5 bg-surface-card border border-surface-border rounded-xl px-3 py-1.5" title={t('shop.voltsTitle')}>
             <span className="text-sm">⚡</span>
             <span className="font-mono font-bold text-accent-glow text-sm">{coins}</span>
@@ -1819,7 +1824,7 @@ export default function ShopPage() {
         </div>
       </nav>
 
-      {shopSection === 'app' ? (
+      {PAYMENTS_ENABLED && shopSection === 'app' ? (
         <AppStoreSection coins={coins} showToast={showToast} userId={profile?.id} onVoltsChanged={setCoins} />
       ) : (
       <>

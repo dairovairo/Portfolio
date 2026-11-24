@@ -10,6 +10,9 @@
 // y de configurar Stripe/Play, y activar el cobro con una sola env var.
 
 const supabase = require('./supabase');
+const { FREE_UNITS } = require('./adPricing');
+
+const FREE_CAMPAIGNS_PER_MONTH = 4;
 
 function paymentsEnabled() {
   return String(process.env.PAYMENTS_ENABLED || '').toLowerCase() === 'true';
@@ -51,24 +54,59 @@ async function getBalanceCents(userId) {
   return Number(data?.balance_cents || 0);
 }
 
+function isMissingSchema(error) {
+  return /does not exist|schema cache|could not find/i.test(error?.message || '');
+}
+
 async function getOpenHold(kind, targetId) {
   const { data, error } = await supabase
     .from('ad_holds')
-    .select('id, user_id, amount_cents, unit_price_cents, units_contracted')
+    .select('id, user_id, amount_cents, unit_price_cents, units_contracted, free_units, extra_unit_price_cents')
     .eq('kind', kind).eq('target_id', targetId).eq('status', 'held')
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (isMissingSchema(error) && !paymentsEnabled()) return null;
+    throw error;
+  }
   return data || null;
 }
 
-// Lo que devolvería wallet_settle ahora mismo (para comprobar, antes de
-// renovar, si saldo + devolución alcanza para la nueva reserva).
-function previewRefundCents(hold, unitsDelivered, threshold) {
+// Lo que cobraría wallet_settle_v2 ahora mismo (misma fórmula).
+function previewChargeCents(hold, unitsDelivered, extraUnits = 0) {
   if (!hold) return 0;
-  const charge = unitsDelivered >= threshold
-    ? Math.min(Math.max(unitsDelivered, 0), hold.units_contracted) * hold.unit_price_cents
-    : 0;
-  return Math.max(0, hold.amount_cents - Math.min(charge, hold.amount_cents));
+  const billable = (n) => {
+    const delivered = Math.min(Math.max(Math.floor(Number(n) || 0), 0), hold.units_contracted);
+    return Math.max(0, delivered - (hold.free_units || 0));
+  };
+  const charge = billable(unitsDelivered) * hold.unit_price_cents
+               + billable(extraUnits) * (hold.extra_unit_price_cents || 0);
+  return Math.min(charge, hold.amount_cents);
+}
+
+// Lo que devolvería (para comprobar, antes de renovar, si saldo + devolución
+// alcanza para la nueva reserva).
+function previewRefundCents(hold, unitsDelivered, extraUnits = 0) {
+  return hold ? hold.amount_cents - previewChargeCents(hold, unitsDelivered, extraUnits) : 0;
+}
+
+// Unidades gratis que le tocan a una campaña: FREE_UNITS en el primer ciclo
+// de cada actividad, hasta FREE_CAMPAIGNS_PER_MONTH campañas cada 30 días.
+// Sin ese tope bastaría con renovar (o recrear) cada 50 envíos para no pagar.
+async function getFreeUnits(userId, kind, targetId = null) {
+  if (!paymentsEnabled()) return FREE_UNITS;
+  if (targetId) {
+    const { count, error } = await supabase
+      .from('ad_holds').select('id', { count: 'exact', head: true })
+      .eq('kind', kind).eq('target_id', targetId);
+    if (error) throw error;
+    if (count) return 0;
+  }
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
+    .from('ad_holds').select('id', { count: 'exact', head: true })
+    .eq('user_id', userId).gt('free_units', 0).gte('created_at', since);
+  if (error) throw error;
+  return (count || 0) >= FREE_CAMPAIGNS_PER_MONTH ? 0 : FREE_UNITS;
 }
 
 // Comprueba sin reservar. Lanza InsufficientFundsError.
@@ -80,13 +118,13 @@ async function assertCanAfford(userId, neededCents, extraAvailableCents = 0) {
   }
 }
 
-async function holdCampaign({ userId, kind, targetId, plan, unitPriceCents, units }) {
+async function holdCampaign({ userId, kind, targetId, plan, unitPriceCents, units, freeUnits = 0, extraUnitPriceCents = 0 }) {
   if (!paymentsEnabled()) return null;
-  const amount = unitPriceCents * units;
-  if (amount <= 0) return null;
-  const { data, error } = await supabase.rpc('wallet_hold', {
+  if (!units || unitPriceCents + extraUnitPriceCents <= 0) return null;
+  const { data, error } = await supabase.rpc('wallet_hold_v2', {
     p_user: userId, p_kind: kind, p_target: targetId, p_plan: plan,
     p_unit_price: unitPriceCents, p_units: units,
+    p_free_units: freeUnits, p_extra_unit_price: extraUnitPriceCents,
   });
   if (error) throw parseRpcError(error);
   return data;
@@ -95,21 +133,31 @@ async function holdCampaign({ userId, kind, targetId, plan, unitPriceCents, unit
 // Se llama SIEMPRE (aunque PAYMENTS_ENABLED esté apagado) para que las
 // reservas hechas mientras estaba encendido se liquiden igual. Sin reserva
 // abierta es un no-op.
-async function settleCampaign({ kind, targetId, unitsDelivered, threshold, reason }) {
-  const { data, error } = await supabase.rpc('wallet_settle', {
+async function settleCampaign({ kind, targetId, unitsDelivered, extraUnits = 0, reason }) {
+  const toInt = (n) => Math.max(0, Math.floor(Number(n) || 0));
+  const { data, error } = await supabase.rpc('wallet_settle_v2', {
     p_kind: kind, p_target: targetId,
-    p_units_delivered: Math.max(0, Math.floor(Number(unitsDelivered) || 0)),
-    p_threshold: threshold, p_reason: reason,
+    p_units_delivered: toInt(unitsDelivered),
+    p_extra_units: toInt(extraUnits), p_reason: reason,
   });
   if (error) {
     // Migración sin ejecutar todavía => no hay nada que liquidar.
-    if (/wallet_settle|does not exist|schema cache/i.test(error.message || '') && !paymentsEnabled()) return null;
+    if (isMissingSchema(error) && !paymentsEnabled()) return null;
     throw parseRpcError(error);
   }
   if (data?.settled) {
-    console.log(`[wallet] settled ${kind} ${targetId} (${reason}): delivered=${unitsDelivered} charged=${data.charged_cents} refunded=${data.refunded_cents}`);
+    console.log(`[wallet] settled ${kind} ${targetId} (${reason}): delivered=${toInt(unitsDelivered)}+${toInt(extraUnits)} charged=${data.charged_cents} refunded=${data.refunded_cents}`);
   }
   return data;
+}
+
+// Cobrado en el último ciclo, si el cron ya lo había liquidado.
+async function lastChargedCents(kind, targetId) {
+  const { data } = await supabase
+    .from('ad_holds').select('charged_cents')
+    .eq('kind', kind).eq('target_id', targetId).eq('status', 'settled')
+    .order('created_at', { ascending: false }).limit(1);
+  return Number(data?.[0]?.charged_cents || 0);
 }
 
 async function chargeFee({ userId, amountCents, description }) {
@@ -135,10 +183,13 @@ module.exports = {
   sendInsufficientFunds,
   getBalanceCents,
   getOpenHold,
+  getFreeUnits,
+  previewChargeCents,
   previewRefundCents,
   assertCanAfford,
   holdCampaign,
   settleCampaign,
+  lastChargedCents,
   chargeFee,
   adjust,
 };

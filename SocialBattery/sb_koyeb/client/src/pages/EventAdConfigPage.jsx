@@ -3,9 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import AudienceCircleMap from '../components/AudienceCircleMap';
-import { EVENT_AD_PRICING, computeEventAdPriceCents, formatEurFromCents } from '../lib/adPricing';
+import { EVENT_AD_PRICING, FREE_UNITS, MIN_UNITS, UNITS_STEP, computeEventAdPriceCents, formatEurFromCents } from '../lib/adPricing';
 import { useTranslation } from '../i18n';
 import WalletInline from '../components/WalletInline';
+import { FreePromoNote } from '../components/FreePromo';
+import { PAYMENTS_ENABLED } from '../lib/features';
 
 // ── Configuración de publicidad de un evento Premium / Ultra ──────────────────
 // Pantalla a la que se llega al pulsar "Configurar publicidad" en el modal
@@ -20,18 +22,12 @@ import WalletInline from '../components/WalletInline';
 // harían las páginas de origen (`POST /community/events`), incluyendo
 // `community_id` si el draft venía de una comunidad concreta.
 //
-// El slider (500–50.000) es el mismo para Premium y Ultra y siempre
-// operativo — lo que cambia entre planes es la insignia, el precio y las
-// prestaciones (Ultra añade apariciones en el banner del menú principal).
-// Si la audiencia (con o sin filtro de intereses) queda por debajo de lo
-// contratado, se avisa con un banner ámbar bajo el slider; el pacing solo
-// enviará las notificaciones que quepan y no se cobrará por el resto
-// (ver eventPromoPacing.js). El resto del formulario del evento (título,
-// categorías, fecha, ubicación...) NO se puede editar aquí — si el
-// usuario quiere retocarlo, pulsa Atrás y vuelve al modal.
-const NOTIF_MIN = 500;
+// El slider es el mismo para Premium y Ultra y llega como mucho a la audiencia
+// que existe. Se paga por lo entregado y las primeras unidades de la campaña
+// son gratis (lib/adPricing.js). El resto del formulario del evento (título,
+// categorías, fecha...) no se edita aquí: para eso está Atrás.
 const NOTIF_MAX = 50000;
-const NOTIF_STEP = 500;
+const DEFAULT_COUNT = 500;
 
 const PLAN_META = {
   premium: {
@@ -140,15 +136,15 @@ export default function EventAdConfigPage() {
   // El plan inicial: en creación, lo que trae el draft del modal; en
   // renovación, el plan que YA tiene contratado el evento (así al usuario
   // le sale prerreadatado exactamente lo que iba a renovar).
-  const initialPlan = isRenew
-    ? (renewEvent.promotion_plan === 'ultra' ? 'ultra' : 'premium')
-    : (draft?.promotion_plan === 'ultra' ? 'ultra' : 'premium');
+  // Sin pagos solo hay una promoción: la completa (Ultra).
+  const initialPlan = !PAYMENTS_ENABLED || (isRenew ? renewEvent : draft)?.promotion_plan === 'ultra'
+    ? 'ultra' : 'premium';
   const [plan, setPlan] = useState(initialPlan);
   const initialCount = isRenew
-    ? Number(renewEvent.notification_count) || NOTIF_MIN
-    : Number(draft?.notification_count) || NOTIF_MIN;
+    ? Number(renewEvent.notification_count) || DEFAULT_COUNT
+    : Number(draft?.notification_count) || DEFAULT_COUNT;
   const [notificationCount, setNotificationCount] = useState(
-    Math.min(Math.max(initialCount, NOTIF_MIN), NOTIF_MAX)
+    Math.min(Math.max(initialCount, MIN_UNITS), NOTIF_MAX)
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -164,6 +160,8 @@ export default function EventAdConfigPage() {
   const [loadingTotal, setLoadingTotal] = useState(true);
   const [total, setTotal] = useState(null);
   const [loadError, setLoadError] = useState('');
+  const [freeUnits, setFreeUnits] = useState(FREE_UNITS);
+  const [freePromo, setFreePromo] = useState(null); // cupo de promociones gratis
 
   const [filterInterested, setFilterInterested] = useState(false);
   const [loadingInterested, setLoadingInterested] = useState(false);
@@ -215,30 +213,25 @@ export default function EventAdConfigPage() {
   );
 
   const loadTotal = useCallback(async () => {
-    if (isRenew) {
-      // Renovación: la audiencia del evento ya está fijada. Simulamos
-      // "carga terminada" para que el gate audienceReady deje pasar al
-      // botón de renovar sin bloquear.
-      setLoadingTotal(false);
-      setTotal(null);
-      return;
-    }
     setLoadingTotal(true);
     setLoadError('');
     try {
-      const query = `?community_id=${encodeURIComponent(draft.communityId)}`;
-      const data = await api.get(`/community/events/promotion-audience${query}`);
+      const params = new URLSearchParams({ community_id: isRenew ? renewEvent.community_id : draft.communityId });
+      if (isRenew) params.set('event_id', renewEvent.id);
+      const data = await api.get(`/community/events/promotion-audience?${params}`);
       setTotal(data?.total ?? 0);
+      setFreeUnits(data?.free_units ?? FREE_UNITS);
+      setFreePromo(data?.free_promo ?? null);
     } catch (e) {
       setLoadError(e.message || t('adConfig.audienceCalcError'));
     } finally {
       setLoadingTotal(false);
     }
-  }, [draft, isRenew]);
+  }, [draft, renewEvent, isRenew, t]);
 
   useEffect(() => {
-    if (isRenew || draft?.communityId) loadTotal();
-  }, [draft, isRenew, loadTotal]);
+    if (renewEvent?.community_id || draft?.communityId) loadTotal();
+  }, [draft, renewEvent, loadTotal]);
 
   // Fase 110: recontar `nearby` cada vez que cambian los inputs (radio,
   // toggle de ubicación, toggle de intereses) con 300 ms de debounce
@@ -278,30 +271,24 @@ export default function EventAdConfigPage() {
     return () => { if (nearbyDebounceRef.current) clearTimeout(nearbyDebounceRef.current); };
   }, [filterLocation, radiusKm, filterInterested, canFilterLocation, draft, draftCategories, showToast]);
 
-  // Audiencia efectiva teniendo en cuenta filtros activos. Si están los
-  // dos (intereses + ubicación), gana la intersección. Si solo uno, ese.
-  // Si ninguno, el total notificable. En renovación la audiencia no se
-  // recalcula (el evento ya existe con la suya fijada), así que se
-  // "corta" antes: audienceReady=true incondicional para no bloquear el
-  // botón, y blockedByFilterShortfall=false por el mismo motivo.
-  const audienceCap = isRenew
-    ? null
-    : filterLocation && filterInterested
-      ? (categoriesDefined === false ? 0 : interestedNearby)
-      : filterLocation
-        ? nearby
-        : filterInterested
-          ? (categoriesDefined === false ? 0 : interested)
-          : total;
+  // Audiencia efectiva con los filtros activos. Al renovar se conservan los
+  // del evento, que aquí no se conocen: se usa el total y el servidor recorta.
+  const audienceCap = filterLocation && filterInterested
+    ? (categoriesDefined === false ? 0 : interestedNearby)
+    : filterLocation
+      ? nearby
+      : filterInterested
+        ? (categoriesDefined === false ? 0 : interested)
+        : total;
   const audienceReady = isRenew || (audienceCap != null && !loadingInterested && !loadingNearby);
-  const contractedExceedsAudience = !isRenew && audienceReady && notificationCount > audienceCap;
-
-  // Con cualquier filtro DURO activo (intereses o ubicación), si el pool
-  // resultante no llega al mínimo contratable (NOTIF_MIN) bloqueamos la
-  // publicación y ocultamos el slider. SIN filtros duros, dejamos publicar
-  // aunque el pool no llegue (fase de crecimiento con pocos usuarios). En
-  // renovación no hay filtros a cambiar aquí, así que esto no aplica.
-  const blockedByFilterShortfall = !isRenew && (filterInterested || filterLocation) && audienceReady && audienceCap < NOTIF_MIN;
+  // No se puede contratar más de lo que existe (mínimo MIN_UNITS).
+  const notifMax = freePromo?.max_units ?? NOTIF_MAX;
+  const sliderMax = audienceCap == null
+    ? notifMax
+    : Math.min(notifMax, Math.max(MIN_UNITS, Math.ceil(audienceCap / UNITS_STEP) * UNITS_STEP));
+  const units = Math.min(notificationCount, sliderMax);
+  const contractedExceedsAudience = audienceReady && audienceCap != null && units > audienceCap;
+  const nobodyMatches = !isRenew && (filterInterested || filterLocation) && audienceReady && audienceCap === 0;
 
   async function handleToggleInterested() {
     const next = !filterInterested;
@@ -333,18 +320,11 @@ export default function EventAdConfigPage() {
 
   const meta = PLAN_META[plan] || PLAN_META.premium;
 
-  // ── Precio dinámico ────────────────────────────────────────────────────
-  // `maxPriceCents`: el techo si TODAS las notificaciones contratadas se
-  //   entregan. Es lo que se enseña en grande — el "importe contratado".
-  // `estPriceCents`: el importe realista teniendo en cuenta el techo de
-  //   audiencia (min(contratado, audiencia efectiva) — se cobra por lo
-  //   entregado, no por lo contratado). Solo se calcula en creación y
-  //   cuando la audiencia excede lo contratado, para no confundir.
-  const maxPriceCents = computeEventAdPriceCents(plan, notificationCount);
-  const effectiveUnits = !isRenew && audienceReady && audienceCap != null
-    ? Math.min(notificationCount, audienceCap)
-    : notificationCount;
-  const estPriceCents = computeEventAdPriceCents(plan, effectiveUnits);
+  // Importe máximo (lo que se reserva) y, si hay menos audiencia que unidades,
+  // lo que se cobraría como mucho de verdad.
+  const maxPriceCents = computeEventAdPriceCents(plan, units, freeUnits);
+  const estPriceCents = computeEventAdPriceCents(
+    plan, audienceCap != null ? Math.min(units, audienceCap) : units, freeUnits);
 
   // En creación se vuelve al perfil de la comunidad; en renovación, al
   // detalle del propio evento (donde estaba el botón "Renovar publicidad"
@@ -362,7 +342,7 @@ export default function EventAdConfigPage() {
     : (draft?.communityName ? t('adConfig.eventInSubtitle', { name: draft.communityName }) : t('adConfig.newEventSubtitle'));
 
   async function handlePublish() {
-    if (!audienceReady || blockedByFilterShortfall) return;
+    if (!audienceReady || nobodyMatches) return;
     setSaving(true);
     setError('');
     try {
@@ -374,12 +354,12 @@ export default function EventAdConfigPage() {
         // miembros de la comunidad.
         await api.post(`/community/events/${renewEvent.id}/renew-promotion`, {
           promotion_plan: plan,
-          notification_count: notificationCount,
+          notification_count: units,
         });
         showToast(t('adConfig.adRenewedToast'), 'success');
       } else {
         if (!draft) return;
-        const formData = buildEventFormData(draft, plan, notificationCount, {
+        const formData = buildEventFormData(draft, plan, units, {
           interestedOnly: filterInterested,
           locationFilter: filterLocation && canFilterLocation
             ? { centerLat: draft.lat, centerLng: draft.lng, radiusKm }
@@ -421,14 +401,13 @@ export default function EventAdConfigPage() {
         {/* Resumen del evento en creación */}
         <div className="bg-surface-card border border-surface-border rounded-2xl p-4 space-y-1">
           <h2 className="font-display font-bold text-surface-text text-sm truncate">
-            {draft.title || t('adConfig.newEventTitle')}
+            {(isRenew ? renewEvent.title : draft.title) || t('adConfig.newEventTitle')}
           </h2>
-          {/* Desde fase 108 todo evento pertenece a una comunidad y el
-              useEffect de más arriba hace kick-out si el draft llegara sin
-              communityId, así que aquí siempre hay communityName. */}
-          <p className="text-xs font-mono text-surface-muted truncate">
-            👥 {draft.communityName}
-          </p>
+          {!isRenew && (
+            <p className="text-xs font-mono text-surface-muted truncate">
+              👥 {draft.communityName}
+            </p>
+          )}
         </div>
 
         {/* ── Selector Premium / Ultra ──────────────────────────────────
@@ -436,6 +415,7 @@ export default function EventAdConfigPage() {
             preseleccionada la que se escogió en el modal. Al alternar,
             debajo se actualizan el precio, las prestaciones y el color
             del slider/botón acorde al plan. */}
+        {PAYMENTS_ENABLED && (
         <div className="bg-surface-card border border-surface-border rounded-2xl p-2">
           <div
             role="tablist"
@@ -468,6 +448,7 @@ export default function EventAdConfigPage() {
             })}
           </div>
         </div>
+        )}
 
         {/* Detalles del plan seleccionado. La píldora superior derecha
             enseña la tarifa POR UNIDAD (céntimos/notificación); el
@@ -481,7 +462,9 @@ export default function EventAdConfigPage() {
               {t('adConfig.' + meta.fullKey)}
             </span>
             <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${meta.pill}`}>
-              {t('adConfig.perUnit', { price: formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents), unit: EVENT_AD_PRICING[plan].unitLabel })}
+              {PAYMENTS_ENABLED
+                ? t('adConfig.perUnit', { price: formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents), unit: t('adConfig.unitNotification') })
+                : t('free.tag')}
             </span>
           </div>
           <ul className="space-y-1.5 text-[12px] font-mono text-surface-muted leading-relaxed">
@@ -686,19 +669,9 @@ export default function EventAdConfigPage() {
         </>
         )}
 
-        {/* Notificaciones a contratar — siempre operativo 500–50.000.
-            Si la audiencia efectiva (con o sin filtro de intereses) queda
-            por debajo de lo contratado, se avisa con banner ámbar; solo
-            se enviarán las notificaciones que quepan y no se cobrará por
-            el resto (ver eventPromoPacing.js). Excepción: con el filtro
-            de intereses activo y por debajo del mínimo contratable,
-            ocultamos el slider y bloqueamos la publicación (ver
-            blockedByFilterShortfall). */}
-        {blockedByFilterShortfall ? (
+        {nobodyMatches ? (
           <div className="bg-surface-card border border-surface-border rounded-2xl p-5 text-center space-y-1">
-            <p className="text-sm text-surface-muted leading-relaxed">
-              {t('adConfig.belowMinTitle', { n: Number(audienceCap).toLocaleString(localeTag), min: NOTIF_MIN.toLocaleString(localeTag) })}
-            </p>
+            <p className="text-sm text-surface-muted leading-relaxed">{t('adConfig.nobodyMatches')}</p>
             <p className="text-xs text-surface-muted">{t('adConfig.belowMinHint')}</p>
           </div>
         ) : (
@@ -708,22 +681,23 @@ export default function EventAdConfigPage() {
               {t('adConfig.contractSlots')}
             </label>
             <span className="text-xs font-mono font-semibold text-surface-text">
-              {Number(notificationCount).toLocaleString(localeTag)}
+              {units.toLocaleString(localeTag)}
             </span>
           </div>
 
           <input
             type="range"
-            min={NOTIF_MIN}
-            max={NOTIF_MAX}
-            step={NOTIF_STEP}
-            value={notificationCount}
+            min={MIN_UNITS}
+            max={sliderMax}
+            step={UNITS_STEP}
+            value={units}
+            disabled={sliderMax === MIN_UNITS}
             onChange={e => setNotificationCount(Number(e.target.value))}
             className={`w-full ${meta.slider} cursor-pointer`}
           />
           <div className="flex items-center justify-between text-[10px] font-mono text-surface-muted">
-            <span>{t('adConfig.minLbl', { n: NOTIF_MIN.toLocaleString(localeTag) })}</span>
-            <span>{t('adConfig.maxLbl', { n: NOTIF_MAX.toLocaleString(localeTag) })}</span>
+            <span>{t('adConfig.minLbl', { n: MIN_UNITS.toLocaleString(localeTag) })}</span>
+            <span>{t('adConfig.maxLbl', { n: sliderMax.toLocaleString(localeTag) })}</span>
           </div>
 
           {contractedExceedsAudience && (
@@ -739,13 +713,8 @@ export default function EventAdConfigPage() {
             </p>
           )}
 
-          {/* Desglose de precio dinámico. Sustituye a la píldora estática
-              '10 €'/'20 €' que había antes en el detalle del plan. El
-              importe máximo se recalcula en directo al mover el slider;
-              si la audiencia efectiva queda por debajo, mostramos
-              también el importe estimado real (solo se cobra lo
-              entregado). En renovación no hay techo de audiencia que
-              recalcular aquí, así que sale solo el máximo. */}
+          {PAYMENTS_ENABLED && (
+          <>
           <div className="border-t border-surface-border/60 pt-2 mt-1 space-y-1">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-mono text-surface-muted">{t('adConfig.priceContracted')}</span>
@@ -763,12 +732,17 @@ export default function EventAdConfigPage() {
             )}
             <p className="text-[10px] font-mono text-surface-muted leading-relaxed">
               {t('adConfig.pricePerNotif', { price: formatEurFromCents(EVENT_AD_PRICING[plan].unitPriceCents) })}
+              {EVENT_AD_PRICING[plan].bannerPriceCents > 0 && (
+                <> {t('adConfig.pricePerBanner', { price: formatEurFromCents(EVENT_AD_PRICING[plan].bannerPriceCents) })}</>
+              )}
             </p>
           </div>
 
           <p className="text-[10px] font-mono text-surface-muted">
-            {t('adConfig.minChargeNote')}
+            {freeUnits > 0 ? t('adConfig.freeUnitsNote', { n: freeUnits }) : t('adConfig.noFreeUnitsNote')}
           </p>
+          </>
+          )}
         </div>
         )}
 
@@ -791,9 +765,8 @@ export default function EventAdConfigPage() {
           </p>
         </div>
 
-        {(plan === 'premium' || plan === 'ultra') && (
-          <WalletInline neededCents={maxPriceCents} warn={!isRenew} forceInsufficient={insufficientFunds} />
-        )}
+        <WalletInline neededCents={estPriceCents} warn={!isRenew} forceInsufficient={insufficientFunds} />
+        <FreePromoNote status={freePromo} />
 
         {error && (
           <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">
@@ -803,7 +776,7 @@ export default function EventAdConfigPage() {
 
         <button
           onClick={handlePublish}
-          disabled={saving || !audienceReady || blockedByFilterShortfall}
+          disabled={saving || !audienceReady || nobodyMatches}
           className={`w-full py-3.5 rounded-xl font-display font-bold text-sm transition-all disabled:opacity-50 active:scale-[0.98] ${meta.button}`}
         >
           {saving ? (isRenew ? t('adConfig.renewing') : t('adConfig.publishing')) : (isRenew ? t('adConfig.renewBtn', { plan: t('adConfig.' + meta.labelKey) }) : t('adConfig.publishBtn', { plan: t('adConfig.' + meta.labelKey) }))}
